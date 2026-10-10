@@ -51,6 +51,8 @@ class NativeBothHarnessContracts(unittest.TestCase):
         native = SOURCE.read_text(encoding="utf-8")
         self.assertIn("servers[1].messages", native)
         self.assertIn("servers[1].udp_sources", native)
+        self.assertIn('detail["transport"] == "native_plain"', native)
+        self.assertIn('detail["wire_transport"] == "mixed"', native)
 
 
 if __name__ == "__main__":

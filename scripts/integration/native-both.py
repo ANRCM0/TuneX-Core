@@ -145,7 +145,8 @@ def native_cases():
             H.check(H.wait_active(fid) and bool(H.wait_until(lambda: payload(port), timeout=60, interval=2)),
                     f"F4 {mode} real TCP and UDP serve the same number after complete apply")
             detail = request("GET", f"/api/forwards/{fid}")
-            H.check(detail["protocol"] == "both" and detail["transport"] == "mixed",
+            H.check(detail["protocol"] == "both" and detail["transport"] == "native_plain"
+                    and detail["wire_transport"] == "mixed",
                     f"F4 {mode} canonical both identity is not projected as TCP or UDP")
             body = {"target_port": 3051, "expected_revision": detail["config_revision"]}
             preview = request("POST", f"/api/forwards/{fid}/preview", body)
