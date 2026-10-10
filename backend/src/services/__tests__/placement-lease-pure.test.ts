@@ -7,7 +7,12 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { isLeaseExpired, LEASE_TTL_SECONDS, type PlacementLeaseRow } from "../placement-lease.ts";
+import {
+  isLeaseExpired,
+  isPlacementLeaseUniqueConflict,
+  LEASE_TTL_SECONDS,
+  type PlacementLeaseRow,
+} from "../placement-lease.ts";
 
 const NOW = new Date("2026-10-04T12:00:00Z");
 const lease = (over: Partial<PlacementLeaseRow> = {}): PlacementLeaseRow => ({
@@ -43,6 +48,15 @@ describe("V5.3 WP9: lease expiry is the two-phase handover gate", () => {
     // 让 owner 自停，连续三次丢失才该。Agent 的上报/观测周期是 30s（§7 冻结）。
     const AGENT_REPORT_INTERVAL_SECONDS = 30;
     expect(LEASE_TTL_SECONDS).toBeGreaterThanOrEqual(3 * AGENT_REPORT_INTERVAL_SECONDS);
+  });
+});
+
+describe("V2.1: first-claim races stay inside the lease result contract", () => {
+  test("only Prisma unique conflicts are classified as a concurrent claim", () => {
+    expect(isPlacementLeaseUniqueConflict({ code: "P2002" })).toBe(true);
+    expect(isPlacementLeaseUniqueConflict({ code: "P2034" })).toBe(false);
+    expect(isPlacementLeaseUniqueConflict(new Error("database unavailable"))).toBe(false);
+    expect(isPlacementLeaseUniqueConflict(null)).toBe(false);
   });
 });
 

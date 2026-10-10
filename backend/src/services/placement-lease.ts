@@ -44,6 +44,11 @@ export interface PlacementLeaseRow {
   revision: number;
 }
 
+/** Prisma's unique-key error is the expected result of a concurrent first claim. */
+export function isPlacementLeaseUniqueConflict(error: unknown): boolean {
+  return (error as { code?: unknown } | null)?.code === "P2002";
+}
+
 export type LeaseClaimResult =
   | { ok: true; lease: PlacementLeaseRow; epoch: number; changed_owner: boolean }
   | {
@@ -99,23 +104,33 @@ export async function claimLease(input: {
   const current = await loadLease(input.tunnelId);
 
   if (current === null) {
-    const created = await db.placementLease.create({
-      data: {
-        tunnel_id: input.tunnelId,
-        owner_node_id: input.nodeId,
-        epoch: 1,
-        lease_expires_at: expiresAt,
-        revision: input.revision,
-      },
-      select: {
-        tunnel_id: true,
-        owner_node_id: true,
-        epoch: true,
-        lease_expires_at: true,
-        revision: true,
-      },
-    });
-    return { ok: true, lease: created, epoch: created.epoch, changed_owner: true };
+    try {
+      const created = await db.placementLease.create({
+        data: {
+          tunnel_id: input.tunnelId,
+          owner_node_id: input.nodeId,
+          epoch: 1,
+          lease_expires_at: expiresAt,
+          revision: input.revision,
+        },
+        select: {
+          tunnel_id: true,
+          owner_node_id: true,
+          epoch: true,
+          lease_expires_at: true,
+          revision: true,
+        },
+      });
+      return { ok: true, lease: created, epoch: created.epoch, changed_owner: true };
+    } catch (error) {
+      // The initial read and INSERT are intentionally separate so the common
+      // path stays cheap. A concurrent claimant can win the unique key between
+      // them; expose that as a bounded ownership race instead of leaking a raw
+      // Prisma exception to failover and retry code.
+      if (!isPlacementLeaseUniqueConflict(error)) throw error;
+      const fresh = await loadLease(input.tunnelId);
+      return { ok: false, reason: "lost_race", current: fresh ?? undefined };
+    }
   }
 
   if (current.owner_node_id === input.nodeId && !isLeaseExpired(current, input.now)) {

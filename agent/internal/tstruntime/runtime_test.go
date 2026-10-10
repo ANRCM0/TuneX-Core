@@ -21,13 +21,39 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/tunex/agent/internal/forwarder"
 	"github.com/tunex/agent/internal/manager"
+	"github.com/tunex/agent/internal/portlease"
 	"github.com/tunex/agent/internal/securelink"
 )
+
+type recordingPortGuard struct {
+	mu     sync.Mutex
+	owners map[string][]portlease.Binding
+}
+
+func (g *recordingPortGuard) ReserveExternal(owner string, bindings []portlease.Binding) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.owners[owner] = append([]portlease.Binding(nil), bindings...)
+	return nil
+}
+
+func (g *recordingPortGuard) ReleaseExternal(owner string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.owners, owner)
+}
+
+func (g *recordingPortGuard) bindings(owner string) []portlease.Binding {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]portlease.Binding(nil), g.owners[owner]...)
+}
 
 func identities(t testing.TB) (securelink.Identity, securelink.Identity) {
 	return identitiesExpiring(t, time.Now().Add(time.Hour), time.Now().Add(time.Hour))
@@ -821,6 +847,78 @@ func TestFailedHigherGenerationKeepsSiblingAndNeverRestoresOlderConfig(t *testin
 	listener, e := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", listen))
 	if e != nil {
 		t.Fatal("old listener resurrected", e)
+	}
+	listener.Close()
+}
+
+func TestRepeatedFailedApplyRestoresPortGuardAndStopsCandidates(t *testing.T) {
+	a, _ := identities(t)
+	listen := freePort(t)
+	in := configFor(t, "ingress", a, freePort(t), []Binding{{
+		ForwardID: 101, Revision: 1, Protocol: "tcp", ListenHost: "127.0.0.1", ListenPort: listen,
+	}})
+	m := testManager(t, t.TempDir(), "owner")
+	guard := &recordingPortGuard{owners: map[string][]portlease.Binding{}}
+	if err := m.SetPortGuard(guard); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Apply(in); err != nil {
+		t.Fatal(err)
+	}
+	owner := "tst:" + in.ID
+	want := []portlease.Binding{portlease.New("tcp", listen, "127.0.0.1")}
+	if got := guard.bindings(owner); !reflect.DeepEqual(got, want) {
+		t.Fatalf("initial guard bindings = %+v, want %+v", got, want)
+	}
+
+	for generation := int64(2); generation < 10; generation++ {
+		occupied, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		candidate := cloneConfig(in)
+		candidate.Generation = generation
+		candidate.TransportConfig = append(json.RawMessage(nil), in.TransportConfig...)
+		var transport TransportConfig
+		if err := json.Unmarshal(candidate.TransportConfig, &transport); err != nil {
+			occupied.Close()
+			t.Fatal(err)
+		}
+		transport.Bindings = append(transport.Bindings, Binding{
+			ForwardID: 1000 + generation, Revision: 1, Protocol: "tcp",
+			ListenHost: "127.0.0.1", ListenPort: occupied.Addr().(*net.TCPAddr).Port,
+		})
+		candidate.TransportConfig, _ = json.Marshal(transport)
+		candidate.ConfigDigest, err = Digest(candidate.TransportConfig)
+		if err != nil {
+			occupied.Close()
+			t.Fatal(err)
+		}
+		candidate.Ports = append(append([]Port(nil), in.Ports...), Port{"tcp", "127.0.0.1", occupied.Addr().(*net.TCPAddr).Port})
+
+		if _, err := m.Apply(candidate); !errors.Is(err, ErrStartFailed) {
+			occupied.Close()
+			t.Fatalf("generation %d apply error = %v, want ErrStartFailed", generation, err)
+		}
+		if got := guard.bindings(owner); !reflect.DeepEqual(got, want) {
+			occupied.Close()
+			t.Fatalf("generation %d leaked guard bindings = %+v, want %+v", generation, got, want)
+		}
+		occupied.Close()
+		if observation := m.Status()[0]; observation.ObservedGeneration != 1 || observation.State != "rolled_back" {
+			t.Fatalf("generation %d observation = %+v, want old runtime with durable fence", generation, observation)
+		}
+	}
+
+	if _, err := m.Remove(in.ID, 10); err != nil {
+		t.Fatal(err)
+	}
+	if got := guard.bindings(owner); len(got) != 0 {
+		t.Fatalf("guard bindings after removal = %+v, want empty", got)
+	}
+	listener, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(listen)))
+	if err != nil {
+		t.Fatalf("listener port remained occupied after cleanup: %v", err)
 	}
 	listener.Close()
 }
