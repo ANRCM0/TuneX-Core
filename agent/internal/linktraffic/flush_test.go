@@ -10,22 +10,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tunex/agent/internal/linkrunner"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
 type fixtureStore struct {
-	samples   []linkrunner.TrafficSample
+	samples   []tstruntime.TrafficSample
 	readErr   error
 	ackErr    error
-	acks      [][]linkrunner.TrafficSample
+	acks      [][]tstruntime.TrafficSample
 	emptyAcks int
 }
 
-func (s *fixtureStore) TrafficSamples() ([]linkrunner.TrafficSample, error) {
-	return append([]linkrunner.TrafficSample(nil), s.samples...), s.readErr
+func (s *fixtureStore) TrafficSamples() ([]tstruntime.TrafficSample, error) {
+	return append([]tstruntime.TrafficSample(nil), s.samples...), s.readErr
 }
 
-func (s *fixtureStore) AckTraffic(samples []linkrunner.TrafficSample) error {
+func (s *fixtureStore) AckTraffic(samples []tstruntime.TrafficSample) error {
 	if s.ackErr != nil {
 		return s.ackErr
 	}
@@ -33,11 +33,11 @@ func (s *fixtureStore) AckTraffic(samples []linkrunner.TrafficSample) error {
 		s.emptyAcks++
 		return nil
 	}
-	s.acks = append(s.acks, append([]linkrunner.TrafficSample(nil), samples...))
+	s.acks = append(s.acks, append([]tstruntime.TrafficSample(nil), samples...))
 	return nil
 }
 
-func flushFixture(producer string, forward int, day string) linkrunner.TrafficSample {
+func flushFixture(producer string, forward int, day string) tstruntime.TrafficSample {
 	s := sampleFixture()
 	s.ProducerID, s.ForwardID, s.Date = producer, int64(forward), day
 	return s
@@ -45,19 +45,19 @@ func flushFixture(producer string, forward int, day string) linkrunner.TrafficSa
 
 func TestFlushKeepsWholeProducerTogetherAndAcknowledgesExactFacts(t *testing.T) {
 	a, b := strings.Repeat("a", 32), strings.Repeat("b", 32)
-	store := &fixtureStore{samples: []linkrunner.TrafficSample{
+	store := &fixtureStore{samples: []tstruntime.TrafficSample{
 		flushFixture(b, 9, "2026-10-07"), flushFixture(a, 7, "2026-10-07"),
 		flushFixture(a, 6, "2026-10-08"), flushFixture(b, 8, "2026-10-07"),
 		flushFixture(a, 6, "2026-10-07"),
 	}}
-	want := [][]linkrunner.TrafficSample{
+	want := [][]tstruntime.TrafficSample{
 		{flushFixture(a, 6, "2026-10-07"), flushFixture(a, 6, "2026-10-08"), flushFixture(a, 7, "2026-10-07")},
 		{flushFixture(b, 8, "2026-10-07"), flushFixture(b, 9, "2026-10-07")},
 	}
-	var calls [][]linkrunner.TrafficSample
+	var calls [][]tstruntime.TrafficSample
 	panel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
-			Samples []linkrunner.TrafficSample `json:"samples"`
+			Samples []tstruntime.TrafficSample `json:"samples"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			t.Error(err)
@@ -78,11 +78,11 @@ func TestFlushKeepsWholeProducerTogetherAndAcknowledgesExactFacts(t *testing.T) 
 
 func TestFlushRetryAcknowledgesOnlyPersistedProducer(t *testing.T) {
 	a, b := strings.Repeat("a", 32), strings.Repeat("b", 32)
-	store := &fixtureStore{samples: []linkrunner.TrafficSample{flushFixture(b, 8, "2026-10-07"), flushFixture(a, 6, "2026-10-07")}}
+	store := &fixtureStore{samples: []tstruntime.TrafficSample{flushFixture(b, 8, "2026-10-07"), flushFixture(a, 6, "2026-10-07")}}
 	failB := true
 	panel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
-			Samples []linkrunner.TrafficSample `json:"samples"`
+			Samples []tstruntime.TrafficSample `json:"samples"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input.Samples) != 1 {
 			t.Error("malformed report")
@@ -123,9 +123,9 @@ func TestFlushDoesNotDeleteOnInvalidACKOrLocalFailure(t *testing.T) {
 	}{
 		{"read failure", fixtureStore{readErr: local}, "", local, 0},
 		{"empty", fixtureStore{}, "", nil, 0},
-		{"HTTP success is not ACK", fixtureStore{samples: []linkrunner.TrafficSample{sampleFixture()}}, `{}`, ErrInvalid, 1},
-		{"local durable ACK failure", fixtureStore{samples: []linkrunner.TrafficSample{sampleFixture()}, ackErr: local}, "echo", local, 1},
-		{"oversize producer cannot be split", fixtureStore{samples: make([]linkrunner.TrafficSample, maxSamples+1)}, "", ErrInvalid, 0},
+		{"HTTP success is not ACK", fixtureStore{samples: []tstruntime.TrafficSample{sampleFixture()}}, `{}`, ErrInvalid, 1},
+		{"local durable ACK failure", fixtureStore{samples: []tstruntime.TrafficSample{sampleFixture()}, ackErr: local}, "echo", local, 1},
+		{"oversize producer cannot be split", fixtureStore{samples: make([]tstruntime.TrafficSample, maxSamples+1)}, "", ErrInvalid, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
@@ -136,7 +136,7 @@ func TestFlushDoesNotDeleteOnInvalidACKOrLocalFailure(t *testing.T) {
 					return
 				}
 				var input struct {
-					Samples []linkrunner.TrafficSample `json:"samples"`
+					Samples []tstruntime.TrafficSample `json:"samples"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 					t.Error(err)

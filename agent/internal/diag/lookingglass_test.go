@@ -419,6 +419,14 @@ func withFakeICMP(t *testing.T, replied bool, rtt int64, raw string, err error, 
 	}
 	t.Cleanup(func() { runICMP = original })
 	if binary != "" {
+		originalFinder := firstExecutable
+		firstExecutable = func(paths []string) string {
+			if len(paths) > 0 && paths[0] == binary {
+				return binary
+			}
+			return originalFinder(paths)
+		}
+		t.Cleanup(func() { firstExecutable = originalFinder })
 		originalCandidates := pingBinaryCandidates
 		pingBinaryCandidates = map[string][]string{
 			LookingGlassMethodPing:  {binary},
@@ -596,6 +604,14 @@ func withFakeTracepath(t *testing.T, hops map[int][]string, raw string, err erro
 	}
 	t.Cleanup(func() { runTracepath = original })
 	if binary != "" {
+		originalFinder := firstExecutable
+		firstExecutable = func(paths []string) string {
+			if len(paths) > 0 && paths[0] == binary {
+				return binary
+			}
+			return originalFinder(paths)
+		}
+		t.Cleanup(func() { firstExecutable = originalFinder })
 		originalCandidates := tracepathBinaryCandidates
 		tracepathBinaryCandidates = []string{binary}
 		t.Cleanup(func() { tracepathBinaryCandidates = originalCandidates })

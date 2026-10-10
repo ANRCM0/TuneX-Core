@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * WP5 测试共享替身 —— `db.ts` 的进程级替换（内部测试工具，不进生产构建）。
  *
@@ -352,7 +353,7 @@ export const dbStub = {
  * 注册都无所谓，后注册的不会覆盖数据语义。
  */
 export function mockDb(): void {
-  mock.module(new URL("../db.ts", import.meta.url).pathname, () => ({ db: dbStub }));
+  mock.module(fileURLToPath(new URL("../db.ts", import.meta.url)), () => ({ db: dbStub }));
 }
 
 /** 清空替身持有的全部状态（beforeEach 调用）。 */

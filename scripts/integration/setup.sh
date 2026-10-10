@@ -47,7 +47,7 @@ EOF
   set -a; . "$ENVF"; set +a
 fi
 export DATABASE_URL
-if [[ "${TUNEX_FXP_LINKS_ENABLED:-false}" == "true" && -z "${TUNEX_LINK_SEAL_KEY:-}" ]]; then
+if [[ "${TUNEX_TST_ENABLED:-false}" == "true" && -z "${TUNEX_LINK_SEAL_KEY:-}" ]]; then
   # A disposable installation still needs one stable independent seal key across
   # Panel/Worker restarts. Write it only into the existing private test env file.
   TUNEX_LINK_SEAL_KEY="$(openssl rand -hex 32)"

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * 缺陷 1 的**真实路由级**回归 —— `GET /:ingressId/support-bundle`、
  * `GET|POST /:ingressId/bindings`、`DELETE /:ingressId/bindings/:egressId`。
@@ -39,7 +40,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
-const root = new URL("../..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../..", import.meta.url));
 
 const PRELUDE = String.raw`
 import { mock, expect } from "bun:test";

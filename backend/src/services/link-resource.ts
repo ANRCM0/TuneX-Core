@@ -1,9 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db.ts";
-import { compileFxpLink, FxpLinkInputSchema, type FxpPlacementConfig } from "../integrations/forwardx/link-compiler.ts";
-import { canonicalConfigDigest } from "../integrations/forwardx/core-contract.ts";
-import { newLinkTransportKey, sealLinkTransportKey, unsealLinkTransportKey } from "../integrations/forwardx/transport-secret.ts";
+import { lockForwardOperation } from "./forward-operation-fence.ts";
+import { compileTstLink, TstLinkInputSchema, TST_MAX_CONNECTIONS, type TstPlacementConfig } from "../domain/link/tst-compiler.ts";
+import { canonicalConfigDigest } from "../domain/link/core-contract.ts";
+import { newTstCredentials, sealTstCredentials, unsealTstCredentials } from "../domain/link/tst-credentials.ts";
 import { loadNodeCapabilityFacts } from "./runtime-admission.ts";
 import { acquirePort, releaseLease, type PortPoolDb, type PortPoolTransaction } from "./portPool.ts";
 import { sendLinkPlacement } from "./link-transport.ts";
@@ -13,17 +14,18 @@ import { checkTunnelCreation, checkTunnelUse } from "./capability-policy.ts";
 import { getEffectivePolicy } from "./policy-service.ts";
 import { resolveForwardPolicy } from "./forward-policy.ts";
 import { linkObservation } from "./link-observation.ts";
-import { normalizeBindScope } from "../integrations/forwardx/bind-scope.ts";
-import { checkAgentVersion } from "../integrations/forwardx/agent-version.ts";
-import { LinkTargetSetSchema, persistedLinkTargetSet, targetSetMatchesFirst } from "../integrations/forwardx/target-set.ts";
-import { LinkClientSourceSchema, persistedLinkClientSource, validateLinkClientSourceBinding } from "../integrations/forwardx/client-source.ts";
+import { normalizeBindScope } from "../domain/link/bind-scope.ts";
+import { checkAgentVersion } from "../domain/link/agent-version.ts";
+import { LinkTargetSetSchema, persistedLinkTargetSet, targetSetMatchesFirst } from "../domain/link/target-set.ts";
+import { LinkClientSourceSchema, persistedLinkClientSource, validateLinkClientSourceBinding } from "../domain/link/client-source.ts";
 import { buildLinkMaintenancePreview, LinkEndpointConfigSchema, LinkMaintenancePreviewSchema,
   LINK_MAINTENANCE_REFERENCE_LIMIT, LINK_MAINTENANCE_PORT_LIMIT,
-  type MaintenanceForward, type MaintenancePort } from "../integrations/forwardx/link-maintenance.ts";
+  type MaintenanceForward, type MaintenancePort } from "../domain/link/link-maintenance.ts";
 import { LinkResourceError } from "./link-errors.ts";
 export { LinkResourceError } from "./link-errors.ts";
 import { assertNoMaintenanceIntent } from "./link-maintenance-guard.ts";
-import { signMaintenanceReceipt, maintenanceRequestDigest, LINK_MAINTENANCE_HOLD_MS } from "../integrations/forwardx/link-maintenance-state.ts";
+import { deriveConnection } from "./node-lifecycle.ts";
+import { signMaintenanceReceipt, maintenanceRequestDigest, LINK_MAINTENANCE_HOLD_MS } from "../domain/link/link-maintenance-state.ts";
 
 const id = z.number().int().positive().max(2_147_483_647);
 const port = id.max(65_535);
@@ -40,14 +42,27 @@ export const LinkBindingSchema = z.object({
   client_source: LinkClientSourceSchema.optional(),
   bytes_per_second_in: z.number().int().min(0).max(2_147_483_647).default(0),
   bytes_per_second_out: z.number().int().min(0).max(2_147_483_647).default(0),
-  max_connections: z.number().int().min(0).max(1_000_000).default(0),
-  max_connections_per_ip: z.number().int().min(0).max(1_000_000).default(0),
+  max_connections: z.number().int().min(0).max(TST_MAX_CONNECTIONS).default(0),
+  max_connections_per_ip: z.number().int().min(0).max(TST_MAX_CONNECTIONS).default(0),
 }).strict().refine((b) => !b.target_set || targetSetMatchesFirst(b.target_set, b.target_host, b.target_port),
   "target_set_first_mismatch").superRefine(validateLinkClientSourceBinding);
 export type LinkConfig = z.infer<typeof LinkConfigSchema>;
 export type LinkBindingInput = z.input<typeof LinkBindingSchema>;
 const LEASE_MS = 180_000;
-const DeploymentSnapshotSchema = z.object({ spec: FxpLinkInputSchema,
+async function extendDeploymentLease(deploymentId: number, candidate: Date): Promise<Date> {
+  // Snapshot polls and queued apply acknowledgements can complete out of order.
+  // A late writer must not shorten the lease already granted to either Agent.
+  await db.linkDeployment.updateMany({ where: { id: deploymentId, lease_expires_at: { lt: candidate } },
+    data: { lease_expires_at: candidate } });
+  return (await db.linkDeployment.findUniqueOrThrow({ where: { id: deploymentId },
+    select: { lease_expires_at: true } })).lease_expires_at;
+}
+function resolveTstPolicy(...input: Parameters<typeof resolveForwardPolicy>) {
+  const policy = resolveForwardPolicy(...input);
+  return { ...policy, max_connections: Math.min(TST_MAX_CONNECTIONS, policy.max_connections),
+    max_connections_per_ip: Math.min(TST_MAX_CONNECTIONS, policy.max_connections_per_ip) };
+}
+const DeploymentSnapshotSchema = z.object({ spec: TstLinkInputSchema,
   revisions: z.array(z.object({ id, revision: z.number().int().min(0) }).strict()) }).strict();
 
 export function sealKey(): string {
@@ -56,18 +71,20 @@ export function sealKey(): string {
   return secret;
 }
 export function assertLinkFeature(): void {
-  if (process.env.TUNEX_FXP_LINKS_ENABLED !== "true") throw new LinkResourceError("fxp_links_not_enabled", 409);
+  if (process.env.TUNEX_TST_ENABLED !== "true") throw new LinkResourceError("tst_not_enabled", 409);
   sealKey();
 }
 async function scopedLink(workspaceId: number, linkId: number, client = db) {
   const link = await client.linkResource.findFirst({ where: { id: linkId, workspace_id: workspaceId } });
   if (!link) throw new LinkResourceError("link_not_found", 404);
+  if (link.carrier !== "tst_v1") throw new LinkResourceError("legacy_transport_unsupported");
   return link;
 }
 export async function lockScopedLink(tx: Prisma.TransactionClient, workspaceId: number, linkId: number) {
   await tx.$queryRaw(Prisma.sql`SELECT id FROM link_resource WHERE id=${linkId} AND workspace_id=${workspaceId} FOR UPDATE`);
   const link = await tx.linkResource.findFirst({ where: { id: linkId, workspace_id: workspaceId } });
   if (!link) throw new LinkResourceError("link_not_found", 404);
+  if (link.carrier !== "tst_v1") throw new LinkResourceError("legacy_transport_unsupported");
   return link;
 }
 export async function lockLink(tx: Prisma.TransactionClient, workspaceId: number, linkId: number, guardMaintenance = true) {
@@ -88,11 +105,12 @@ async function endpoints(workspaceId: number, config: LinkConfig,
   if (!["ingress", "both"].includes(ingress.role ?? "") || !["egress", "both"].includes(egress.role ?? ""))
     throw new LinkResourceError("link_node_role_mismatch");
   for (const node of nodes) {
-    if (node.lifecycle !== "active") throw new LinkResourceError("link_node_unavailable");
+    if (node.lifecycle !== "active" || deriveConnection({ ...node, has_credential: !!node.node_credential_hash }) !== "online")
+      throw new LinkResourceError("link_node_unavailable");
   }
   const [inFacts, outFacts] = await Promise.all([loadNodeCapabilityFacts(ingress.id, client), loadNodeCapabilityFacts(egress.id, client)]);
-  if (requireCurrent && (!inFacts?.advertisementCurrent || !outFacts?.advertisementCurrent))
-    throw new LinkResourceError("agent_fxp_capability_stale");
+  if (!inFacts?.advertisementCurrent || !outFacts?.advertisementCurrent)
+    throw new LinkResourceError("agent_tst_capability_stale");
   const fact = (node: typeof ingress, capabilities: string[] | null | undefined) => {
     // Node.version is a historical display field (new rows default to unknown).
     // Authenticated heartbeats write NodeStateReport.version, not Node.version.
@@ -100,8 +118,8 @@ async function endpoints(workspaceId: number, config: LinkConfig,
     const version = node.state_report?.version ?? "";
     const versionFailure = checkAgentVersion(version, null);
     if (versionFailure) throw new LinkResourceError(versionFailure);
-    if (!capabilities?.includes("forward.link.fxp.v1"))
-      throw new LinkResourceError("agent_fxp_capability_missing");
+    if (!capabilities?.includes("forward.link.tst.v1"))
+      throw new LinkResourceError("agent_tst_capability_missing");
     return { id: node.id, workspace_id: workspaceId, connect_host: node.connect_ip ?? "",
       version, capabilities };
   };
@@ -168,11 +186,11 @@ export async function createLink(workspaceId: number, actorId: number, raw: unkn
   const spec = LinkCreateSchema.parse(raw);
   const nodes = await endpoints(workspaceId, spec.config);
   // Admission and actual compiler validation happen before persistence.
-  compileFxpLink({ link_id: 1, workspace_id: workspaceId, version: 1, generation: 1,
+  compileTstLink({ link_id: 1, workspace_id: workspaceId, version: 1, generation: 1,
     ingress: nodes.inFact, egress: nodes.outFact, carrier_port: spec.config.carrier_port,
-    lease_expires_at: new Date(Date.now() + LEASE_MS).toISOString(), bindings: [] }, newLinkTransportKey());
+    lease_expires_at: new Date(Date.now() + LEASE_MS).toISOString(), bindings: [] });
   return db.$transaction(async (tx) => {
-    const link = await tx.linkResource.create({ data: { workspace_id: workspaceId, created_by: actorId, name: spec.name } });
+    const link = await tx.linkResource.create({ data: { workspace_id: workspaceId, created_by: actorId, name: spec.name, carrier: "tst_v1" } });
     await tx.linkVersion.create({ data: { link_id: link.id, version: 1,
       config: spec.config, config_digest: canonicalConfigDigest(spec.config) } });
     return link;
@@ -233,14 +251,14 @@ export async function captureLinkMaintenance(tx: Prisma.TransactionClient, works
       version: link.desired_version + (input.change.type === "update_endpoints" && canonicalConfigDigest(candidate) !== canonicalConfigDigest(config) ? 1 : 0),
       generation: link.generation + 1, ingress: nodes.inFact, egress: nodes.outFact,
       carrier_port: candidate.carrier_port, lease_expires_at: new Date(now.getTime() + LEASE_MS).toISOString(),
-      bindings: active.map((r) => ({ forward_id: r.id, protocol: r.forward_protocol as "tcp" | "udp" | "both",
+      bindings: active.map((r) => ({ forward_id: r.id, revision: r.config_revision ?? 0, protocol: r.forward_protocol as "tcp" | "udp" | "both",
         listen_port: r.listen_port!, listen_host: (r.listen_ip === "127.0.0.1" || r.listen_ip === "::1" ? r.listen_ip : "") as "" | "127.0.0.1" | "::1",
         target_host: r.remote_host!, target_port: r.remote_port!,
         ...(r.link_target_config == null ? {} : { target_set: persistedLinkTargetSet(r.link_target_config) }),
         ...(r.link_source_config == null ? {} : { client_source: persistedLinkClientSource(r.link_source_config) }),
-        ...resolveForwardPolicy(r, policy.limits) })) };
+        ...resolveTstPolicy(r, policy.limits) })) };
     let compiled;
-    try { compiled = compileFxpLink(spec, "00".repeat(32)); }
+    try { compiled = compileTstLink(spec); }
     catch (error) { throw new LinkResourceError(error instanceof Error && /^[a-z_]{1,64}$/.test(error.message)
       ? error.message : "link_binding_invalid"); }
     const deployment = await tx.linkDeployment.findUnique({ where: {
@@ -261,7 +279,7 @@ export async function captureLinkMaintenance(tx: Prisma.TransactionClient, works
       ingress_node_id: r.ingress_node_id, listen_ip: r.listen_ip, listen_port: r.listen_port,
       target_host: r.remote_host, target_port: r.remote_port,
       target_set: r.link_target_config ?? null, client_source: r.link_source_config ?? null,
-      ...resolveForwardPolicy(r, policy.limits) }));
+      ...resolveTstPolicy(r, policy.limits) }));
     const admission = { candidate: candidateSpec, references: referenceFacts,
       policy: { deny_scope: policy.deny_scope, limits: policy.limits, entitlements: policy.entitlements } };
     const preview = buildLinkMaintenancePreview({
@@ -296,7 +314,7 @@ export async function captureLinkMaintenance(tx: Prisma.TransactionClient, works
 }
 
 type Deployment = Awaited<ReturnType<typeof prepareDeployment>>;
-async function reservePlacements(tx: Prisma.TransactionClient, placements: FxpPlacementConfig[]) {
+async function reservePlacements(tx: Prisma.TransactionClient, placements: TstPlacementConfig[]) {
   // Reuse the caller's transaction: a failed second protocol must roll back the
   // first claim and the proposed business revision, without nesting transactions.
   const leaseDb = { node: tx.node, tunnel: tx.tunnel, nodePortLease: tx.nodePortLease,
@@ -313,37 +331,38 @@ async function reservePlacements(tx: Prisma.TransactionClient, placements: FxpPl
 async function preflightBinding(tx: Prisma.TransactionClient, workspaceId: number,
   link: Awaited<ReturnType<typeof scopedLink>>, config: LinkConfig,
   nodes: Awaited<ReturnType<typeof endpoints>>, binding: z.output<typeof LinkBindingSchema>,
-  forwardId: number, active = true) {
+  forwardId: number, revision: number, active = true) {
   // Compile suspended candidates too: capability checks, complete target/source
   // authorization and the 1 MiB budget must precede every durable edit.
   const policy = await getEffectivePolicy(workspaceId, { client: tx, noCache: true });
   const rows = await tx.tunnel.findMany({ where: { workspace_id: workspaceId,
     link_resource_id: link.id, desired_status: "active" }, orderBy: { id: "asc" } });
   const bindings = rows.filter((r) => r.id !== forwardId).map((r) => ({ forward_id: r.id,
+    revision: r.config_revision ?? 0,
     protocol: r.forward_protocol as "tcp" | "udp" | "both", listen_port: r.listen_port!,
     listen_host: (r.listen_ip === "127.0.0.1" || r.listen_ip === "::1" ? r.listen_ip : "") as "" | "127.0.0.1" | "::1",
     target_host: r.remote_host!, target_port: r.remote_port!,
     ...(r.link_target_config == null ? {} : { target_set: persistedLinkTargetSet(r.link_target_config) }),
     ...(r.link_source_config == null ? {} : { client_source: persistedLinkClientSource(r.link_source_config) }),
-    ...resolveForwardPolicy(r, policy.limits) }));
-  bindings.push({ forward_id: forwardId, protocol: binding.protocol,
+    ...resolveTstPolicy(r, policy.limits) }));
+  bindings.push({ forward_id: forwardId, revision, protocol: binding.protocol,
     listen_port: binding.listen_port, listen_host: binding.listen_host,
     target_host: binding.target_host, target_port: binding.target_port,
     ...(binding.target_set ? { target_set: binding.target_set } : {}),
     ...(binding.client_source ? { client_source: binding.client_source } : {}),
-    ...resolveForwardPolicy(binding, policy.limits) });
+    ...resolveTstPolicy(binding, policy.limits) });
   let compiled;
-  try { compiled = compileFxpLink({ link_id: link.id, workspace_id: workspaceId,
+  try { compiled = compileTstLink({ link_id: link.id, workspace_id: workspaceId,
     version: link.desired_version, generation: link.generation + 1, ingress: nodes.inFact, egress: nodes.outFact,
-    carrier_port: config.carrier_port, lease_expires_at: new Date(Date.now() + LEASE_MS).toISOString(), bindings }, "00".repeat(32)); }
+    carrier_port: config.carrier_port, lease_expires_at: new Date(Date.now() + LEASE_MS).toISOString(), bindings }); }
   catch (error) { throw new LinkResourceError(error instanceof Error && /^[a-z_]{1,64}$/.test(error.message)
     ? error.message : "link_binding_invalid"); }
   // A suspended edit must pass the same capability and byte budget preflight,
   // but must not reserve or deploy its inactive listener.
-  if (!active) compiled = compileFxpLink({ link_id: link.id, workspace_id: workspaceId,
+  if (!active) compiled = compileTstLink({ link_id: link.id, workspace_id: workspaceId,
     version: link.desired_version, generation: link.generation + 1, ingress: nodes.inFact, egress: nodes.outFact,
     carrier_port: config.carrier_port, lease_expires_at: new Date(Date.now() + LEASE_MS).toISOString(),
-    bindings: bindings.filter((b) => b.forward_id !== forwardId) }, "00".repeat(32));
+    bindings: bindings.filter((b) => b.forward_id !== forwardId) });
   await reservePlacements(tx, [compiled.egress, compiled.ingress]);
 }
 async function prepareDeployment(workspaceId: number, linkId: number, rotate: boolean, retiring = false) {
@@ -358,7 +377,8 @@ async function prepareDeployment(workspaceId: number, linkId: number, rotate: bo
     const generation = link.generation + 1;
     if ((retiring || rotate) && await tx.tunnel.count({ where: { link_resource_id: linkId } }))
       throw new LinkResourceError("link_has_references");
-    const rows = await tx.tunnel.findMany({ where: { workspace_id: workspaceId, link_resource_id: linkId, desired_status: "active" }, orderBy: { id: "asc" } });
+    const references = await tx.tunnel.findMany({ where: { workspace_id: workspaceId, link_resource_id: linkId }, orderBy: { id: "asc" } });
+    const rows = references.filter((row) => row.desired_status === "active");
     const policy = await getEffectivePolicy(workspaceId, { client: tx, noCache: true });
     const trafficUsed = await sumWorkspaceTraffic(workspaceId, policy.limits.traffic_period, new Date(), tx);
     for (const row of rows) {
@@ -368,31 +388,33 @@ async function prepareDeployment(workspaceId: number, linkId: number, rotate: bo
         if (!decision.allowed) throw new LinkResourceError(decision.reason ?? "policy_denied", 403);
       }
     }
-    const bindings = rows.map((r) => ({ forward_id: r.id, protocol: r.forward_protocol as "tcp" | "udp" | "both",
+    const bindings = rows.map((r) => ({ forward_id: r.id, revision: r.config_revision ?? 0, protocol: r.forward_protocol as "tcp" | "udp" | "both",
       listen_port: r.listen_port!, listen_host: r.listen_ip === "127.0.0.1" || r.listen_ip === "::1" ? r.listen_ip : "" as const,
       target_host: r.remote_host!, target_port: r.remote_port!,
       ...(r.link_target_config == null ? {} : { target_set: persistedLinkTargetSet(r.link_target_config) }),
       ...(r.link_source_config == null ? {} : { client_source: persistedLinkClientSource(r.link_source_config) }),
-      ...resolveForwardPolicy(r, policy.limits) }));
+      ...resolveTstPolicy(r, policy.limits) }));
     const lease = new Date(Date.now() + LEASE_MS);
-    const input = FxpLinkInputSchema.parse({ link_id: linkId, workspace_id: workspaceId,
+    const input = TstLinkInputSchema.parse({ link_id: linkId, workspace_id: workspaceId,
       version: link.desired_version, generation, ingress: nodes.inFact, egress: nodes.outFact,
       carrier_port: config.carrier_port, lease_expires_at: lease.toISOString(), bindings });
     const previous = link.generation ? await tx.linkTransportCredential.findUnique({
       where: { link_id_generation: { link_id: linkId, generation: link.generation } } }) : null;
     if (link.generation && !previous && !rotate) throw new LinkResourceError("link_credential_missing", 503);
-    const secret = !rotate && previous
-      ? unsealLinkTransportKey(previous.secret_enc, sealKey(), workspaceId, linkId, previous.generation) : newLinkTransportKey();
+    let secret = !rotate && previous
+      ? unsealTstCredentials(previous.secret_enc, sealKey(), workspaceId, linkId, previous.generation) : await newTstCredentials(workspaceId, linkId, nodes.ingress.id, nodes.egress.id);
+    if (Date.parse(secret.expires_at) <= Date.now() + 86_400_000)
+      secret = await newTstCredentials(workspaceId, linkId, nodes.ingress.id, nodes.egress.id);
     let placements;
-    try { placements = compileFxpLink(input, secret); }
+    try { placements = compileTstLink(input, secret); }
     catch (error) { throw new LinkResourceError(error instanceof Error && /^[a-z_]{1,64}$/.test(error.message)
       ? error.message : "link_binding_invalid"); }
     if (!retiring) await reservePlacements(tx, [placements.egress, placements.ingress]);
     await tx.linkTransportCredential.create({ data: { link_id: linkId, generation,
-      secret_enc: sealLinkTransportKey(secret, sealKey(), workspaceId, linkId, generation) } });
+      secret_enc: sealTstCredentials(secret, sealKey(), workspaceId, linkId, generation) } });
     const deployment = await tx.linkDeployment.create({ data: { link_id: linkId, generation,
       version: link.desired_version, status: retiring ? "retiring" : "preparing", binding_snapshot: { spec: input,
-        revisions: rows.map((r) => ({ id: r.id, revision: r.config_revision ?? 0 })) }, lease_expires_at: lease,
+        revisions: references.map((r) => ({ id: r.id, revision: r.config_revision ?? 0 })) }, lease_expires_at: lease,
       placements: { create: [placements.egress, placements.ingress].map((p) => ({
         node_id: p.node_id, role: p.role, runtime_id: p.id, generation,
         config_digest: p.config_digest,
@@ -423,7 +445,7 @@ async function applyDeployment(prepared: Deployment) {
     for (const placement of [placements.egress, placements.ingress]) {
       await sendLinkPlacement(placement);
       await db.linkPlacement.updateMany({ where: { deployment_id: deployment.id, role: placement.role,
-        generation: deployment.generation }, data: { status: placement.runner_config ? "running" : "passive",
+        generation: deployment.generation }, data: { status: placement.role === "ingress" && !placement.transport_config.bindings.length ? "passive" : "running",
         applied_generation: deployment.generation, last_error_code: null } });
     }
     await db.$transaction(async (tx) => {
@@ -437,6 +459,11 @@ async function applyDeployment(prepared: Deployment) {
             await tx.tunnel.updateMany({ where: { id: fact.id, workspace_id: link.workspace_id,
               link_resource_id: link.id, config_revision: fact.revision, desired_status: "active" }, data: { apply_status: "active", applied_revision: fact.revision,
               apply_error_code: null, apply_error: null, last_applied_at: new Date() } });
+            await tx.tunnel.updateMany({ where: { id: fact.id, workspace_id: link.workspace_id, link_resource_id: link.id,
+              config_revision: fact.revision, desired_status: "inactive" }, data: { apply_status: "suspended",
+              applied_revision: fact.revision, apply_error_code: null, apply_error: null, last_applied_at: new Date() } });
+            await tx.tunnel.deleteMany({ where: { id: fact.id, workspace_id: link.workspace_id, link_resource_id: link.id,
+              config_revision: fact.revision, applied_revision: fact.revision, desired_status: "inactive", forward_delete_requested_at: { not: null } } });
         }
       }
       await tx.tunnel.updateMany({ where: { link_resource_id: link.id, desired_status: "inactive",
@@ -468,14 +495,20 @@ export async function deployLink(workspaceId: number, linkId: number, rotate = f
   return applyDeployment(await prepareDeployment(workspaceId, linkId, rotate));
 }
 
-export async function createLinkForward(workspaceId: number, linkId: number, actorId: number, raw: unknown) {
+export async function createLinkForward(workspaceId: number, linkId: number, actorId: number, raw: unknown, options: { deploy?: boolean; operationId?: string; operationToken?: string } = {}) {
   assertLinkFeature();
-  const binding = LinkBindingSchema.parse(raw);
+  const autoListen = raw != null && typeof raw === "object" && (raw as { listen_port?: unknown }).listen_port == null;
+  const binding = LinkBindingSchema.parse(autoListen ? { ...raw, listen_port: 1 } : raw);
+  if (binding.target_set || binding.client_source) throw new LinkResourceError("tst_policy_unsupported", 400);
   const link = await scopedLink(workspaceId, linkId);
   const version = await db.linkVersion.findUniqueOrThrow({ where: { link_id_version: { link_id: linkId, version: link.desired_version } } });
   const config = LinkConfigSchema.parse(version.config);
   const nodes = await endpoints(workspaceId, config);
   const created = await withWorkspaceQuotaLock(workspaceId, async (tx, policy) => {
+    if (options.operationId) {
+      const existing = await lockForwardOperation(tx, options.operationId, options.operationToken, workspaceId, actorId);
+      if (existing !== null) return existing;
+    }
     const locked = await lockLink(tx, workspaceId, linkId);
     if (locked.desired_version !== version.version) throw new LinkResourceError("link_version_conflict");
     const tunnelCount = await countWorkspaceTunnels(workspaceId, tx);
@@ -485,7 +518,18 @@ export async function createLinkForward(workspaceId: number, linkId: number, act
         inGroupOwned: true, outGroupOwned: true, inGroupId: nodes.ingress.node_group_id, outGroupId: nodes.egress.node_group_id });
       if (!decision.allowed) throw new LinkResourceError(decision.reason ?? "policy_denied", 403);
     }
-    await preflightBinding(tx, workspaceId, locked, config, nodes, binding, 2_147_483_647);
+    if (autoListen) {
+      const leaseDb = { node: tx.node, tunnel: tx.tunnel, nodePortLease: tx.nodePortLease,
+        $transaction: async <T>(run: (client: PortPoolTransaction) => Promise<T>) => run(tx as unknown as PortPoolTransaction) } as unknown as PortPoolDb;
+      const otherLanes = binding.protocol === "both" ? await tx.nodePortLease.findMany({ where: {
+        node_id: nodes.ingress.id, status: "active" }, select: { port: true } }) : [];
+      const allocation = await acquirePort({ nodeId: nodes.ingress.id, leaseType: "ingress", linkId,
+        freshAllocation: true, protocol: binding.protocol === "udp" ? "udp" : "tcp", bindScope: binding.listen_host,
+        reservedPorts: otherLanes.map((lease) => lease.port), expiresAt: null, deps: { db: leaseDb } });
+      if (!allocation.ok) throw new LinkResourceError(allocation.code);
+      binding.listen_port = allocation.result.port;
+    }
+    await preflightBinding(tx, workspaceId, locked, config, nodes, binding, 2_147_483_647, 1);
     const row = await tx.tunnel.create({ data: {
       name: binding.name, workspace_id: workspaceId, user_id: actorId, category: "port_forward",
       tunnel_type: binding.protocol === "udp" ? "udp" : "tcp", forward_protocol: binding.protocol,
@@ -504,11 +548,14 @@ export async function createLinkForward(workspaceId: number, linkId: number, act
       candidate: { ...binding, mode: "relay", ingress_node_id: nodes.ingress.id,
         egress_node_id: nodes.egress.id, link_resource_id: linkId } as ForwardCandidateConfig,
       resolvedListenIp: row.listen_ip, egressPort: config.carrier_port }, tx);
+    if (options.operationId) await tx.forwardOperation.update({ where: { id: options.operationId },
+      data: { forward_id: row.id, link_id: linkId, state: "pending_apply", stage: "forward_saved" } });
+    await tx.linkResource.update({ where: { id: linkId }, data: { last_unreferenced_at: null } });
     return row.id;
   });
   // The persisted revision survives transport failure and is retried by the Link
   // reconciler. Never start a parallel legacy Tunnel for this business object.
-  await deployLink(workspaceId, linkId);
+  if (options.deploy !== false) await deployLink(workspaceId, linkId);
   return { id: created, link_id: linkId };
 }
 
@@ -522,6 +569,7 @@ export async function updateLinkForward(workspaceId: number, linkId: number, for
     throw parsed.error;
   }
   const binding = parsed.data;
+  if (binding.target_set || binding.client_source) throw new LinkResourceError("tst_policy_unsupported", 400);
   const link = await scopedLink(workspaceId, linkId);
   const version = await db.linkVersion.findUniqueOrThrow({ where: { link_id_version: { link_id: linkId, version: link.desired_version } } });
   const config = LinkConfigSchema.parse(version.config);
@@ -531,6 +579,7 @@ export async function updateLinkForward(workspaceId: number, linkId: number, for
     if (locked.desired_version !== version.version) throw new LinkResourceError("link_version_conflict");
     const row = await tx.tunnel.findFirst({ where: { id: forwardId, workspace_id: workspaceId, link_resource_id: linkId } });
     if (!row) throw new LinkResourceError("forward_not_found", 404);
+    if (row.forward_delete_requested_at) throw new LinkResourceError("forward_deleting");
     if (row.config_revision !== expectedRevision) throw new LinkResourceError("revision_conflict");
     if (row.link_source_config != null && !binding.client_source)
       throw new LinkResourceError("link_client_source_required");
@@ -539,7 +588,8 @@ export async function updateLinkForward(workspaceId: number, linkId: number, for
     if (row.forward_protocol !== binding.protocol) throw new LinkResourceError("protocol_change_requires_new_forward");
     if (normalizeBindScope(row.listen_ip) !== normalizeBindScope(binding.listen_host))
       throw new LinkResourceError("listen_scope_change_requires_new_forward");
-    await preflightBinding(tx, workspaceId, locked, config, nodes, binding, row.id, row.desired_status !== "inactive");
+    await preflightBinding(tx, workspaceId, locked, config, nodes, binding, row.id,
+      (row.config_revision ?? 0) + 1, row.desired_status !== "inactive");
     await createForwardRevision({ tunnelId: row.id, desiredStatus: row.desired_status === "inactive" ? "inactive" : "active", createdById: actorId,
       link_resource_id: linkId,
       candidate: { ...binding, mode: "relay", ingress_node_id: row.ingress_node_id!,
@@ -561,6 +611,8 @@ export async function actionLinkForward(workspaceId: number, linkId: number, for
     if (locked.desired_version !== version.version) throw new LinkResourceError("link_version_conflict");
     const row = await tx.tunnel.findFirst({ where: { id: forwardId, workspace_id: workspaceId, link_resource_id: linkId } });
     if (!row) throw new LinkResourceError("forward_not_found", 404);
+    if (row.forward_delete_requested_at && action !== "delete" && action !== "retry") throw new LinkResourceError("forward_deleting");
+    if (action === "delete") await tx.tunnel.update({ where: { id: forwardId }, data: { forward_delete_requested_at: new Date() } });
     if (nodes) await preflightBinding(tx, workspaceId, locked, config, nodes, LinkBindingSchema.parse({
       name: row.name, protocol: row.forward_protocol, listen_port: row.listen_port,
       listen_host: row.listen_ip === "127.0.0.1" || row.listen_ip === "::1" ? row.listen_ip : "",
@@ -569,7 +621,7 @@ export async function actionLinkForward(workspaceId: number, linkId: number, for
     ...(row.link_source_config == null ? {} : { client_source: persistedLinkClientSource(row.link_source_config) }),
       bytes_per_second_in: row.bytes_per_second_in ?? 0, bytes_per_second_out: row.bytes_per_second_out ?? 0,
       max_connections: row.max_connections ?? 0, max_connections_per_ip: row.max_connections_per_ip ?? 0,
-    }), row.id);
+    }), row.id, (row.config_revision ?? 0) + 1);
     if (action !== "retry") {
       await createForwardRevision({ tunnelId: row.id, createdById: actorId ?? row.user_id,
         desiredStatus: action === "resume" ? "active" : "inactive", link_resource_id: linkId,
@@ -586,9 +638,7 @@ export async function actionLinkForward(workspaceId: number, linkId: number, for
     }
   });
   await deployLink(workspaceId, linkId);
-  if (action === "delete") await db.tunnel.deleteMany({ where: { id: forwardId, workspace_id: workspaceId,
-    link_resource_id: linkId, desired_status: "inactive" } });
-  else if (action === "suspend") await db.tunnel.updateMany({ where: { id: forwardId,
+  if (action === "suspend") await db.tunnel.updateMany({ where: { id: forwardId,
     link_resource_id: linkId, desired_status: "inactive" }, data: { apply_status: "suspended" } });
   return getLink(workspaceId, linkId);
 }
@@ -599,29 +649,32 @@ export async function retireLink(workspaceId: number, linkId: number) {
     const link = await lockScopedLink(tx, workspaceId, linkId);
     await assertNoMaintenanceIntent(tx, linkId);
     if (await tx.tunnel.count({ where: { link_resource_id: linkId } })) throw new LinkResourceError("link_has_references");
+    if (await tx.forwardOperation.count({ where: { link_id: linkId, state: { in: ["accepted", "applying", "pending_apply"] } } }))
+      throw new LinkResourceError("link_has_pending_operations");
     return link;
   });
   if (current.status === "retired") return { id: linkId, status: "retired" };
-  const prepared = current.status === "retiring" ? await hydrateDeployment(current) : await prepareDeployment(workspaceId, linkId, false, true);
+  const prepared = current.status === "retiring" ? await hydrateDeployment(current, true) : await prepareDeployment(workspaceId, linkId, false, true);
   // Ingress stops first. Tombstones are persisted before freeing any DB lease.
   for (const placement of [prepared.placements.ingress, prepared.placements.egress]) await sendLinkPlacement(placement, true);
   const changed = await db.linkResource.updateMany({ where: { id: linkId, generation: prepared.deployment.generation,
-    status: "retiring" }, data: { status: "retired" } });
+    status: "retiring" }, data: { status: "retired", reuse_key: null } });
   if (changed.count !== 1) throw new LinkResourceError("link_generation_conflict");
   await db.linkDeployment.update({ where: { id: prepared.deployment.id }, data: { status: "retired" } });
   await releaseLease({ linkId });
   return { id: linkId, status: "retired" };
 }
 
-async function hydrateDeployment(link: Awaited<ReturnType<typeof scopedLink>>): Promise<Deployment> {
+async function hydrateDeployment(link: Awaited<ReturnType<typeof scopedLink>>, removalOnly = false): Promise<Deployment> {
   const deployment = await db.linkDeployment.findUniqueOrThrow({ where: { link_id_generation: { link_id: link.id,
     generation: link.generation } }, include: { placements: true } });
   const credential = await db.linkTransportCredential.findUniqueOrThrow({ where: { link_id_generation: {
     link_id: link.id, generation: link.generation } } });
   const input = DeploymentSnapshotSchema.parse(deployment.binding_snapshot).spec;
   input.lease_expires_at = new Date(Date.now() + LEASE_MS).toISOString();
-  const secret = unsealLinkTransportKey(credential.secret_enc, sealKey(), link.workspace_id, link.id, link.generation);
-  const placements = compileFxpLink(input, secret);
+  const secret = unsealTstCredentials(credential.secret_enc, sealKey(), link.workspace_id, link.id, link.generation);
+  if (!removalOnly && Date.parse(secret.expires_at) <= Date.now()) throw new LinkResourceError("tst_certificate_expired", 403);
+  const placements = compileTstLink(input, secret);
   return { link, deployment, placements };
 }
 
@@ -637,31 +690,32 @@ async function deploymentIsCurrent(link: Awaited<ReturnType<typeof scopedLink>>,
     const nodes = await endpoints(link.workspace_id, { ingress_node_id: snapshot.spec.ingress.id,
       egress_node_id: snapshot.spec.egress.id, carrier_port: snapshot.spec.carrier_port });
     // A snapshot freezes config, not a permanent capability attestation.
-    compileFxpLink({ ...snapshot.spec, ingress: nodes.inFact, egress: nodes.outFact }, "00".repeat(32));
+    compileTstLink({ ...snapshot.spec, ingress: nodes.inFact, egress: nodes.outFact });
   } catch (error) {
     if (error instanceof LinkResourceError) throw new LinkResourceError(error.code, 403);
-    if (error instanceof Error && /^agent_fxp_[a-z_]+_capability_missing$/.test(error.message))
+    if (error instanceof Error && /^agent_tst_[a-z_]+_capability_missing$/.test(error.message))
       throw new LinkResourceError(error.message, 403);
     throw error;
   }
   const policy = await getEffectivePolicy(link.workspace_id, { noCache: true });
   if (policy.deny_scope) throw new LinkResourceError(policy.deny_reason ?? "policy_denied", 403);
-  const rows = await db.tunnel.findMany({ where: { workspace_id: link.workspace_id,
-    link_resource_id: link.id, desired_status: "active" }, orderBy: { id: "asc" } });
+  const references = await db.tunnel.findMany({ where: { workspace_id: link.workspace_id,
+    link_resource_id: link.id }, orderBy: { id: "asc" } });
+  const rows = references.filter((row) => row.desired_status === "active");
   const trafficUsed = await sumWorkspaceTraffic(link.workspace_id, policy.limits.traffic_period, new Date());
   for (const row of rows) for (const protocol of row.forward_protocol === "both" ? ["tcp", "udp"] : [row.forward_protocol ?? ""]) {
     const decision = checkTunnelUse(policy, { trafficUsed, protocol, inGroupOwned: true, outGroupOwned: true,
       inGroupId: row.in_node_group_id!, outGroupId: row.out_node_group_id });
     if (!decision.allowed) throw new LinkResourceError(decision.reason ?? "policy_denied", 403);
   }
-  const bindings = rows.map((row) => ({ forward_id: row.id, protocol: row.forward_protocol,
+  const bindings = rows.map((row) => ({ forward_id: row.id, revision: row.config_revision ?? 0, protocol: row.forward_protocol,
     listen_port: row.listen_port, listen_host: row.listen_ip === "127.0.0.1" || row.listen_ip === "::1" ? row.listen_ip : "",
     target_host: row.remote_host, target_port: row.remote_port,
     ...(row.link_target_config == null ? {} : { target_set: persistedLinkTargetSet(row.link_target_config) }),
       ...(row.link_source_config == null ? {} : { client_source: persistedLinkClientSource(row.link_source_config) }),
-    ...resolveForwardPolicy(row, policy.limits) }));
+    ...resolveTstPolicy(row, policy.limits) }));
   return latest.desired_version === deployment.version &&
-    deploymentBindingsMatch(snapshot, bindings, rows.map((row) => ({ id: row.id, revision: row.config_revision ?? 0 })));
+    deploymentBindingsMatch(snapshot, bindings, references.map((row) => ({ id: row.id, revision: row.config_revision ?? 0 })));
 }
 
 /** Shared pure fence: includes complete targets/source policy and effective hard ceilings. */
@@ -672,13 +726,13 @@ function deploymentBindingsMatch(snapshot: z.infer<typeof DeploymentSnapshotSche
 }
 
 /** Startup/reconnect and periodic renewal use the same immutable merge compiler. */
-export async function desiredNodeLinks(nodeId: number): Promise<FxpPlacementConfig[]> {
-  if (process.env.TUNEX_FXP_LINKS_ENABLED !== "true") return [];
+export async function desiredNodeLinks(nodeId: number): Promise<TstPlacementConfig[]> {
+  if (process.env.TUNEX_TST_ENABLED !== "true") return [];
   const placements = await db.linkPlacement.findMany({ where: { node_id: nodeId,
     deployment: { status: { in: ["pending", "active", "degraded"] },
-      link: { status: { in: ["active", "deploying", "degraded"] } } } },
+      link: { carrier: "tst_v1", status: { in: ["active", "deploying", "degraded"] } } } },
     include: { deployment: { include: { link: true } } } });
-  const result: FxpPlacementConfig[] = [];
+  const result: TstPlacementConfig[] = [];
   for (const placement of placements) {
     const deployment = placement.deployment;
     if (deployment.generation !== deployment.link.generation) continue;
@@ -689,27 +743,39 @@ export async function desiredNodeLinks(nodeId: number): Promise<FxpPlacementConf
     const snapshot = DeploymentSnapshotSchema.parse(deployment.binding_snapshot);
     const cred = await db.linkTransportCredential.findUniqueOrThrow({ where: { link_id_generation: {
       link_id: deployment.link_id, generation: deployment.generation } } });
-    const secret = unsealLinkTransportKey(cred.secret_enc, sealKey(), deployment.link.workspace_id,
+    const secret = unsealTstCredentials(cred.secret_enc, sealKey(), deployment.link.workspace_id,
       deployment.link_id, deployment.generation);
-    const lease = new Date(Date.now() + LEASE_MS);
+    if (Date.parse(secret.expires_at) <= Date.now()) continue;
+    const lease = await extendDeploymentLease(deployment.id, new Date(Date.now() + LEASE_MS));
     const input = snapshot.spec;
     input.lease_expires_at = lease.toISOString();
-    const config = compileFxpLink(input, secret)[placement.role === "ingress" ? "ingress" : "egress"];
+    const config = compileTstLink(input, secret)[placement.role === "ingress" ? "ingress" : "egress"];
     if (config.node_id !== nodeId || config.config_digest !== placement.config_digest) throw new LinkResourceError("link_snapshot_corrupt", 503);
-    await db.linkDeployment.update({ where: { id: deployment.id }, data: { lease_expires_at: lease } });
     result.push(config);
   }
   return result;
 }
 
 export async function reconcileLinks(): Promise<{ scanned: number; errors: number }> {
-  if (process.env.TUNEX_FXP_LINKS_ENABLED !== "true") return { scanned: 0, errors: 0 };
-  const links = await db.linkResource.findMany({ where: { status: { in: ["active", "deploying", "degraded", "retiring"] } } });
+  if (process.env.TUNEX_TST_ENABLED !== "true") return { scanned: 0, errors: 0 };
   let errors = 0;
+  const unused = await db.linkResource.findMany({ where: { carrier: "tst_v1", managed_by: "auto_forward",
+    status: { notIn: ["retired", "retiring"] }, last_unreferenced_at: { lte: new Date(Date.now() - 300_000) },
+    forwards: { none: {} } }, take: 100 });
+  for (const link of unused) {
+    try { await retireLink(link.workspace_id, link.id); } catch { errors++; }
+  }
+  const links = await db.linkResource.findMany({ where: { carrier: "tst_v1", status: { in: ["active", "deploying", "degraded", "retiring"] } } });
   for (const link of links) {
     let prepared: Deployment | undefined;
     try {
       if (link.status === "retiring") { await retireLink(link.workspace_id, link.id); continue; }
+      const credential = await db.linkTransportCredential.findUniqueOrThrow({ where: { link_id_generation: {
+        link_id: link.id, generation: link.generation } } });
+      if (Date.parse(unsealTstCredentials(credential.secret_enc, sealKey(), link.workspace_id, link.id, link.generation).expires_at) <= Date.now() + 86_400_000) {
+        await deployLink(link.workspace_id, link.id);
+        continue;
+      }
       prepared = await hydrateDeployment(link);
       const current = await deploymentIsCurrent(link, prepared.deployment);
       if (!current || prepared.deployment.status === "policy_blocked") {
@@ -723,8 +789,8 @@ export async function reconcileLinks(): Promise<{ scanned: number; errors: numbe
       // Refresh the exact generation; reconnect and duplicate apply renew its
       // durable lease without creating a new desired-state writer.
       for (const placement of [prepared.placements.egress, prepared.placements.ingress]) await sendLinkPlacement(placement);
-      await db.linkDeployment.update({ where: { id: prepared.deployment.id },
-        data: { lease_expires_at: new Date(prepared.placements.ingress.lease_expires_at) } });
+      await extendDeploymentLease(prepared.deployment.id,
+        new Date(prepared.placements.ingress.lease_expires_at));
     } catch (error) {
       errors++;
       if (prepared && error instanceof Error && error.message === "stale_generation") {

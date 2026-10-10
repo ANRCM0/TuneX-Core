@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * V5-WP20-6b — `GET /api/me/capabilities` 的 **HTTP 契约**回归。
  *
@@ -23,7 +24,7 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 
-const root = new URL("../..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../..", import.meta.url));
 
 const scenario = String.raw`
 import { mock, expect } from "bun:test";

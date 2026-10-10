@@ -439,16 +439,26 @@ function restrictedPath(dir: string, tools: string[]): string {
   const bin = join(dir, "bin");
   mkdirSync(bin, { recursive: true });
   for (const tool of tools) {
-    const found = ["/usr/bin", "/bin", "/usr/local/bin"]
-      .map((base) => join(base, tool))
+    const windows = process.platform === "win32";
+    const found = ["/usr/bin", "/bin", "/usr/local/bin", process.env.TUNEX_POSIX_TOOLS ?? join(tmpdir(), "tunex-posix-tools"),
+      ...(process.env.PATH ?? "").split(windows ? ";" : ":")]
+      .flatMap((base) => [join(base, tool), ...(windows ? [join(base, `${tool}.exe`)] : [])])
       .find((candidate) => existsSync(candidate));
     if (!found) throw new Error(`test host is missing '${tool}'`);
-    symlinkSync(found, join(bin, tool));
+    if (windows) writeFileSync(join(bin, tool), `#!/bin/sh\nexec '${shellPath(found)}' "$@"\n`, { mode: 0o755 });
+    else symlinkSync(found, join(bin, tool));
   }
   return bin;
 }
 
-const SH = ["/bin/sh", "/usr/bin/sh"].find((candidate) => existsSync(candidate)) ?? "sh";
+const SH = ["/bin/sh", "/usr/bin/sh"].find((candidate) => existsSync(candidate)) ?? Bun.which("sh") ?? "sh";
+function shellPath(value: string): string {
+  return process.platform === "win32" ? value.replace(/\\/g, "/").replace(/^([A-Za-z]):\//, (_, drive) => `/${drive.toLowerCase()}/`) : value;
+}
+function probeEnv(bin: string) {
+  return { PATH: shellPath(bin), TMPDIR: shellPath(join(bin, "..")),
+    ...(process.platform === "win32" ? { SYSTEMROOT: process.env.SYSTEMROOT, SystemRoot: process.env.SystemRoot } : {}) };
+}
 
 /**
  * 一次探针运行的完整环境：独立临时目录 + agent.env + 受控 PATH。
@@ -474,8 +484,8 @@ function probeSandbox(tools: string[], agentProbe?: string) {
  * 事件循环堵死，服务端永远回不了响应（实测 curl 28 超时、0 字节）。
  */
 async function runProbe(body: string, base: string, bin: string, envFile: string): Promise<string> {
-  const proc = Bun.spawn([SH, "-c", body, "sh", base, "5", envFile], {
-    env: { PATH: bin },
+  const proc = Bun.spawn([SH, "-c", body, "sh", base, "5", shellPath(envFile)], {
+    env: probeEnv(bin),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -486,7 +496,9 @@ async function runProbe(body: string, base: string, bin: string, envFile: string
 
 /** 跑一条命令并拿回 stdout/stderr（同样是异步，理由见 `runProbe`）。 */
 async function runCommand(argv: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
-  const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+  const command = process.platform === "win32" && existsSync(argv[0]!) && !argv[0]!.endsWith(".exe")
+    ? [SH, shellPath(argv[0]!), ...argv.slice(1)] : argv;
+  const proc = Bun.spawn(command, { stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -559,7 +571,7 @@ describe("identity probe behaviour: a 302 or a non-Panel 200 is never 通过", (
         join(box.bin, "wget"),
         "-S",
         "-O",
-        "/dev/null",
+        process.platform === "win32" ? "NUL" : "/dev/null",
         "-T",
         "5",
         "--header",
@@ -826,8 +838,8 @@ describe("身份探针的首选路径与兜底路径", () => {
       const base = `http://127.0.0.1:${panel.port}`;
       // 假二进制把收到的参数写到文件里：这样断言的是**真实传参**，不是脚本文本。
       const argsFile = join(box.dir, "agent-args.txt");
-      const proc = Bun.spawn([SH, "-c", body, "sh", base, "5", box.envFile], {
-        env: { PATH: box.bin, AGENT_ARGS_FILE: argsFile },
+      const proc = Bun.spawn([SH, "-c", body, "sh", base, "5", shellPath(box.envFile)], {
+        env: { ...probeEnv(box.bin), AGENT_ARGS_FILE: shellPath(argsFile) },
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -841,7 +853,7 @@ describe("身份探针的首选路径与兜底路径", () => {
       expect(args).toContain("--probe-timeout");
       expect(args).toContain("5");
       expect(args).toContain("--probe-env-file");
-      expect(args).toContain(box.envFile);
+      expect(args).toContain(shellPath(box.envFile));
       // 内置探针已经给了结论 ⇒ 兜底路径不该再发一次请求（面板只被**探针**打过一次，
       // 而这次探针是假的、没打请求 ⇒ 面板应当**零请求**）。
       expect(panel.seenCount).toBe(0);

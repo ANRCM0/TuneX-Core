@@ -1,5 +1,6 @@
 /**
- * Real F2/F3 persistence gate. Requires an already migrated, dedicated loopback
+ * V2 historical target/source persistence and fail-closed compilation gate.
+ * Requires an already migrated, dedicated loopback
  * *_link_target_sets_test database, TUNEX_DB_TEST=1 and the explicit URL below.
  * Never loads .env, falls back to ambient DATABASE_URL, or applies migrations.
  * Run with node --experimental-transform-types --test tests/link-target-sets.test.mjs.
@@ -47,9 +48,9 @@ if (!enabled) {
   });
   const { createForwardRevision, ensureForwardBaselineRevision, currentDesiredConfig } =
     await import("../src/services/forward-revision.ts");
-  const { compileFxpLink } = await import("../src/integrations/forwardx/link-compiler.ts");
-  const { persistedLinkTargetSet } = await import("../src/integrations/forwardx/target-set.ts");
-  const { persistedLinkClientSource } = await import("../src/integrations/forwardx/client-source.ts");
+  const { compileTstLink } = await import("../src/domain/link/tst-compiler.ts");
+  const { persistedLinkTargetSet } = await import("../src/domain/link/target-set.ts");
+  const { persistedLinkClientSource } = await import("../src/domain/link/client-source.ts");
   const nonce = randomUUID();
   const completeSet = { version: 1,
     targets: [{ host: "primary.example", port: 443 },
@@ -118,23 +119,23 @@ if (!enabled) {
   }
   function recoverConfig(id, binding) {
     const endpoint = { workspace_id: created.workspace.id, connect_host: "127.0.0.1",
-      version: "0.0.0-dev", capabilities: ["forward.link.fxp.v1", "forward.targets.fxp.v1", "forward.client-source.fxp.v1"] };
-    return compileFxpLink({ link_id: created.link.id, workspace_id: created.workspace.id, version: 1, generation: 1,
+      version: "2.0.0", capabilities: ["forward.link.tst.v1"] };
+    return compileTstLink({ link_id: created.link.id, workspace_id: created.workspace.id, version: 1, generation: 1,
       ingress: { ...endpoint, id: created.nodes[0] }, egress: { ...endpoint, id: created.nodes[1] },
       carrier_port: 25000, lease_expires_at: "2037-01-01T00:00:00Z", bindings: [{ forward_id: id,
-        protocol: binding.protocol, listen_port: binding.listen_port, listen_host: "127.0.0.1",
+        revision: binding.revision ?? 1, protocol: binding.protocol, listen_port: binding.listen_port, listen_host: "127.0.0.1",
         target_host: binding.target_host, target_port: binding.target_port,
         ...(binding.target_set === undefined ? {} : { target_set: binding.target_set }),
-        ...(binding.client_source === undefined ? {} : { client_source: binding.client_source }) }] }, "ab".repeat(32));
+        ...(binding.client_source === undefined ? {} : { client_source: binding.client_source }) }] });
   }
   function snapshotBinding(snapshot) {
-    return { protocol: snapshot.protocol, listen_port: snapshot.listen_port,
+    return { revision: snapshot.revision, protocol: snapshot.protocol, listen_port: snapshot.listen_port,
       target_host: snapshot.target_host, target_port: snapshot.target_port,
       target_set: persistedLinkTargetSet(snapshot.link_target_config),
       client_source: persistedLinkClientSource(snapshot.link_source_config) };
   }
 
-  test("real F2 revision transactions preserve immutable target sets, projections and recovery", { timeout: 60_000 }, async (t) => {
+  test("historical policies retain immutable database facts and TST rejects unsupported execution", { timeout: 60_000 }, async (t) => {
     await client.$connect();
     created.user = await client.user.create({ data: { email: `target-set-${nonce}@example.test` } });
     created.workspace = await client.workspace.create({ data: { slug: `target-set-${nonce}`,
@@ -176,16 +177,9 @@ if (!enabled) {
         const restarted = new PrismaClient(options);
         try {
           const recovered = await assertComplete(id, suspendedEdit, "active", restarted);
-          const config = recoverConfig(id, recovered.desired);
-          const snapshotConfig = recoverConfig(id, snapshotBinding(recovered.snapshot));
-          assert.deepEqual(config, snapshotConfig, "fresh-connection desired and revision facts compile the same complete configuration");
-          assert.deepEqual(config.egress.runner_config.targetSets[0].targets, suspendedEdit.targets);
-          assert.equal(config.egress.runner_config.allowedBindings.length, 20);
-          assert.deepEqual(config.ingress.runner_config.entries[0].targetSet.targets, suspendedEdit.targets);
-          const oldConfig = recoverConfig(id, snapshotBinding(first.snapshot));
-          assert.deepEqual(oldConfig.egress.runner_config.targetSets[0].targets, initial.targets);
-          assert.notEqual(config.egress.config_digest, oldConfig.egress.config_digest);
-          assert.notEqual(config.ingress.config_digest, oldConfig.ingress.config_digest);
+          for (const binding of [recovered.desired, snapshotBinding(recovered.snapshot), snapshotBinding(first.snapshot)])
+            assert.throws(() => recoverConfig(id, binding), /tst_policy_unsupported/,
+              "TST rejects the complete historical set instead of silently selecting the first target");
         } finally { await restarted.$disconnect(); }
       }
     });
@@ -213,15 +207,12 @@ if (!enabled) {
         assert.deepEqual(facts.row.link_source_config, expected);
         assert.deepEqual(facts.snapshot.link_source_config, expected);
         assert.deepEqual(facts.desired.client_source, expected);
-        const compiled = recoverConfig(forwardId, facts.desired);
-        const restored = recoverConfig(forwardId, snapshotBinding(facts.snapshot));
-        assert.deepEqual(compiled, restored);
-        const runtime = { version: 1, receiveProxy: expected.receive_proxy,
-          trustedCIDRs: expected.trusted_cidrs, sendProxy: expected.send_proxy };
-        assert.deepEqual(compiled.ingress.runner_config.entries[0].clientSource, runtime);
-        assert.deepEqual(compiled.egress.runner_config.clientSources, [{ ...runtime, ruleId: forwardId }]);
-        assert.equal(compiled.egress.runner_config.allowedBindings.length, 10);
-        assert.equal(compiled.egress.runner_config.targetSets[0].strategy, "ip_hash");
+        for (const binding of [facts.desired, snapshotBinding(facts.snapshot)]) {
+          assert.throws(() => recoverConfig(forwardId, binding), /tst_policy_unsupported/);
+          const { target_set: _set, ...sourceOnly } = binding;
+          assert.throws(() => recoverConfig(forwardId, sourceOnly), /tst_policy_unsupported/,
+            "a historical source policy is rejected even without a target set");
+        }
         return facts;
       };
       const initial = await sourceFacts(canonical);
@@ -238,8 +229,7 @@ if (!enabled) {
       const changed = { ...canonical, send_proxy: "v1" };
       await edit(changed); const edited = await sourceFacts(changed);
       assert.deepEqual(edited.revisions[0], initial.snapshot);
-      assert.notEqual(recoverConfig(id, initial.desired).ingress.config_digest, recoverConfig(id, edited.desired).ingress.config_digest);
-      assert.notEqual(recoverConfig(id, initial.desired).egress.config_digest, recoverConfig(id, edited.desired).egress.config_digest);
+      assert.notDeepEqual(initial.snapshot.link_source_config, edited.snapshot.link_source_config);
       await edit(undefined, "inactive");await sourceFacts(changed, "inactive");
       await edit(disabled, "inactive");await sourceFacts(disabled, "inactive");
       await edit(undefined);const resumed = await sourceFacts(disabled);
@@ -335,11 +325,15 @@ if (!enabled) {
         assert.equal(suspended.row.config_revision, 4);
         assert.deepEqual(suspended.revisions[0], legacy.snapshot);
         const config = recoverConfig(row.id, suspended.desired);
-        assert.equal(config.egress.runner_config.targetSets, undefined);
-        assert.equal(config.egress.runner_config.allowedBindings.length, 2);
-        assert.equal(config.ingress.runner_config.entries[0].targetSet, undefined);
-        assert.equal(config.ingress.runner_config.entries[0].clientSource, undefined);
-        assert.equal(config.egress.runner_config.clientSources, undefined);
+        assert.equal(config.egress.transport_config.bindings.length, 1);
+        assert.equal(config.egress.transport_config.bindings[0].protocol, "both");
+        assert.equal(config.egress.transport_config.bindings[0].target_host, row.remote_host);
+        assert.equal(config.ingress.transport_config.bindings[0].target_host, "");
+        for (const placement of [config.ingress, config.egress]) {
+          assert.equal("target_set" in placement.transport_config.bindings[0], false);
+          assert.equal("client_source" in placement.transport_config.bindings[0], false);
+          assert.equal(placement.runtime_ids.length, 2);
+        }
         assert.equal(suspended.row.link_source_config, null);assert.equal(suspended.snapshot.link_source_config, null);
       }
     });

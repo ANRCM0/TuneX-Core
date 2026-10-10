@@ -139,6 +139,7 @@ describe("A. 统一命令（§7.9 六个动作 + V4-WP11C 诊断）", () => {
     expect([...COMMAND_ACTIONS]).toEqual([
       "apply_link",
       "remove_link",
+      "diagnose_link_forward",
       "apply_tunnel",
       "remove_tunnel",
       "update_targets",

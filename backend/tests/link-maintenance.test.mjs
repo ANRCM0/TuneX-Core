@@ -16,7 +16,7 @@ if (!enabled) {
   const { Prisma, PrismaClient } = await import("@prisma/client");
   const client = new PrismaClient({ datasources: { db: { url: url.href } }, log: [],
     transactionOptions: { maxWait: 5000, timeout: 10000 } });
-  const { canonicalConfigDigest } = await import("../src/integrations/forwardx/core-contract.ts");
+  const { canonicalConfigDigest } = await import("../src/domain/link/core-contract.ts");
   const { closeMaintenanceIntent, currentMaintenanceIntent } = await import("../src/services/link-maintenance-guard.ts");
   const nonce = randomUUID();
   const links = [];

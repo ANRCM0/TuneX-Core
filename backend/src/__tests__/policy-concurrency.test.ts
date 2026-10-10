@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * SOFT-01 验收：并发创建隧道时的额度原子判定（不超发）。
  *
@@ -24,7 +25,7 @@
  */
 import { test, expect, describe, mock, beforeAll } from "bun:test";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /* ------------------------------------------------------------------ */
 /* 假数据库                                                            */

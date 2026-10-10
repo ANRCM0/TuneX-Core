@@ -9,19 +9,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tunex/agent/internal/linkrunner"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
-func sampleFixture() linkrunner.TrafficSample {
+func sampleFixture() tstruntime.TrafficSample {
 	// Keep the fixture on the actual wire contract rather than assuming an
 	// internal field spelling in the collector's representation.
-	var sample linkrunner.TrafficSample
+	var sample tstruntime.TrafficSample
 	_ = json.Unmarshal([]byte(`{"producer_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","link_id":3,"workspace_id":4,"node_id":5,"forward_id":6,"generation":7,"config_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","date":"2026-10-07","bytes_in":"41","bytes_out":"43","connections":"1"}`), &sample)
 	return sample
 }
 
 func TestAuthenticatedTrafficUsesCurrentRouteAndExactPersistedACK(t *testing.T) {
-	samples := []linkrunner.TrafficSample{sampleFixture()}
+	samples := []tstruntime.TrafficSample{sampleFixture()}
 	calls := 0
 	newPanel := func() *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +29,7 @@ func TestAuthenticatedTrafficUsesCurrentRouteAndExactPersistedACK(t *testing.T) 
 				t.Error("traffic did not use authenticated node channel")
 			}
 			var input struct {
-				Samples []linkrunner.TrafficSample `json:"samples"`
+				Samples []tstruntime.TrafficSample `json:"samples"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input.Samples) != 1 {
 				t.Error("malformed cumulative traffic body")
@@ -55,7 +55,7 @@ func TestAuthenticatedTrafficUsesCurrentRouteAndExactPersistedACK(t *testing.T) 
 }
 
 func TestTrafficCannotAckOnHTTPStatusMissingOrAlteredFacts(t *testing.T) {
-	samples := []linkrunner.TrafficSample{sampleFixture()}
+	samples := []tstruntime.TrafficSample{sampleFixture()}
 	raw, _ := json.Marshal(samples)
 	for _, response := range []string{
 		`{}`, `{"data":{"accepted":[]}}`, `{"data":{"ok":true}}`,
@@ -79,7 +79,7 @@ func TestTrafficRejectsRedirectAndDoesNotLeakCredentials(t *testing.T) {
 		http.Redirect(w, r, destination.URL, http.StatusTemporaryRedirect)
 	}))
 	defer source.Close()
-	_, err := (Client{PanelURL: func() string { return source.URL }, Credential: "fixture-credential", HTTP: &http.Client{}}).Post(context.Background(), []linkrunner.TrafficSample{sampleFixture()})
+	_, err := (Client{PanelURL: func() string { return source.URL }, Credential: "fixture-credential", HTTP: &http.Client{}}).Post(context.Background(), []tstruntime.TrafficSample{sampleFixture()})
 	if !errors.Is(err, ErrRejected) || forwarded || strings.Contains(err.Error(), "fixture-credential") {
 		t.Fatal("redirect leak or unsafe error", err)
 	}

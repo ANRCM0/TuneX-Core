@@ -8,7 +8,7 @@ test("capability reader stays on the supplied transaction client and fences stal
   const reader = client as unknown as NonNullable<Parameters<typeof loadNodeCapabilityFacts>[1]>;
   const now = Date.now();
   const report = (reported_at: Date, credential_rotated_at: Date | null = null) => ({
-    control_protocol_version: 2, capabilities: ["forward.link.fxp.v1"], capability_manifest: null,
+    control_protocol_version: 2, capabilities: ["forward.link.tst.v1"], capability_manifest: null,
     reported_at, node: { credential_rotated_at },
   });
   expect(await loadNodeCapabilityFacts(11, reader)).toBeNull();

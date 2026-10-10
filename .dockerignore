@@ -28,3 +28,7 @@ DEVELOPMENT.md
 **/.DS_Store
 **/.idea/
 **/.vscode/
+
+# Reference checkout and historical source archives never enter runtime images.
+Forwardx/
+third_party/

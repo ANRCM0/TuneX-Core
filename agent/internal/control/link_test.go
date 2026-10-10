@@ -2,57 +2,67 @@ package control
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
-	"net"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/tunex/agent/internal/linkrunner"
+	"github.com/tunex/agent/internal/diag"
 	"github.com/tunex/agent/internal/manager"
 	"github.com/tunex/agent/internal/reporter"
 	"github.com/tunex/agent/internal/restore"
+	"github.com/tunex/agent/internal/securelink"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
-func passiveLink(t *testing.T) linkrunner.Config {
+func passiveLink(t *testing.T) tstruntime.Config {
 	t.Helper()
-	digest, err := linkrunner.Digest(json.RawMessage("null"))
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	uri, _ := url.Parse("urn:tunex:tst:w:5:l:91:n:7:r:ingress")
+	cert := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "test"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}, URIs: []*url.URL{uri}, DNSNames: []string{"tst-node-7.tunex.invalid"}}
+	der, _ := x509.CreateCertificate(rand.Reader, cert, cert, &key.PublicKey, key)
+	keyDER, _ := x509.MarshalPKCS8PrivateKey(key)
+	certPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	raw, _ := json.Marshal(tstruntime.TransportConfig{Protocol: "tst/1", Role: "ingress", WorkspaceID: 5, LinkID: 91, NodeID: 7, PeerNodeID: 8, CarrierHost: "127.0.0.1", CarrierPort: 2443, Identity: securelink.Identity{CertificatePEM: certPEM, PrivateKeyPEM: string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})), CAPEM: certPEM, PeerURI: "urn:tunex:tst:w:5:l:91:n:8:r:egress"}, Bindings: []tstruntime.Binding{}})
+	digest, err := tstruntime.Digest(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return linkrunner.Config{ID: "tunex-link-91-p7-ingress", LinkID: 91, WorkspaceID: 5, NodeID: 7, Role: "ingress", Generation: 1, LeaseExpiresAt: time.Now().Add(time.Minute).Format(time.RFC3339Nano), ConfigDigest: digest, RunnerConfig: json.RawMessage("null")}
+	return tstruntime.Config{ID: "tunex-link-91-p7-ingress", LinkID: 91, WorkspaceID: 5, NodeID: 7, Role: "ingress", Generation: 1, LeaseExpiresAt: time.Now().Add(time.Minute).Format(time.RFC3339Nano), ConfigDigest: digest, TransportConfig: raw}
 }
 
 func linkClient(t *testing.T) *Client {
 	t.Helper()
 	c := newTestClient(t)
-	binary, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	links, err := linkrunner.New(binary, t.TempDir(), "agent-uuid-identity")
+	links, err := tstruntime.New(t.TempDir(), "agent-uuid-identity")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := links.SetPortGuard(c.tunnels); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := links.Reconcile(&linkrunner.Snapshot{NodeDBID: 7, Links: []linkrunner.Config{}}); err != nil {
+	if _, err := links.Reconcile(&tstruntime.Snapshot{NodeDBID: 7, Links: []tstruntime.Config{}}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { links.Close() })
 	c.cfg.Links = links
-	c.cfg.RuntimeFacts = RuntimeFacts{FXPLink: true}
+	c.cfg.RuntimeFacts = RuntimeFacts{TSTLink: true}
 	return c
 }
 
-func linkCommand(action string, cfg linkrunner.Config) *QueuedCommand {
+func linkCommand(action string, cfg tstruntime.Config) *QueuedCommand {
 	cmd := &QueuedCommand{Envelope: Envelope{CommandID: "link-command", ResourceID: cfg.ID, Action: action, Revision: cfg.Generation}}
 	if action == ActionApplyLink {
 		cmd.Link = &cfg
@@ -212,7 +222,7 @@ func TestLinkAdmissionAndNoLegacyLKGSecrets(t *testing.T) {
 		t.Fatal(ack)
 	}
 	data, _ := json.Marshal(restore.SnapshotOf(c.tunnels, "v1"))
-	if strings.Contains(string(data), "runner_config") || strings.Contains(string(data), cfg.ID) {
+	if strings.Contains(string(data), "transport_config") || strings.Contains(string(data), cfg.ID) {
 		t.Fatal("Link in legacy LKG")
 	}
 	c.cfg.RuntimeFacts = RuntimeFacts{}
@@ -221,38 +231,38 @@ func TestLinkAdmissionAndNoLegacyLKGSecrets(t *testing.T) {
 	}
 }
 
-func TestFXPCapabilitiesRequireRuntimeFacts(t *testing.T) {
-	for _, facts := range []RuntimeFacts{{}, {FXPLink: true}, {TrafficRotation: true}, {PolicyRuntime: true, TrafficRotation: true}} {
+func TestTSTCapabilitiesRequireRuntimeFacts(t *testing.T) {
+	for _, facts := range []RuntimeFacts{{}, {TSTLink: true}, {TrafficRotation: true}, {PolicyRuntime: true, TrafficRotation: true}} {
 		if slices.Contains(Capabilities(facts), CapabilityTrafficRotation) {
-			t.Fatal("unconstructed or legacy FXP advertises epoch rotation", facts)
+			t.Fatal("unconstructed or legacy TST advertises epoch rotation", facts)
 		}
 	}
-	if !slices.Contains(Capabilities(RuntimeFacts{FXPLink: true, TrafficRotation: true}), CapabilityTrafficRotation) {
-		t.Fatal("negotiated FXP omits epoch rotation")
+	if !slices.Contains(Capabilities(RuntimeFacts{TSTLink: true, TrafficRotation: true}), CapabilityTrafficRotation) {
+		t.Fatal("negotiated TST omits epoch rotation")
 	}
-	if !slices.Contains(Capabilities(RuntimeFacts{PolicyRuntime: true}), CapabilityRuntimePolicy) || slices.Contains(Capabilities(RuntimeFacts{PolicyRuntime: true}), CapabilityFXPLink) {
-		t.Fatal("native policy runtime must advertise independently of optional FXP")
+	if !slices.Contains(Capabilities(RuntimeFacts{PolicyRuntime: true}), CapabilityRuntimePolicy) || slices.Contains(Capabilities(RuntimeFacts{PolicyRuntime: true}), CapabilityTSTLink) {
+		t.Fatal("native policy runtime must advertise independently of optional TST")
 	}
-	for _, cap := range []string{ActionApplyLink, ActionRemoveLink, CapabilityFXPLink, CapabilityRuntimePolicy} {
+	for _, cap := range []string{ActionApplyLink, ActionRemoveLink, ActionDiagnoseLink, CapabilityTSTLink, CapabilityRuntimePolicy} {
 		if slices.Contains(Capabilities(), cap) || slices.Contains(Capabilities(RuntimeFacts{}), cap) {
 			t.Fatalf("default advertises %s", cap)
 		}
-		if !slices.Contains(Capabilities(RuntimeFacts{FXPLink: true}), cap) {
+		if !slices.Contains(Capabilities(RuntimeFacts{TSTLink: true}), cap) {
 			t.Fatalf("wired runtime omits %s", cap)
 		}
 	}
-	if Implements(ActionApplyLink) || !Implements(ActionApplyLink, RuntimeFacts{FXPLink: true}) {
+	if Implements(ActionApplyLink) || !Implements(ActionApplyLink, RuntimeFacts{TSTLink: true}) {
 		t.Fatal("action gate drift")
 	}
-	t.Setenv("TUNEX_FXP_LINKS_ENABLED", "false")
-	t.Setenv("TUNEX_FXP_BINARY", filepath.Join(t.TempDir(), "missing"))
+	t.Setenv("TUNEX_TST_ENABLED", "false")
+
 	m, facts, err := NewLinkRuntime(t.TempDir(), "agent", manager.NewTunnelManager(manager.NewEgressManager(), "127.0.0.1"))
-	if err != nil || m != nil || facts.FXPLink {
+	if err != nil || m != nil || facts.TSTLink {
 		t.Fatalf("disabled: %v %+v", err, facts)
 	}
-	t.Setenv("TUNEX_FXP_LINKS_ENABLED", "true")
+	t.Setenv("TUNEX_TST_ENABLED", "true")
 	m, facts, err = NewLinkRuntime(t.TempDir(), "agent", nil)
-	if err == nil || m != nil || facts.FXPLink {
+	if err == nil || m != nil || facts.TSTLink {
 		t.Fatal("missing executable advertised")
 	}
 }
@@ -265,12 +275,12 @@ func TestLinkRestoreFallbackOnlyOnOutage(t *testing.T) {
 		want   error
 		cached bool
 	}{
-		{503, `{}`, nil, true}, {401, `{}`, linkrunner.ErrPanelUnauthorized, false},
-		{200, `{"data":{"snapshot":{"tunnels":[]}}}`, linkrunner.ErrSnapshot, false},
+		{503, `{}`, nil, true}, {401, `{}`, tstruntime.ErrPanelUnauthorized, false},
+		{200, `{"data":{"snapshot":{"tunnels":[]}}}`, tstruntime.ErrSnapshot, false},
 		{200, `{"data":{"snapshot":{"node_db_id":7,"links":[]}}}`, nil, false},
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(tc.status); w.Write([]byte(tc.body)) }))
-		cached, err := RestoreLinks(context.Background(), linkrunner.HTTPSource{PanelURL: srv.URL, Credential: "credential", AgentID: "agent-uuid-identity"}, c.cfg.Links)
+		cached, err := RestoreLinks(context.Background(), tstruntime.HTTPSource{PanelURL: srv.URL, Credential: "credential", AgentID: "agent-uuid-identity"}, c.cfg.Links)
 		srv.Close()
 		if cached != tc.cached || !errors.Is(err, tc.want) {
 			t.Fatalf("status=%d cached=%v error=%v", tc.status, cached, err)
@@ -278,53 +288,27 @@ func TestLinkRestoreFallbackOnlyOnOutage(t *testing.T) {
 	}
 }
 
-func TestRealFXPControlACKAndSharedPortGuard(t *testing.T) {
-	binary := os.Getenv("TUNEX_TEST_FXP_BINARY")
-	if binary == "" {
-		t.Skip("real FXP required")
-	}
+func TestTSTDiagnosisControlRejectsForeignPayloadAndStaleAuthorization(t *testing.T) {
 	c := linkClient(t)
-	c.cfg.Links.Close()
-	t.Setenv("TUNEX_FXP_LINKS_ENABLED", "true")
-	t.Setenv("TUNEX_FXP_BINARY", binary)
-	links, facts, err := NewLinkRuntime(t.TempDir(), "agent-uuid-identity", c.tunnels)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { links.Close() })
-	if !facts.FXPLink {
-		t.Fatal("real wired executable capability missing")
-	}
-	links.Reconcile(&linkrunner.Snapshot{NodeDBID: 7, Links: []linkrunner.Config{}})
-	c.cfg.Links = links
-	c.cfg.RuntimeFacts = facts
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	ln.Close()
 	cfg := passiveLink(t)
-	cfg.ID = "egress-control"
-	cfg.Role = "egress"
-	cfg.Ports = []linkrunner.Port{{Protocol: "tcp", Host: "127.0.0.1", Port: port}}
-	cfg.RuntimeIDs = []string{"runtime-1"}
-	const key = "3ecf7346b6e030c083758b165f74c7f99c5c4d0175ef3e6eb363234042b95ae5"
-	cfg.RunnerConfig, _ = json.Marshal(map[string]any{"role": "exit", "tunnelId": 91, "listenPort": port, "listenHost": "127.0.0.1", "protocol": "tcp", "key": key})
-	cfg.ConfigDigest, _ = linkrunner.Digest(cfg.RunnerConfig)
-	ack := c.execute(context.Background(), linkCommand(ActionApplyLink, cfg))
-	if !ack.OK || ack.LinkObservation == nil || !ack.LinkObservation.Ready {
-		t.Fatalf("apply: %+v", ack)
-	}
-	data, _ := json.Marshal(ack)
-	if strings.Contains(string(data), key) {
-		t.Fatal("ACK leaked key")
-	}
-	ack = c.execute(context.Background(), linkCommand(ActionRemoveLink, cfg))
-	if !ack.OK {
+	if ack := c.execute(context.Background(), linkCommand(ActionApplyLink, cfg)); !ack.OK {
 		t.Fatal(ack)
 	}
-	if len(c.tunnels.UsedPorts()) != 0 {
-		t.Fatal("remove retained external slot")
+	cmd := &QueuedCommand{Envelope: Envelope{CommandID: "tst-probe", ResourceID: cfg.ID, Action: ActionDiagnoseLink, Revision: 1}, LinkProbe: &tstruntime.ProbeRequest{ForwardID: 101, Revision: 1}}
+	if ack := c.execute(context.Background(), cmd); ack.OK || ack.ErrorCode != "identity_mismatch" {
+		t.Fatal("ingress target authorized", ack)
+	}
+	cmd.Probe = &diag.Request{}
+	if ack := c.execute(context.Background(), cmd); ack.ErrorCode != "invalid_payload" {
+		t.Fatal(ack)
+	}
+	cmd.Probe = nil
+	c.cfg.RuntimeFacts = RuntimeFacts{}
+	if ack := c.execute(context.Background(), cmd); ack.ErrorCode != "unsupported_action" {
+		t.Fatal(ack)
+	}
+	cmd.Envelope.Action = ActionCollectDiagnostics
+	if ack := c.execute(context.Background(), cmd); ack.ErrorCode != "invalid_payload" {
+		t.Fatal("foreign sibling accepted", ack)
 	}
 }

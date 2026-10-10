@@ -19,6 +19,7 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "@/components/providers";
 import { ForwardProtocolBadge } from "@/components/forwards/forward-protocol-badge";
+import { ForwardUnifiedDetail } from "@/components/forwards/forward-unified-detail";
 import {
   draftTlsPathErrors,
   draftToPatch,
@@ -634,19 +635,14 @@ describe("D. 渲染：tls / ws / 历史值都照事实，不存在 unknown 兜�
 });
 
 describe("F. 措辞接线：凡假设「连接」的地方都按传输切换（列表/详情/仪表盘/影响面）", () => {
-  test("详情页：datagram 行说「会话模型」，tls 行展示证书/私钥路径", () => {
-    const detail = WEB("components/forwards/forward-detail.tsx");
-    expect(detail).toContain("forwardProtocolHasConnections(forward.protocol) === false");
-    expect(detail).toContain("datagram ? (");
-    expect(detail).toContain('t("forward.sessionModel")');
-    expect(detail).toContain('t("forward.sessionModelMapping")');
-    expect(detail).toContain("isTls ? (");
-    expect(detail).toContain("forward.tls_cert_path");
-    expect(detail).toContain("forward.tls_key_path");
-    // 组件不自己比较协议名（"udp" 只许出现在注释里）
-    const code = detail.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-    expect(code).not.toContain('=== "udp"');
-    expect(code).not.toContain('"udp"');
+  test("统一详情按 TCP / UDP / both 展示会话模型，且不显示未知秘密字段", () => {
+    for (const [protocol, text] of [["udp", "UDP 活跃映射"], ["both", "TCP 连接与 UDP 映射共用策略预算"], ["tcp", "TCP 连接"]]) {
+      const forward = { id: 1, name: "safe", mode: "direct", transport: "native_plain", protocol, ingress_node_id: 1,
+        secret: "PRIVATE_KEY_SENTINEL" } as unknown as PortForward;
+      const html = renderToStaticMarkup(<ForwardUnifiedDetail forward={forward} workspaceId={1} locale="zh" initialTab="config" drawer={false}
+        onClose={() => {}} onEdit={() => {}} onCopy={() => {}} onAction={() => {}} canUpdate={false} canDelete={false} busy={false} />);
+      expect(html).toContain("会话模型"); expect(html).toContain(text); expect(html).not.toContain("PRIVATE_KEY_SENTINEL");
+    }
   });
 
   test("编辑器影响面按传输切换：datagram 不再复用 stream 的连接措辞", () => {

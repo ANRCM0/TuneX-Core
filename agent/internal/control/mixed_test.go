@@ -6,7 +6,7 @@ import (
 )
 
 func TestNativeBothCapabilityRequiresConstructedNativeRuntime(t *testing.T) {
-	for _, facts := range []RuntimeFacts{{}, {FXPLink: true}, {PolicyRuntime: true}} {
+	for _, facts := range []RuntimeFacts{{}, {TSTLink: true}, {PolicyRuntime: true}} {
 		if slices.Contains(Capabilities(facts), CapabilityNativeBoth) {
 			t.Fatal("unconstructed native both advertised")
 		}

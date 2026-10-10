@@ -27,10 +27,10 @@ import (
 	"time"
 
 	"github.com/tunex/agent/internal/forwarder"
-	"github.com/tunex/agent/internal/linkrunner"
 	"github.com/tunex/agent/internal/logx"
 	"github.com/tunex/agent/internal/panelroute"
 	"github.com/tunex/agent/internal/targetobs"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
 // Interval is the state-report cadence.
@@ -426,7 +426,7 @@ type Config struct {
 	// the wire rather than being sent as an empty array that would read as
 	// "no problems found".
 	targetObs      TargetObservationLister
-	linkPlacements func() []linkrunner.Observation
+	linkPlacements func() []tstruntime.Observation
 
 	// Ownership facts the panel returns in the state report's
 	// answer. nil = this node tracks no leases (nothing to renew, nothing to

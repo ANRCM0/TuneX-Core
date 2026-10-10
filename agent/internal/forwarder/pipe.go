@@ -7,11 +7,11 @@ import (
 )
 
 // byteCounter accumulates transferred bytes. The zero value is ready to use.
-type byteCounter struct{ n int64 }
+type byteCounter struct{ n atomic.Int64 }
 
-func (c *byteCounter) add(delta int64) { atomic.AddInt64(&c.n, delta) }
+func (c *byteCounter) add(delta int64) { c.n.Add(delta) }
 
-func (c *byteCounter) load() int64 { return atomic.LoadInt64(&c.n) }
+func (c *byteCounter) load() int64 { return c.n.Load() }
 
 // relayBuffer is one read chunk. 32KiB matches io.Copy's own default and keeps
 // the syscall count sane on a bulk transfer.

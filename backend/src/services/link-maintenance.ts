@@ -1,10 +1,10 @@
 import { Prisma, type LinkMaintenanceMigration } from "@prisma/client";
 import { db } from "../db.ts";
-import { canonicalConfigDigest } from "../integrations/forwardx/core-contract.ts";
-import { LinkEndpointConfigSchema, LinkMaintenancePreviewSchema } from "../integrations/forwardx/link-maintenance.ts";
+import { canonicalConfigDigest } from "../domain/link/core-contract.ts";
+import { LinkEndpointConfigSchema, LinkMaintenancePreviewSchema } from "../domain/link/link-maintenance.ts";
 import { LinkMaintenanceCommitSchema, LinkMaintenanceCancelSchema, MaintenanceStatusSchema,
   maintenanceRequestDigest, verifyMaintenanceReceipt, LINK_MAINTENANCE_HOLD_MS,
-  LINK_MAINTENANCE_SNAPSHOT_BYTES } from "../integrations/forwardx/link-maintenance-state.ts";
+  LINK_MAINTENANCE_SNAPSHOT_BYTES } from "../domain/link/link-maintenance-state.ts";
 import { LinkResourceError } from "./link-errors.ts";
 import { assertLinkFeature, captureLinkMaintenance, lockScopedLink, sealKey } from "./link-resource.ts";
 import { closeMaintenanceIntent, currentMaintenanceIntent } from "./link-maintenance-guard.ts";
@@ -78,7 +78,7 @@ export async function commitLinkMaintenance(workspaceId: number, linkId: number,
   });
 }
 
-/** These read/cancel paths remain usable with submission/FXP flags disabled. */
+/** These read/cancel paths remain usable with submission/TST flags disabled. */
 export async function listLinkMaintenance(workspaceId: number, linkId: number) {
   return db.$transaction(async (tx) => {
     await lockScopedLink(tx, workspaceId, linkId);
@@ -129,7 +129,7 @@ export async function reconcileLinkMaintenance(): Promise<{ scanned: number; clo
         }
         let reason: string | null = null;
         try {
-          if (process.env.TUNEX_FXP_LINKS_ENABLED !== "true" || process.env.TUNEX_LINK_MAINTENANCE_ENABLED !== "true")
+          if (process.env.TUNEX_TST_ENABLED !== "true" || process.env.TUNEX_LINK_MAINTENANCE_ENABLED !== "true")
             reason = "link_maintenance_not_enabled";
           else {
             const facts = snapshot(current);

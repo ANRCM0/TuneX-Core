@@ -70,13 +70,13 @@ func (c *fastConn) SetWriteDeadline(time.Time) error { return nil }
 // assert the relay half-closes (once) instead of aborting.
 type halfCloseConn struct {
 	inner       *fastConn
-	writeClosed int64
+	writeClosed atomic.Int64
 }
 
 func (c *halfCloseConn) Read(p []byte) (int, error)       { return c.inner.Read(p) }
 func (c *halfCloseConn) Write(p []byte) (int, error)      { return len(p), nil }
 func (c *halfCloseConn) Close() error                     { return c.inner.Close() }
-func (c *halfCloseConn) CloseWrite() error                { atomic.AddInt64(&c.writeClosed, 1); return nil }
+func (c *halfCloseConn) CloseWrite() error                { c.writeClosed.Add(1); return nil }
 func (c *halfCloseConn) LocalAddr() net.Addr              { return dummyAddr{} }
 func (c *halfCloseConn) RemoteAddr() net.Addr             { return dummyAddr{} }
 func (c *halfCloseConn) SetDeadline(time.Time) error      { return nil }
@@ -623,7 +623,7 @@ func TestPipeConnsHalfClosesAndDrains(t *testing.T) {
 	fast.inner.Close()
 	time.Sleep(150 * time.Millisecond)
 
-	if n := atomic.LoadInt64(&fast.writeClosed); n != 0 {
+	if n := fast.writeClosed.Load(); n != 0 {
 		t.Fatalf("CloseWrite called on the source side %d times, want 0", n)
 	}
 	select {
@@ -640,7 +640,7 @@ func TestPipeConnsHalfClosesAndDrains(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("PipeConns never returned after the second direction finished")
 	}
-	if n := atomic.LoadInt64(&fast.writeClosed); n != 1 {
+	if n := fast.writeClosed.Load(); n != 1 {
 		t.Fatalf("CloseWrite called %d times, want exactly 1 (on the destination of the finished direction)", n)
 	}
 }

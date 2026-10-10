@@ -27,7 +27,6 @@ import (
 	"math/rand"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/tunex/agent/internal/forwarder"
@@ -432,7 +431,7 @@ func (h *healthTable) snapshot() []BreakerState {
 // least-bad target, and an operator must be able to see how often this node had
 // to make that trade.
 func (l *LoadBalancer) ForcedPicks() uint64 {
-	return atomic.LoadUint64(&l.forcedPicks)
+	return l.forcedPicks.Load()
 }
 
 // BreakerStates reports the per-target breaker view of this pool, or an empty
@@ -525,7 +524,7 @@ func (l *LoadBalancer) selectPlain() forwarder.Target {
 		// boundary: the distribution matches the weights exactly, and O(log
 		// n) keeps a pool with many targets cheap.
 		total := l.weighted[len(l.weighted)-1].upto
-		idx := atomic.AddUint64(&l.cursor, 1)
+		idx := l.cursor.Add(1)
 		want := idx % total
 		lo := 0
 		for hi := len(l.weighted) - 1; lo < hi; {
@@ -541,7 +540,7 @@ func (l *LoadBalancer) selectPlain() forwarder.Target {
 		if len(l.slots) == 0 {
 			return forwarder.Target{}
 		}
-		idx := int(atomic.AddUint64(&l.cursor, 1)-1) % len(l.slots)
+		idx := int(l.cursor.Add(1)-1) % len(l.slots)
 		return l.slots[idx]
 	}
 }
@@ -587,7 +586,7 @@ func (l *LoadBalancer) selectHealthAware(h *healthTable) (forwarder.Target, bool
 		// breaker did not choose this connection, availability forced it.
 		entered = !h.forcedLogged
 		h.forcedLogged = true
-		atomic.AddUint64(&l.forcedPicks, 1)
+		l.forcedPicks.Add(1)
 		return l.pickRankLocked(h, bestAny, false, now), entered
 	}
 	h.forcedLogged = false
@@ -640,10 +639,10 @@ func (l *LoadBalancer) pickRankLocked(h *healthTable, rank int, eligibleOnly boo
 		// (including the fact that it starts one slot in), so a health array
 		// that says nothing reproduces the ordinary no-health sequence instead of merely
 		// the same distribution.
-		idx := atomic.AddUint64(&l.cursor, 1)
+		idx := l.cursor.Add(1)
 		want = int(idx % uint64(total))
 	default:
-		idx := atomic.AddUint64(&l.cursor, 1) - 1
+		idx := l.cursor.Add(1) - 1
 		want = int(idx % uint64(count))
 	}
 

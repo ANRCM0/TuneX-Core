@@ -103,7 +103,7 @@ type LoadBalancer struct {
 	// belong to" answer, so Select stays O(log n) even with thousands of
 	// connections and a handful of heavy targets.
 	weighted []weightSlot
-	cursor   uint64 // round-robin position, atomic to dodge the hot lock
+	cursor   atomic.Uint64 // round-robin position, aligned on every architecture
 
 	// Health-aware state. health is nil until a payload carries a `target_health`
 	// array: nil is the structural form of "no health signal", and Select takes
@@ -115,7 +115,7 @@ type LoadBalancer struct {
 	// than hidden.
 	health      *healthTable
 	bounds      BreakerBounds
-	forcedPicks uint64
+	forcedPicks atomic.Uint64
 }
 
 // weightSlot maps a range of the round-robin cursor onto one target.
@@ -351,7 +351,7 @@ func (l *LoadBalancer) selectAffinity(h *healthTable, source string) (forwarder.
 	if bestAdmissible < 0 {
 		entered := !h.forcedLogged
 		h.forcedLogged = true
-		atomic.AddUint64(&l.forcedPicks, 1)
+		l.forcedPicks.Add(1)
 		return l.pickAffinity(any, source), entered
 	}
 	h.forcedLogged = false
@@ -391,7 +391,7 @@ func (l *LoadBalancer) UpdateTargets(strategy Strategy, targets []forwarder.Targ
 	l.mu.Unlock()
 	// Reset the cursor so round robin restarts at the head of the new pool
 	// instead of resuming mid-way through an unrelated ordering.
-	atomic.StoreUint64(&l.cursor, 0)
+	l.cursor.Store(0)
 	l.UpdateHealth(nil)
 }
 

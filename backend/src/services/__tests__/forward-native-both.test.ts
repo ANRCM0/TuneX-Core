@@ -142,7 +142,7 @@ test("probes keep both identity but clearly report TCP-only evidence; unsupporte
   expect(probeTargetsForForward({ ...forward, middle_node_id: 33 })).toMatchObject({ ok: false, code: "native_both_middle_unsupported" });
 });
 
-test("migration makes projection nullable without shrinking the legacy enum or touching shared FXP both", () => {
+test("migration makes projection nullable without shrinking the legacy enum or touching shared TST both", () => {
   const sql = readFileSync(new URL("../../../prisma/migrations/20261101008000_native_both_projection/migration.sql", import.meta.url), "utf8");
   expect(sql).toContain("NULL DEFAULT 'wss'");
   for (const name of ["tcp", "mtcp", "udp", "tunex", "mtls", "mwss", "wss", "tls", "quic"]) expect(sql).toContain(`'${name}'`);

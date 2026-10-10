@@ -50,11 +50,10 @@ const (
 	ActionLookingGlass        = "looking_glass"
 	ActionApplyLink           = "apply_link"
 	ActionRemoveLink          = "remove_link"
-	CapabilityFXPLink         = "forward.link.fxp.v1"
+	ActionDiagnoseLink        = "diagnose_link_forward"
+	CapabilityTSTLink         = "forward.link.tst.v1"
 	CapabilityRuntimePolicy   = "forward.policy.runtime.v1"
 	CapabilityTrafficRotation = "forward.traffic.rotation.v1"
-	CapabilityFXPTargets      = "forward.targets.fxp.v1"
-	CapabilityFXPSource       = "forward.client-source.fxp.v1"
 	CapabilityNativeBoth      = "forward.protocol.both.native.v1"
 )
 
@@ -72,7 +71,7 @@ var advertisedActions = []string{
 
 // Capabilities returns the actions this agent implements, sorted. The caller
 // gets a copy: a state report must not be able to mutate the agent's own list.
-type RuntimeFacts struct{ FXPLink, PolicyRuntime, TrafficRotation, FXPTargets, FXPSource, NativeBoth bool }
+type RuntimeFacts struct{ TSTLink, PolicyRuntime, TrafficRotation, NativeBoth bool }
 
 func Capabilities(facts ...RuntimeFacts) []string {
 	out := make([]string, len(advertisedActions))
@@ -80,19 +79,13 @@ func Capabilities(facts ...RuntimeFacts) []string {
 	if len(facts) > 0 && facts[0].NativeBoth {
 		out = append(out, CapabilityNativeBoth)
 	}
-	if len(facts) > 0 && facts[0].FXPLink {
-		out = append(out, ActionApplyLink, ActionRemoveLink, CapabilityFXPLink)
+	if len(facts) > 0 && facts[0].TSTLink {
+		out = append(out, ActionApplyLink, ActionRemoveLink, ActionDiagnoseLink, CapabilityTSTLink)
 		if facts[0].TrafficRotation {
 			out = append(out, CapabilityTrafficRotation)
 		}
-		if facts[0].FXPSource {
-			out = append(out, CapabilityFXPSource)
-		}
-		if facts[0].FXPTargets {
-			out = append(out, CapabilityFXPTargets)
-		}
 	}
-	if len(facts) > 0 && (facts[0].FXPLink || facts[0].PolicyRuntime) {
+	if len(facts) > 0 && (facts[0].TSTLink || facts[0].PolicyRuntime) {
 		out = append(out, CapabilityRuntimePolicy)
 	}
 	// 方法级能力：`looking_glass` 这个动作内部还有方法维（tcp_connect / ping / ping6），
@@ -115,7 +108,7 @@ var lookingGlassMethodAvailability = sync.OnceValue(diag.DetectLookingGlassMetho
 // command loop can answer a command the panel should not have sent with the same
 // reason the panel would have used to refuse sending it.
 func Implements(action string, facts ...RuntimeFacts) bool {
-	if len(facts) > 0 && facts[0].FXPLink && (action == ActionApplyLink || action == ActionRemoveLink) {
+	if len(facts) > 0 && facts[0].TSTLink && (action == ActionApplyLink || action == ActionRemoveLink || action == ActionDiagnoseLink) {
 		return true
 	}
 	for _, a := range advertisedActions {

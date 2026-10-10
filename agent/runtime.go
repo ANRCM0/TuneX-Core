@@ -13,7 +13,6 @@ import (
 	"github.com/tunex/agent/internal/api"
 	"github.com/tunex/agent/internal/control"
 	"github.com/tunex/agent/internal/forwarder"
-	"github.com/tunex/agent/internal/linkrunner"
 	"github.com/tunex/agent/internal/linktraffic"
 	"github.com/tunex/agent/internal/logx"
 	"github.com/tunex/agent/internal/manager"
@@ -24,6 +23,7 @@ import (
 	"github.com/tunex/agent/internal/selfinfo"
 	"github.com/tunex/agent/internal/targetdns"
 	"github.com/tunex/agent/internal/targetobs"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
 // agentRuntime owns the process-level Agent components so startup and shutdown share one lifecycle.
@@ -63,7 +63,7 @@ type agentRuntime struct {
 	// control loop then reconciles as soon as the panel can answer, because this
 	// process never observed a failed pull of its own.
 	restoredFromCache bool
-	links             *linkrunner.Manager
+	links             *tstruntime.Manager
 	linkFacts         control.RuntimeFacts
 }
 
@@ -104,45 +104,43 @@ func startRuntime(ctx context.Context, cfg *agentconfig.Config) *agentRuntime {
 	ledger := reporter.NewLedger()
 	revisions := reporter.NewRevisionState()
 	rt.ledger = ledger
-	// Managed FXP shares the native manager's external slots and owns a separate
+	// TST shares the native manager's external slots and owns a separate
 	// encrypted cache; it must never enter restore.LKG's tunnel snapshot.
 	linkStateDir := cfg.StateDir
 	if linkStateDir == "" && cfg.LKGPath() != "" {
 		linkStateDir = filepath.Dir(cfg.LKGPath())
 	}
 	if links, facts, err := control.NewLinkRuntime(linkStateDir, cfg.AgentID, tunnels); err != nil {
-		logx.Error("managed FXP runtime disabled", "err", err.Error())
+		logx.Error("TST runtime disabled", "err", err.Error())
 		ledger.Record(err.Error())
 	} else {
 		if links != nil {
 			if err := links.EnableTraffic(); err != nil {
 				_ = links.Close()
-				logx.Error("managed FXP runtime disabled: private traffic spool unavailable")
-				ledger.Record("managed FXP private traffic spool unavailable")
+				logx.Error("TST runtime disabled: private traffic spool unavailable")
+				ledger.Record("TST private traffic spool unavailable")
 			} else {
 				rt.links = links
 				rt.linkFacts = facts
 				rt.linkFacts.TrafficRotation = links.TrafficRotationSupported()
-				rt.linkFacts.FXPTargets = links.TargetSetsSupported()
-				rt.linkFacts.FXPSource = links.ClientSourceSupported()
 			}
 		}
 	}
 	// The native TunnelManager also enforces the shared runtime policy gate;
-	// its capability is independent of the optional FXP executable.
+	// its capability is independent of the optional TST runtime.
 	rt.linkFacts.PolicyRuntime = true
 	rt.linkFacts.NativeBoth = true
 	if rt.links != nil {
-		fromCache, err := control.RestoreLinks(ctx, linkrunner.HTTPSource{PanelURL: cfg.PanelHTTPURL, Credential: cfg.NodeCredential, AgentID: cfg.AgentID}, rt.links)
+		fromCache, err := control.RestoreLinks(ctx, tstruntime.HTTPSource{PanelURL: cfg.PanelHTTPURL, Credential: cfg.NodeCredential, AgentID: cfg.AgentID}, rt.links)
 		rt.restoredFromCache = fromCache
 		if err != nil {
-			logx.Error("managed FXP restore failed", "err", err.Error())
+			logx.Error("TST restore failed", "err", err.Error())
 			ledger.Record(err.Error())
 		}
 		go func() {
 			<-ctx.Done()
 			if err := rt.links.Close(); err != nil {
-				logx.Error("managed FXP stop failed", "err", err.Error())
+				logx.Error("TST stop failed", "err", err.Error())
 			}
 		}()
 	}
@@ -326,7 +324,7 @@ func startRuntime(ctx context.Context, cfg *agentconfig.Config) *agentRuntime {
 			defer ticker.Stop()
 			for {
 				if err := linktraffic.Flush(ctx, client, rt.links); err != nil && ctx.Err() == nil {
-					logx.Debug("managed FXP traffic report deferred; durable samples retained")
+					logx.Debug("TST traffic report deferred; durable samples retained")
 				}
 				select {
 				case <-ctx.Done():
@@ -361,9 +359,9 @@ func startRuntime(ctx context.Context, cfg *agentconfig.Config) *agentRuntime {
 			// forward the panel has already deleted or suspended.
 			Reconnected: func(rctx context.Context) {
 				if rt.links != nil {
-					_, err := control.RestoreLinks(rctx, linkrunner.HTTPSource{PanelURL: panelRouter.ActiveURL(), Credential: cfg.NodeCredential, AgentID: cfg.AgentID}, rt.links)
+					_, err := control.RestoreLinks(rctx, tstruntime.HTTPSource{PanelURL: panelRouter.ActiveURL(), Credential: cfg.NodeCredential, AgentID: cfg.AgentID}, rt.links)
 					if err != nil {
-						logx.Error("managed FXP reconcile failed", "err", err.Error())
+						logx.Error("TST reconcile failed", "err", err.Error())
 						ledger.Record(err.Error())
 					}
 				}
@@ -426,7 +424,7 @@ func startRuntime(ctx context.Context, cfg *agentconfig.Config) *agentRuntime {
 	// 面板迁移回退（task-44/45）：解析出来的三元组与**进程共享的**切换器一起交给
 	// 上报侧。切换判据只有一份（panelroute.Router），命令拉取/ACK/desired 用的是同一个。
 	if cfg.PanelHTTPURL != "" && cfg.NodeCredential != "" {
-		var linkPlacements func() []linkrunner.Observation
+		var linkPlacements func() []tstruntime.Observation
 		if rt.links != nil {
 			linkPlacements = rt.links.Status
 		}

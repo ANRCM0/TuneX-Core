@@ -10,6 +10,7 @@ export const WORKSPACE_PERMISSIONS = [
   "forward:update",
   "forward:delete",
   "node:read",
+  "node:use",
   "node:manage",
   "member:read",
   "member:manage",
@@ -35,6 +36,7 @@ export const WORKSPACE_PERMISSION_LABELS: Record<CanonicalWorkspacePermission, s
   "forward:update": "修改端口转发",
   "forward:delete": "删除端口转发",
   "node:read": "查看节点与节点组",
+  "node:use": "使用工作空间节点创建转发",
   "node:manage": "管理节点与节点组",
   "member:read": "查看成员",
   "member:manage": "管理成员",
@@ -45,7 +47,7 @@ export const WORKSPACE_PERMISSION_LABELS: Record<CanonicalWorkspacePermission, s
 
 export const WORKSPACE_PERMISSION_GROUPS: { group: string; permissions: CanonicalWorkspacePermission[] }[] = [
   { group: "端口转发", permissions: ["forward:read", "forward:create", "forward:update", "forward:delete"] },
-  { group: "节点", permissions: ["node:read", "node:manage"] },
+  { group: "节点", permissions: ["node:read", "node:use", "node:manage"] },
   { group: "成员", permissions: ["member:read", "member:manage"] },
   { group: "设置", permissions: ["settings:read", "settings:manage"] },
   { group: "审计", permissions: ["audit:read"] },

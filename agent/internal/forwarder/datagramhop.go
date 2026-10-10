@@ -15,7 +15,7 @@
 //   - **No destination, ever.** The exit resolves the target from its own
 //     configured pool, so a forged source address (trivial over UDP, unlike TCP)
 //     cannot turn an egress into an open relay. This is the same invariant the
-//     Forwardx FXP runtime states for its exit side.
+//     TST runtime states for its exit side.
 //   - **No length.** UDP preserves the datagram boundary, so the payload is
 //     "everything after the header"; a length field could only disagree with it.
 //   - **No checksum/sequence.** There is no retransmission and no reassembly in

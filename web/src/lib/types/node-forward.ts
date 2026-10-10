@@ -105,6 +105,10 @@ export interface ForwardPolicyInput {
 }
 
 export interface PortForward extends ForwardPolicyInput {
+  path?: "direct" | "relay";
+  transport?: "native_plain" | "tst_v1" | "legacy_unsupported";
+  lifecycle?: { desired: "active" | "suspended" | "deleting"; deployment: "pending" | "applying" | "confirmed" | "failed" | "unknown";
+    runtime: "ready" | "passive" | "stopped" | "stale" | "unknown"; transport: string; target_health: string; traffic: unknown };
   link_resource_id?: number | null;
   /** Missing/null creator is read-only in own mutation scope. */
   creator_user_id?: number | null;

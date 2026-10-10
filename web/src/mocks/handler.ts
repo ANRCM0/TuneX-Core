@@ -47,6 +47,7 @@ import { handleWorkspacesMock } from "./handlers/workspaces";
 import { handleDashboardMock } from "./handlers/dashboard";
 import { handleNodesMock } from "./handlers/nodes";
 import { handleForwardsMock } from "./handlers/forwards";
+import { handleUnifiedForwardsMock } from "./handlers/forward-unified";
 import { handleTunnelsMock } from "./handlers/tunnels";
 import { handleCatalogMock } from "./handlers/catalog";
 import { handleCommerceMock } from "./handlers/commerce";
@@ -279,12 +280,12 @@ export async function handleMock(method: string, path: string, req: MockRequest)
   const scopeMembership = db.workspaceMembers.find((m) => m.workspace_id === scopeId && m.user_id === user.id && m.active);
   // Route Profile 与 node-groups 同资源族（后端 `resolveWorkspaceAccess(c, action, "node")`）：
   // GET → read，写 → manage。
-  if (seg[0] === "nodes" || seg[0] === "node-groups" || seg[0] === "forwards" || seg[0] === "route-profiles") {
+  if (seg[0] === "nodes" || seg[0] === "node-groups" || seg[0] === "forwards" || seg[0] === "route-profiles" || seg[0] === "forward-operations") {
     if (!scopeMembership) return notFound("工作空间不存在");
     const grants = mockEffectivePermissions(db, scopeMembership);
-    const resource = seg[0] === "forwards" ? "forward" : "node";
-    const action = method === "GET" ? "read" : resource === "node" ? "manage" :
-      method === "DELETE" || (method === "POST" && seg[1] === "batch" && asRecord(req.body).action === "delete")
+    const resource = seg[0] === "forwards" || seg[0] === "forward-operations" ? "forward" : "node";
+    const action = method === "GET" || seg[2] === "diagnose" ? "read" : resource === "node" ? "manage" :
+      method === "DELETE" || (method === "POST" && ["batch", "actions"].includes(seg[2] ?? seg[1]) && asRecord(req.body).action === "delete")
         ? "delete"
         : method === "POST" && seg[1] === undefined ? "create" : "update";
     if (!grants.permissions[`${resource}:${action}` as keyof typeof grants.permissions]) return fail(403, "工作空间角色无权操作", "permission_denied");
@@ -328,6 +329,10 @@ export async function handleMock(method: string, path: string, req: MockRequest)
   // 404（DNS 前门 / 延迟端点 / HA 三处同一顺序问题，本专项已踩过）。
   {
     const result = await handleForwardHaMock(ctx);
+    if (result) return result;
+  }
+  {
+    const result = await handleUnifiedForwardsMock(ctx);
     if (result) return result;
   }
   {

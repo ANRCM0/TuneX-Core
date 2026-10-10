@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { test, expect, describe, beforeEach, afterEach, mock } from "bun:test";
 import { createHash } from "node:crypto";
 
@@ -176,8 +177,8 @@ const dbStub = {
 
 // mock.module 必须在被测模块 import **之前**注册（与 config-pusher-dedup 测试同一模式）。
 // 路径必须是「与 mail-tokens.ts 里 `../db.ts` / `../env.ts` 解析到的同一文件」。
-const MODULE_DB = new URL("../../db.ts", import.meta.url).pathname;
-const MODULE_ENV = new URL("../../env.ts", import.meta.url).pathname;
+const MODULE_DB = fileURLToPath(new URL("../../db.ts", import.meta.url));
+const MODULE_ENV = fileURLToPath(new URL("../../env.ts", import.meta.url));
 
 mock.module(MODULE_DB, () => ({ db: dbStub }));
 

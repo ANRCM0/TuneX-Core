@@ -140,6 +140,7 @@ function validateIntField(value: unknown, field: string, min: number, max: numbe
 export const ACTION_PAYLOAD_KEYS = {
   apply_link: new Set(["link_id", "workspace_id", "node_id", "config_digest"]),
   remove_link: new Set(["link_id", "workspace_id", "node_id"]),
+  diagnose_link_forward: new Set(["forward_id", "revision", "timeout_ms"]),
   apply_tunnel: new Set(["tunnel"]),
   remove_tunnel: new Set(["reason"]),
   update_targets: new Set(["targets"]),
@@ -419,6 +420,15 @@ export function validatePayload(action: CommandAction, payload: unknown): string
       const extra = unknownKeys(payload, [...ACTION_PAYLOAD_KEYS.collect_diagnostics]);
       if (extra.length > 0) return `payload 含未定义字段: ${extra.join(", ")}`;
       return null;
+    }
+    case "diagnose_link_forward": {
+      const extra = unknownKeys(payload, [...ACTION_PAYLOAD_KEYS.diagnose_link_forward]);
+      if (extra.length) return "invalid_link_probe";
+      const forward = validateIntField(payload.forward_id, "forward_id", 1, 2147483647);
+      if (forward) return forward;
+      const revision = validateIntField(payload.revision, "revision", 1, 2147483647);
+      if (revision) return revision;
+      return payload.timeout_ms === undefined ? null : validateIntField(payload.timeout_ms, "timeout_ms", 1, 5000);
     }
     case "diagnose_tunnel": {
       const extra = unknownKeys(payload, [...ACTION_PAYLOAD_KEYS.diagnose_tunnel]);
@@ -854,6 +864,7 @@ export class ControlValidator {
         };
       }
       case "diagnose_tunnel":
+      case "diagnose_link_forward":
         // : a diagnose is READ-ONLY. It must not enter the mutation path,
         // which would apply the revision gate and advance the resource status —
         // a diagnostic that mutates is not a diagnostic.
@@ -871,7 +882,7 @@ export class ControlValidator {
    * "信封与 payload 合法、且不需要任何状态推进"，并回一个 accepted 形状的回执，
    * 让调用方无法把它误当成一次已应用的变更。
    */
-  private recordReadOnlyProbe(cmd: DiagnoseTunnelEnvelope, nowMs: number): CommandAck {
+  private recordReadOnlyProbe(cmd: CommandEnvelope, nowMs: number): CommandAck {
     const state = this.snapshot(cmd.resource, cmd.resource_id);
     const ack: CommandAck = {
       command_id: cmd.command_id,

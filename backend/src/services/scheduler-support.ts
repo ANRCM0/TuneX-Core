@@ -13,7 +13,7 @@ import { db } from "../db.ts";
 import { decideNodeAuth } from "./node-credential.ts";
 import { acquirePort, releaseLease } from "./portPool.ts";
 import type { AcquirePortOutcome } from "./portPool.ts";
-import { bindScopesOverlap, protocolsOverlap } from "../integrations/forwardx/bind-scope.ts";
+import { bindScopesOverlap, protocolsOverlap } from "../domain/link/bind-scope.ts";
 import {
   countWorkspaceTunnels,
   getEffectivePolicy,

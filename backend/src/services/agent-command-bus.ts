@@ -28,7 +28,7 @@ import {
 } from "./runtime-admission.ts";
 import { randomUUID } from "node:crypto";
 import { admitSelector, selectorAdmissionDetail } from "./selector-admission.ts";
-import type { FxpPlacementConfig } from "../integrations/forwardx/link-compiler.ts";
+import type { TstPlacementConfig } from "../domain/link/tst-compiler.ts";
 import {
   AgentTransportError,
   Orchestrator,
@@ -39,7 +39,8 @@ import {
 } from "./orchestrator.ts";
 
 export interface QueuedAgentCommand {
-  link?: FxpPlacementConfig | null;
+  link_probe?: { forward_id: number; revision: number; timeout_ms?: number } | null;
+  link?: TstPlacementConfig | null;
   envelope: CommandEnvelope;
   config: AgentTunnelConfig | null;
   /**  diagnose payload; delivered beside the envelope, like `config`. */
@@ -263,21 +264,24 @@ export async function enqueueAgentCommand(
    * 而在别处被静默改成传错的形状。
    */
   lookingGlass?: QueuedLookingGlassRequest | null,
-  link?: FxpPlacementConfig | null,
+  link?: TstPlacementConfig | null,
+  linkProbe?: QueuedAgentCommand["link_probe"],
+  expectedTargets?: { host: string; port: number }[],
 ): Promise<{ scope: number }> {
   const scope = await (deps.resolveScope ?? nodeScope)(nodeId);
   const item: QueuedAgentCommand = {
     envelope,
     config,
     ...(link ? { link } : {}),
+    ...(linkProbe ? { link_probe: linkProbe } : {}),
     ...(probe ? { probe } : {}),
     ...(lookingGlass ? { looking_glass: lookingGlass } : {}),
     queued_at: new Date().toISOString(),
   };
   const key = queueKey(scope, nodeId);
-  const pushedTargets = probe?.targets
+  const pushedTargets = expectedTargets ?? (probe?.targets
     ? probe.targets.map((t) => ({ host: t.host, port: t.port }))
-    : (lookingGlass?.targets ?? []).map((t) => ({ host: t.address, port: t.port }));
+    : (lookingGlass?.targets ?? []).map((t) => ({ host: t.address, port: t.port })));
   const pending: PendingCommand = {
     command_id: envelope.command_id,
     action: String(envelope.action ?? ""),
@@ -454,7 +458,7 @@ export async function storeAgentCommandAck(
     // widened "probe-shaped" from one action to two (diagnose_tunnel, looking_glass)
     // rather than duplicating the rule: both ACK a bounded list of host/port
     // observations, and for both a partial list reads as "this path is fine".
-    const probeLike = pending.action === "diagnose_tunnel" || pending.action === "looking_glass";
+    const probeLike = pending.action === "diagnose_tunnel" || pending.action === "diagnose_link_forward" || pending.action === "looking_glass";
     if (probeLike) {
       const expected = pending.expected_targets ?? [];
       const problem = matchExpectedTargets(expected, results);
@@ -469,7 +473,7 @@ export async function storeAgentCommandAck(
     }
     normalized.results = results;
   } else if (
-    (pending.action === "diagnose_tunnel" || pending.action === "looking_glass") && ack.ok
+    (pending.action === "diagnose_tunnel" || pending.action === "diagnose_link_forward" || pending.action === "looking_glass") && ack.ok
   ) {
     throw new TypeError(`${pending.action} ack returned no results`);
   }
@@ -1477,7 +1481,7 @@ async function collectFederatedLegRows(
 
 export async function buildDesiredNodeSnapshot(
   nodeId: number,
-): Promise<{ version: string; node_db_id: number; links: FxpPlacementConfig[]; tunnels: AgentTunnelConfig[]; skipped: Array<{ id: number; reason: string }> }> {
+): Promise<{ version: string; node_db_id: number; links: TstPlacementConfig[]; tunnels: AgentTunnelConfig[]; skipped: Array<{ id: number; reason: string }> }> {
   const persistedRows = await db.tunnel.findMany({
     where: {
       desired_status: "active",

@@ -1,7 +1,7 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 
-// No process-global mocks can contaminate unrelated suites, including shared FXP.
+// No process-global mocks can contaminate unrelated suites, including shared TST.
 if (process.env.TUNEX_NATIVE_BOTH_OFFLINE !== "1") {
   test("isolated native both service/HTTP/DB/builders regression suite", () => {
     const child = Bun.spawnSync([process.execPath, "test", "--preload",
@@ -43,7 +43,7 @@ test("real auth and workspace middleware protect discovery, default-off/exact tr
   for (const value of [undefined, "1", "TRUE", "true ", "true"]) {
     if (value === undefined) delete process.env.FORWARD_NATIVE_BOTH_ENABLED; else process.env.FORWARD_NATIVE_BOTH_ENABLED = value;
     const response = await app.request("/api/forwards/capabilities", { headers: { cookie } });
-    expect(response.status).toBe(200); expect(await response.json()).toEqual({ data: { native_both_enabled: value === "true" } });
+    expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ data: { native_both_enabled: value === "true" } });
   }
   f.memberActive = false;
   expect((await app.request("/api/forwards/capabilities", { headers: { cookie } })).status).toBe(404);
@@ -100,7 +100,7 @@ test("both create consumes ONE rule with NULL projection; missing either entitle
   expect(f.rows).toHaveLength(1); expect(f.rows[0]).toMatchObject({ forward_protocol: "both", tunnel_type: null, listen_port: 23000 });
   const response = await app.request("/api/forwards/71", { headers: { cookie } });
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ data: { id: 71, protocol: "both", transport: "mixed", config_revision: 0 } });
+  expect(await response.json()).toMatchObject({ data: { id: 71, protocol: "both", transport: "native_plain", wire_transport: "mixed", config_revision: 0 } });
 });
 test("flag-off existing both metadata/preflight remain compatible; INTO both flag gate has zero mutations", async () => {
   const row = seed(); process.env.FORWARD_NATIVE_BOTH_ENABLED = "false";

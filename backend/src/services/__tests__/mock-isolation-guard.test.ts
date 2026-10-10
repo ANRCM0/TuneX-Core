@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * 进程级模块替身的**隔离守卫**（task-28 / task-30）。
  *
@@ -50,7 +51,7 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const SRC = new URL("../..", import.meta.url).pathname; // …/backend/src/
+const SRC = fileURLToPath(new URL("../..", import.meta.url)); // …/backend/src/
 
 /** 真实模块的运行时导出面。 */
 function envKeys(): string[] {
@@ -173,7 +174,7 @@ function mockSites(file: string): MockSite[] {
   return sites;
 }
 
-const relativePath = (file: string) => (file.startsWith(SRC) ? file.slice(SRC.length).replace(/^\/+/, "") : file);
+const relativePath = (file: string) => (file.startsWith(SRC) ? file.slice(SRC.length).replace(/\\/g, "/").replace(/^\/+/, "") : file);
 
 describe("进程级替身隔离：受监控模块的替身必须语义完整", () => {
   const files = testFiles(SRC);

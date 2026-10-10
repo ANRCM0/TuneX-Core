@@ -113,9 +113,6 @@ export const userConsoleNav: NavGroup[] = [
     items: [
       { href: "/nodes", labelKey: "common.nodes", iconKey: "nodes" },
       {
-        href: "/links", labelKey: "links.title", labelZh: "加密隧道", labelEn: "Encrypted tunnels", iconKey: "tunnels",
-      },
-      {
         /** 用户侧只暴露可消费的路由策略，不展示 selector / transit 等编排术语。 */
         href: "/routes",
         labelKey: "common.routingPolicies",
@@ -150,6 +147,7 @@ export const userConsoleNav: NavGroup[] = [
     items: [
       { href: "/settings", labelKey: "common.settings", iconKey: "settings" },
       { href: "/settings/workspace", labelKey: "common.workspace", iconKey: "workspace" },
+      { href: "/links", labelKey: "links.advancedResources", labelZh: "高级连接资源", labelEn: "Advanced connections", iconKey: "tunnels" },
       // DDNS 切片的设置页入口：词条暂放在 `lib/ddns-i18n.ts`（与 node-*-i18n 同一约定），
       // 词典尚未收录，故带 labelZh/labelEn 回退，避免渲染成键名本身。
       {

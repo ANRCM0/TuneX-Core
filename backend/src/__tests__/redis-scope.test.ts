@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * TEN-02：Redis key 作用域（`ws:<scope>:` 前缀）+ 跨租户隔离验证。
  *
@@ -16,7 +17,7 @@
  */
 import { test, expect, describe, mock } from "bun:test";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 // **替身必须语义完整**（2026-10-07）：`mock.module` 是**进程级**注册表，先加载者生效，
 // 一个缺段的 env 替身会泄漏给同进程的其它测试文件 —— 例如缺 `mail` 时

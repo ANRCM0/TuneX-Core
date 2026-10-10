@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * 生产首启可用性（task-35）。
  *
@@ -26,7 +27,7 @@ import { readFileSync } from "node:fs";
 import { describeSeedDemoDecision, shouldSeedDemoData } from "../seed-scope.ts";
 import { checkNodeCreation, type EffectivePolicy } from "../capability-policy.ts";
 
-const BACKEND = new URL("../../../", import.meta.url).pathname; // …/backend/
+const BACKEND = fileURLToPath(new URL("../../../", import.meta.url)); // …/backend/
 const SEED_SOURCE = readFileSync(`${BACKEND}prisma/seed.ts`, "utf8");
 const ENV_MODULE = `${BACKEND}src/env.ts`;
 

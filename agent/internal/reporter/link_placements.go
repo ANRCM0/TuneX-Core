@@ -4,28 +4,28 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/tunex/agent/internal/linkrunner"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
 // LinkPlacement is the closed, secret-free runtime fact sent to the panel.
 // It is deliberately separate from Observation, which also contains child logs.
 type LinkPlacement struct {
-	ID                  string                    `json:"id"`
-	LinkID              int64                     `json:"link_id"`
-	WorkspaceID         int64                     `json:"workspace_id"`
-	NodeID              int64                     `json:"node_id"`
-	Role                string                    `json:"role"`
-	Generation          int64                     `json:"generation"`
-	ObservedGeneration  int64                     `json:"observed_generation"`
-	ConfigDigest        string                    `json:"config_digest"`
-	DesiredConfigDigest string                    `json:"desired_config_digest"`
-	Ready               bool                      `json:"ready"`
-	State               string                    `json:"state"`
-	LeaseExpiresAt      string                    `json:"lease_expires_at"`
-	Ports               []LinkPlacementPort       `json:"ports"`
-	RuntimeIDs          []string                  `json:"runtime_ids"`
-	TrafficStatus       *LinkTrafficStatus        `json:"traffic_status,omitempty"`
-	TargetStatus        []linkrunner.TargetStatus `json:"target_status,omitempty"`
+	ID                  string              `json:"id"`
+	LinkID              int64               `json:"link_id"`
+	WorkspaceID         int64               `json:"workspace_id"`
+	NodeID              int64               `json:"node_id"`
+	Role                string              `json:"role"`
+	Generation          int64               `json:"generation"`
+	ObservedGeneration  int64               `json:"observed_generation"`
+	ConfigDigest        string              `json:"config_digest"`
+	DesiredConfigDigest string              `json:"desired_config_digest"`
+	Ready               bool                `json:"ready"`
+	State               string              `json:"state"`
+	LeaseExpiresAt      string              `json:"lease_expires_at"`
+	Ports               []LinkPlacementPort `json:"ports"`
+	RuntimeIDs          []string            `json:"runtime_ids"`
+	TrafficStatus       *LinkTrafficStatus  `json:"traffic_status,omitempty"`
+	TargetStatus        []LinkTargetStatus  `json:"target_status,omitempty"`
 }
 
 // LinkTrafficStatus is a closed copy of the in-memory capacity observation.
@@ -42,8 +42,8 @@ type LinkTrafficStatus struct {
 
 var trafficAckPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$`)
 
-func reportedTrafficStatus(in *linkrunner.TrafficStatus) *LinkTrafficStatus {
-	if in == nil || in.ProducerCount < 0 || in.ProducerCount > 128 ||
+func reportedTrafficStatus(in *tstruntime.TrafficStatus) *LinkTrafficStatus {
+	if in == nil || in.ProducerCount < 0 || in.ProducerCount > 32768 ||
 		in.SampleCount < 0 || in.SampleCount > 262144 || in.RuleCount < 0 || in.RuleCount > 262144 ||
 		in.SpoolBytes < 0 || in.SpoolBytes > 403701760 {
 		return nil
@@ -77,11 +77,11 @@ type LinkPlacementPort struct {
 // WithLinkPlacements reads an in-memory runtime snapshot on each report.
 // Runtime wiring: reporter.WithLinkPlacements(rt.links.Status).
 // A nil provider (or nil snapshot) makes no claim; an empty snapshot is [].
-func WithLinkPlacements(provider func() []linkrunner.Observation) Option {
+func WithLinkPlacements(provider func() []tstruntime.Observation) Option {
 	return func(c *Config) { c.linkPlacements = provider }
 }
 
-func reportedLinkPlacements(in []linkrunner.Observation) *[]LinkPlacement {
+func reportedLinkPlacements(in []tstruntime.Observation) *[]LinkPlacement {
 	if in == nil {
 		return nil
 	}

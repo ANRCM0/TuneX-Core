@@ -5,7 +5,7 @@ import type { AppVariables } from "../middlewares/auth.ts";
 import { resolveWorkspaceAccess } from "../services/workspace.ts";
 import {
   LinkResourceError, listLinks, getLink, createLink, updateLink, deployLink,
-  retireLink, createLinkForward, updateLinkForward, actionLinkForward, previewLinkMaintenance,
+  retireLink, previewLinkMaintenance,
 } from "../services/link-resource.ts";
 import { commitLinkMaintenance, listLinkMaintenance, getLinkMaintenance, cancelLinkMaintenance } from "../services/link-maintenance.ts";
 
@@ -71,15 +71,3 @@ linksRoutes.post("/:id/maintenance/migrations/:migrationId/cancel", async (c) =>
 linksRoutes.post("/:id/deploy", async (c) => c.json({ data: await deployLink(c.get("workspace")!.id, positive.parse(c.req.param("id"))) }));
 linksRoutes.post("/:id/rotate-key", async (c) => c.json({ data: await deployLink(c.get("workspace")!.id, positive.parse(c.req.param("id")), true) }));
 linksRoutes.delete("/:id", async (c) => c.json({ data: await retireLink(c.get("workspace")!.id, positive.parse(c.req.param("id"))) }));
-linksRoutes.post("/:id/forwards", async (c) => c.json({ data: await createLinkForward(c.get("workspace")!.id,
-  positive.parse(c.req.param("id")), c.get("user")!.id, await c.req.json()) }, 201));
-linksRoutes.put("/:id/forwards/:forwardId", async (c) => {
-  const input = z.object({ expected_revision: z.number().int().min(0), binding: z.unknown() }).strict().parse(await c.req.json());
-  return c.json({ data: await updateLinkForward(c.get("workspace")!.id, positive.parse(c.req.param("id")),
-    positive.parse(c.req.param("forwardId")), c.get("user")!.id, input.expected_revision, input.binding) });
-});
-linksRoutes.post("/:id/forwards/:forwardId/actions", async (c) => {
-  const input = z.object({ action: z.enum(["suspend", "resume", "retry", "delete"]) }).strict().parse(await c.req.json());
-  return c.json({ data: await actionLinkForward(c.get("workspace")!.id, positive.parse(c.req.param("id")),
-    positive.parse(c.req.param("forwardId")), input.action, c.get("user")!.id) });
-});

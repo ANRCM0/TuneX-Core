@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * V5-WP20-6 流量口径统一单元测试 —— 离线。
  *
@@ -269,7 +270,7 @@ function billingWindowForMonth(now: Date): Date {
 
 // ─────────────────────────── D. DoD 第 8 条与读路径切换（静态守卫） ───────────────────────────
 
-const SRC = new URL("../../../", import.meta.url).pathname; // backend/src/
+const SRC = fileURLToPath(new URL("../../../", import.meta.url)); // backend/src/
 const read = (rel: string) => readFileSync(`${SRC}${rel}`, "utf8");
 const STRIP = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:\w"'])\/\/[^\n]*/g, "$1");
 

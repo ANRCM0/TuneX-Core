@@ -15,6 +15,16 @@ import { Hono } from "hono";
 import { selectRule } from "../../middlewares/rate-limit.ts";
 import { GLOBAL_RATE_LIMIT_RULES } from "../../middlewares/rate-limit.ts";
 
+// Bun's module mocks are global. Keep route fixtures in a clean process.
+if (process.env.TUNEX_ROUTE_ISOLATED_FORWARD_BATCH_ROUTE !== "1") {
+  test("isolated forward-batch-route HTTP regression", () => {
+    const child = Bun.spawnSync([process.execPath, "test", fileURLToPath(import.meta.url), "--timeout", "10000"], {
+      env: { ...process.env, TUNEX_ROUTE_ISOLATED_FORWARD_BATCH_ROUTE: "1", AUTH_SECRET: "test-route-isolation-at-least-32-characters",
+        DATABASE_URL: "mysql://root@127.0.0.1:33079/tunex_v2_test" }, stdout: "pipe", stderr: "pipe", timeout: 20000, // secret-scan:allow isolated loopback fixture, no credentials
+    });
+    expect(child.exitCode, new TextDecoder().decode(child.stderr)).toBe(0);
+  });
+} else {
 const ROOT = fileURLToPath(new URL("../..", import.meta.url)); // → .../backend/src/
 
 interface BatchCall {
@@ -35,6 +45,7 @@ mock.module(`${ROOT}services/forward-service.ts`, () => ({
   getForwardSummary: async () => ({ total: 0 }),
   getForwardTraffic: async () => ({ ok: true, data: [] }),
   patchForward: async () => ({ ok: true, data: {} }),
+  applySavedForward: async () => ({ ok: true, data: {} }),
   previewForwardUpdate: async () => ({ ok: true, data: {} }),
   /** 逐条：id=2 → 404；id=3 → 409；其余成功。 */
   runForwardAction: async (id: number, action: string, workspaceId: number) => {
@@ -209,3 +220,5 @@ describe("V4-WP9 批量限流规则", () => {
     expect(rule?.name).toBe("api-global");
   });
 });
+
+}

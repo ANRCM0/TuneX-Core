@@ -1,15 +1,26 @@
 package reporter
 
 import (
-	"github.com/tunex/agent/internal/linkrunner"
+	"github.com/tunex/agent/internal/tstruntime"
 	"time"
 )
 
-func reportedTargetStatus(role string, in []linkrunner.TargetStatus) []linkrunner.TargetStatus {
+// Nullable fields are mandatory in the closed Panel contract. Unknown values
+// must serialize as null, rather than disappear through runtime omitempty tags.
+type LinkTargetStatus struct {
+	ForwardID     int64    `json:"forward_id"`
+	States        []string `json:"states"`
+	SelectedTCP   *int     `json:"selected_tcp"`
+	SelectedUDP   *int     `json:"selected_udp"`
+	LastCheckedAt *string  `json:"last_checked_at"`
+	Reason        string   `json:"reason"`
+}
+
+func reportedTargetStatus(role string, in []tstruntime.TargetStatus) []LinkTargetStatus {
 	if role != "egress" || len(in) > 500 {
 		return nil
 	}
-	out := make([]linkrunner.TargetStatus, 0, len(in))
+	out := make([]LinkTargetStatus, 0, len(in))
 	seen := map[int64]bool{}
 	for _, fact := range in {
 		if fact.ForwardID < 1 || fact.ForwardID > 2147483647 || seen[fact.ForwardID] || len(fact.States) < 1 || len(fact.States) > 10 {
@@ -57,7 +68,9 @@ func reportedTargetStatus(role string, in []linkrunner.TargetStatus) []linkrunne
 			stamp := *fact.LastCheckedAt
 			fact.LastCheckedAt = &stamp
 		}
-		out = append(out, fact)
+		out = append(out, LinkTargetStatus{ForwardID: fact.ForwardID, States: fact.States,
+			SelectedTCP: fact.SelectedTCP, SelectedUDP: fact.SelectedUDP,
+			LastCheckedAt: fact.LastCheckedAt, Reason: fact.Reason})
 	}
 	return out
 }

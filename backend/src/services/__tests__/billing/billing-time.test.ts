@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * V5-WP20-1 计费时钟纯函数（`services/billing-time.ts`）单元测试 —— 离线，不碰 DB/Redis。
  *
@@ -40,7 +41,7 @@ const SOURCE_PATH = new URL("../../billing-time.ts", import.meta.url);
 const SOURCE = readFileSync(SOURCE_PATH, "utf8");
 /** 去掉注释后的**代码**：契约里被禁止的东西出现在注释里是解释，出现在代码里才是违规。 */
 const CODE = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:\w"'])\/\/[^\n]*/g, "$1");
-const CANONICAL_PATH = new URL("./billing-clock-canonical.ts", import.meta.url).pathname;
+const CANONICAL_PATH = fileURLToPath(new URL("./billing-clock-canonical.ts", import.meta.url));
 
 describe("A. 静态守卫：模块不依赖进程时区、不越界判定层", () => {
   test("固定时区声明 + 只用 Intl.DateTimeFormat 派生日历分量", () => {

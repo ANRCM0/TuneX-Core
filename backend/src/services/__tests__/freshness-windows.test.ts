@@ -57,7 +57,7 @@ describe("同源族（这台节点还活着吗）：三个消费者的阈值必�
     // connect ECONNREFUSED`），而全量测试的既有噪音是 0 —— 不为一条等式给所有
     // 门禁加噪音。改成钉住**声明形状**：必须是引用共享常量，不能是字面量。
     const source = readFileSync(new URL("../scheduler-support.ts", import.meta.url), "utf8");
-    const decl = source.split("\n").find((line) => line.startsWith("export const HEARTBEAT_TIMEOUT_MS")) ?? "";
+    const decl = source.split(/\r?\n/).find((line) => line.startsWith("export const HEARTBEAT_TIMEOUT_MS")) ?? "";
     expect(decl).toBe("export const HEARTBEAT_TIMEOUT_MS = CONNECTION_ONLINE_WINDOW_MS;");
     // 而且它的判定与 deriveConnection 是同一个问题：status=active + 最近上报在窗口内。
     expect(source).toContain("return now.getTime() - node.last_seen_at.getTime() <= timeoutMs;");

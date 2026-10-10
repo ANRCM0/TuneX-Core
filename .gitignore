@@ -45,3 +45,13 @@ scripts/perf/__pycache__/
 
 # ForwardX 参考副本：只读研究用，永不进入提交
 Forwardx(参考项目，不进入git提交）/
+Forwardx/
+
+# Private acceptance fixtures and local generated evidence.
+scripts/integration/.env.integration
+scripts/integration/.agent.env
+scripts/integration/.passwords.env
+scripts/integration/state.json
+scripts/integration/evidence/
+scripts/integration/__pycache__/
+web/test-artifacts/

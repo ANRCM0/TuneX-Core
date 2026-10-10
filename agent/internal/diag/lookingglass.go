@@ -424,7 +424,7 @@ func rawCapabilitySet(procStatus string) bool {
 	return false
 }
 
-func firstExecutable(paths []string) string {
+var firstExecutable = func(paths []string) string {
 	for _, path := range paths {
 		info, err := os.Stat(path)
 		if err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {

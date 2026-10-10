@@ -47,7 +47,7 @@ export async function ensurePersonalWorkspace(user: { id: number; email: string 
   return workspace;
 }
 
-export type WorkspaceAction = "read" | "create" | "update" | "delete" | "manage";
+export type WorkspaceAction = "read" | "create" | "update" | "delete" | "manage" | "use";
 export type WorkspaceRole = "owner" | "admin" | "member" | "viewer";
 export type WorkspaceResourceFamily = "forward" | "tunnel" | "node" | "member" | "settings" | "audit";
 
@@ -79,7 +79,7 @@ function requiredPermission(action: WorkspaceAction, resource: WorkspaceResource
       ? `forward:${action}` : null;
   }
   if (resource === "node" || resource === "member" || resource === "settings") {
-    return action === "read" || action === "manage" ? `${resource}:${action}` : null;
+    return action === "read" || action === "manage" || resource === "node" && action === "use" ? `${resource}:${action}` : null;
   }
   return resource === "audit" && action === "read" ? "audit:read" : null;
 }
@@ -119,6 +119,7 @@ export function canWorkspaceResourceAction(
   if (access.role === "admin") return true;
   if (action === "read") return true;
   if (access.role === "viewer") return false;
+  if (resource === "node" && action === "use") return true;
   if (resource !== "forward" && resource !== "tunnel") return false;
   return action === "create" || (isCreator === true && (action === "update" || action === "delete"));
 }

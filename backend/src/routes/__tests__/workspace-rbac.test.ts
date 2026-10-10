@@ -1,9 +1,10 @@
+import { fileURLToPath } from "node:url";
 /** WP10 negative HTTP gate. Run mocks in a child process so Bun's global module
  * registry cannot replace workspace authorization in unrelated route suites. */
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 
-const root = new URL("../..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../..", import.meta.url));
 const scenario = String.raw`
 import { mock, expect } from "bun:test";
 import { Hono } from "hono";
@@ -89,6 +90,7 @@ mock.module(root + "services/forward-service.ts", () => ({
   getForward: async (id, ws) => scoped(id,ws), getForwardSummary: async () => ({}), getForwardTraffic: async () => ({ok:true,data:[]}),
   patchForward: async (id,ws) => mutation(id,ws), deleteForward: async (id,ws) => mutation(id,ws),
   previewForwardUpdate: async (id,ws) => { previews++; return {ok:true,data:scoped(id,ws)}; },
+  applySavedForward: async () => ({ok:true,data:{}}),
   runForwardAction: async (id,action,ws) => mutation(id,ws),
   runForwardBatch: async (ids,action,ws,authorize) => {
     const results = ids.map(id => {
@@ -175,6 +177,7 @@ identity("admin");roleId=44;await status("/api/workspaces/2/members/8","DELETE",
 identity("owner",{});await status("/api/workspaces/2/members","GET",undefined,200);
 const bearer=await request("/api/forwards/11","PATCH",{name:"no-team"},{authorization:"Bearer fixture"});expect(bearer.status).toBe(403);checks++;
 console.log("WP10 HTTP checks:",checks);
+process.exit(0);
 `;
 
 test("WP10 real Hono routes enforce scoped creator, replacement roles, aliases, batch and member boundaries", () => {

@@ -38,7 +38,7 @@ const workspace: WorkspaceContextValue = {
   select: () => {}, createTeam: async () => null, refresh: async () => {},
 };
 
-const COMPONENT = readFileSync(new URL("../forward-workspace.tsx", import.meta.url), "utf8");
+const COMPONENT = readFileSync(new URL("../forward-unified-workspace.tsx", import.meta.url), "utf8");
 const TABLE = readFileSync(new URL("../forward-table.tsx", import.meta.url), "utf8");
 const CREATE_DIALOG = readFileSync(new URL("../forward-create-dialog.tsx", import.meta.url), "utf8");
 

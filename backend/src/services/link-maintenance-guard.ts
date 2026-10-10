@@ -1,5 +1,5 @@
 import type { Prisma, LinkMaintenanceMigration } from "@prisma/client";
-import { MaintenanceStatusSchema, maintenanceTransition } from "../integrations/forwardx/link-maintenance-state.ts";
+import { MaintenanceStatusSchema, maintenanceTransition } from "../domain/link/link-maintenance-state.ts";
 import { LinkResourceError } from "./link-errors.ts";
 
 /** Caller holds the Link row lock. Close only an intent; never release runtime ports. */

@@ -10,10 +10,10 @@ test("F5 intents preserve immutable baselines, idempotency, CAS, cancellation, e
     import {mock} from "bun:test";
     import assert from "node:assert/strict";
     import {randomUUID} from "node:crypto";
-    import {canonicalConfigDigest} from ${modulePath("../../integrations/forwardx/core-contract.ts")};
-    import {signMaintenanceReceipt,maintenanceRequestDigest} from ${modulePath("../../integrations/forwardx/link-maintenance-state.ts")};
+    import {canonicalConfigDigest} from ${modulePath("../../domain/link/core-contract.ts")};
+    import {signMaintenanceReceipt,maintenanceRequestDigest} from ${modulePath("../../domain/link/link-maintenance-state.ts")};
     import {LinkResourceError} from ${modulePath("../link-errors.ts")};
-    process.env.TUNEX_FXP_LINKS_ENABLED="true";process.env.TUNEX_LINK_MAINTENANCE_ENABLED="true";
+    process.env.TUNEX_TST_ENABLED="true";process.env.TUNEX_LINK_MAINTENANCE_ENABLED="true";
     const key="53".repeat(32),stateToken="ab".repeat(32);
     let state=stateToken,ready=true,captureFailure=null,failEvent=false;
     const rows=[],events=[];
@@ -45,7 +45,7 @@ test("F5 intents preserve immutable baselines, idempotency, CAS, cancellation, e
         snapshot:{schema_version:1,request,state_token:state,baseline:{config,generation:4,desired_version:2},
           admission:{references:[{id:9,revision:2,desired_status:"active",target_host:"must-not-leak.example"},
             {id:10,revision:3,desired_status:"inactive",target_host:"must-not-leak.example"}]}}};};
-    mock.module(${modulePath("../link-resource.ts")},()=>({assertLinkFeature:()=>{if(process.env.TUNEX_FXP_LINKS_ENABLED!=="true")throw new LinkResourceError("fxp_links_not_enabled");},
+    mock.module(${modulePath("../link-resource.ts")},()=>({assertLinkFeature:()=>{if(process.env.TUNEX_TST_ENABLED!=="true")throw new LinkResourceError("tst_not_enabled");},
       captureLinkMaintenance:capture,lockScopedLink,sealKey:()=>key}));
     const service=await import(${modulePath("../link-maintenance.ts")});
     const guard=await import(${modulePath("../link-maintenance-guard.ts")});
@@ -82,14 +82,14 @@ test("F5 intents preserve immutable baselines, idempotency, CAS, cancellation, e
     await fails(()=>service.cancelLinkMaintenance(3,7,id,8,{expected_state_version:2}),"link_maintenance_state_conflict");
     assert.deepEqual({rows,events},beforeCancel);
     assert.deepEqual(await service.reconcileLinkMaintenance(),{scanned:1,closed:0,errors:0});
-    process.env.TUNEX_FXP_LINKS_ENABLED="false";process.env.TUNEX_LINK_MAINTENANCE_ENABLED="false";
+    process.env.TUNEX_TST_ENABLED="false";process.env.TUNEX_LINK_MAINTENANCE_ENABLED="false";
     const cancelled=await service.cancelLinkMaintenance(3,7,id,8,{expected_state_version:1});
     assert.equal(cancelled.status,"cancelled");assert.equal(cancelled.state_version,2);assert.equal(rows[0].active_link_id,null);
     assert.equal((await service.cancelLinkMaintenance(3,7,id,8,{expected_state_version:1})).status,"cancelled");
     assert.equal(events.length,2);assert.deepEqual(rows[0].snapshot,privateSnapshot,"closing never rebases immutable facts");
     await guard.assertNoMaintenanceIntent(db,7);
     assert.equal((await service.getLinkMaintenance(3,7,id)).events.length,2,"read/cancel works with flags off");
-    process.env.TUNEX_FXP_LINKS_ENABLED="true";process.env.TUNEX_LINK_MAINTENANCE_ENABLED="true";
+    process.env.TUNEX_TST_ENABLED="true";process.env.TUNEX_LINK_MAINTENANCE_ENABLED="true";
     assert.equal((await write(original)).migration.status,"cancelled","idempotency cannot reopen terminal intent");
     const second=await write(input());rows.at(-1).hold_expires_at=new Date(0);
     await guard.assertNoMaintenanceIntent(db,7);assert.equal(rows.at(-1).status,"expired");
@@ -104,8 +104,8 @@ test("F5 intents preserve immutable baselines, idempotency, CAS, cancellation, e
     assert.equal(rows.at(-1).reason_code,"link_runtime_unconfirmed");
     await write(input());rows.at(-1).snapshot.baseline.config.carrier_port++;
     assert.equal((await service.reconcileLinkMaintenance()).closed,1);assert.equal(rows.at(-1).reason_code,"link_maintenance_snapshot_corrupt");
-    await write(input());captureFailure=new LinkResourceError("agent_fxp_capability_stale");
-    assert.equal((await service.reconcileLinkMaintenance()).closed,1);assert.equal(rows.at(-1).reason_code,"agent_fxp_capability_stale");captureFailure=null;
+    await write(input());captureFailure=new LinkResourceError("agent_tst_capability_stale");
+    assert.equal((await service.reconcileLinkMaintenance()).closed,1);assert.equal(rows.at(-1).reason_code,"agent_tst_capability_stale");captureFailure=null;
     await write(input());process.env.TUNEX_LINK_MAINTENANCE_ENABLED="false";
     assert.equal((await service.reconcileLinkMaintenance()).closed,1);assert.equal(rows.at(-1).active_link_id,null);
     assert.equal(events.every(e=>e.reason_code==null||/^[a-z_]+$/.test(e.reason_code)),true);

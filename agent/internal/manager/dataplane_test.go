@@ -409,10 +409,16 @@ func TestRelayChainWeightedDistribution(t *testing.T) {
 
 func TestRelayChainTargetFailureObservableAndDropsConn(t *testing.T) {
 	// A target that accepts nothing (free, closed port): every dial fails.
-	dead := freePort(t)
+	reserved, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reserved.Close()
+	dead := reserved.Addr().(*net.TCPAddr).Port
 	tp := newRelayTopology(t, WeightedRoundRobin, forwarder.Target{
 		Host: "127.0.0.1", Port: dead, Weight: 1,
 	})
+	reserved.Close()
 
 	conn, err := dialRetry(t, tp.ingress)
 	if err != nil {
@@ -448,10 +454,18 @@ func TestRelayChainTargetFailureObservableAndDropsConn(t *testing.T) {
 func TestRelayChainRecoversWhenTargetComesBack(t *testing.T) {
 	// Start dead, heal the target, and the pool keeps working — the ledger
 	// must clear the remembered failure once a dial succeeds again.
-	dead := freePort(t)
+	// Retain the target reservation until both relay listeners are bound, so
+	// the kernel cannot reuse the dead target number for our own egress.
+	reserved, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reserved.Close()
+	dead := reserved.Addr().(*net.TCPAddr).Port
 	tp := newRelayTopology(t, WeightedRoundRobin, forwarder.Target{
 		Host: "127.0.0.1", Port: dead, Weight: 1,
 	})
+	reserved.Close()
 
 	conn, err := dialRetry(t, tp.ingress)
 	if err != nil {

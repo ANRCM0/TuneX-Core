@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -39,6 +40,11 @@ type LKG struct {
 // agent. A mismatch is corruption from this build's point of view: the file is
 // ignored (and left in place for forensics), not guessed at.
 const lkgSchemaVersion = 1
+
+// Windows cannot atomically replace a file while another handle is reading it.
+// Serialize local writers with readers so a valid cache never appears corrupt
+// merely because an in-process replacement overlaps an observer's read.
+var lkgDiskMu sync.RWMutex
 
 // lkgEnvelope is the on-disk record. The agent id is part of it so a cache file
 // carried over from another node cannot be adopted.
@@ -74,6 +80,8 @@ func (l LKG) Enabled() bool { return strings.TrimSpace(l.Path) != "" }
 // `nil` is different — it means "we do not know" — and is refused so a failed
 // fetch can never erase the last state that actually worked.
 func (l LKG) Save(agentID string, snap *Snapshot) error {
+	lkgDiskMu.Lock()
+	defer lkgDiskMu.Unlock()
 	if !l.Enabled() {
 		return ErrLKGDisabled
 	}
@@ -151,6 +159,8 @@ func (l LKG) Save(agentID string, snap *Snapshot) error {
 
 // Load reads and validates the cache for this agent id.
 func (l LKG) Load(agentID string) (*Snapshot, error) {
+	lkgDiskMu.RLock()
+	defer lkgDiskMu.RUnlock()
 	if !l.Enabled() {
 		return nil, ErrLKGDisabled
 	}
