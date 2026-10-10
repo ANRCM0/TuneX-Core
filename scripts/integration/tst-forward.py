@@ -132,7 +132,13 @@ def await_operation(operation_id):
     while time.monotonic() < end:
         receipt = request("GET", f"/api/forward-operations/{operation_id}")
         if receipt["state"] == "failed":
-            raise RuntimeError("operation failed: " + str(receipt.get("error_code", "unknown")))
+            # The operation code is already a bounded public enum. Preserve it in
+            # the redacted evidence so an acceptance failure remains diagnosable
+            # without archiving authenticated DTOs or worker logs.
+            code = receipt.get("error_code", "unknown")
+            if not isinstance(code, str) or not code.replace("_", "").isalnum():
+                code = "unknown"
+            raise RuntimeError(f"operation_failed_{code}")
         if receipt.get("forward_id"):
             detail = request("GET", f"/api/forwards/{receipt['forward_id']}")
             if detail.get("lifecycle", {}).get("deployment") == "confirmed":
@@ -222,8 +228,13 @@ def main():
         H.check(listener_closed(21081), "last Forward deletion confirms listener removal")
     except Exception as error:
         # Error messages are only harness-owned bounded descriptions; raw API bodies
-        # and authenticated snapshots are never archived.
-        H.record(False, f"TST acceptance failed: {type(error).__name__}")
+        # and authenticated snapshots are never archived. Keep the bounded reason
+        # because a generic RuntimeError made second-Forward regressions opaque.
+        reason = str(error)
+        if not reason or any(ord(ch) < 32 or ord(ch) > 127 for ch in reason):
+            reason = "unknown"
+        reason = reason[:120]
+        H.record(False, f"TST acceptance failed: {type(error).__name__}:{reason}")
     finally:
         if held:
             held.close()
