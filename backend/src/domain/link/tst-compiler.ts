@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { canonicalConfigDigest } from "./core-contract.ts";
-import type { TstCredentials, TstIdentity } from "./tst-credentials.ts";
+import { validateTstCredentials, type TstCredentials, type TstIdentity } from "./tst-credentials.ts";
 import { LinkTargetSetSchema } from "./target-set.ts";
 import { LinkClientSourceSchema } from "./client-source.ts";
 import { bindScopesOverlap, protocolsOverlap } from "./bind-scope.ts";
@@ -33,6 +33,8 @@ export function compileTstLink(raw: unknown, credentials?: TstCredentials): { in
     if (node.workspace_id !== input.workspace_id) throw new Error("link_workspace_mismatch");
     if (!node.capabilities.includes("forward.link.tst.v1")) throw new Error("agent_tst_capability_missing");
   }
+  if (credentials) validateTstCredentials(credentials, { workspace: input.workspace_id, link: input.link_id,
+    ingressNode: input.ingress.id, egressNode: input.egress.id });
   if (!input.egress.connect_host) throw new Error("hop_address_missing");
   if (new Set(input.bindings.map((b) => b.forward_id)).size !== input.bindings.length) throw new Error("duplicate_forward_binding");
   for (let i = 0; i < input.bindings.length; i++) for (let j = i + 1; j < input.bindings.length; j++) {

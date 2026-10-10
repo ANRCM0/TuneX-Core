@@ -24,10 +24,11 @@ import (
 )
 
 const (
-	commandsPath = "/api/internal/node/commands"
-	ackPath      = "/api/internal/node/ack"
-	pollInterval = time.Second
-	httpTimeout  = 12 * time.Second
+	commandsPath   = "/api/internal/node/commands"
+	ackPath        = "/api/internal/node/ack"
+	pollInterval   = time.Second
+	maxPollBackoff = 30 * time.Second
+	httpTimeout    = 12 * time.Second
 )
 
 // ErrorRecorder records an apply/runtime failure. reporter.Ledger satisfies it.
@@ -221,10 +222,46 @@ func (c *Client) notePanelAttempt(err error) {
 	c.cfg.Router.NoteOutcome(panelroute.PanelOutcomeSuccess, time.Now())
 }
 
+// pollBackoff returns the bounded delay before the next failed control pull.
+// The first retry remains one second, while a prolonged outage backs off to
+// thirty seconds so a dead panel does not turn every Agent into a request
+// storm. A successful pull resets the caller's failure streak.
+func pollBackoff(failures int) time.Duration {
+	if failures <= 0 {
+		return pollInterval
+	}
+	delay := pollInterval
+	for attempt := 1; attempt < failures && delay < maxPollBackoff; attempt++ {
+		if delay > maxPollBackoff/2 {
+			return maxPollBackoff
+		}
+		delay *= 2
+	}
+	if delay > maxPollBackoff {
+		return maxPollBackoff
+	}
+	return delay
+}
+
+// waitForPoll uses a timer instead of time.After so an outage does not leave
+// one timer allocation behind on every failed request. Cancellation is checked
+// by the same select as the timer, allowing shutdown to interrupt a long backoff.
+func waitForPoll(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 func (c *Client) Run(ctx context.Context) error {
 	if !c.enabled() {
 		return errors.New("control: panel URL and node credential are required")
 	}
+	failureStreak := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -232,10 +269,13 @@ func (c *Client) Run(ctx context.Context) error {
 		cmd, err := c.pull(ctx)
 		c.notePanelAttempt(err)
 		if err != nil {
-			logx.Debug("control pull failed", "err", err.Error())
+			failureStreak++
+			retryIn := pollBackoff(failureStreak)
+			logx.Debug("control pull failed", "err", err.Error(), "failure_streak", failureStreak, "retry_in", retryIn.String())
 			c.reachable = false
 			c.sawFailure = true
 		} else {
+			failureStreak = 0
 			// The panel is authoritative again. Two situations need a reconcile:
 			//   · this process watched the panel go away and come back;
 			//   · this process booted during an outage and restored from cache, so
@@ -269,10 +309,12 @@ func (c *Client) Run(ctx context.Context) error {
 				}
 			}
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(pollInterval):
+		delay := pollInterval
+		if failureStreak > 0 {
+			delay = pollBackoff(failureStreak)
+		}
+		if err := waitForPoll(ctx, delay); err != nil {
+			return err
 		}
 	}
 }

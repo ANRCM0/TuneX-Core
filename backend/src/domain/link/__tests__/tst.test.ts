@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { X509Certificate, createPublicKey } from "node:crypto";
-import { newTstCredentials, sealTstCredentials, unsealTstCredentials, tstUri } from "../tst-credentials.ts";
+import { newTstCredentials, sealTstCredentials, shouldRotateTstCredentials, tstCredentialExpiryState, unsealTstCredentials, tstUri } from "../tst-credentials.ts";
 import { compileTstLink } from "../tst-compiler.ts";
 import { canonicalConfigDigest } from "../core-contract.ts";
 
@@ -56,6 +56,21 @@ describe("independent TST configuration and scoped credentials", () => {
     expect(renewed.ingress.config_digest).toBe(result.ingress.config_digest);
     const update = compileTstLink({ ...input, bindings: [{ ...input.bindings[0], revision: 6 }] }, credentials);
     expect(update.egress.config_digest).not.toBe(result.egress.config_digest);
+  });
+  test("compiler rejects credential bundles with broken chain, key or peer binding", async () => {
+    const credentials = await newTstCredentials(4, 3, 11, 12);
+    const foreign = await newTstCredentials(4, 3, 11, 12);
+    expect(() => compileTstLink(input, { ...credentials, ca_pem: foreign.ca_pem })).toThrow("invalid_tst_credential");
+    expect(() => compileTstLink(input, { ...credentials, ingress: { ...credentials.ingress, private_key_pem: foreign.ingress.private_key_pem } })).toThrow("invalid_tst_credential");
+    expect(() => compileTstLink(input, { ...credentials, egress: { ...credentials.egress, peer_uri: tstUri(4, 99, 11, "ingress") } })).toThrow("invalid_tst_credential");
+    expect(() => compileTstLink(input, { ...credentials, ingress: { ...credentials.ingress, certificate_pem: foreign.ingress.certificate_pem } })).toThrow("invalid_tst_credential");
+  });
+  test("credential expiry policy distinguishes active, renewal and revoked boundaries", () => {
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    expect(tstCredentialExpiryState("2026-01-03T00:00:00.000Z", now)).toBe("active");
+    expect(tstCredentialExpiryState("2026-01-01T23:59:59.999Z", now)).toBe("renewal_due");
+    expect(shouldRotateTstCredentials("2025-12-31T23:59:59.999Z", now)).toBe(true);
+    expect(tstCredentialExpiryState("garbage", now)).toBe("invalid");
   });
   test("missing capability, cross workspace, duplicates and unsupported policies fail closed", () => {
     expect(() => compileTstLink({ ...input, ingress: { ...input.ingress, workspace_id: 9 } })).toThrow("link_workspace_mismatch");

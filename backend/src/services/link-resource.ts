@@ -4,7 +4,7 @@ import { db } from "../db.ts";
 import { lockForwardOperation } from "./forward-operation-fence.ts";
 import { compileTstLink, TstLinkInputSchema, TST_MAX_CONNECTIONS, type TstPlacementConfig } from "../domain/link/tst-compiler.ts";
 import { canonicalConfigDigest } from "../domain/link/core-contract.ts";
-import { newTstCredentials, sealTstCredentials, unsealTstCredentials } from "../domain/link/tst-credentials.ts";
+import { newTstCredentials, sealTstCredentials, shouldRotateTstCredentials, tstCredentialExpiryState, unsealTstCredentials } from "../domain/link/tst-credentials.ts";
 import { loadNodeCapabilityFacts } from "./runtime-admission.ts";
 import { acquirePort, releaseLease, type PortPoolDb, type PortPoolTransaction } from "./portPool.ts";
 import { sendLinkPlacement } from "./link-transport.ts";
@@ -403,7 +403,7 @@ async function prepareDeployment(workspaceId: number, linkId: number, rotate: bo
     if (link.generation && !previous && !rotate) throw new LinkResourceError("link_credential_missing", 503);
     let secret = !rotate && previous
       ? unsealTstCredentials(previous.secret_enc, sealKey(), workspaceId, linkId, previous.generation) : await newTstCredentials(workspaceId, linkId, nodes.ingress.id, nodes.egress.id);
-    if (Date.parse(secret.expires_at) <= Date.now() + 86_400_000)
+    if (shouldRotateTstCredentials(secret.expires_at))
       secret = await newTstCredentials(workspaceId, linkId, nodes.ingress.id, nodes.egress.id);
     let placements;
     try { placements = compileTstLink(input, secret); }
@@ -673,7 +673,8 @@ async function hydrateDeployment(link: Awaited<ReturnType<typeof scopedLink>>, r
   const input = DeploymentSnapshotSchema.parse(deployment.binding_snapshot).spec;
   input.lease_expires_at = new Date(Date.now() + LEASE_MS).toISOString();
   const secret = unsealTstCredentials(credential.secret_enc, sealKey(), link.workspace_id, link.id, link.generation);
-  if (!removalOnly && Date.parse(secret.expires_at) <= Date.now()) throw new LinkResourceError("tst_certificate_expired", 403);
+  if (!removalOnly && ["expired", "invalid"].includes(tstCredentialExpiryState(secret.expires_at)))
+    throw new LinkResourceError("tst_certificate_expired", 403);
   const placements = compileTstLink(input, secret);
   return { link, deployment, placements };
 }
@@ -745,7 +746,7 @@ export async function desiredNodeLinks(nodeId: number): Promise<TstPlacementConf
       link_id: deployment.link_id, generation: deployment.generation } } });
     const secret = unsealTstCredentials(cred.secret_enc, sealKey(), deployment.link.workspace_id,
       deployment.link_id, deployment.generation);
-    if (Date.parse(secret.expires_at) <= Date.now()) continue;
+    if (["expired", "invalid"].includes(tstCredentialExpiryState(secret.expires_at))) continue;
     const lease = await extendDeploymentLease(deployment.id, new Date(Date.now() + LEASE_MS));
     const input = snapshot.spec;
     input.lease_expires_at = lease.toISOString();
@@ -772,7 +773,7 @@ export async function reconcileLinks(): Promise<{ scanned: number; errors: numbe
       if (link.status === "retiring") { await retireLink(link.workspace_id, link.id); continue; }
       const credential = await db.linkTransportCredential.findUniqueOrThrow({ where: { link_id_generation: {
         link_id: link.id, generation: link.generation } } });
-      if (Date.parse(unsealTstCredentials(credential.secret_enc, sealKey(), link.workspace_id, link.id, link.generation).expires_at) <= Date.now() + 86_400_000) {
+      if (shouldRotateTstCredentials(unsealTstCredentials(credential.secret_enc, sealKey(), link.workspace_id, link.id, link.generation).expires_at)) {
         await deployLink(link.workspace_id, link.id);
         continue;
       }
