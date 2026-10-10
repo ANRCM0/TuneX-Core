@@ -223,6 +223,15 @@ func waitForPortClosed(t *testing.T, port int) {
 	}
 }
 
+func waitForPortGuardFree(t *testing.T, tm *TunnelManager, port int) {
+	t.Helper()
+	if !waitFor(t, fmt.Sprintf("manager guard for port %d released", port), 5*time.Second, func() bool {
+		return !tm.UsedPorts()[port]
+	}) {
+		t.Fatalf("manager guard for port %d was not released", port)
+	}
+}
+
 func ids(list []forwarder.TunnelConfig) []string {
 	out := make([]string, 0, len(list))
 	for _, c := range list {
@@ -793,6 +802,7 @@ func TestTunnelManagerRemoveFreesPort(t *testing.T) {
 		t.Fatal("the tunnel is still listed after Remove")
 	}
 	waitForPortClosed(t, port)
+	waitForPortGuardFree(t, tm, port)
 	// The port must be reusable.
 	if _, err := tm.Apply(forwarder.TunnelConfig{
 		ID: "r2", Mode: forwarder.ModeRelay, IngressPort: port,
