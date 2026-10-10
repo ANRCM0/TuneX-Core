@@ -96,10 +96,10 @@ describe("native plain Forward both contract and rollout", () => {
     }
   });
   test("detail editor receives capabilities and clears old-scope reference facts", () => {
-    const source = readFileSync(new URL("../forward-detail.tsx", import.meta.url), "utf8");
-    expect(source).toContain("capabilities={forwardCapabilities}");
-    expect(source).toContain("setNodes([])");
-    expect(source).toContain("setBindings({})");
+    const source = readFileSync(new URL("../forward-unified-workspace.tsx", import.meta.url), "utf8");
+    expect(source).toContain("capabilities={capabilities}");
+    expect(source).toContain("JSON.stringify([workspace.currentId, workspace.permissions])");
+    expect(source).toContain("controller.abort()");
   });
   test("copy is one create payload, same both and limits, auto-port, no stats/registry extras", () => {
     const source = rule();
@@ -209,7 +209,7 @@ describe("native both authenticated workspace mock parity", () => {
   }
   test("authenticated capability read is default off; unknown scope and anonymous stay denied", async () => {
     resetStore(); delete process.env.FORWARD_NATIVE_BOTH_ENABLED;
-    expect((await call("GET", "/forwards/capabilities")).body).toEqual({ native_both_enabled: false });
+    expect((await call("GET", "/forwards/capabilities")).body).toMatchObject({ native_both_enabled: false, tst_enabled: false });
     expect((await call("GET", "/forwards/capabilities", undefined, "")).status).toBe(401);
     expect((await handleMock("GET", "/forwards/capabilities", { cookie: "tunex_session=u1", workspaceId: 999 } as never)).status).toBe(404);
   });
@@ -217,10 +217,10 @@ describe("native both authenticated workspace mock parity", () => {
     resetStore(); advertise(1);
     for (const value of ["false", "TRUE", "1", " true ", ""]) {
       process.env.FORWARD_NATIVE_BOTH_ENABLED = value;
-      expect((await call("GET", "/forwards/capabilities")).body).toEqual({ native_both_enabled: false });
+      expect((await call("GET", "/forwards/capabilities")).body).toMatchObject({ native_both_enabled: false });
     }
     process.env.FORWARD_NATIVE_BOTH_ENABLED = "true";
-    expect((await call("GET", "/forwards/capabilities")).body).toEqual({ native_both_enabled: true });
+    expect((await call("GET", "/forwards/capabilities")).body).toMatchObject({ native_both_enabled: true });
     const report = (await call("GET", "/nodes/1/diagnostics")).body as NodeDiagnosticsReport;
     expect(report.panel.reported?.capabilities).toEqual([FORWARD_NATIVE_BOTH_CAPABILITY]);
     const [enriched] = await withForwardRuntimeCapabilities([mockUserNode(getStore(), getStore().nodes[0]!)], async () => report);

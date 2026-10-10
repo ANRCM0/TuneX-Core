@@ -18,7 +18,7 @@ const trafficAckAt = z.string().max(64).refine((value) => {
 });
 const trafficStatus = z.object({
   rotation_supported: z.boolean(),
-  producer_count: z.number().int().min(0).max(128),
+  producer_count: z.number().int().min(0).max(32768),
   sample_count: z.number().int().min(0).max(262144),
   rule_count: z.number().int().min(0).max(262144),
   spool_bytes: z.number().int().min(0).max(403701760),

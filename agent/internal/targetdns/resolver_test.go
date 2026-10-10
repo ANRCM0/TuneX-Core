@@ -45,7 +45,7 @@ type scriptedLookup struct {
 	ttl    time.Duration
 	err    map[string]error
 	calls  map[string]int
-	total  int64
+	total  atomic.Int64
 	before func(host string)
 }
 
@@ -75,7 +75,7 @@ func (s *scriptedLookup) count(host string) int {
 func (s *scriptedLookup) Lookup(_ context.Context, host string) (LookupResult, error) {
 	s.mu.Lock()
 	s.calls[host]++
-	atomic.AddInt64(&s.total, 1)
+	s.total.Add(1)
 	before := s.before
 	addrs := s.addrs[host]
 	err := s.err[host]
@@ -285,8 +285,8 @@ func TestIPLiteralsBypassResolution(t *testing.T) {
 			t.Errorf("literal %q produced %v", host, plan.Addrs)
 		}
 	}
-	if atomic.LoadInt64(&lookup.total) != 0 {
-		t.Fatalf("literals triggered %d lookup(s)", lookup.total)
+	if lookup.total.Load() != 0 {
+		t.Fatalf("literals triggered %d lookup(s)", lookup.total.Load())
 	}
 	// And through the dialer, which is where it actually matters.
 	dial := &fakeDial{}
@@ -297,7 +297,7 @@ func TestIPLiteralsBypassResolution(t *testing.T) {
 	if got := dial.dialed(); len(got) != 1 || got[0] != "127.0.0.1:9000" {
 		t.Fatalf("dialled %v, want the literal address unchanged", got)
 	}
-	if atomic.LoadInt64(&lookup.total) != 0 {
+	if lookup.total.Load() != 0 {
 		t.Fatalf("a literal dial triggered a lookup")
 	}
 }
@@ -605,7 +605,7 @@ func TestNonTCPAndUnparseableAddressesFallThrough(t *testing.T) {
 	if got := dial.dialed(); len(got) != 2 {
 		t.Fatalf("plain dials = %v, want both passed through untouched", got)
 	}
-	if atomic.LoadInt64(&lookup.total) != 0 {
+	if lookup.total.Load() != 0 {
 		t.Fatal("a non-TCP dial triggered target resolution")
 	}
 }

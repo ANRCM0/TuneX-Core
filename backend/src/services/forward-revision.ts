@@ -20,9 +20,9 @@ import {
 // 远端出口腿支持边界只有一处定义（`federation/forward-hop.ts`），
 // 校验与运行期必须用同一个集合 —— 各写一份就是"preview 放行、rollout 拒绝"的来源。
 import { FEDERATED_EGRESS_UNSUPPORTED_PROTOCOLS } from "./federation/forward-hop.ts";
-import { LinkTargetSetSchema, persistedLinkTargetSet, targetSetMatchesFirst, type LinkTargetSet } from "../integrations/forwardx/target-set.ts";
+import { LinkTargetSetSchema, persistedLinkTargetSet, targetSetMatchesFirst, type LinkTargetSet } from "../domain/link/target-set.ts";
 
-import { LinkClientSourceSchema, persistedLinkClientSource, type LinkClientSource } from "../integrations/forwardx/client-source.ts";
+import { LinkClientSourceSchema, persistedLinkClientSource, type LinkClientSource } from "../domain/link/client-source.ts";
 
 /* ================================================================== */
 /* 契约类型                                                            */
@@ -1125,7 +1125,7 @@ export async function createForwardRevision(
     }
     const linkedBoth = input.candidate.protocol === "both" && linkedId != null &&
       linkedId === row.link_resource_id && input.link_resource_id === row.link_resource_id;
-    // Shared FXP authorization remains separate; adding native both cannot
+    // Shared TST authorization remains separate; adding native both cannot
     // accidentally authorize a forged or missing Link provenance.
     if (linkedId != null && input.candidate.protocol === "both" && !linkedBoth)
       throw new ForwardRevisionError("invalid_input", "Link both requires explicit persisted Link authorization");

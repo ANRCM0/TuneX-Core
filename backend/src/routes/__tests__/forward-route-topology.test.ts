@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * V5-WP19-C —— `GET /api/forwards/:id/topology` 的**行为级可达性**测试。
  *
@@ -30,6 +31,16 @@ import { beforeEach, describe, expect, test, mock } from "bun:test";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 
+// Bun's module mocks are global. Keep route fixtures in a clean process.
+if (process.env.TUNEX_ROUTE_ISOLATED_FORWARD_ROUTE_TOPOLOGY !== "1") {
+  test("isolated forward-route-topology HTTP regression", () => {
+    const child = Bun.spawnSync([process.execPath, "test", fileURLToPath(import.meta.url), "--timeout", "10000"], {
+      env: { ...process.env, TUNEX_ROUTE_ISOLATED_FORWARD_ROUTE_TOPOLOGY: "1", AUTH_SECRET: "test-route-isolation-at-least-32-characters",
+        DATABASE_URL: "mysql://root@127.0.0.1:33079/tunex_v2_test" }, stdout: "pipe", stderr: "pipe", timeout: 20000, // secret-scan:allow isolated loopback fixture, no credentials
+    });
+    expect(child.exitCode, new TextDecoder().decode(child.stderr)).toBe(0);
+  });
+} else {
 const TOPOLOGY_MODULE = "../../services/forward-topology.ts";
 // 先拿真实现（后面透传它）：`mock.module` 会替换整个模块，凡是别人也 import 的导出都必须保留。
 const realTopology = await import(TOPOLOGY_MODULE);
@@ -117,3 +128,5 @@ describe("V5-WP19-C: 拓扑视图的路由可达性", () => {
     expect(body.code).toBe("no_ingress_node");
   });
 });
+
+}

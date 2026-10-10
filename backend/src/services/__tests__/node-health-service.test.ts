@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * task-26 —— Agent 版本基线（`TUNEX_AGENT_LATEST_VERSION`）的**语义**守卫。
  *
@@ -28,7 +29,7 @@ import { spawnSync } from "node:child_process";
 import { classifyAgentBaseline, getNodeHealth } from "../node-health-service.ts";
 import { isVersionOlder } from "../node-health.ts";
 
-const root = new URL("../..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../..", import.meta.url));
 
 /** 真实形态：installer 写进去的 git sha（40 位小写 hex）。 */
 const SHA = "0123456789abcdef0123456789abcdef01234567";

@@ -58,6 +58,7 @@ export const FORWARD_LIST_MAX_UNPAGED = 500;
 
 export interface ForwardListFilters {
   mode?: ForwardMode;
+  transport?: "native_plain" | "tst_v1" | "legacy_unsupported";
   apply_status?: ForwardApplyStatus;
   ingress_node_id?: number;
   egress_node_id?: number;
@@ -178,7 +179,9 @@ export function parseForwardListQuery(
     sort: parseForwardSortKey(raw.sort),
     order: parseForwardSortOrder(raw.order),
     filters: {
-      mode: parseMode(raw.mode),
+      mode: parseMode(raw.path ?? raw.mode),
+      ...(raw.transport === "native_plain" || raw.transport === "tst_v1" || raw.transport === "legacy_unsupported"
+        ? { transport: raw.transport } : {}),
       apply_status: parseApplyStatus(raw.apply_status),
       ingress_node_id: parsePositiveInt(raw.ingress_node_id),
       egress_node_id: parsePositiveInt(raw.egress_node_id),

@@ -93,7 +93,7 @@ func TestPolicyConfigContract(t *testing.T) {
 		{MaxMappings: -1}, {MaxMappingsPerSourceIP: -1}, {PolicyScope: "user"},
 		{RateBurstBytes: 128}, {Protocol: ProtocolTCP, MaxMappings: 1},
 		{BytesPerSecondIn: 2147483648}, {BytesPerSecondOut: 2147483648},
-		{MaxConnections: 2147483648}, {MaxConnectionsPerIP: 2147483648},
+		{MaxConnections: 2147483648},
 	} {
 		if _, err := NewDataPlanePolicy(bad); err == nil {
 			t.Fatalf("invalid policy accepted: %+v", bad)

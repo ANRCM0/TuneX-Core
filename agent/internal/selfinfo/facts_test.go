@@ -108,7 +108,8 @@ func TestCollectNeverCarriesConfigurationOrCredentials(t *testing.T) {
 	// The scratch path embeds this test's name, which itself contains the words
 	// being scanned for; normalise it so the check tests the DATA, not the path.
 	if facts.StateDir.Path != "" {
-		rendered = strings.ReplaceAll(rendered, facts.StateDir.Path, "<state-dir>")
+		escaped, _ := json.Marshal(facts.StateDir.Path)
+		rendered = strings.ReplaceAll(rendered, string(escaped), `"<state-dir>"`)
 	}
 
 	// The tunnel's target address is panel-owned configuration; a node fact must

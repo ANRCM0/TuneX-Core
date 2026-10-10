@@ -39,7 +39,7 @@ services:
       # Destructive batch Forward deletion is default-off; A00 gate opts in explicitly.
       FORWARD_BATCH_DELETE_ENABLED: ${FORWARD_BATCH_DELETE_ENABLED:-false}
       FORWARD_NATIVE_BOTH_ENABLED: ${FORWARD_NATIVE_BOTH_ENABLED:-false}
-      TUNEX_FXP_LINKS_ENABLED: ${TUNEX_FXP_LINKS_ENABLED:-false}
+      TUNEX_TST_ENABLED: ${TUNEX_TST_ENABLED:-false}
       TUNEX_LINK_MAINTENANCE_ENABLED: ${TUNEX_LINK_MAINTENANCE_ENABLED:-false}
       TUNEX_LINK_SEAL_KEY: ${TUNEX_LINK_SEAL_KEY:-}
     networks:
@@ -75,7 +75,7 @@ services:
       JWT_ISSUER: integration
       DISABLE_WORKER: "false"
       FORWARD_NATIVE_BOTH_ENABLED: ${FORWARD_NATIVE_BOTH_ENABLED:-false}
-      TUNEX_FXP_LINKS_ENABLED: ${TUNEX_FXP_LINKS_ENABLED:-false}
+      TUNEX_TST_ENABLED: ${TUNEX_TST_ENABLED:-false}
       TUNEX_LINK_MAINTENANCE_ENABLED: ${TUNEX_LINK_MAINTENANCE_ENABLED:-false}
       TUNEX_LINK_SEAL_KEY: ${TUNEX_LINK_SEAL_KEY:-}
     command: ["bun", "src/worker.ts"]
@@ -146,8 +146,7 @@ services:
 
   ingress-agent:
     environment:
-      TUNEX_FXP_LINKS_ENABLED: ${TUNEX_FXP_LINKS_ENABLED:-false}
-      TUNEX_FXP_TRAFFIC_EPOCH_SECONDS: ${TUNEX_FXP_TRAFFIC_EPOCH_SECONDS:-86400}
+      TUNEX_TST_ENABLED: ${TUNEX_TST_ENABLED:-false}
     image: ${TUNEX_IT_AGENT_IMAGE:?required}
     container_name: tunex-it-ingress-agent
     restart: unless-stopped
@@ -188,8 +187,7 @@ services:
 
   egress-agent:
     environment:
-      TUNEX_FXP_LINKS_ENABLED: ${TUNEX_FXP_LINKS_ENABLED:-false}
-      TUNEX_FXP_TRAFFIC_EPOCH_SECONDS: ${TUNEX_FXP_TRAFFIC_EPOCH_SECONDS:-86400}
+      TUNEX_TST_ENABLED: ${TUNEX_TST_ENABLED:-false}
     image: ${TUNEX_IT_AGENT_IMAGE:?required}
     container_name: tunex-it-egress-agent
     restart: unless-stopped
@@ -228,8 +226,7 @@ services:
 
   ingress-agent-b:
     environment:
-      TUNEX_FXP_LINKS_ENABLED: ${TUNEX_FXP_LINKS_ENABLED:-false}
-      TUNEX_FXP_TRAFFIC_EPOCH_SECONDS: ${TUNEX_FXP_TRAFFIC_EPOCH_SECONDS:-86400}
+      TUNEX_TST_ENABLED: ${TUNEX_TST_ENABLED:-false}
     image: ${TUNEX_IT_AGENT_IMAGE:?required}
     container_name: tunex-it-ingress-agent-b
     restart: unless-stopped
@@ -269,8 +266,7 @@ services:
 
   egress-agent-b:
     environment:
-      TUNEX_FXP_LINKS_ENABLED: ${TUNEX_FXP_LINKS_ENABLED:-false}
-      TUNEX_FXP_TRAFFIC_EPOCH_SECONDS: ${TUNEX_FXP_TRAFFIC_EPOCH_SECONDS:-86400}
+      TUNEX_TST_ENABLED: ${TUNEX_TST_ENABLED:-false}
     image: ${TUNEX_IT_AGENT_IMAGE:?required}
     container_name: tunex-it-egress-agent-b
     restart: unless-stopped

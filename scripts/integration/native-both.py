@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-spec = importlib.util.spec_from_file_location("f4_shared_harness", HERE / "abcd-links.py")
+spec = importlib.util.spec_from_file_location("f4_shared_harness", HERE / "tst-forward.py")
 if spec is None or spec.loader is None:
     raise SystemExit("cannot load real network harness")
 A = importlib.util.module_from_spec(spec)

@@ -1,4 +1,4 @@
-/** Native composite Forward contract; deliberately independent of shared FXP. */
+/** Native composite Forward contract; deliberately independent of shared TST. */
 export const FORWARD_NATIVE_BOTH_CAPABILITY = "forward.protocol.both.native.v1";
 
 /** Discovery and write admission use the same default-off, exact-value flag. */

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * V5-WP20-4 续期执行器（`renewSubscriptionPeriod`）单元测试 —— 离线，`db.ts` 用模块级替身。
  *
@@ -200,7 +201,7 @@ const fakeDb = {
 
 // 注意路径层级：本文件在 `src/services/__tests__/v5-wp20/`，`db.ts` 在 `src/` ⇒ 需要三层 ../。
 // （写成两层会注册到不存在的 `src/services/db.ts`，替身静默不生效、用例会去连真库。）
-mock.module(new URL("../../../db.ts", import.meta.url).pathname, () => ({ db: fakeDb }));
+mock.module(fileURLToPath(new URL("../../../db.ts", import.meta.url)), () => ({ db: fakeDb }));
 
 const { renewSubscriptionPeriod } = await import("../../subscription-billing.ts");
 

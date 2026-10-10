@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * V4-WP5 — Node lifecycle 离线测试（不连 MySQL / Redis / 网络）。
  *
@@ -959,7 +960,7 @@ describe("LIFECYCLE_ERROR_STATUS — 错误码 → HTTP 状态映射", () => {
 
 describe("WP5 边界：只判 lifecycle，不做下发", () => {
   test("服务源码不 import socket / control-protocol / portPool", async () => {
-    const src = await Bun.file(new URL("../node-lifecycle.ts", import.meta.url).pathname).text();
+    const src = await Bun.file(fileURLToPath(new URL("../node-lifecycle.ts", import.meta.url))).text();
     expect(src).not.toMatch(/from "\.\.\/(socket|services\/control-protocol|services\/portPool)/);
     expect(src).not.toMatch(/configPusher|pushConfig|revision\+\+/);
     expect(src).not.toMatch(/\blisten\s*\(|new WebSocket|\.connect\(/);

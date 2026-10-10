@@ -11,8 +11,8 @@ test("F5 preview HTTP preserves manage permission, Workspace scoping, strict inp
     import assert from "node:assert/strict";
     import { Hono } from "hono";
     import { HTTPException } from "hono/http-exception";
-    import { LinkMaintenancePreviewSchema } from ${modulePath("../../integrations/forwardx/link-maintenance.ts")};
-    import { LinkMaintenanceCommitSchema, LinkMaintenanceCancelSchema } from ${modulePath("../../integrations/forwardx/link-maintenance-state.ts")};
+    import { LinkMaintenancePreviewSchema } from ${modulePath("../../domain/link/link-maintenance.ts")};
+    import { LinkMaintenanceCommitSchema, LinkMaintenanceCancelSchema } from ${modulePath("../../domain/link/link-maintenance-state.ts")};
     let authed=true, allowed=true, failure=null;
     const calls=[], permissions=[];
     mock.module(${modulePath("../../services/workspace.ts")},()=>({resolveWorkspaceAccess:async(c,action,resource)=>{
@@ -57,7 +57,7 @@ test("F5 preview HTTP preserves manage permission, Workspace scoping, strict inp
     response=await app.request("http://localhost/api/links/3/maintenance/preview",{
       method:"POST",headers:{"content-type":"application/json"},body:"not-json"});
     assert.equal(response.status,400);assert.equal((await response.json()).code,"invalid_input");assert.equal(calls.length,1);
-    for(const code of ["link_version_conflict","link_generation_conflict","fxp_links_not_enabled"]){
+    for(const code of ["link_version_conflict","link_generation_conflict","tst_not_enabled"]){
       failure=new LinkResourceError(code);response=await req();assert.equal(response.status,409);
       assert.equal(response.headers.get("cache-control"),"no-store");assert.equal((await response.json()).code,code);
     }

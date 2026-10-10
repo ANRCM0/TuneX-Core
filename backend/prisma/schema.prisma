@@ -614,11 +614,12 @@ model Tunnel {
   max_connections_per_ip     Int?
   /// NULL keeps the existing native runtime owner. A link binding has one writer.
   link_resource_id           Int?
-  /// Versioned FXP binding target set. NULL preserves legacy single-target behavior.
+  /// Historical versioned binding target snapshot. NULL preserves the single target.
   link_target_config         Json?
   /// Versioned TCP client source config; NULL is exact legacy behavior.
   link_source_config Json?
   link_resource              LinkResource? @relation(fields: [link_resource_id], references: [id], onDelete: Restrict)
+  forward_delete_requested_at DateTime?
   traffic                    Float           @default(0)
   traffic_cost               Float           @default(0)
   proxy_protocol             Boolean         @default(false)
@@ -879,7 +880,7 @@ model ForwardRevision {
   max_connections_per_ip Int?
   /// Link provenance at this revision; immutable ID, intentionally no FK.
   link_resource_id Int?
-  /// Immutable versioned FXP target set; no mutable EgressPool dependency.
+  /// Immutable historical target snapshot; no mutable EgressPool dependency.
   link_target_config Json?
   /// Versioned TCP client source config; NULL is exact legacy behavior.
   link_source_config Json?
@@ -1131,13 +1132,16 @@ model LinkResource {
   id Int @id @default(autoincrement())
   workspace_id Int
   name String @db.VarChar(255)
-  carrier String @default("fxp_v1") @db.VarChar(32)
+  carrier String @default("tst_v1") @db.VarChar(32)
   status String @default("draft") @db.VarChar(24)
   generation Int @default(0)
   desired_version Int @default(1)
   created_by Int
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+  managed_by String @default("manual") @db.VarChar(24)
+  reuse_key String? @unique @db.Char(64)
+  last_unreferenced_at DateTime?
   versions LinkVersion[]
   deployments LinkDeployment[]
   credentials LinkTransportCredential[]
@@ -2907,4 +2911,28 @@ model NotificationMute {
 
   @@unique([user_id, channel_kind, category], map: "notification_mute_unique")
   @@map("notification_mute")
+}
+
+/// Durable business request ledger. Runtime jobs are recoverable from this table.
+model ForwardOperation {
+  id String @id @db.VarChar(36)
+  workspace_id Int
+  actor_id Int
+  idempotency_key String @db.VarChar(128)
+  request_hash String @db.Char(64)
+  request Json
+  forward_id Int?
+  link_id Int?
+  state String @default("accepted") @db.VarChar(24)
+  stage String @default("accepted") @db.VarChar(32)
+  error_code String? @db.VarChar(64)
+  attempts Int @default(0)
+  executor_token String? @db.VarChar(36)
+  executor_expires_at DateTime?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  @@unique([workspace_id, actor_id, idempotency_key])
+  @@index([state, executor_expires_at])
+  @@index([workspace_id, forward_id])
+  @@map("forward_operation")
 }

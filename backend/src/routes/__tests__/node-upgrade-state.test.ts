@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * R1-A / 退出条件 #7 —— 用户域升级读投影 `GET /api/nodes/:id/upgrade-state` 的路由级契约。
  *
@@ -27,7 +28,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
-const root = new URL("../..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../..", import.meta.url));
 
 /* ------------------------------------------------------------------ */
 /* 子进程前置：数据面替身 + 真实路由 + 真实前置判定                        */

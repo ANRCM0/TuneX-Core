@@ -42,6 +42,7 @@ export interface RequestOptions {
   cache?: RequestCache;
   workspaceId?: number;
   unwrap?: boolean;
+  signal?: AbortSignal;
 }
 
 export const CSRF_TOKEN_HEADER = "X-CSRF-Token";
@@ -71,7 +72,8 @@ export function clearMockSessionCookie(): void {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, query, cookie, noRedirect, cache, workspaceId, unwrap = true } = options;
+  const { method = "GET", body, query, cookie, noRedirect, cache, workspaceId, unwrap = true, signal } = options;
+  signal?.throwIfAborted();
   const url = `/api${path.startsWith("/") ? path : `/${path}`}${buildQuery(query)}`;
   if (API_MOCK) {
     const { handleMock } = await import("@/mocks/handler");
@@ -82,6 +84,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
         ? activeWorkspaceId ?? undefined
         : reqCookie ? workspaceIdFromCookie(reqCookie) ?? undefined : undefined),
     });
+    signal?.throwIfAborted();
     if (res.status === 401 && !noRedirect) redirectToLogin();
     if (res.status >= 400) throw new ApiError(res.status, (res.body as { message?: string })?.message ?? "Request failed", res.body);
     return res.body as T;
@@ -98,6 +101,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     method, headers, credentials: "include",
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: cache ?? "no-store",
+    signal,
   });
   return await finalize<T>(res, noRedirect, unwrap);
 }

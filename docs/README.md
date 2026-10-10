@@ -1,31 +1,20 @@
-# TuneX 文档
+﻿# TuneX V2 文档
 
-更新：2026-10-10。当前主线是把隧道转发做完整：能部署、能持续传输、能切换、能恢复，运行状态和流量必须可信。
+实现基线：`8ca81c0c3f779bb3485594f8b1dc91f3a1c246a4`。本轮执行用户提供的 V2 方案，以第 23–27 节 TST/1 决议为最终约束。源码为开发候选；没有自动开启生产能力或发布镜像。
 
-| 文档 | 用途 |
+| 文档 | 内容 |
 | --- | --- |
-| [后续开发方案](DEVELOPMENT_PLAN.md) | 当前差距、优先级、工作包、依赖和交付标准；后续开发的统一入口。 |
-| [转发运行边界](forwarding-runtime.md) | 已有能力、资源关系、变更影响、限额与流量口径。 |
-| [测试与验收](testing.md) | 自动测试、真实 Linux 多 Agent 验收、证据范围和发布要求。 |
-| [生产部署](production-deploy.md) | 生产栈、反代、迁移、Agent、实验功能、备份与回退。 |
+| [开发范围](DEVELOPMENT_PLAN.md) | 工作包、当前交付与剩余发布门槛。 |
+| [原始 V2 方案](v2-development-plan.md) | 用户提供的完整开发方案；旧 FXP 段落为历史需求，最终决议优先。 |
+| [运行边界](forwarding-runtime.md) | 统一 Forward、能力、身份、端口、更新与统计。 |
+| [测试与验收](testing.md) | 执行命令、证据范围、平台矩阵和未通过门槛。 |
+| [部署](production-deploy.md) | Compose、迁移、实验启用、备份和回退。 |
+| [数据迁移](v2-migration.md) | 历史记录隔离、备份与恢复。 |
+| [TST/1 规范](protocol/tst-v1.md) | TLS、帧、状态机、窗口、认证、版本与限制。 |
+| [威胁模型](protocol/tst-threat-model.md) | 信任边界、攻击面、防护和残余风险。 |
+| [架构决策](protocol/adr-tst-v1.md) | 自有协议、标准密码学与版本替换。 |
+| [许可归档](compliance/README.md) | 历史源码、许可证、修改与来源记录。 |
+| [依赖清单](compliance/native-dependencies.md) | 当前运行依赖、替换映射与残留扫描范围。 |
+| [实现台账](v2-progress.md) | 工作包和执行验证状态。 |
 
-## 当前基线
-
-| 层级 | 已确认状态 |
-| --- | --- |
-| 已合并基线 | [PR #75](https://github.com/PaiMonCai/TuneX/pull/75) 已合入 `main`，合并提交 `ef159eb`；[main CI 37944370097](https://github.com/PaiMonCai/TuneX/actions/runs/37944370097) required 通过。包含 F1/F2 首切片、F3 共享 TCP 来源、F4 Linux 原生 both 限定组合，不等于全部工作包或发布条件完成。 |
-| 已合并 F5 预览 | [PR #76](https://github.com/PaiMonCai/TuneX/pull/76) 已合入 `main`，提交 `54542d3`；[main CI 37957715413](https://github.com/PaiMonCai/TuneX/actions/runs/37957715413) required 通过。在线迁移执行器尚未交付。 |
-| 已验收、待合并 | [PR #77](https://github.com/PaiMonCai/TuneX/pull/77) / `feat/link-maintenance-state`：持久计划、幂等提交/CAS、取消/过期/漂移回收及逻辑编辑围栏。源码 `0ebb16e` 的 [CI 38010987884](https://github.com/PaiMonCai/TuneX/actions/runs/38010987884) required 通过；共享实网 95/0、原生 both 37/0；不包含在线执行。 |
-| 发布边界 | 本轮没有生产部署、tag 或发行；`TUNEX_FXP_LINKS_ENABLED`、`FORWARD_NATIVE_BOTH_ENABLED` 仍默认关闭，公共 FXP 支持矩阵仍为 planned。 |
-
-当前功能范围与限制统一看 [运行边界](forwarding-runtime.md)，对应源码 SHA、实网结果和未运行项统一看 [测试说明](testing.md)。文档提交不改变上述源码验收归属，不用旧 CI 为新代码背书。
-
-当前 [F5 持久计划/CAS 首切片](DEVELOPMENT_PLAN.md#f5-next-slice) 已独立验收、待合并；接下来开发候选端口预留/出口准备，再接入口切换、旧路径排空/退役及故障补偿。F1 真实跨日/长期运行、数据库归档、真实 Panel 浏览器和公开发布门禁仍待完成。Windows 适配暂停；保留现有原生 Agent LKG 恢复功能，没有性能基线和明显收益时不新增缓存优化。支付及其他外围功能继续后置。
-
-ForwardX 对标基线为项目 2.3.281、提交 `cb0ef0bb156dc114e4344c887328018491fbd638`。实际导入组件及来源说明见 [third_party/forwardx](../third_party/forwardx/README.md)。本地 `Forwardx/` 是参考源码，不是构建依赖，也不属于本次文档清理范围。
-
-## 文档维护
-
-`docs/` 保持一个入口与四份职责明确的正文：开发方案、运行契约、验收、部署。过时的阶段方案、重复功能对比、失败修复流水账不另设当前入口；历史过程通过 Git 历史和验收页中的固定提交/CI 链接查阅。组件旁的 README、历史测试证据以及许可证、来源和修改清单继续保留，不因日期较旧而删除。
-
-新增能力时，同一 PR 更新运行边界、开发方案中的状态和相关验收要求。只在验收确实完成后标记交付，记录对应源码 SHA；避免另建一份长期并行的路线图。本文档目录不保存密码、部署环境文件、原始生产日志或测试夹具凭据。
+`TUNEX_TST_ENABLED=false` 和 `FORWARD_NATIVE_BOTH_ENABLED=false` 是发布默认值。能力枚举、编译成功、组件 fixture 和交叉编译各自只证明其覆盖范围。独立安全审查、Linux 容器实网及实际发布后验证需有单独证据。

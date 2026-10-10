@@ -49,7 +49,7 @@ func (c TunnelConfig) hasPolicy() bool {
 		c.MaxConnections > 0 || c.MaxConnectionsPerIP > 0 || c.MaxMappings > 0 || c.MaxMappingsPerSourceIP > 0
 }
 
-// DataPlanePolicy is reusable by ingress, egress and future FXP adapters. Create
+// DataPlanePolicy is reusable by ingress, egress and TST placements. Create
 // it ONCE per runtime, acquire before handshake/dial/mapping allocation, and
 // release on every failure and final teardown. WaitIn/Out must run before writing
 // payload; a cancelled context interrupts even a multi-year low-rate wait.

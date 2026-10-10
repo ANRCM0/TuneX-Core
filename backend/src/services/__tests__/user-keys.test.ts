@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { test, expect, describe, beforeEach, mock } from "bun:test";
 import { createHash } from "node:crypto";
 
@@ -142,7 +143,7 @@ const dbStub = {
 };
 
 // mock.module 必须在被测模块 import **之前**注册（与 mail-tokens 测试同一模式）。
-mock.module(new URL("../../db.ts", import.meta.url).pathname, () => ({ db: dbStub }));
+mock.module(fileURLToPath(new URL("../../db.ts", import.meta.url)), () => ({ db: dbStub }));
 
 const keys = await import("../user-keys.ts");
 

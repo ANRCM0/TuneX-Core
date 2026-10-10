@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tunex/agent/internal/linkrunner"
 	"github.com/tunex/agent/internal/manager"
 	"github.com/tunex/agent/internal/portlease"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
 func TestMutationReportWaitsForPeriodicReportAndCollectsFreshPorts(t *testing.T) {
@@ -25,7 +25,7 @@ func TestMutationReportWaitsForPeriodicReportAndCollectsFreshPorts(t *testing.T)
 	posts := 0
 	r := New(Config{PanelURL: "http://panel.invalid", Credential: "fixture"},
 		WithPorts(ports),
-		WithLinkPlacements(func() []linkrunner.Observation { return []linkrunner.Observation{} }),
+		WithLinkPlacements(func() []tstruntime.Observation { return []tstruntime.Observation{} }),
 		WithPost(func(ctx context.Context, _ string, body []byte, _ map[string]string) error {
 			var payload StatePayload
 			if err := json.Unmarshal(body, &payload); err != nil {

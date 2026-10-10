@@ -12,9 +12,10 @@
 import { Prisma } from "@prisma/client";
 import type { TunnelType } from "@prisma/client";
 import { db } from "../db.ts";
+import { lockForwardOperation } from "./forward-operation-fence.ts";
 import { nativeBothEntryDisabled, nativeBothShapeError } from "./forward-native-both.ts";
 import { admitRuntimeFromStore } from "./runtime-admission.ts";
-import { bindScopesOverlap, protocolsOverlap } from "../integrations/forwardx/bind-scope.ts";
+import { bindScopesOverlap, protocolsOverlap } from "../domain/link/bind-scope.ts";
 import { forwardPolicyErrors, forwardPolicyValues, resolveForwardPolicy, type ForwardPolicyInput } from "./forward-policy.ts";
 import {
   countWorkspaceTunnels,
@@ -127,6 +128,10 @@ export interface ForwardCreateInput extends ForwardPolicyInput {
 }
 
 export interface ForwardCreateOptions {
+  /** Durable coordinator identity; linked atomically with the business row. */
+  operationId?: string;
+  operationToken?: string;
+  deferApply?: boolean;
   /**
    * Missing local NodeBinding rows may be prepared as part of Forward creation
    * only when the caller already has node-management permission.
@@ -135,6 +140,7 @@ export interface ForwardCreateOptions {
 }
 
 export interface ForwardListInput {
+  transport?: "native_plain" | "tst_v1" | "legacy_unsupported";
   ingress_node_id?: number;
   egress_node_id?: number;
   mode?: ForwardMode;
@@ -255,6 +261,7 @@ const nodeSelect = {
 } as const;
 
 const forwardInclude = Prisma.validator<Prisma.TunnelInclude>()({
+  link_resource: { select: { carrier: true } },
   ingress_node: {
     select: {
       id: true,
@@ -312,6 +319,7 @@ export function forwardView(t: any) {
 
   const protocol = persistedForwardProtocol(t.forward_protocol, t.tunnel_type);
   const nativeProtocol = normalizeForwardProtocol(protocol);
+  const transport = t.link_resource_id == null ? "native_plain" : t.link_resource?.carrier === "tst_v1" ? "tst_v1" : "legacy_unsupported";
   return {
     id: t.id,
     link_resource_id: t.link_resource_id ?? null,
@@ -319,9 +327,15 @@ export function forwardView(t: any) {
     creator_user_id: t.user_id ?? null,
     name: t.name,
     protocol,
-    transport: nativeProtocol === null ? null : FORWARD_PROTOCOL_SPECS[nativeProtocol].transport,
+    path: t.tunnel_mode ?? "direct",
+    transport,
+    wire_transport: nativeProtocol === null ? null : FORWARD_PROTOCOL_SPECS[nativeProtocol].transport,
+    lifecycle: { desired: t.forward_delete_requested_at ? "deleting" : t.desired_status === "inactive" ? "suspended" : "active",
+      deployment: t.apply_status === "active" && t.applied_revision === t.config_revision ? "confirmed"
+        : t.apply_status === "error" ? "failed" : t.apply_status === "applying" ? "applying" : "pending",
+      runtime: "unknown", transport, target_health: "unverified", traffic: null },
     protocol_supported: t.link_resource_id != null
-      ? process.env.TUNEX_FXP_LINKS_ENABLED === "true" && ["tcp", "udp", "both"].includes(protocol)
+      ? transport === "tst_v1" && process.env.TUNEX_TST_ENABLED === "true" && ["tcp", "udp", "both"].includes(protocol)
       : normalizeForwardProtocol(protocol) !== null && nativeBothShapeError({ ...t, forward_protocol: protocol }) === null,
     // : the paths are part of a tls Forward's configuration, so the view
     // carries them. Without them the detail page can say "TLS" but never which
@@ -512,6 +526,9 @@ function forwardListWhere(
       ? { egress_node_id: input.egress_node_id }
       : {}),
     ...(input.mode ? { tunnel_mode: input.mode } : {}),
+    ...(input.transport === "native_plain" ? { link_resource_id: null }
+      : input.transport === "tst_v1" ? { link_resource: { carrier: "tst_v1" } }
+      : input.transport === "legacy_unsupported" ? { link_resource: { carrier: { not: "tst_v1" } } } : {}),
     ...(input.apply_status ? { apply_status: input.apply_status } : {}),
   };
 
@@ -551,7 +568,7 @@ export async function listForwards(workspaceId: number, input: ForwardListInput 
     take: FORWARD_LIST_MAX_UNPAGED,
     include: forwardInclude,
   });
-  return rows.map(forwardView);
+  return enrichTstForwardViews(rows.map(forwardView), workspaceId);
 }
 
 /**
@@ -576,7 +593,7 @@ export async function listForwardsPage(
     }),
     db.tunnel.count({ where }),
   ]);
-  return { data: rows.map(forwardView), total } as ForwardPage<
+  return { data: await enrichTstForwardViews(rows.map(forwardView), workspaceId), total } as ForwardPage<
     ReturnType<typeof forwardView>
   >;
 }
@@ -638,7 +655,31 @@ export async function getForward(
   workspaceId: number,
 ): Promise<ReturnType<typeof forwardView> | null> {
   const row = await loadForwardRow(id, workspaceId);
-  return row ? forwardView(row) : null;
+  if (!row) return null;
+  return (await enrichTstForwardViews([forwardView(row)], workspaceId))[0]!;
+}
+
+/** One read per shared Link, regardless of how many list rows reference it.
+ * Deployment ACKs never supply runtime readiness or invented traffic zeros. */
+async function enrichTstForwardViews(views: ReturnType<typeof forwardView>[], workspaceId: number) {
+  const linked = views.filter((view) => view.link_resource_id && view.transport === "tst_v1");
+  if (!linked.length) return views;
+  const { getLink } = await import("./link-resource.ts");
+  const ids = [...new Set<number>(linked.map((view) => view.link_resource_id))];
+  const links = new Map(await Promise.all(ids.map(async (id) => [id, await getLink(workspaceId, id)] as const)));
+  for (const view of linked) {
+    const link = links.get(view.link_resource_id)!;
+    const observations = link.deployment?.placements.map((placement) => placement.observation) ?? [];
+    view.lifecycle.runtime = observations.length !== 2 || observations.some((o) => o.state === "unknown") ? "unknown"
+      : observations.some((o) => o.state === "stale") ? "stale"
+      : observations.every((o) => o.ready) ? "ready"
+      : observations.some((o) => o.state === "passive") && view.desired_status === "inactive" ? "passive"
+      : observations.every((o) => ["removed", "expired", "closed"].includes(o.state)) ? "stopped" : "unknown";
+    view.online = view.lifecycle.runtime === "ready";
+    const traffic = link.forwards.find((f) => f.id === view.id)?.traffic;
+    if (traffic) (view.lifecycle as { traffic: unknown }).traffic = traffic;
+  }
+  return views;
 }
 
 export async function getForwardTraffic(
@@ -877,6 +918,10 @@ export async function createForward(
   const reserved = await withWorkspaceQuotaLock(
     workspaceId,
     async (tx, policy) => {
+      if (options.operationId) {
+        const existing = await lockForwardOperation(tx, options.operationId, options.operationToken, workspaceId, userId);
+        if (existing !== null) return { tunnelId: existing } as const;
+      }
       resolveForwardPolicy(input, policy.limits); // Validate ceilings; persist the user's request.
       const requestedForwardPolicy = forwardPolicyValues(input);
       const [tunnelCount, trafficUsed, maxOrder] = await Promise.all([
@@ -984,6 +1029,10 @@ export async function createForward(
         select: { id: true },
       });
 
+      if (options.operationId) await tx.forwardOperation.update({
+        where: { id: options.operationId }, data: { forward_id: tunnel.id, state: "pending_apply", stage: "forward_saved" },
+      });
+
       let poolId: number | null = null;
       if (egress) {
         const pool = await tx.egressPool.create({
@@ -1054,7 +1103,7 @@ export async function createForward(
   }
 
   const orchestrator = getOrchestrator();
-  if (orchestrator) {
+  if (orchestrator && !options.deferApply) {
     const applied =
       input.mode === "direct"
         ? await reapplyDirectTunnel(tunnelId, orchestrator)
@@ -1752,6 +1801,26 @@ async function resolveForwardCandidate(
   };
 }
 
+/** Recover a durably saved native create through the existing scheduler. */
+export async function applySavedForward(id: number, workspaceId: number) {
+  const current = await loadForwardRow(id, workspaceId);
+  if (!current) return error(404, "not_found", "端口转发不存在");
+  if (current.link_resource_id != null) return linkManagedForward();
+  if (current.apply_status === "active" && current.applied_revision === current.config_revision) {
+    await ensureForwardBaselineRevision(id, current.user_id);
+    return { ok: true as const, data: forwardView(current) };
+  }
+  const orchestrator = getOrchestrator();
+  if (!orchestrator) return error(503, "apply_failed", "转发下发通道不可用");
+  const applied = current.tunnel_mode === "direct"
+    ? await reapplyDirectTunnel(id, orchestrator)
+    : await reapplyRelayTunnel(id, orchestrator);
+  if (!applied.ok) return error(502, "apply_failed", applied.error, { apply_error_code: applied.error_code });
+  await ensureForwardBaselineRevision(id, current.user_id);
+  const after = await loadForwardRow(id, workspaceId);
+  return after ? { ok: true as const, data: forwardView(after) } : error(404, "not_found", "端口转发不存在");
+}
+
 export async function runForwardAction(
   id: number,
   action: ForwardAction,
@@ -1790,6 +1859,7 @@ export async function runForwardBatch(
   action: ForwardBatchAction,
   workspaceId: number,
   authorize?: (row: { user_id: number }) => boolean,
+  actorId?: number,
 ): Promise<ForwardBatchPayload> {
   const results: ForwardBatchItemResult[] = [];
   for (const id of ids) {
@@ -1809,7 +1879,11 @@ export async function runForwardBatch(
       }
       // Reuse the single-delete lifecycle (rollout, local leases, dedicated pool,
       // federated leg release), never bulk-delete desired rows directly.
-      const outcome = action === "delete"
+      const linked = actorId ? await db.tunnel.findFirst({ where: { id, workspace_id: workspaceId, category: "port_forward" },
+        select: { link_resource_id: true } }) : null;
+      const outcome = linked?.link_resource_id
+        ? await (await import("./forward-application.ts")).unifiedActionForward(id, workspaceId, actorId!, action)
+        : action === "delete"
         ? await deleteForward(id, workspaceId)
         : await runForwardAction(id, action, workspaceId);
       if (outcome.ok) {

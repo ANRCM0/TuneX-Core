@@ -4,12 +4,12 @@ import (
 	"context"
 	"sort"
 
-	"github.com/tunex/agent/internal/linkrunner"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
 type Store interface {
-	TrafficSamples() ([]linkrunner.TrafficSample, error)
-	AckTraffic([]linkrunner.TrafficSample) error
+	TrafficSamples() ([]tstruntime.TrafficSample, error)
+	AckTraffic([]tstruntime.TrafficSample) error
 }
 
 // Flush keeps one producer intact within a bounded request so the collector can

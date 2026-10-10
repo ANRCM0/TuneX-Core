@@ -41,7 +41,7 @@ describe("optional traffic capacity is a closed bounded snapshot", () => {
     }
     for (const traffic_status of [
       { ...statistics, rotation_supported: false, producer_count: 0, sample_count: 0, rule_count: 0, spool_bytes: 0, last_ack_at: null },
-      { ...statistics, producer_count: 128, sample_count: 262144, rule_count: 262144, spool_bytes: 403701760 },
+      { ...statistics, producer_count: 32768, sample_count: 262144, rule_count: 262144, spool_bytes: 403701760 },
     ]) expect(parse(traffic_status)).toEqual({ ok: true, placements: [{ ...fact, traffic_status }] });
   });
   test("rejects incomplete snapshots and malformed bounded numbers without coercion", () => {
@@ -50,7 +50,7 @@ describe("optional traffic capacity is a closed bounded snapshot", () => {
       const incomplete: Record<string, unknown> = { ...statistics }; delete incomplete[field];
       expect(parse(incomplete).ok).toBe(false);
     }
-    for (const [field, max] of [["producer_count", 128], ["sample_count", 262144], ["rule_count", 262144], ["spool_bytes", 403701760]] as const) {
+    for (const [field, max] of [["producer_count", 32768], ["sample_count", 262144], ["rule_count", 262144], ["spool_bytes", 403701760]] as const) {
       for (const value of [null, false, "0", -1, 0.5, max + 1, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
         expect(parse({ ...statistics, [field]: value }).ok).toBe(false);
       }

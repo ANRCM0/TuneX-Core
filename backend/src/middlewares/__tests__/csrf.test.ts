@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { test, expect, describe, mock } from "bun:test";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -14,7 +15,7 @@ import type { AppVariables } from "../auth.ts";
  */
 
 // 路径必须与 csrf.ts 内解析到的同一文件。
-const MODULE_ENV = new URL("../../env.ts", import.meta.url).pathname;
+const MODULE_ENV = fileURLToPath(new URL("../../env.ts", import.meta.url));
 // **替身必须语义完整**（2026-10-07）：`mock.module` 是**进程级**注册表，先加载者生效，
 // 一个缺段的 env 替身会泄漏给同进程的其它测试文件 —— 例如缺 `mail` 时
 // `services/mail.ts:isMailConfigured()` 会读 `env.mail.host` 并抛 TypeError，把别人的

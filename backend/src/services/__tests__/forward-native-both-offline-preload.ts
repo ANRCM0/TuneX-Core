@@ -47,7 +47,8 @@ const models: any = {
   workspaceMember: { findUnique: async ({ where }: any) => where.workspace_id_user_id.workspace_id === 7 ? {
     active: bothFixture.memberActive, role: bothFixture.role, role_id: bothFixture.customPermissions ? 1 : null,
     workspace: { kind: "personal" }, custom_role: bothFixture.customPermissions ? { id: 1, workspace_id: 7, permissions: bothFixture.customPermissions } : null } : null },
-  node: { findFirst: async ({ where }: any) => where.node_group?.workspace_id === 7 ? bothNode(where.id) : null,
+  node: { findMany: async () => [bothNode(11), bothNode(22)],
+    findFirst: async ({ where }: any) => where.node_group?.workspace_id === 7 ? bothNode(where.id) : null,
     findUnique: async ({ where }: any) => bothNode(where.id) },
   nodeGroup: { findUnique: async ({ where }: any) => ({ id: where.id, workspace_id: 7, user_id: 1 }) },
   nodeStateReport: { findUnique: async ({ where }: any) => bothFixture.reports.get(where.node_id) ?? null },
@@ -109,7 +110,6 @@ mock.module(fileURLToPath(new URL("../policy-service.ts", import.meta.url)), () 
   assignDefaultPolicy: async () => {},
 }));
 mock.module(fileURLToPath(new URL("../relay-wiring.ts", import.meta.url)), () => ({ getOrchestrator: () => null }));
-mock.module(fileURLToPath(new URL("../link-resource.ts", import.meta.url)), () => ({ desiredNodeLinks: async () => [] }));
 mock.module("ioredis", () => ({ default: class OfflineRedis {
   on() { return this; } get() { return Promise.resolve(null); } set() { return Promise.resolve("OK"); }
   del() { return Promise.resolve(0); } scan() { return Promise.resolve(["0", []]); } disconnect() {}

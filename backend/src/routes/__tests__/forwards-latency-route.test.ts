@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * D6 —— `GET /api/forwards/:id/latency` 的**路由级契约**。
  *
@@ -36,7 +37,7 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 
 /** backend/src/（子进程的 import 前缀与 cwd 都与既有子进程用例保持一致）。 */
-const root = new URL("../..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../..", import.meta.url));
 
 /* ------------------------------------------------------------------ */
 /* 子进程前置：数据面替身 + 真实路由 + 真实权限内核                        */

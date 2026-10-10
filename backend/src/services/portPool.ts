@@ -14,7 +14,7 @@
 import { db } from "../db.ts";
 import { redis, RedisKeys } from "../redis.ts";
 import { nodeScope } from "../tenant-scope.ts";
-import { bindScopesOverlap, leaseProtocol, normalizeBindScope, protocolsOverlap, type LeaseProtocol } from "../integrations/forwardx/bind-scope.ts";
+import { bindScopesOverlap, leaseProtocol, normalizeBindScope, protocolsOverlap, type LeaseProtocol } from "../domain/link/bind-scope.ts";
 import { parseLinkPlacements } from "./node-state-report.ts";
 
 /* ================================================================== */
@@ -93,6 +93,8 @@ export interface AgentPortHolder {
 export type PortReservation = number | AgentPortHolder;
 
 export interface AcquirePortInput {
+  /** Allocate a new business listener rather than renew an existing Link claim. */
+  freshAllocation?: boolean;
   /** 节点主键（`Node.id`，即 `node_port_lease.node_id` 的外键值）。 */
   nodeId: number;
   /** 方向；**不构成物理隔离**，只是审计/排障元数据（见文件头）。 */
@@ -557,7 +559,7 @@ export async function acquirePort(
   input: AcquirePortInput,
   inject?: PortPoolDeps,
 ): Promise<AcquirePortOutcome> {
-  // Native composite owns one coarse, conservative lease. Shared FXP still
+  // Native composite owns one coarse, conservative lease. Shared TST still
   // acquires explicit child bindings; a Link must not take a composite lease.
   if (typeof input.protocol === "string" && input.protocol.trim().toLowerCase() === "both" &&
       (input.tunnelId == null || input.linkId != null)) {
@@ -637,7 +639,7 @@ export async function acquirePort(
         (ownsLinkBinding || ownsNativeSummary(holder, rows)));
     });
   };
-  const ownedLink = input.linkId != null && !isPreferred
+  const ownedLink = input.linkId != null && !isPreferred && !input.freshAllocation
     ? activeRows.find((row) => sameOwner(row, input) && row.protocol === protocol && normalizeBindScope(row.bind_scope) === bindScope)
     : undefined;
   const ownedNative = input.tunnelId != null && !isPreferred

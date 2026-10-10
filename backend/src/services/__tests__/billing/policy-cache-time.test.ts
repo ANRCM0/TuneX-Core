@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * V5-WP20 —— 策略缓存的**时间语义**回归（`getEffectivePolicy` 的 `noCache` 与 TTL 基准）。
  *
@@ -17,7 +18,7 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 
-const root = new URL("../../../../", import.meta.url).pathname; // → backend/（四级：v5-wp20→__tests__→services→src→backend）
+const root = fileURLToPath(new URL("../../../../", import.meta.url)); // → backend/（四级：v5-wp20→__tests__→services→src→backend）
 
 const scenario = String.raw`
 import { mock, expect } from "bun:test";

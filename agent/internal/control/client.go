@@ -15,12 +15,12 @@ import (
 
 	"github.com/tunex/agent/internal/diag"
 	"github.com/tunex/agent/internal/forwarder"
-	"github.com/tunex/agent/internal/linkrunner"
 	"github.com/tunex/agent/internal/logx"
 	"github.com/tunex/agent/internal/manager"
 	"github.com/tunex/agent/internal/ownership"
 	"github.com/tunex/agent/internal/panelroute"
 	"github.com/tunex/agent/internal/selfinfo"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
 const (
@@ -47,7 +47,7 @@ type Config struct {
 	Credential string
 	// Links is wired only when the runtime feature flag, executable and private
 	// cache are available. Numeric node identity comes from desired metadata.
-	Links        *linkrunner.Manager
+	Links        *tstruntime.Manager
 	RuntimeFacts RuntimeFacts
 	// ReportLinkState (historical name) publishes the complete authenticated
 	// runtime state after successful Link/native mutations and before their ACK.
@@ -99,11 +99,12 @@ type Envelope struct {
 type QueuedCommand struct {
 	Envelope Envelope                `json:"envelope"`
 	Config   *forwarder.TunnelConfig `json:"config"`
-	Link     *linkrunner.Config      `json:"link,omitempty"`
+	Link     *tstruntime.Config      `json:"link,omitempty"`
 	// Probe carries a diagnose request. It is a separate field rather than a
 	// synthetic TunnelConfig: a probe is not a tunnel, and pretending otherwise
 	// would let a malformed probe look like a config apply.
-	Probe *diag.Request `json:"probe,omitempty"`
+	Probe     *diag.Request            `json:"probe,omitempty"`
+	LinkProbe *tstruntime.ProbeRequest `json:"link_probe,omitempty"`
 	// LookingGlass carries a user-originated, panel-resolved diagnostic request,
 	// and pinned to **public literal addresses only**.
 	//
@@ -150,7 +151,7 @@ type ackPayload struct {
 	// and the panel would have no way to tell "not serving yet" from "serving".
 	// `next_hop` travels the other way on the egress ACK for exactly the same reason.
 	HopLocalAddr    string                  `json:"hop_local_addr,omitempty"`
-	LinkObservation *linkrunner.Observation `json:"link_observation,omitempty"`
+	LinkObservation *tstruntime.Observation `json:"link_observation,omitempty"`
 }
 
 type Client struct {
@@ -390,10 +391,32 @@ func (c *Client) execute(ctx context.Context, cmd *QueuedCommand) ackPayload {
 		ack.ErrorCode, ack.Error = "invalid_command", "missing resource_id"
 		return ack
 	}
+	if cmd.LinkProbe != nil && cmd.Envelope.Action != ActionDiagnoseLink {
+		ack.ErrorCode, ack.Error = "invalid_payload", "link_probe requires diagnose_link_forward"
+		return ack
+	}
 	switch cmd.Envelope.Action {
+	case ActionDiagnoseLink:
+		if c.cfg.Links == nil || !c.cfg.RuntimeFacts.TSTLink {
+			ack.ErrorCode, ack.Error = "unsupported_action", "TST link is disabled"
+			return ack
+		}
+		if cmd.LinkProbe == nil || cmd.Config != nil || cmd.Link != nil || cmd.Probe != nil || cmd.LookingGlass != nil {
+			ack.ErrorCode, ack.Error = "invalid_payload", "expected sibling link_probe"
+			return ack
+		}
+		results, err := c.cfg.Links.Diagnose(ctx, resourceID, cmd.Envelope.Revision, *cmd.LinkProbe)
+		if err != nil {
+			ack.ErrorCode, ack.Error = linkAckCode(err), err.Error()
+			return ack
+		}
+		ack.OK = true
+		ack.Results = results
+		rev := cmd.Envelope.Revision
+		ack.AppliedRevision = &rev
 	case ActionApplyLink, ActionRemoveLink:
-		if c.cfg.Links == nil || !c.cfg.RuntimeFacts.FXPLink {
-			ack.ErrorCode, ack.Error = "unsupported_action", "managed FXP link is disabled"
+		if c.cfg.Links == nil || !c.cfg.RuntimeFacts.TSTLink {
+			ack.ErrorCode, ack.Error = "unsupported_action", "TST link is disabled"
 			return ack
 		}
 		if cmd.Config != nil || cmd.Probe != nil || cmd.LookingGlass != nil {

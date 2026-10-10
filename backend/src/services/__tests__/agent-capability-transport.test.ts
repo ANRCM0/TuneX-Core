@@ -115,6 +115,8 @@ describe("WP11B outbound capability gate", () => {
     const scenario = `
       import { mock } from "bun:test";
       import assert from "node:assert/strict";
+      process.env.AUTH_SECRET = "test-capability-secret-at-least-32-characters";
+      process.env.DATABASE_URL = "mysql://root@127.0.0.1:33079/tunex_v2_test";
       mock.module("ioredis", () => ({ default: class { on() { return this; } } }));
       let scopeReads = 0;
       mock.module(${JSON.stringify(fileURLToPath(new URL("../../db.ts", import.meta.url)))}, () => ({ db: {

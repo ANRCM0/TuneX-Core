@@ -21,7 +21,7 @@ const { policyFixture: state } = await import("./forward-policy-offline-preload.
 const { createForward, deleteForward, forwardView, patchForward, previewForwardUpdate, runForwardAction } = await import("../forward-service.ts");
 
 beforeEach(() => {
-  state.rows = [{ id: 71, workspace_id: 7, link_resource_id: 5, name: "linked", tunnel_mode: "relay", forward_protocol: "both",
+  state.rows = [{ id: 71, workspace_id: 7, link_resource_id: 5, link_resource: { carrier: "tst_v1" }, name: "linked", tunnel_mode: "relay", forward_protocol: "both",
     listen_port: 23000, remote_host: "business.example", remote_port: 8080, config_revision: 3 }];
   state.mutations = 0; state.reads = [];
 });
@@ -42,18 +42,18 @@ test("forged Link identity cannot enter create or patch even on a native row", a
   expect(state.mutations).toBe(0);
 });
 test("view preserves Link identity/relay target and only marks Link both supported with feature enabled", () => {
-  const previous = process.env.TUNEX_FXP_LINKS_ENABLED;
+  const previous = process.env.TUNEX_TST_ENABLED;
   try {
-    process.env.TUNEX_FXP_LINKS_ENABLED = "true";
+    process.env.TUNEX_TST_ENABLED = "true";
     expect(forwardView(state.rows[0])).toMatchObject({ link_resource_id: 5, protocol: "both", protocol_supported: true,
       target_host: "business.example", target_port: 8080, max_connections: 0 });
     expect(forwardView({ ...state.rows[0], link_resource_id: null }).protocol_supported).toBe(true);
     expect(forwardView({ ...state.rows[0], link_resource_id: null, middle_node_id: 33 })).toMatchObject({ protocol: "both", protocol_supported: false });
-    process.env.TUNEX_FXP_LINKS_ENABLED = "false";
+    process.env.TUNEX_TST_ENABLED = "false";
     expect(forwardView(state.rows[0]).protocol_supported).toBe(false);
   } finally {
-    if (previous === undefined) delete process.env.TUNEX_FXP_LINKS_ENABLED;
-    else process.env.TUNEX_FXP_LINKS_ENABLED = previous;
+    if (previous === undefined) delete process.env.TUNEX_TST_ENABLED;
+    else process.env.TUNEX_TST_ENABLED = previous;
   }
 });
 }

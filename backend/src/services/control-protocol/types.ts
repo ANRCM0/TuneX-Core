@@ -27,6 +27,7 @@
 export const COMMAND_ACTIONS = [
   "apply_link",
   "remove_link",
+  "diagnose_link_forward",
   "apply_tunnel",
   "remove_tunnel",
   "update_targets",
@@ -162,6 +163,7 @@ export interface ActionSpec {
 export const ACTION_SPECS: Readonly<Record<CommandAction, ActionSpec>> = {
   apply_link: { mutating: true, resources: ["link"], minRevision: 1 },
   remove_link: { mutating: true, resources: ["link"], minRevision: 1 },
+  diagnose_link_forward: { mutating: false, resources: ["link"], minRevision: 1 },
   apply_tunnel: { mutating: true, resources: ["tunnel"], minRevision: 1 },
   remove_tunnel: { mutating: true, resources: ["tunnel"], minRevision: 1 },
   update_targets: { mutating: true, resources: ["tunnel"], minRevision: 1 },
@@ -344,6 +346,7 @@ export interface CommandAckPayload {
 }
 
 export type CommandPayload =
+  | DiagnoseLinkForwardPayload
   | CollectDiagnosticsPayload
   | DiagnoseTunnelPayload
   | LookingGlassPayload
@@ -381,6 +384,8 @@ export type CommandAckEnvelope = CommandEnvelopeBase & { action: "command_ack"; 
 export type DiagnoseTunnelEnvelope = CommandEnvelopeBase & { action: "diagnose_tunnel"; payload: DiagnoseTunnelPayload };
 export type CollectDiagnosticsEnvelope = CommandEnvelopeBase & { action: "collect_diagnostics"; payload: CollectDiagnosticsPayload };
 export type LookingGlassEnvelope = CommandEnvelopeBase & { action: "looking_glass"; payload: LookingGlassPayload };
+export interface DiagnoseLinkForwardPayload { forward_id: number; revision: number; timeout_ms?: number }
+export type DiagnoseLinkForwardEnvelope = CommandEnvelopeBase & { action: "diagnose_link_forward"; payload: DiagnoseLinkForwardPayload };
 /** Secret-free command metadata; the complete encrypted carrier config is a sibling. */
 export interface LinkCommandPayload {
   link_id: number;
@@ -395,6 +400,7 @@ export type LinkEnvelope = CommandEnvelopeBase & {
 
 /** 判别联合：`switch (env.action)` 即可把 payload 收敛到具体类型。 */
 export type CommandEnvelope =
+  | DiagnoseLinkForwardEnvelope
   | LinkEnvelope
   | CollectDiagnosticsEnvelope
   | DiagnoseTunnelEnvelope

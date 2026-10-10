@@ -130,13 +130,13 @@ describe("critical UI wiring", () => {
     expect(text).not.toContain('current?.role === "owner"'); expect(text).toContain("permissionFence.current.next()"); expect(text).toContain("setProjection(null)");
   });
   test("list owns per-resource guards, separate node read and independent partial loads", () => {
-    const text = source("forwards/forward-workspace.tsx");
-    expect(text).toContain('canForward(forward, "update")'); expect(text).toContain('canForward(forward, "delete")');
-    expect(text).toContain('can("forward:create")'); expect(text).toContain('can("node:read")'); expect(text).toContain('can("node:manage")');
-    expect(text).toContain("summaryTask"); expect(text).toContain("nodesTask"); expect(text).toContain("setSelectedIds(new Set())");
+    const text = source("forwards/forward-unified-workspace.tsx");
+    expect(text).toContain('canForward(row, "update")'); expect(text).toContain('canForward(row, "delete")');
+    expect(text).toContain('can("forward:create")'); expect(text).toContain('can("node:read")'); expect(text).not.toContain('can("node:manage")');
+    expect(text).toContain("Promise.allSettled"); expect(text).toContain("workspace.currentId, workspace.permissions");
   });
   test("detail/edit/Node controls recheck authorization", () => {
-    expect(source("forwards/forward-detail.tsx")).toContain('canForward(forward, "delete")');
+    expect(source("forwards/forward-unified-workspace.tsx")).toContain('canDelete(selected)');
     expect(source("forwards/forward-edit-dialog.tsx")).toContain('canForward(forward, "update")');
     expect(source("nodes/node-workspace.tsx")).toContain("if (!canManage)");
     expect(source("workspace/workspace-members.tsx")).toContain("api.workspaces.assignRole");

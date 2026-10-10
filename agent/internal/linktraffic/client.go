@@ -1,4 +1,4 @@
-// Package linktraffic delivers durable FXP payload facts over the authenticated
+// Package linktraffic delivers durable TST payload facts over the authenticated
 // Agent-to-Panel channel. It does not own counters or the accounting ledger.
 package linktraffic
 
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tunex/agent/internal/linkrunner"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
 const maxBytes = 1 << 20
@@ -34,7 +34,7 @@ type Client struct {
 
 // Post acknowledges only exactly the persisted samples returned by the panel.
 // An HTTP success, missing field or mismatched sample is not a storage ACK.
-func (c Client) Post(ctx context.Context, samples []linkrunner.TrafficSample) ([]linkrunner.TrafficSample, error) {
+func (c Client) Post(ctx context.Context, samples []tstruntime.TrafficSample) ([]tstruntime.TrafficSample, error) {
 	if c.PanelURL == nil || len(samples) == 0 || len(samples) > maxSamples || strings.TrimSpace(c.Credential) == "" {
 		return nil, ErrInvalid
 	}
@@ -44,7 +44,7 @@ func (c Client) Post(ctx context.Context, samples []linkrunner.TrafficSample) ([
 		return nil, ErrInvalid
 	}
 	body, err := json.Marshal(struct {
-		Samples []linkrunner.TrafficSample `json:"samples"`
+		Samples []tstruntime.TrafficSample `json:"samples"`
 	}{samples})
 	if err != nil || len(body) > maxBytes {
 		return nil, ErrInvalid
@@ -83,7 +83,7 @@ func (c Client) Post(ctx context.Context, samples []linkrunner.TrafficSample) ([
 	}
 	var env struct {
 		Data *struct {
-			Accepted *[]linkrunner.TrafficSample `json:"accepted"`
+			Accepted *[]tstruntime.TrafficSample `json:"accepted"`
 		} `json:"data"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(answer))

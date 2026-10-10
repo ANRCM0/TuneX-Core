@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * V4-WP9 — `/api/forwards` 列表的路由层契约（Hono `app.request`，不连 DB/Redis/env）。
  *
@@ -22,7 +23,17 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Hono } from "hono";
 
-const ROOT = new URL("../..", import.meta.url).pathname; // → .../backend/src/
+// Bun's module mocks are global. Keep route fixtures in a clean process.
+if (process.env.TUNEX_ROUTE_ISOLATED_FORWARD_LIST_ROUTE !== "1") {
+  test("isolated forward-list-route HTTP regression", () => {
+    const child = Bun.spawnSync([process.execPath, "test", fileURLToPath(import.meta.url), "--timeout", "10000"], {
+      env: { ...process.env, TUNEX_ROUTE_ISOLATED_FORWARD_LIST_ROUTE: "1", AUTH_SECRET: "test-route-isolation-at-least-32-characters",
+        DATABASE_URL: "mysql://root@127.0.0.1:33079/tunex_v2_test" }, stdout: "pipe", stderr: "pipe", timeout: 20000, // secret-scan:allow isolated loopback fixture, no credentials
+    });
+    expect(child.exitCode, new TextDecoder().decode(child.stderr)).toBe(0);
+  });
+} else {
+const ROOT = fileURLToPath(new URL("../..", import.meta.url)); // → .../backend/src/
 
 interface ListCall {
   scope: string;
@@ -73,6 +84,7 @@ mock.module(`${ROOT}services/forward-service.ts`, () => ({
   getForwardSummary: async () => ({ total: 0 }),
   getForwardTraffic: async () => ({ ok: true, data: [] }),
   patchForward: async () => ({ ok: true, data: {} }),
+  applySavedForward: async () => ({ ok: true, data: {} }),
   previewForwardUpdate: async () => ({ ok: true, data: {} }),
   runForwardAction: async () => ({ ok: true, data: {} }),
   /**
@@ -222,3 +234,5 @@ describe("V4-WP9 /api/forwards 列表", () => {
     });
   });
 });
+
+}

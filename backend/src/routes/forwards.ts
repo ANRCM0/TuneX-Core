@@ -70,6 +70,8 @@ import { BILLING_TIME_ZONE, billingDayKeyStamp, billingDayStart } from "../servi
 import { dayKeyOf, fillDays } from "../services/traffic.ts";
 import { FORWARD_PROTOCOLS } from "../services/forward-contract.ts";
 import { forwardNativeBothEnabled } from "../services/forward-native-both.ts";
+import { unifiedForwardCapabilities, unifiedPatchForward, unifiedActionForward } from "../services/forward-application.ts";
+import { LinkResourceError } from "../services/link-errors.ts";
 import {
   forwardListShape,
   forwardOrderBy,
@@ -79,6 +81,12 @@ import {
 
 export const forwardsRoutes = new Hono<{ Variables: AppVariables }>();
 type Ctx = Context<{ Variables: AppVariables }>;
+forwardsRoutes.onError((error, c) => {
+  if (error instanceof HTTPException) return error.getResponse();
+  if (error instanceof LinkResourceError) return c.json({ error: error.code, code: error.code }, error.status);
+  if (error instanceof z.ZodError) return c.json({ error: "转发参数不合法", code: "invalid_input" }, 400);
+  return c.json({ error: "转发操作未完成", code: "forward_operation_failed" }, 503);
+});
 
 forwardsRoutes.use("*", async (c, next) => {
   const method = c.req.method.toUpperCase();
@@ -98,6 +106,9 @@ forwardsRoutes.use("*", async (c, next) => {
     // bump). Requiring forward:update would tell a read-only role "you may not
     // diagnose the forward you can see", which is not the product rule.
     action = "read";
+  } else if (method === "POST" && /\/actions\/?$/.test(path)) {
+    const body = await c.req.json().catch(() => null);
+    action = body?.action === "delete" ? "delete" : "update";
   } else if (method === "PATCH" || method === "PUT" || method === "POST") {
     action = "update";
   }
@@ -240,9 +251,7 @@ export const ForwardPatchSchema = z
 
 const ACTIONS = new Set<ForwardAction>(["retry", "suspend", "resume"]);
 
-forwardsRoutes.get("/capabilities", (c) => c.json({
-  data: { native_both_enabled: forwardNativeBothEnabled() },
-}));
+forwardsRoutes.get("/capabilities", async (c) => c.json({ data: await unifiedForwardCapabilities(workspace(c)) }));
 
 /**
  *  §13.6：列表改为**服务端**分页 / 排序。
@@ -509,9 +518,15 @@ forwardsRoutes.patch("/:id", async (c) => {
   if (id === null) {
     return c.json({ error: "ID 不合法", code: "invalid_input" }, 400);
   }
-  const parsed = ForwardPatchSchema.safeParse(
-    await c.req.json().catch(() => null),
-  );
+  const raw = await c.req.json().catch(() => null);
+  const bound = await db.tunnel.findFirst({ where: { id, workspace_id: workspace(c).id, category: "port_forward" },
+    select: { link_resource_id: true } });
+  if (bound?.link_resource_id) {
+    const denied = await authorizeForward(c, id, "update");
+    if (denied) return denied;
+    return send(c, await unifiedPatchForward(id, workspace(c).id, user(c).id, raw));
+  }
+  const parsed = ForwardPatchSchema.safeParse(raw);
   if (!parsed.success) {
     const message = parsed.error.issues[0]?.message ?? "端口转发参数不合法";
     return c.json({ error: message, code: "invalid_input" }, 400);
@@ -519,6 +534,25 @@ forwardsRoutes.patch("/:id", async (c) => {
   const denied = await authorizeForward(c, id, "update");
   if (denied) return denied;
   return send(c, await patchForward(id, workspace(c).id, parsed.data, user(c).id));
+});
+
+forwardsRoutes.get("/:id/history", async (c) => {
+  const id = idParam(c, "id");
+  if (!id) return c.json({ code: "invalid_input", error: "ID 不合法" }, 400);
+  if (!await getForward(id, workspace(c).id)) return c.json({ code: "not_found", error: "端口转发不存在" }, 404);
+  return c.json({ data: await db.forwardRevision.findMany({ where: { tunnel_id: id }, orderBy: { revision: "desc" }, take: 100,
+    select: { revision: true, desired_status: true, created_at: true, created_by_id: true } }) });
+});
+
+forwardsRoutes.post("/:id/actions", async (c) => {
+  const id = idParam(c, "id");
+  if (!id) return c.json({ code: "invalid_input", error: "ID 不合法" }, 400);
+  const input = z.object({ action: z.enum(["suspend", "resume", "retry", "delete"]) }).strict().parse(await c.req.json());
+  const denied = await authorizeForward(c, id, input.action === "delete" ? "delete" : "update");
+  if (denied) return denied;
+  const result = await unifiedActionForward(id, workspace(c).id, user(c).id, input.action);
+  if (!result.ok) return c.json({ code: result.code, error: result.message }, result.status);
+  return c.json({ data: result.data });
 });
 
 /**
@@ -536,6 +570,8 @@ forwardsRoutes.post("/:id/diagnose", async (c) => {
   if (id === null) return c.json({ error: "ID 不合法", code: "invalid_input" }, 400);
   const denied = await authorizeForward(c, id, "read");
   if (denied) return denied;
+  const bound = await db.tunnel.findFirst({ where: { id, workspace_id: workspace(c).id, category: "port_forward" }, select: { link_resource_id: true } });
+  if (bound?.link_resource_id) return c.json({ data: await (await import("../services/tst-diagnose.ts")).diagnoseTstForward(id, workspace(c).id) });
   const result = await diagnoseForward(id, workspace(c).id, defaultDiagnoseDeps());
   if (!result.ok) {
     return c.json({ error: result.message, code: result.code, error_layer: result.error_layer }, result.status);
@@ -1415,6 +1451,7 @@ forwardsRoutes.post("/batch", async (c) => {
       "forward",
       row.user_id === user(c).id,
     ),
+    user(c).id,
   );
   return c.json({ data: payload });
 });
@@ -1430,7 +1467,9 @@ forwardsRoutes.post("/:id/:action", async (c) => {
   }
   const denied = await authorizeForward(c, id, "update");
   if (denied) return denied;
-  return send(c, await runForwardAction(id, action, workspace(c).id));
+  const result = await unifiedActionForward(id, workspace(c).id, user(c).id, action);
+  if (!result.ok) return c.json({ code: result.code, error: result.message }, result.status);
+  return c.json({ data: result.data });
 });
 
 forwardsRoutes.delete("/:id", async (c) => {
@@ -1440,5 +1479,7 @@ forwardsRoutes.delete("/:id", async (c) => {
   }
   const denied = await authorizeForward(c, id, "delete");
   if (denied) return denied;
-  return send(c, await deleteForward(id, workspace(c).id));
+  const result = await unifiedActionForward(id, workspace(c).id, user(c).id, "delete");
+  if (!result.ok) return c.json({ code: result.code, error: result.message }, result.status);
+  return c.json({ data: result.data });
 });

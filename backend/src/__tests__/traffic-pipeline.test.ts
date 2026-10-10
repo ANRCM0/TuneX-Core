@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * OPS-01 / OPS-03 流量链路单元测试（不连 MySQL / Redis）。
  *
@@ -19,7 +20,7 @@ import type {
   TrafficInsertRow,
 } from "../services/traffic-archive.ts";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 // **替身必须语义完整**（2026-10-07）：`mock.module` 是**进程级**注册表，先加载者生效，
 // 一个缺段的 env 替身会泄漏给同进程的其它测试文件 —— 例如缺 `mail` 时

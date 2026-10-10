@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /** WP10 isolated kernel + workspace access tests: no DB, Redis, or mock.module. */
 import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
@@ -25,6 +26,18 @@ import {
   type WorkspaceRole,
 } from "../workspace.ts";
 
+// Route suites replace workspace exports globally in Bun. Validate the actual
+// authorization kernel in a clean process so permissive route fixtures cannot
+// masquerade as an RBAC decision.
+if (process.env.TUNEX_RBAC_KERNEL_ISOLATED !== "1") {
+  test("isolated workspace authorization kernel", () => {
+    const child = Bun.spawnSync([process.execPath, "test", fileURLToPath(import.meta.url), "--timeout", "10000"], {
+      env: { ...process.env, TUNEX_RBAC_KERNEL_ISOLATED: "1", AUTH_SECRET: "test-rbac-kernel-secret-at-least-32-characters",
+        DATABASE_URL: "mysql://root@127.0.0.1:33079/tunex_v2_test" }, stdout: "pipe", stderr: "pipe", timeout: 20000, // secret-scan:allow isolated loopback fixture, no credentials
+    });
+    expect(child.exitCode, new TextDecoder().decode(child.stderr)).toBe(0);
+  });
+} else {
 function access(role: WorkspaceRole, patch: Partial<WorkspaceAccess> = {}): WorkspaceAccess {
   return { id: 20, role, personalWorkspaceId: 10, kind: "team", customRoleId: null, ...patch };
 }
@@ -36,6 +49,7 @@ const matrix: [WorkspaceResourceFamily, WorkspaceAction, WorkspaceRole[]][] = [
   ["forward", "delete", ["owner", "admin"]],
   ["node", "read", ["owner", "admin", "member", "viewer"]],
   ["node", "manage", ["owner", "admin"]],
+  ["node", "use", ["owner", "admin", "member"]],
   ["member", "read", ["owner", "admin", "member", "viewer"]],
   ["member", "manage", ["owner", "admin"]],
   ["settings", "read", ["owner", "admin", "member", "viewer"]],
@@ -97,7 +111,7 @@ describe("fixed resource-aware RBAC matrix", () => {
 
 describe("custom replacement and canonical legacy alias rules", () => {
   test("canonical keys and permission list output never write legacy aliases", () => {
-    expect(WORKSPACE_PERMISSIONS).toHaveLength(11);
+    expect(WORKSPACE_PERMISSIONS).toHaveLength(12);
     expect(WORKSPACE_PERMISSIONS.every((key) => !key.startsWith("tunnel:"))).toBe(true);
     expect(sanitizeCustomPermissions({ "tunnel:create": true, "tunnel:delete": false, "node:read": true }))
       .toEqual({ "forward:create": true, "forward:delete": false, "node:read": true });
@@ -339,3 +353,5 @@ describe("workspace resolver: scoped custom role and middleware prefilter", () =
     expect(await error.getResponse().json()).toEqual({ error: "test denial", code: "permission_denied", error_layer: "rbac" });
   });
 });
+
+}

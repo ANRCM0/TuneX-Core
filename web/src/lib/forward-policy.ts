@@ -1,4 +1,6 @@
 export const FORWARD_POLICY_MAX = 2147483647;
+/** TST/1's bounded shared stream + datagram session table. */
+export const TST_POLICY_MAX_CONCURRENCY = 4096;
 export const FORWARD_POLICY_FIELDS = ["bytes_per_second_in", "bytes_per_second_out", "max_connections", "max_connections_per_ip"] as const;
 export type ForwardPolicyField = typeof FORWARD_POLICY_FIELDS[number];
 export type ForwardPolicyInput = Partial<Record<ForwardPolicyField, number | null>>;

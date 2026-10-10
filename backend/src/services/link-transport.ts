@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { enqueueAgentCommand, waitAgentCommandAck } from "./agent-command-bus.ts";
 import { loadNodeCapabilityFacts } from "./runtime-admission.ts";
-import type { FxpPlacementConfig } from "../integrations/forwardx/link-compiler.ts";
+import type { TstPlacementConfig } from "../domain/link/tst-compiler.ts";
 import type { CommandEnvelope } from "./control-protocol/index.ts";
 
-export async function sendLinkPlacement(config: FxpPlacementConfig, remove = false): Promise<void> {
+export async function sendLinkPlacement(config: TstPlacementConfig, remove = false): Promise<void> {
   const facts = await loadNodeCapabilityFacts(config.node_id);
   const action = remove ? "remove_link" : "apply_link";
-  if (!facts?.capabilities?.includes(action) || !facts.capabilities.includes("forward.link.fxp.v1")) {
-    throw new Error("agent_fxp_capability_missing");
+  if (!facts?.advertisementCurrent || !facts?.capabilities?.includes(action) || !facts.capabilities.includes("forward.link.tst.v1")) {
+    throw new Error("agent_tst_capability_missing");
   }
   const envelope: CommandEnvelope = {
     command_id: randomUUID(), resource: "link", resource_id: config.id,

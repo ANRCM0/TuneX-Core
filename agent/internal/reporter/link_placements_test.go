@@ -7,24 +7,24 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tunex/agent/internal/linkrunner"
+	"github.com/tunex/agent/internal/tstruntime"
 )
 
 func TestLinkPlacementsReachTheAuthenticatedStateReportWithoutSecrets(t *testing.T) {
 	ack := "2026-10-07T07:59:00.123456789Z"
-	status := []linkrunner.Observation{{
+	status := []tstruntime.Observation{{
 		ID: "tunex-link-8-p2-egress", LinkID: 8, WorkspaceID: 7, NodeID: 2, Role: "egress",
 		Generation: 6, ObservedGeneration: 5, DesiredConfigDigest: strings.Repeat("a", 64),
 		ConfigDigest: strings.Repeat("b", 64), Ready: true, State: "rolled_back",
 		LeaseExpiresAt: "2026-10-07T08:00:00Z", RuntimeIDs: []string{"link-8-exit-tcp"},
-		Ports: []linkrunner.Port{{Protocol: "tcp", Host: "", Port: 22000}},
-		PID:   1234, Logs: []string{"runner key=secret-output"}, LastError: "secret-arbitrary-error",
-		TrafficStatus: &linkrunner.TrafficStatus{RotationSupported: true, ProducerCount: 2, SampleCount: 500,
+		Ports: []tstruntime.Port{{Protocol: "tcp", Host: "", Port: 22000}},
+		Logs:  []string{"private key=secret-output"}, LastError: "secret-arbitrary-error",
+		TrafficStatus: &tstruntime.TrafficStatus{RotationSupported: true, ProducerCount: 2, SampleCount: 500,
 			RuleCount: 250, SpoolBytes: 123456, LastAckAt: &ack, State: "blocked"},
 	}}
 	var sent [][]byte
 	r := New(Config{PanelURL: "http://panel.invalid", NodeID: "n2", Credential: "credential"},
-		WithLinkPlacements(func() []linkrunner.Observation { return status }),
+		WithLinkPlacements(func() []tstruntime.Observation { return status }),
 		WithPost(func(_ context.Context, url string, body []byte, headers map[string]string) error {
 			if !strings.HasSuffix(url, StatePath) || headers[CredentialHeader] != "Bearer credential" {
 				t.Fatal("Link facts must use the authenticated state channel")
@@ -78,11 +78,11 @@ func TestLinkPlacementsReachTheAuthenticatedStateReportWithoutSecrets(t *testing
 }
 
 func TestLinkPlacementTrafficStatusOptionalAndClosed(t *testing.T) {
-	observation := linkrunner.Observation{ID: "placement-1", LinkID: 1, WorkspaceID: 2, NodeID: 3,
+	observation := tstruntime.Observation{ID: "placement-1", LinkID: 1, WorkspaceID: 2, NodeID: 3,
 		Generation: 4, ObservedGeneration: 4, Ready: false, State: "failed"}
 	encode := func() map[string]json.RawMessage {
 		t.Helper()
-		payload, err := json.Marshal((*reportedLinkPlacements([]linkrunner.Observation{observation}))[0])
+		payload, err := json.Marshal((*reportedLinkPlacements([]tstruntime.Observation{observation}))[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +96,7 @@ func TestLinkPlacementTrafficStatusOptionalAndClosed(t *testing.T) {
 		t.Fatal("old observation invented capacity")
 	}
 	for _, state := range []string{"idle", "collecting", "backlogged", "blocked"} {
-		observation.TrafficStatus = &linkrunner.TrafficStatus{State: state}
+		observation.TrafficStatus = &tstruntime.TrafficStatus{State: state}
 		payload := encode()
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(payload["traffic_status"], &fields); err != nil {
@@ -108,7 +108,7 @@ func TestLinkPlacementTrafficStatusOptionalAndClosed(t *testing.T) {
 			t.Fatalf("closed zero snapshot changed readiness or omitted capacity: %+v", fields)
 		}
 	}
-	observation.TrafficStatus = &linkrunner.TrafficStatus{State: "backlogged", RotationSupported: true,
+	observation.TrafficStatus = &tstruntime.TrafficStatus{State: "backlogged", RotationSupported: true,
 		ProducerCount: 128, SampleCount: 262144, RuleCount: 262144, SpoolBytes: 403701760}
 	if _, ok := encode()["traffic_status"]; !ok {
 		t.Fatal("inclusive capacity bounds rejected")
@@ -116,18 +116,18 @@ func TestLinkPlacementTrafficStatusOptionalAndClosed(t *testing.T) {
 }
 
 func TestLinkPlacementTrafficStatusRejectsInvalidFacts(t *testing.T) {
-	valid := linkrunner.TrafficStatus{State: "collecting"}
-	for _, mutate := range []func(*linkrunner.TrafficStatus){
-		func(s *linkrunner.TrafficStatus) { s.ProducerCount = -1 },
-		func(s *linkrunner.TrafficStatus) { s.ProducerCount = 129 },
-		func(s *linkrunner.TrafficStatus) { s.SampleCount = -1 },
-		func(s *linkrunner.TrafficStatus) { s.SampleCount = 262145 },
-		func(s *linkrunner.TrafficStatus) { s.RuleCount = -1 },
-		func(s *linkrunner.TrafficStatus) { s.RuleCount = 262145 },
-		func(s *linkrunner.TrafficStatus) { s.SpoolBytes = -1 },
-		func(s *linkrunner.TrafficStatus) { s.SpoolBytes = 403701761 },
-		func(s *linkrunner.TrafficStatus) { s.State = "ready" },
-		func(s *linkrunner.TrafficStatus) { s.State = "credential=secret" },
+	valid := tstruntime.TrafficStatus{State: "collecting"}
+	for _, mutate := range []func(*tstruntime.TrafficStatus){
+		func(s *tstruntime.TrafficStatus) { s.ProducerCount = -1 },
+		func(s *tstruntime.TrafficStatus) { s.ProducerCount = 32769 },
+		func(s *tstruntime.TrafficStatus) { s.SampleCount = -1 },
+		func(s *tstruntime.TrafficStatus) { s.SampleCount = 262145 },
+		func(s *tstruntime.TrafficStatus) { s.RuleCount = -1 },
+		func(s *tstruntime.TrafficStatus) { s.RuleCount = 262145 },
+		func(s *tstruntime.TrafficStatus) { s.SpoolBytes = -1 },
+		func(s *tstruntime.TrafficStatus) { s.SpoolBytes = 403701761 },
+		func(s *tstruntime.TrafficStatus) { s.State = "ready" },
+		func(s *tstruntime.TrafficStatus) { s.State = "credential=secret" },
 	} {
 		value := valid
 		mutate(&value)
@@ -156,7 +156,7 @@ func TestLinkPlacementTrafficStatusRejectsInvalidFacts(t *testing.T) {
 func TestLinkPlacementReportsDistinguishUnknownFromEmpty(t *testing.T) {
 	for _, r := range []*Reporter{
 		New(Config{}),
-		New(Config{}, WithLinkPlacements(func() []linkrunner.Observation { return nil })),
+		New(Config{}, WithLinkPlacements(func() []tstruntime.Observation { return nil })),
 	} {
 		raw, err := json.Marshal(r.StatePayload())
 		if err != nil {
@@ -166,7 +166,7 @@ func TestLinkPlacementReportsDistinguishUnknownFromEmpty(t *testing.T) {
 			t.Fatal("unknown snapshot became an idle claim")
 		}
 	}
-	r := New(Config{}, WithLinkPlacements(func() []linkrunner.Observation { return []linkrunner.Observation{} }))
+	r := New(Config{}, WithLinkPlacements(func() []tstruntime.Observation { return []tstruntime.Observation{} }))
 	raw, err := json.Marshal(r.StatePayload())
 	if err != nil {
 		t.Fatal(err)
@@ -175,8 +175,8 @@ func TestLinkPlacementReportsDistinguishUnknownFromEmpty(t *testing.T) {
 		t.Fatalf("configured empty snapshot missing: %s", raw)
 	}
 	// An unknown remove fence carries no ownership metadata and makes no claim.
-	r = New(Config{}, WithLinkPlacements(func() []linkrunner.Observation {
-		return []linkrunner.Observation{{ID: "unowned-remove-fence", Generation: 1, State: "removed"}}
+	r = New(Config{}, WithLinkPlacements(func() []tstruntime.Observation {
+		return []tstruntime.Observation{{ID: "unowned-remove-fence", Generation: 1, State: "removed"}}
 	}))
 	if got := r.StatePayload().LinkPlacements; got == nil || len(*got) != 0 {
 		t.Fatal("unowned fence reported")

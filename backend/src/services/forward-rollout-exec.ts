@@ -9,7 +9,7 @@
 
 import { acquirePort, releaseLease } from "./portPool.ts";
 import type { AcquirePortOutcome } from "./portPool.ts";
-import { leaseProtocol, normalizeBindScope } from "../integrations/forwardx/bind-scope.ts";
+import { leaseProtocol, normalizeBindScope } from "../domain/link/bind-scope.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { ACTIVE_ROLLOUT_PHASES, planRollout, ROLLOUT_STAGE_SEQUENCE, rolloutStepKey } from "./forward-rollout.ts";
 import {

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * 缺陷 2 的**真实端点级**回归 —— `GET /api/forwards/:id/throughput` 的"今天"速率分母。
  *
@@ -38,7 +39,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
-const root = new URL("../..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("../..", import.meta.url));
 
 const PRELUDE = String.raw`
 import { mock, expect, setSystemTime } from "bun:test";

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 /**
  * V5-WP20-5 到期降级与可观测 —— 单元测试（离线，全部走**纯函数**）。
  *
@@ -250,7 +251,7 @@ describe("D. buildUsageExpiryView：到期/宽限的可观测投影（文案唯�
 // ─────────────────────────── E. 静态守卫：没有新状态机 / 字段落在真实端点上 ───────────────────────────
 
 describe("E. 守卫：不新增状态机、文案只有一份、投影落在已挂载的端点上", () => {
-  const ROOT = new URL("../../../", import.meta.url).pathname;
+  const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
   test("到期仍然只是时间比较：没有新增 `*Status` 枚举、没有翻转任务的写入", () => {
     const schema = readFileSync(`${ROOT}../prisma/schema.prisma`, "utf8");
