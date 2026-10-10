@@ -321,6 +321,19 @@ async function reservePlacements(tx: Prisma.TransactionClient, placements: TstPl
     $transaction: async <T>(run: (client: PortPoolTransaction) => Promise<T>) =>
       run(tx as unknown as PortPoolTransaction) } as unknown as PortPoolDb;
   for (const placement of placements) for (const slot of placement.ports) {
+    // A Link generation refresh keeps the same carrier and existing business
+    // listeners alive while the Agent report catches up from `applied` to
+    // `ready`. Re-asking the port pool to explain that same active Link lease
+    // through the just-published runtime facts creates a transient self-
+    // conflict. The durable lease is authoritative for this exact binding;
+    // only new or changed slots need a fresh acquisition (which still checks
+    // foreign runtime facts and released/orphaned leases).
+    const existing = await tx.nodePortLease.findFirst({ where: {
+      node_id: placement.node_id, lease_type: placement.role, link_id: placement.link_id,
+      tunnel_id: null, status: "active", protocol: slot.protocol,
+      bind_scope: normalizeBindScope(slot.host), port: slot.port,
+    }, select: { id: true } });
+    if (existing) continue;
     const result = await acquirePort({ nodeId: placement.node_id, leaseType: placement.role,
       preferredPort: slot.port, protocol: slot.protocol, bindScope: slot.host,
       linkId: placement.link_id, ownRuntimeIds: [placement.id, ...placement.runtime_ids],
