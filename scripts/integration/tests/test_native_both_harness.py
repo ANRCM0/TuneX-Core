@@ -44,6 +44,14 @@ class NativeBothHarnessContracts(unittest.TestCase):
         self.assertNotIn("credential-value", str(caught.exception))
         self.assertEqual(self.ns["safe_code"]("raw error\ncredential"), "unknown")
 
+    def test_acceptance_observes_both_target_lanes(self):
+        source = (Path(__file__).resolve().parents[1] / "tst-forward.py").read_text(encoding="utf-8")
+        self.assertIn("self.messages = []", source)
+        self.assertIn("self.udp_sources = []", source)
+        native = SOURCE.read_text(encoding="utf-8")
+        self.assertIn("servers[1].messages", native)
+        self.assertIn("servers[1].udp_sources", native)
+
 
 if __name__ == "__main__":
     unittest.main()

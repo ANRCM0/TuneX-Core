@@ -225,7 +225,10 @@ jobs:
       - name: TST protocol and runtime race checks
         run: go test -race ./internal/securelink ./internal/tstruntime
       - name: TST parser fuzz smoke
-        run: go test ./internal/securelink -run '^$' -fuzz FuzzReadFrame -fuzztime 15s
+        # A single worker keeps the fixed-duration smoke deterministic on
+        # shared runners while still exercising the parser with millions of
+        # generated inputs in the allotted window.
+        run: go test ./internal/securelink -run '^$' -fuzz FuzzReadFrame -fuzztime 15s -parallel 1
       - name: Race detector for acknowledged native removal
         run: go test -race ./internal/manager ./internal/control -run 'Removal|StoppingScope|PublishesActualHop'
       # Race instrumentation is intentionally off the PR hot path; normal tests

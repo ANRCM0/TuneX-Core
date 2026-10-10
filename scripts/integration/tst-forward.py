@@ -31,6 +31,10 @@ class Echo:
         self.stop_event = threading.Event()
         self.clients = set()
         self.lock = threading.Lock()
+        # Native-both acceptance uses these bounded observations to prove that
+        # a retarget moved both protocol lanes to the new target.
+        self.messages = []
+        self.udp_sources = []
         self.tcp_socket = socket.socket()
         self.tcp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.tcp_socket.bind(("0.0.0.0", port))
@@ -67,6 +71,8 @@ class Echo:
                 if not payload:
                     client.shutdown(socket.SHUT_WR)
                     return
+                with self.lock:
+                    self.messages.append(payload)
                 client.sendall(payload)
         except OSError:
             pass
@@ -79,6 +85,8 @@ class Echo:
         while not self.stop_event.is_set():
             try:
                 payload, source = self.udp_socket.recvfrom(65507)
+                with self.lock:
+                    self.udp_sources.append(payload)
                 self.udp_socket.sendto(payload, source)
             except socket.timeout:
                 continue

@@ -155,11 +155,11 @@ def native_cases():
             marker = f"F4-{mode}-retarget".encode()
             active = H.wait_active(fid)
             forwarded = bool(H.wait_until(lambda: payload(port, marker), timeout=60, interval=2))
-            tcp_new, udp_new = marker+b"-tcp" in servers[1].messages, marker+b"-udp" in servers[1].udp.sources
+            tcp_new, udp_new = marker+b"-tcp" in servers[1].messages, marker+b"-udp" in servers[1].udp_sources
             evidence = ""
             if not (active and forwarded and tcp_new and udp_new):
                 facts = {"active": active, "payload": forwarded, "tcp_new": tcp_new, "udp_new": udp_new,
-                         "tcp_old": marker+b"-tcp" in servers[0].messages, "udp_old": marker+b"-udp" in servers[0].udp.sources,
+                         "tcp_old": marker+b"-tcp" in servers[0].messages, "udp_old": marker+b"-udp" in servers[0].udp_sources,
                          "runtime": retarget_facts(fid, 3051)}
                 evidence = " facts=" + json.dumps(facts, sort_keys=True)
             H.check(active and forwarded and tcp_new and udp_new,
