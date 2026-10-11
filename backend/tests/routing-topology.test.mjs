@@ -262,5 +262,82 @@ if (process.env.TUNEX_DB_TEST !== '1') {
       assert.deepEqual(await footprint(owner, forwardIds, nodeIds, linkIds), before);
       process.env.TUNEX_ROUTING_PROBES_ENABLED = 'false';
     });
+    await t.test('protected compensation dispatches the immutable baseline at a new authenticated generation', async () => {
+      const { attachRoutingHop } = await import('../src/services/routing-runtime.ts');
+      const { Orchestrator } = await import('../src/services/orchestrator.ts');
+      const { compensateRollout, indexRolloutNodes } = await import('../src/services/forward-rollout-exec.ts');
+      const { markStepCompleted, appendPrepared, readKeySet, readLedger } = await import('../src/services/forward-rollout-state.ts');
+      const previousKey = process.env.TUNEX_LINK_SEAL_KEY;
+      process.env.TUNEX_LINK_SEAL_KEY = randomBytes(32).toString('hex');
+      try {
+        await db.nodeStateReport.updateMany({ where: { node_id: { in: nodeIds } }, data: {
+          reported_at: new Date(), capabilities: ['apply_tunnel', 'remove_tunnel', 'forward.routing.hop.mtls.v1'] } });
+        await db.tunnel.update({ where: { id: native.id }, data: { routing_security_version: 1,
+          config_revision: 4, applied_revision: 3, middle_node_id: middle.id, egress_port: 26200, apply_status: 'error' } });
+        const baseline = { tunnel_id: native.id, revision: 3, name: native.name, desired_status: 'active',
+          mode: 'relay', protocol: 'tcp', ingress_node_id: ingress.id, middle_node_id: null, egress_node_id: egress.id,
+          listen_port: 26100, egress_pool_id: pool.id, egress_port: 26200,
+          targets: [{ host: 'example.test', port: 443, weight: 3, order_by: 10 }] };
+        await db.forwardRevision.create({ data: baseline });
+        await db.forwardRevision.create({ data: { ...baseline, revision: 4, middle_node_id: middle.id } });
+        const planned = { name: native.name, desired_status: 'active', mode: 'relay', protocol: 'tcp',
+          ingress_node_id: ingress.id, middle_node_id: null, egress_node_id: egress.id, listen_ip: null,
+          listen_port: 26100, target_host: null, target_port: null, egress_pool_id: pool.id, egress_port: 26200,
+          egress_targets: baseline.targets };
+        const rollout = await db.forwardRollout.create({ data: { tunnel_id: native.id, revision: 4, base_revision: 3,
+          phase: 'compensating', cleaned: [], prepared: [], steps: { desired: { ...planned, middle_node_id: middle.id }, applied: planned } } });
+        const completionKey = `protected-${native.id}-egress`;
+        const attempts = await Promise.all(Array.from({ length: 4 }, () => markStepCompleted(rollout.id, completionKey, { db })));
+        assert.equal(attempts.filter(Boolean).length, 1);
+        await markStepCompleted(rollout.id, 'second-step', { db });
+        const resource = { kind: 'egress_apply', node_id: egress.id, port: 26200, handle: null };
+        await Promise.all([appendPrepared(rollout.id, resource, { db }), appendPrepared(rollout.id, { ...resource, node_id: middle.id }, { db })]);
+        const ledger = await db.forwardRollout.findUniqueOrThrow({ where: { id: rollout.id } });
+        assert.deepEqual(readKeySet(ledger.cleaned), [completionKey, 'second-step']);
+        assert.equal(readLedger(ledger.prepared, []).length, 2);
+        assert.deepEqual(new Set(ledger.prepared.map((entry) => entry.node_id)), new Set([egress.id, middle.id]));
+        const config = { id: `tunex-${native.id}-relay`, revision: 5, mode: 'RELAY', protocol: 'tcp',
+          ingress_port: 26100, egress_port: 0, remote_host: '', remote_port: 0, next_hop: '127.0.0.1:26200',
+          targets: [], lb_strategy: 'round', speed_limit: 0 };
+        const rejected = (value) => assert.rejects(attachRoutingHop(value, ingress.id),
+          (error) => error.code === 'routing_generation_unavailable');
+        await rejected(config); // Active compensation alone cannot authorize an absent snapshot.
+        await db.forwardRevision.create({ data: { ...baseline, revision: 5,
+          targets: [{ host: 'changed.example.test', port: 443, weight: 3, order_by: 10 }] } });
+        await rejected(config); // Same path with changed targets is not the immutable baseline.
+        await db.forwardRevision.deleteMany({ where: { tunnel_id: native.id, revision: 5 } });
+        const configs = [], tombstones = new Map();
+        const apply = async (node, value) => {
+          assert(value.route_auth, 'protected_dispatch_must_not_fall_back_to_plaintext');
+          assert(value.revision > (tombstones.get(`${node.id}:${value.id}`) ?? 0));
+          configs.push({ node: node.id, value });
+          return { ok: true, applied_revision: value.revision };
+        };
+        const orchestrator = new Orchestrator({ routingConfig: attachRoutingHop, healthSource: async () => [],
+          transport: { applyEgress: apply, applyRelay: apply, applyDirect: apply,
+            removeTunnel: async (node, id, envelope) => {
+              tombstones.set(`${node.id}:${id}`, envelope.revision);
+              return { ok: true, applied_revision: envelope.revision };
+            } } });
+        indexRolloutNodes(orchestrator, local.rows.map((row) => ({ ...row, connect_ip: `127.0.0.${row.id}` })));
+        assert.deepEqual(await compensateRollout(rollout.id, { db, orchestrator, runtimeUse: async () => null }), { ok: true });
+        assert.deepEqual(configs.map((item) => item.node), [egress.id, ingress.id]);
+        assert(configs.every((item) => item.value.revision === 5 && item.value.route_auth.revision === 5));
+        assert.deepEqual(configs[0].value.route_auth.node_ids, [ingress.id, egress.id]);
+        assert.equal(configs[0].value.route_auth.incoming.ca_pem, configs[1].value.route_auth.outgoing.ca_pem);
+        const restored = await db.tunnel.findUniqueOrThrow({ where: { id: native.id } });
+        assert.equal(restored.config_revision, 5); assert.equal(restored.applied_revision, 5);
+        assert.equal(restored.middle_node_id, null); assert.equal(restored.routing_security_version, 1);
+        assert.equal((await db.forwardRollout.findUniqueOrThrow({ where: { id: rollout.id } })).compensated, true);
+        await rejected({ ...config, revision: 4 }); // Historical and future snapshots remain fenced.
+        await rejected({ ...config, revision: 6 });
+        await assert.rejects(attachRoutingHop(config, middle.id), (error) => error.code === 'routing_generation_unavailable');
+        await db.nodeBinding.delete({ where: { id: binding.id } });
+        await rejected(config); // Reusing sealed identities cannot bypass revoked adjacency.
+      } finally {
+        if (previousKey === undefined) delete process.env.TUNEX_LINK_SEAL_KEY;
+        else process.env.TUNEX_LINK_SEAL_KEY = previousKey;
+      }
+    });
   });
 }

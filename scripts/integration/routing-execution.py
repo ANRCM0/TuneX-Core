@@ -17,6 +17,7 @@ STATE=json.loads((HERE/"state.json").read_text(encoding="utf-8"))
 MID=STATE["nodes"]["ingress_secondary"]["id"]
 CONTAINER="tunex-it-ingress-agent-b"
 OUT=HERE/"evidence"
+FAULT_PID="/tmp/tunex-it-routing-listener-fault.pid"
 
 def request(method,path,body=None):
     status,response,_=H.req(method,path,body,timeout=120)
@@ -53,7 +54,7 @@ def plain_refused(ip,port):
     except OSError: return True
 
 def main():
-    fid=None; stopped=False; role_before=None; echo=None; receipts=[]; history=[]; diagnostics={}
+    fid=None; stopped=False; role_before=None; echo=None; receipts=[]; history=[]; diagnostics={}; fault_running=False
     signal.signal(signal.SIGALRM,H.alarm);signal.setitimer(signal.ITIMER_REAL,720)
     H.acquire_lock()
     try:
@@ -116,11 +117,37 @@ def main():
         H.check({"primary","backup"} <= {r["candidate_id"] for r in confirmed_history},"R45 persisted decision history traces both actually confirmed routes")
         serialized=json.dumps(history)
         H.check(all(s not in serialized for s in ("private_key","certificate_pem","target_host","connect_ip")),"R45 public route history contains no private identities or addresses")
+        # Disable automation via normal versioned policy save before an explicit
+        # OS socket fault. This exercises protected compensation with real Agents.
+        current_policy=request("GET",f"/api/routing/policies/{fid}")
+        before=route_state(fid); graph=request("GET","/api/routing/topology")
+        request("PUT",f"/api/routing/policies/{fid}",{"schema_version":1,"expected_policy_version":current_policy["version"],
+            "intent":{**intent,"expected_revision":before["config_revision"],"topology_digest":graph["digest"]},
+            "enabled":False,"auto_failover":False,"auto_failback":False,"failure_threshold":1,"recovery_threshold":1,
+            "cooldown_ms":30000,"max_rtt_ms":5000,"max_loss_percent":0,"min_handshake_success_rate":1})
+        H.docker(["exec","-d",H.INGRESS_CONTAINER,"sh","-c",f"echo $$ > {FAULT_PID}; exec nc -l -p 21094"])
+        fault_running=True
+        H.check(bool(H.wait_until(lambda:":21094" in H.docker(["exec",H.INGRESS_CONTAINER,"sh","-c","netstat -tln"]),timeout=10,interval=1)),
+            "R45 real foreign TCP socket occupies only the candidate listener")
+        status,response,_=H.req("PATCH",f"/api/forwards/{fid}",{"listen_port":21094,"expected_revision":before["config_revision"]},timeout=120)
+        H.check(status==502 and response.get("code")=="apply_failed","R45 protected listener cutover reports the real bind failure")
+        recovered=bool(H.wait_until(lambda:H.wait_active(fid) and payload(21093,b"secure-compensated-primary"),timeout=90,interval=2))
+        restored=route_state(fid)
+        H.check(recovered and restored["config_revision"]>before["config_revision"]+1 and
+            restored["applied_revision"]==restored["config_revision"] and restored["routing_security_version"]==1,
+            "R45 failed protected cutover restores authenticated baseline payload at a newer exact revision")
+        compensation=rollout_state(fid)
+        H.check(any(r["revision"]==before["config_revision"]+1 and r["compensated"] for r in compensation),
+            "R45 real protected rollback is durably marked compensated")
+        H.docker(["exec",H.INGRESS_CONTAINER,"sh","-c",f"kill $(cat {FAULT_PID}); rm -f {FAULT_PID}"])
+        fault_running=False
         OUT.joinpath("routing-execution-observations.json").write_text(json.dumps({"method":"real_linux_agents_and_socket_faults","receipts":receipts,"history":history},indent=2),encoding="utf-8")
     except Exception as exc:
         message=str(exc)
         H.check(False,f"R45 acceptance failed: {type(exc).__name__} {message}" if len(message)<160 and 'PRIVATE' not in message else f"R45 acceptance failed: {type(exc).__name__}")
     finally:
+        if fault_running:
+            H.docker(["exec",H.INGRESS_CONTAINER,"sh","-c",f"test ! -f {FAULT_PID} || kill $(cat {FAULT_PID}); rm -f {FAULT_PID}"],allow=True)
         if fid:
             try:
                 policy=request("GET",f"/api/routing/policies/{fid}")

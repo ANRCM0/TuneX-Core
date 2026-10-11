@@ -219,6 +219,48 @@ class HotReloadMeasurementTest(unittest.TestCase):
                                                 {"hot_reload_samples": 1}, "direct")
 
 
+class ProcessExitObservationTest(unittest.TestCase):
+    def _agent(self, graceful: bool):
+        # A controlled exit checks the deadline/kill behavior without making
+        # timing assertions that would depend on the CI host scheduler.
+        class Process:
+            args = ["fixture"]
+            def __init__(self):
+                self.done = threading.Event()
+                self.killed = False
+                self.wait_timeout = "not_called"
+            def poll(self):
+                return 0 if self.done.is_set() else None
+            def send_signal(self, sig):
+                if graceful:
+                    self.done.set()
+            def wait(self, timeout=None):
+                self.wait_timeout = timeout
+                if not self.done.wait(5):
+                    raise RuntimeError("fixture process was not reaped")
+                return 0
+            def kill(self):
+                self.killed = True
+                self.done.set()
+        agent = object.__new__(baseline.AgentProcess)
+        agent.proc = Process()
+        return agent
+
+    def test_graceful_exit_uses_blocking_wait_without_polling_quantization(self):
+        agent = self._agent(True)
+        self.assertGreaterEqual(agent.stop(timeout=1), 0)
+        self.assertIsNone(agent.proc.wait_timeout)
+        self.assertFalse(agent.proc.killed)
+        self.assertEqual(agent.stop(), 0)
+
+    def test_unresponsive_process_is_killed_and_reaped_after_deadline(self):
+        agent = self._agent(False)
+        self.assertGreaterEqual(agent.stop(timeout=0), 0)
+        self.assertTrue(agent.proc.killed)
+        self.assertIsNone(agent.proc.wait_timeout)
+        self.assertIsNotNone(agent.proc.poll())
+
+
 class CpuAccountingTest(unittest.TestCase):
     def test_own_process_cpu_is_measurable(self):
         # 采样器必须能读到自己（基线里读的是被测 Agent 进程）。

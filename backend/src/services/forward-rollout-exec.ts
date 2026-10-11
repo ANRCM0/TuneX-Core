@@ -2033,7 +2033,12 @@ async function executeRolloutOwned(
         };
       }
 
-      if (phase === "prepare") {
+      // PREPARE may replace the existing exit in place (same runtime ID/port).
+      // Once that apply ACKed, its identity/targets no longer match the baseline
+      // ingress. A later transit failure therefore needs a full baseline replay.
+      const preparedBaselineReplaced = phase === "prepare" && ctx.applied?.mode === "relay" &&
+        ctx.prepared.some((p) => p.kind === "egress_apply" && p.node_id === ctx.applied!.egress_node_id);
+      if (phase === "prepare" && !preparedBaselineReplaced) {
         // 释放本轮自己创建的资源 + 撤已 ACK 的 egress；applied_revision 不动、
         // 旧 runtime 继续（CUTOVER 尚未发生，撤自己就够了）。
         const cleanup = await releasePrepared(ctx, deps, db);
@@ -2072,8 +2077,8 @@ async function executeRolloutOwned(
         };
       }
 
-      if (phase === "cutover") {
-        // 入口已经可能切过去了 ⇒ 必须补偿（§3.4）。
+      if (phase === "cutover" || preparedBaselineReplaced) {
+        // Either ingress may have cut over, or PREPARE replaced a shared exit.
         // releasePrepared fail-closed：runtime 未确认撤除时不会释放端口租约。
         const preparedCleanup = await releasePrepared(ctx, deps, db);
         const moved = await transitionRollout(
@@ -2200,7 +2205,9 @@ async function releasePrepared(
         tunnelId: ctx.tunnelId,
         node: nodeFor(deps.orchestrator, p.node_id),
         direction: "egress",
-        revision: ctx.revision + 1,
+        // The baseline replay uses revision+1, so cleanup must fence only the
+        // failed generation, including an exit that already ACKed PREPARE.
+        revision: ctx.revision,
         reason: `rollout ${ctx.rolloutId} prepare-failed cleanup`,
       });
       if (!removed.ok) teardownErrors.push(`egress node ${p.node_id}: ${removed.error}`);

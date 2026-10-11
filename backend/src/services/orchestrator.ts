@@ -1272,10 +1272,9 @@ export class Orchestrator {
   /**
    * 从一台节点上撤下隧道（补偿路径）。
    *
-   * 用 `revision + 1` 而不是失败那次 revision：Agent 的闸门是
-   * 「applied_revision ≥ incoming → 拒绝 stale」。若失败的那次已经推进了
-   * `applied_revision`，用同一 revision 重发会被判 stale 而撤不掉——
-   * 补偿就会静默失效，出口端口继续被占。加 1 保证 remove 能过去。
+   * 调用方传入要围住的 generation：Agent remove 允许等于当前版本，
+   * 确认后以 tombstone 拒绝 apply <= removal revision。补偿与节点回切的
+   * 新版本必须高于此删除围栏，不能提前用下一版本撤旧 runtime。
    *
    * 幂等：Agent 侧未知 id 返回 ok（ `manager.Remove` 对未知 id 是 no-op），
    * 因此补偿重复执行是安全的。

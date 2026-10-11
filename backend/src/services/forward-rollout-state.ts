@@ -132,6 +132,8 @@ export interface RolloutDeps {
  * 而替身只需要这几个方法。真库里 `db` 满足之（结构上兼容）。
  */
 export interface RolloutDb {
+  /** Real MySQL JSON arrays require atomic SQL append; Prisma Json has no push operator. */
+  $executeRaw?: (query: TemplateStringsArray, ...values: unknown[]) => Promise<number>;
   tunnel: {
     findUnique(args: unknown): Promise<unknown>;
     update(args: unknown): Promise<unknown>;
@@ -268,7 +270,7 @@ export function readPlan(value: unknown): RolloutPlan | null {
 /**
  * 把一个 step 标记为已完成。
  *
- * 用 `updateMany where completed NOT contains` 而不是先读后写：并发两次
+ * 用 MySQL 原子 JSON 追加及 NOT contains 条件，而不是先读后写：并发两次
  * 续跑（worker cron 与请求同步路径）对同一个 step 只会有一个写入成功，
  * 另一个看到 count=0 就知道「已经有人做过了」→ 幂等跳过。
  * 这也让**重复执行同一个 step 永远是安全的**（幂等键天然去重）。
@@ -278,6 +280,14 @@ export async function markStepCompleted(
   key: string,
   deps: { db: RolloutDb },
 ): Promise<boolean> {
+  if (deps.db.$executeRaw) {
+    const count = await deps.db.$executeRaw`UPDATE forward_rollout
+      SET cleaned = JSON_ARRAY_APPEND(IF(JSON_TYPE(cleaned) = 'ARRAY', cleaned, JSON_ARRAY()), '$', ${key}),
+          updated_at = CURRENT_TIMESTAMP(3)
+      WHERE id = ${rolloutId} AND JSON_CONTAINS(COALESCE(cleaned, JSON_ARRAY()), JSON_QUOTE(${key})) = 0`;
+    return count > 0;
+  }
+  // In-memory dependency ports implement append semantics explicitly.
   const res = (await deps.db.forwardRollout.updateMany({
     where: { id: rolloutId },
     data: { cleaned: { push: key } },
@@ -299,6 +309,13 @@ export async function appendPrepared(
   resource: PreparedResource,
   deps: { db: RolloutDb },
 ): Promise<void> {
+  if (deps.db.$executeRaw) {
+    await deps.db.$executeRaw`UPDATE forward_rollout
+      SET prepared = JSON_ARRAY_APPEND(IF(JSON_TYPE(prepared) = 'ARRAY', prepared, JSON_ARRAY()), '$', CAST(${JSON.stringify(resource)} AS JSON)),
+          updated_at = CURRENT_TIMESTAMP(3)
+      WHERE id = ${rolloutId}`;
+    return;
+  }
   await deps.db.forwardRollout.updateMany({
     where: { id: rolloutId },
     data: { prepared: { push: resource } },

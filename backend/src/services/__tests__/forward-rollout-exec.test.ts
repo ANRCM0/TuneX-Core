@@ -914,6 +914,41 @@ describe("V4-F1 ingress ownership handoff", () => {
 });
 
 describe("V5.4 middle-hop topology cutover", () => {
+  it("failed transit preparation restores a shared exit and ingress above every cleanup fence", async () => {
+    const { f, deps, orch } = removeMiddleHopEnv();
+    Object.assign(f.snapshots.find((s) => s.revision === 6)!, { middle_node_id: null });
+    Object.assign(f.snapshots.find((s) => s.revision === 7)!, { middle_node_id: 23 });
+    Object.assign(f.tunnels[0]!, { middle_node_id: 23, applied_revision: 6 });
+    f.bindings.push({ id: 1, ingress_node_id: 11, egress_node_id: 23 }, { id: 2, ingress_node_id: 23, egress_node_id: 22 });
+    Object.assign(deps.db.nodeBinding, { findMany: async () => f.bindings });
+    const readNode = deps.db.node.findUnique;
+    deps.db.node.findUnique = async (args: unknown) => {
+      const row = await readNode(args) as Record<string, unknown>;
+      return (args as { where: { id: number } }).where.id === 23 ? { ...row, role: "both" } : row;
+    };
+    const fences = new Map<number, number>();
+    const remove = orch.removeTunnel;
+    orch.removeTunnel = (async (input: Record<string, any>) => {
+      fences.set(input.node.id, input.revision);
+      return remove(input);
+    }) as typeof orch.removeTunnel;
+    const egress = orch.dispatchEgress;
+    orch.dispatchEgress = (async (input: Record<string, any>) => {
+      expect(input.revision).toBeGreaterThan(fences.get(input.egressNode.id) ?? 0);
+      return egress(input);
+    }) as typeof orch.dispatchEgress;
+    orch.dispatchTransit = (async () => ({ ok: false, error_code: "agent_rejected", error: "fixture transit bind failed" })) as typeof orch.dispatchTransit;
+    const result = await registerRollout({ tunnelId: 1, revision: 7, baseRevision: 6,
+      impact: impact({ middle_node_change: true }) }, deps);
+    expect(result.ok).toBe(false);
+    expect(result.compensated, JSON.stringify(result)).toBe(true);
+    expect(f.rollouts[0]!.compensated).toBe(true);
+    expect(orch.calls.dispatchEgress.map((call) => call.revision)).toEqual([7, 8]);
+    expect(orch.calls.dispatchIngress).toHaveLength(1);
+    expect(orch.calls.dispatchIngress[0]).toMatchObject({ revision: 8, nextHop: "10.0.1.22:22000" });
+    expect(f.tunnels[0]).toMatchObject({ middle_node_id: null, config_revision: 8, applied_revision: 8, apply_status: "active" });
+  });
+
   it("removing middle hop re-cuts ingress to egress, retires transit, and releases only the transit lease", async () => {
     const { f, deps, orch } = removeMiddleHopEnv();
     const res = await registerRollout(

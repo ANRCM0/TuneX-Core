@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { newTstCredentials, sealTstCredentials, unsealTstCredentials, validateTstCredentials, tstUri } from "../domain/link/tst-credentials.ts";
 import { RoutingError } from "../domain/routing/model.ts";
+import { canonicalConfigDigest } from "../domain/link/core-contract.ts";
 import { loadNodeCapabilityFacts } from "./runtime-admission.ts";
 import type { AgentTunnelConfig } from "./orchestrator.ts";
 
@@ -68,37 +69,61 @@ export function routingForwardId(runtimeId: string): number | null {
   const id = match ? Number(match[1]) : 0;
   return Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647 ? id : null;
 }
+
+/** A compensation is a new generation with the complete immutable baseline.
+ * Only the active failed rollout may authorize it, never an arbitrary snapshot. */
+async function compensationPath(tx: Prisma.TransactionClient, forward: {
+  id: number; config_revision: number | null; applied_revision: number | null;
+}, revision: number): Promise<number[]> {
+  if (forward.config_revision === null || revision !== forward.config_revision + 1 || !forward.applied_revision)
+    throw new RoutingError("routing_generation_unavailable", 409);
+  const rollouts = await tx.forwardRollout.findMany({ where: { tunnel_id: forward.id,
+    revision: forward.config_revision, base_revision: forward.applied_revision, phase: "compensating" },
+    take: 2, select: { id: true } });
+  if (rollouts.length !== 1) throw new RoutingError("routing_generation_unavailable", 409);
+  const snapshots = await tx.forwardRevision.findMany({ where: { tunnel_id: forward.id,
+    revision: { in: [forward.applied_revision, revision] } } });
+  const baseline = snapshots.find((s) => s.revision === forward.applied_revision);
+  const rollback = snapshots.find((s) => s.revision === revision);
+  if (!baseline || !rollback || rollback.mode !== "relay" || rollback.protocol !== "tcp" ||
+      rollback.link_resource_id || rollback.federated_egress_peer)
+    throw new RoutingError("routing_generation_unavailable", 409);
+  const content = ({ id: _id, revision: _revision, created_at: _time, ...fields }: typeof rollback) => fields;
+  if (canonicalConfigDigest(content(baseline)) !== canonicalConfigDigest(content(rollback)))
+    throw new RoutingError("routing_generation_unavailable", 409);
+  return PathSchema.parse([rollback.ingress_node_id, ...(rollback.middle_node_id ? [rollback.middle_node_id] : []), rollback.egress_node_id]);
+}
+
 export async function attachRoutingHop(config: AgentTunnelConfig, node: number): Promise<AgentTunnelConfig> {
   const forwardId = routingForwardId(config.id);
   if (forwardId === null) return config;
   const { db } = await import("../db.ts");
-  const forward = await db.tunnel.findUnique({ where: { id: forwardId }, select: { id: true, workspace_id: true,
-    routing_security_version: true, config_revision: true, ingress_node_id: true, middle_node_id: true, egress_node_id: true,
-    tunnel_mode: true, forward_protocol: true, link_resource_id: true, federated_egress_peer: true } });
-  if (!forward || forward.routing_security_version === 0) return config;
-  if (forward.routing_security_version !== 1 || forward.config_revision !== config.revision || !forward.workspace_id ||
-      forward.tunnel_mode !== "relay" || forward.forward_protocol !== "tcp" || forward.link_resource_id || forward.federated_egress_peer)
-    throw new RoutingError("routing_generation_unavailable", 409);
-  const path = PathSchema.parse([forward.ingress_node_id, ...(forward.middle_node_id ? [forward.middle_node_id] : []), forward.egress_node_id]);
-  if (!path.includes(node)) throw new RoutingError("routing_generation_unavailable", 409);
-  const owned = await db.node.count({ where: { id: { in: path }, node_group: { workspace_id: forward.workspace_id },
-    credential_revoked: false, node_credential_hash: { not: null } } });
-  if (owned !== path.length) throw new RoutingError("routing_generation_unavailable", 409);
-  await assertRoutingHopCapabilities(path);
-  let runtime = await db.routingRuntime.findFirst({ where: { forward_id: forward.id, revision: config.revision, workspace_id: forward.workspace_id } });
-  // Normal edits and compensation also rotate identities, preserving the security floor.
-  if (!runtime) {
-    const prepared = await prepareRoutingRuntime(forward.workspace_id, forward.id, config.revision, path);
-    runtime = await db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM tunnel WHERE id = ${forward.id} FOR UPDATE`;
-      const current = await tx.tunnel.findUnique({ where: { id: forward.id }, select: { workspace_id: true, config_revision: true,
-        ingress_node_id: true, middle_node_id: true, egress_node_id: true, routing_security_version: true } });
-      if (!current || current.workspace_id !== forward.workspace_id || current.config_revision !== config.revision ||
-          current.routing_security_version !== 1 || JSON.stringify([current.ingress_node_id, ...(current.middle_node_id ? [current.middle_node_id] : []), current.egress_node_id]) !== JSON.stringify(path))
-        throw new RoutingError("routing_generation_unavailable", 409);
-      return tx.routingRuntime.upsert({ where: { forward_id_revision: { forward_id: forward.id, revision: config.revision } }, create: prepared, update: {} });
-    });
-  }
-  if (JSON.stringify(runtime.path) !== JSON.stringify(path)) throw new RoutingError("routing_generation_unavailable", 409);
-  return { ...config, route_auth: projectRoutingHop(runtime, node) };
+  return db.$transaction(async (tx) => {
+    // Generation, rollback authority and identity creation share the Forward lock.
+    await tx.$queryRaw`SELECT id FROM tunnel WHERE id = ${forwardId} FOR UPDATE`;
+    const forward = await tx.tunnel.findUnique({ where: { id: forwardId }, select: { id: true, workspace_id: true,
+      routing_security_version: true, config_revision: true, applied_revision: true, ingress_node_id: true,
+      middle_node_id: true, egress_node_id: true, tunnel_mode: true, forward_protocol: true,
+      link_resource_id: true, federated_egress_peer: true } });
+    if (!forward) throw new RoutingError("routing_generation_unavailable", 409);
+    if (forward.routing_security_version === 0) return config;
+    if (forward.routing_security_version !== 1 || !forward.workspace_id || forward.tunnel_mode !== "relay" ||
+        forward.forward_protocol !== "tcp" || forward.link_resource_id || forward.federated_egress_peer)
+      throw new RoutingError("routing_generation_unavailable", 409);
+    const path = forward.config_revision === config.revision
+      ? PathSchema.parse([forward.ingress_node_id, ...(forward.middle_node_id ? [forward.middle_node_id] : []), forward.egress_node_id])
+      : await compensationPath(tx, forward, config.revision);
+    if (!path.includes(node)) throw new RoutingError("routing_generation_unavailable", 409);
+    const owned = await tx.node.count({ where: { id: { in: path }, node_group: { workspace_id: forward.workspace_id },
+      lifecycle: "active", credential_revoked: false, node_credential_hash: { not: null } } });
+    const bindings = await tx.nodeBinding.count({ where: { OR: path.slice(1).map((peer, i) => ({
+      ingress_node_id: path[i]!, egress_node_id: peer })) } });
+    if (owned !== path.length || bindings !== path.length - 1) throw new RoutingError("routing_generation_unavailable", 409);
+    await assertRoutingHopCapabilities(path, (id) => loadNodeCapabilityFacts(id, tx));
+    let runtime = await tx.routingRuntime.findFirst({ where: { forward_id: forward.id, revision: config.revision, workspace_id: forward.workspace_id } });
+    if (!runtime) runtime = await tx.routingRuntime.create({ data:
+      await prepareRoutingRuntime(forward.workspace_id, forward.id, config.revision, path) });
+    if (JSON.stringify(runtime.path) !== JSON.stringify(path)) throw new RoutingError("routing_generation_unavailable", 409);
+    return { ...config, route_auth: projectRoutingHop(runtime, node) };
+  }, { timeout: 10_000 });
 }

@@ -490,14 +490,33 @@ class AgentProcess:
         """发送信号并等待退出，返回观察到的退出耗时（秒）。"""
         if self.proc is None or self.proc.poll() is not None:
             return 0.0
+        proc = self.proc
+        exited = threading.Event()
+        observation: dict = {}
+
+        def reap() -> None:
+            try:
+                # On POSIX, wait(timeout=...) uses exponential polling (up to
+                # 50 ms). That polling quantizes the shutdown latency itself.
+                # A blocking waiter records exit without adding that interval;
+                # the observing thread still enforces both timeout bounds.
+                proc.wait()
+                observation["exited_at"] = time.perf_counter()
+            except BaseException as exc:
+                observation["error"] = exc
+            finally:
+                exited.set()
+
+        threading.Thread(target=reap, daemon=True).start()
         started = time.perf_counter()
-        self.proc.send_signal(sig)
-        try:
-            self.proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            self.proc.kill()
-            self.proc.wait(timeout=10)
-        return time.perf_counter() - started
+        proc.send_signal(sig)
+        if not exited.wait(timeout=max(0, timeout)):
+            proc.kill()
+            if not exited.wait(timeout=10):
+                raise subprocess.TimeoutExpired(proc.args, timeout + 10)
+        if "error" in observation:
+            raise observation["error"]
+        return max(0.0, observation["exited_at"] - started)
 
     def kill(self) -> None:
         if self.proc is not None and self.proc.poll() is None:
