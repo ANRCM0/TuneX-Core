@@ -87,3 +87,30 @@ trace 转换后的 scheduler pprof 均解析成功。
 32 个等待方、deadline/cancel、credit/队列、RESET/Close 的新增回归连续
 100 轮通过，全量 Agent/vet 通过；当前 SHA 的性能与热点复测须以
 [后续收据](../v2.2-performance.md) 为准，本节旧 profile 不代表新源码。
+
+## 通知优化后复测：266eb44
+
+固定源码 `266eb445a14fdc8317ec16abbdbbb37dee04d6d8`，同一 Windows/amd64
+主机、Go 1.26.3、GOMAXPROCS=4、CGO_ENABLED=0、16 KiB mTLS workload。
+按前述命令采集 CPU、heap、block、mutex 与完整 trace，三轮
+`-benchtime=2s -count=3`；四份 pprof 与 trace 转换后的 scheduler pprof
+均解析成功。原始文件、命令、源码和文件 hash 保存于
+`scripts/perf/results/notification-hotspots/manifest.json`，采集时工作区已提交。
+
+带诊断开销的三轮为 336.45/274.06/259.73 MB/s、632/602/609 B/op、
+16/15/15 allocs/op。采样时长约 12.12 秒、累计 CPU 样本 31.44 秒，
+与接收优化后的执行次数和时长不同，不能直接以累计分配或等待总量计算改善。
+无 profiling 的五轮交错 A/B 结果见 [工作记录](../v2.2-performance.md)。
+
+| 采样 | 当前观测 | 后续意义 |
+| --- | --- | --- |
+| alloc_space | 累计约 134.66 MB；`subscribeLocked` flat 25.99%，`send` 19.31%，`queueControlLocked` 14.85% | 无人等待的状态变化已不分配；真正的等待注册、发送完成通知与控制队列仍有分配 |
+| CPU | Windows `runtime.cgocall` flat 59.00%，AES-GCM 加密/解密 2.48%/1.94% | 主机系统调用开销仍占主要部分，不能推断 Linux 同样或改变 TLS 要求 |
+| block | 累计约 54.78 秒，channel receive 66.18%、select 33.61% | 仍是跨 goroutine 等待归因，不代表死锁 |
+| mutex | 累计约 141.78 ms contention delay | 仅说明该 workload，未替代高并发归因 |
+| trace scheduler | 累计约 6.82 秒，`signalLocked` flat 65.00% | 实际广播仍唤醒等待方；本次减少分配没有消除调度开销，也不据此宣称 CPU 提速 |
+
+下一项数据路径评估应覆盖控制队列存储与发送完成通知的生命周期，先验证
+队列上限、WINDOW_UPDATE 合并、控制帧优先级与数据轮询、出队后的 I/O
+所有权，以及取消/关闭时仅回收队列内对象。当前不复用 channel，也不跳过
+必要广播或同步计量。固定 Linux、多 stream 和 WAN/长稳复测仍单独待验收。

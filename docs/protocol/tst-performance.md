@@ -189,3 +189,46 @@ before publishing a capacity claim.
 Parser fuzz smoke completed 960,760 executions in 15 seconds with 24 additional
 interesting corpus inputs and no failure on this host. This is bounded fuzz
 evidence, not proof of security or a substitute for ongoing fuzzing.
+
+## On-demand notification measurements (266eb44)
+
+State-change channels are now allocated only when an operation needs to wait.
+The condition check and subscription hold the same Session mutex; broadcasting
+closes that generation even before a subscriber enters select. All subscribers
+wake, later subscribers use a fresh channel, and the carrier writer still gets
+its bounded wake signal when there are no subscribers. Cancellation leaves at
+most one pending channel per Session until the next state change.
+
+Notification regressions passed 100 repetitions on Windows/amd64, plus complete
+Agent tests and vet. Five alternating independent processes per transport,
+against `690fc1d`, reduced TSTStream/mTLS median B/op by 51.8%/58.1% on that host.
+The fixed-source profile's allocation share is 25.99% for `subscribeLocked`,
+19.31% for `send`, and 14.85% for `queueControlLocked`. Cumulative profile totals
+have different durations and iteration counts; they are not a speedup ratio.
+
+[Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38116729290) and the
+[same-runner performance gate](https://github.com/PaiMonCai/TuneX/actions/runs/38116729325)
+passed for `266eb445a14fdc8317ec16abbdbbb37dee04d6d8`, against
+`690fc1dba983c1e5d3076bd88d25df9f94cb7ddf`. Protocol/runtime race, fuzz, other
+runtime ownership races and real shared-Link acceptance passed. TST acceptance
+reports 24 PASS/0 FAIL; native both reports 37 PASS/0 FAIL.
+
+| Linux/amd64 median | Before notification change | After notification change |
+| --- | --- | --- |
+| TSTStream B/op; allocs/op | 1,776; 25 | 783; 16 |
+| TSTMutualTLS B/op; allocs/op | 1,459; 19 | 584; 12 |
+| Full TST TCP runtime B/op; allocs/op | 122,495; 518 | 115,314; 464 |
+| Full TST UDP runtime B/op; allocs/op | 36,548; 148 | 35,031; 135 |
+| Full TST TCP runtime ns/op | 5,485,181 | 5,497,931 |
+
+Host: Ubuntu 24.04/amd64, AMD EPYC 7763, Go 1.26.8, GOMAXPROCS=4,
+CGO_ENABLED=0. Both binaries differ. Each side has 1,500 connection setups and
+960 concurrent RTT samples per native topology, zero errors and five samples
+per Go metric. All native rounds returned to 12 goroutines per Agent before
+resource capture. All 138 comparisons, including 90 enforced checks, passed;
+the 35% threshold and harness remain unchanged. Recomputing the downloaded
+measurements reproduces every check by metric identity. The full TCP runtime
+retains synchronous traffic persistence; its median ns/op increased by 0.23%.
+Artifact: `performance-266eb445a14fdc8317ec16abbdbbb37dee04d6d8-1`, also retained
+under `scripts/perf/results/ci-266eb44/`. Fixed-host multi-stream, WAN and long-run
+capacity remain unverified; the internal change alters no wire or API contract.

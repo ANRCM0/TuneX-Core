@@ -68,8 +68,13 @@ V2.2 P3 继续实现按需状态通知：在同锁检查状态与注册等待，
 当前 channel，无等待方时不分配，writer 唤醒保留。通知、两级流控、队列、
 deadline/cancel、RESET/Close 的回归连续 100 轮通过，全量 Agent/vet 通过。
 对 `690fc1d` 的 Windows 五轮交错 A/B 中，TSTStream/mTLS 分配量分别减少
-51.8%/58.1%；当前源码的 Linux CI/race、真实 shared-Link 和性能门禁待取得
-本轮收据。详情见 [V2.2 工作记录](v2.2-performance.md)。
+51.8%/58.1%。`266eb44` 的完整 Linux CI/race、真实 shared-Link 和性能门禁
+均已通过；TST 24 PASS、原生 both 37 PASS，均 0 FAIL。对 `690fc1d` 的
+Linux 五轮交错采样中，TSTStream/mTLS 分配量分别减少 55.9%/60.0%，
+完整 TCP runtime 分配量减少 5.9%、耗时中位数变化 +0.23%。138 项比较、
+90 项严格门禁均通过，原有 35% 阈值保留，原始工件复算一致。当前源码的
+五类热点已复测解析；发送完成通知与控制队列成为下一项评估对象。多连接、
+真实 WAN/跨日长稳及后续版本仍待执行，见 [V2.2 工作记录](v2.2-performance.md)。
 
 ## 实网发现与修复
 
@@ -83,7 +88,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | 46b0a96 CI 已通过；Agent 源码与已通过 race/集成的 9edcd86 相同 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
+| 当前候选 SHA 的 Linux CI/race | 266eb44 CI/race/真实集成及严格性能门禁已通过 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |
