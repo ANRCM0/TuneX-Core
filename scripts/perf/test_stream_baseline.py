@@ -137,6 +137,29 @@ class ProfileTest(unittest.TestCase):
 
 
 class EchoTargetLifecycleTest(unittest.TestCase):
+    def test_target_identity_is_visible_even_when_echo_finishes_before_start_returns(self):
+        from unittest.mock import patch
+        original_start = threading.Thread.start
+        release_accept = threading.Event()
+        worker_started = threading.Event()
+
+        def delay_accept_bookkeeping(worker):
+            original_start(worker)
+            if getattr(worker._target, "__name__", "") == "_handle":
+                worker_started.set()
+                release_accept.wait(timeout=2)
+
+        target = baseline.EchoTarget()
+        try:
+            with patch.object(threading.Thread, "start", delay_accept_bookkeeping):
+                received, _ = baseline.transfer_once(target.host, target.port, b"identity", timeout=2)
+                self.assertTrue(worker_started.wait(timeout=2))
+                self.assertEqual(received, len(b"identity"))
+                self.assertTrue(target.accepted.is_set())
+        finally:
+            release_accept.set()
+            target.close()
+
     def test_close_releases_connected_clients_and_listener(self):
         target = baseline.EchoTarget()
         self.addCleanup(target.close)

@@ -29,6 +29,20 @@ UNITS = {"ns/op": "latency_ns", "MB/s": "throughput_mb_s",
          "B/op": "allocated_bytes", "allocs/op": "allocation_count"}
 
 
+def capture_error_stack(exc: Exception) -> list[dict]:
+    """Publish harness call locations without exception text, source or locals."""
+    root = Path(__file__).resolve().parent
+    frames = []
+    tb = exc.__traceback__
+    while tb is not None:
+        path = Path(tb.tb_frame.f_code.co_filename).resolve()
+        if path.parent == root:
+            frames.append({"file": path.name, "function": tb.tb_frame.f_code.co_name,
+                           "line": tb.tb_lineno})
+        tb = tb.tb_next
+    return frames[-12:]
+
+
 def benchmark_metrics(raw: str, count: int) -> dict:
     samples: dict[str, dict[str, list[float]]] = {}
     for line in raw.splitlines():
@@ -190,7 +204,9 @@ def main(argv=None) -> int:
         receipt["passed"] = receipt["comparison"]["passed"]
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         receipt["error_type"] = type(exc).__name__
+        receipt["error_stack"] = capture_error_stack(exc)
         print(f"performance capture failed: {type(exc).__name__}", file=sys.stderr)
+        print(f"harness call locations: {json.dumps(receipt['error_stack'], sort_keys=True)}", file=sys.stderr)
     finally:
         path = out / "comparison.json"
         path.write_text(json.dumps(receipt, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")

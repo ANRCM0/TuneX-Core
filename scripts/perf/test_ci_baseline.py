@@ -1,4 +1,6 @@
 import importlib.util
+import io
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -13,6 +15,31 @@ spec.loader.exec_module(gate)
 
 
 class BenchmarkReceiptTest(unittest.TestCase):
+    def test_capture_failure_keeps_locations_and_rejects_exception_payload(self):
+        sensitive_message = "private-token=http://user:secret@127.0.0.1/config"
+        with tempfile.TemporaryDirectory() as tmp, patch.object(
+                gate, "measure_pair", side_effect=RuntimeError(sensitive_message)), \
+                patch("sys.stderr", new_callable=io.StringIO) as stderr, \
+                patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(gate.main(["--base", "a" * 40, "--head", "b" * 40, "--out", tmp]), 3)
+            receipt_text = (Path(tmp) / "comparison.json").read_text(encoding="utf-8")
+            receipt = json.loads(receipt_text)
+            self.assertFalse(receipt["passed"])
+            self.assertEqual(receipt["error_type"], "RuntimeError")
+            self.assertEqual(receipt["error_stack"], [{"file": "ci-baseline.py", "function": "main",
+                                                       "line": receipt["error_stack"][0]["line"]}])
+            self.assertIsInstance(receipt["error_stack"][0]["line"], int)
+            self.assertNotIn(sensitive_message, receipt_text + stderr.getvalue())
+            self.assertNotIn("unittest", receipt_text)
+
+    def test_error_stack_locates_the_failing_harness_function(self):
+        try:
+            gate.benchmark_metrics("", 3)
+        except ValueError as exc:
+            frames = gate.capture_error_stack(exc)
+        self.assertEqual(frames[-1]["file"], "ci-baseline.py")
+        self.assertEqual(frames[-1]["function"], "benchmark_metrics")
+
     def samples(self):
         return "\n".join(f"Benchmark{name}-4 100 1000 ns/op 120 MB/s 64 B/op 2 allocs/op"
                          for names in gate.BENCHMARKS.values() for name in names for _ in range(3))

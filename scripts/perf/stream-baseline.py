@@ -215,6 +215,9 @@ class EchoTarget:
                 worker = threading.Thread(target=self._handle, args=(conn,), daemon=True)
                 self._connections.add(conn)
                 self._workers.add(worker)
+                # Publish the accepted identity before the worker can echo.
+                # Thread.start may yield until the whole payload has returned.
+                self.accepted.set()
                 try:
                     worker.start()
                 except BaseException:
@@ -222,7 +225,6 @@ class EchoTarget:
                     self._workers.discard(worker)
                     conn.close()
                     raise
-                self.accepted.set()
 
     def _handle(self, conn: socket.socket) -> None:
         try:
