@@ -88,12 +88,25 @@ V2.3 R1 的纯图/策略与真实 HTTP 路由测试位于 `backend/src/domain/ro
 `TUNEX_ROUTING_ENABLED=false` 为默认值；接口和 R2–R5 范围见
 [V2.3 路由开发](v2.3-routing.md)。
 
-V2.3 R2 Native 目标探测专项在 `backend/src/services/__tests__/routing-probe.test.ts`，
+V2.3 R2 Native/TST 授权目标与 ICMP 边探测专项在 `backend/src/services/__tests__/routing-probe.test.ts`，
 真实 HTTP 权限测试沿用 routing 路由测试。`routing-topology.test.mjs` 另验证独立
 默认关闭开关、目标快照、拒绝路径及真实 Redis Lua 预算/过期写者围栏。
 core CI 的 `scripts/integration/routing-probe.py` 使用真实 Agent/目标 socket 验证
-TCP 观测、目标失效、配置身份变化与实际经过的过期窗口；结果属于目标段，不是
-链路 RTT/丢包/UDP 或端到端健康证明。真机部署继续延后统一验收。
+TCP 观测、目标失效、配置身份变化与实际经过的过期窗口；目标 TCP 建连、逐边 ICMP RTT
+与响应丢失是不同测量，不代表 TLS/UDP 应用或端到端健康。真机部署继续延后统一验收。
+
+R3/R4/R5 策略与身份专项在 `backend/src/domain/routing/__tests__/policy.test.ts` 和
+`backend/src/services/__tests__/routing-runtime.test.ts`；真实数据库测试包含并发策略 CAS、
+权限撤销、执行 receipt、MySQL 原子发布账本及使用生产 Worker 恢复依赖的受保护回滚。
+`scripts/integration/routing-execution.py` 在 core CI 中启动实际节点与目标，验证三跳主路径、
+中转停机、两节点备用、旧 TCP 中断、恢复回切、裸跳拒绝、外部端口占用后的补偿和正常删除。
+同时检查实际 payload、exact revision、持久补偿与脱敏历史，不以 proposal 代替已应用结果。
+固定执行 SHA 和逐项计数见 [V2.3 记录](v2.3-routing.md#固定源码验收记录)。
+
+高级路由界面的隔离 Chromium HTTP fixture 使用 `TUNEX_BROWSER_FIXTURE=routing` 运行
+`web/src/components/forwards/__tests__/browser-native-both-runner.mjs`；验证授权候选、预览保存、
+只读权限、409 冲突、unknown ACK、关闭能力及跨空间迟到响应，并保存六宽度截图与 console 记录。
+该 fixture 验证组件与 HTTP 行为，真实 Agent 故障/回滚由独立 core gate 验证。
 
 ## 证据与平台矩阵
 
@@ -103,7 +116,7 @@ TCP 观测、目标失效、配置身份变化与实际经过的过期窗口；�
 | --- | --- |
 | Windows Agent 单元/真实 socket | 本地执行，完整结果见 Agent 证据 |
 | Linux amd64/arm64 构建 | 交叉编译结果仅代表构建 |
-| Linux 实际运行/race | 5a3e300 主 CI/race、真实容器 shared-Link、108 个隔离 netns case 和 300 秒丢包条件 soak 通过；原始执行证据见 V2.2 记录 |
+| Linux 实际运行/race | V2.2 固定 `5a3e300` 的性能矩阵/soak 通过；V2.3 固定 `0abdd4d` 的主 CI/race、真实 shared-Link、路由故障/回切/回滚通过；最新性能状态单独记录于 V2.3 文档 |
 | 正式 Linux Compose 安装/升级/恢复/回退 | 延后统一真机验收，隔离 CI 容器测试不替代正式安装验证 |
 | Web 单元/Next build/真实业务浏览器 | 单测、typecheck、生产构建与当前隔离 Panel/Agent 浏览器验收通过；真实证据见 `web/test-artifacts/real-unified-forward-browser-evidence.json` |
 | 外部独立安全审查 | 尚未完成，TST 保持关闭 |

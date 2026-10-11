@@ -58,6 +58,32 @@ Agent 在 Panel 创建 Node 后通过 enrollment/upgrade 安装，主动发起�
 
 关闭创建开关不能当作所有授权监听瞬时停止的证明；通过正常移除、租约/证书到期和新鲜 Agent 报告核对。在线端点切换和有引用密钥轮换不保证无损；维护预览/持久计划不执行在线迁移。
 
+## V2.3 高级路由实验配置
+
+当前默认关闭，真机部署按用户安排延后。下面是未来隔离验收所需配置，已完成的 Linux CI
+不代替正式部署。Panel/Worker 共用 `.env` 中的六个开关及安装密钥，先做全量迁移并备份密钥：
+
+| 开关 | 作用 |
+| --- | --- |
+| `TUNEX_ROUTING_ENABLED` | Workspace 拓扑与只读预览 |
+| `TUNEX_ROUTING_PROBES_ENABLED` | 授权目标/ICMP 探测 |
+| `TUNEX_ROUTING_POLICIES_ENABLED` | 版本化策略保存与解释 |
+| `TUNEX_ROUTING_EXECUTION_ENABLED` | 显式启用策略的后台执行 |
+| `TUNEX_ROUTING_MULTIHOP_ENABLED` | 三节点路径执行 |
+| `TUNEX_ROUTING_HOP_AUTH_ENABLED` | 逐跳身份签发，自动执行的必要条件 |
+
+各项仅精确值 `true` 启用。`TUNEX_LINK_SEAL_KEY` 为独立 64 位 hex 安装密钥；Native
+逐跳身份同样需要它，不只用于 TST。所有路径节点须新鲜广告 `forward.routing.hop.mtls.v1`，
+入口/出口固定、相邻边已授权；当前只执行同 Workspace Native TCP RELAY 的两或三个不同节点。
+成员从转发详情“高级路由”预览再保存候选/阈值，策略的 enabled 与自动切换/回切也需显式开启。
+核对历史中的 confirmed、desired/applied exact revision 与实际 payload；pending 不视作已经切换。
+
+关闭执行/多跳开关与停用策略可停止后续自动选路，已有受保护规则仍须按正常生命周期操作。
+启用后的 security floor 持久保留；不能删除密钥、清零该字段或回退到不支持身份的 Agent。
+备份/恢复须包含 `routing_runtime` 的封存身份和对应安装密钥，并保持数据库与节点私有状态配套。
+路径或身份重建会中断旧 TCP，客户端需重连；当前不自动迁移 UDP/TST 路径，也不做并行路径逐连接分流。
+完整支持范围与受保护补偿规则见 [V2.3 路由开发](v2.3-routing.md)。
+
 ## 备份与回退
 
 ```bash

@@ -150,9 +150,22 @@ HTTP/DB 136（0 skipped），实际路由 30、探测 49、Native both 37、TST 
 [最终 Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38149532543) 全部通过：后端 3,247 项、
 HTTP/DB 136（0 skipped），实际路由 30、授权探测 49、Native both 37、TST 24 项均无失败。
 [同 SHA 固定旧基线性能](https://github.com/PaiMonCai/TuneX/actions/runs/38149544024) 的矩阵与
-300 秒混合长稳已通过，双 SHA 比较首次失败后正在复测。
-首次比较实际失败，唯一回归为 TST UDP 回环延迟中位数 +52.86%；当前 Agent tree 与
-此前通过的 `07e247d` 完全一致，存在较大样本波动，已保留失败工件并按同 SHA/原阈值复测失败 compare job。
+300 秒混合长稳已通过，双 SHA 比较两次均未通过。首次唯一回归为 TST UDP 回环延迟中位数
++52.86%；同 SHA/原阈值的第二次 compare 中，该指标通过，但直接建连中位数 +79.07%。
+当前 Agent tree 与此前通过的 `07e247d` 完全一致，不能据此将本次失败改写为通过。
+`046b916` 将流量回显目标隔离至独立 Python 进程，避免目标与客户端计时竞争同一解释器；
+107 项 Python 检查通过（Windows 跳过两项 Linux 专属检查），常规 CI 通过。
+[固定旧基线复验](https://github.com/PaiMonCai/TuneX/actions/runs/38152935135) 全部通过：
+138 检查、90 强制指标、0 回归；两端使用同一新版采样器，样本数、同步持久记账与 35%
+门禁不变，所有旧失败保留。108 个整形 case 通过，300 秒混合流完成 37,409 次往返、0 错误/损坏，
+原始收据 hash、计量、分位数、整形与资源回收已复核。
+`dee1cf9` 移除发布执行器的全局跳地址缓存，只从本次持久账本取该节点最新确认地址，避免
+完成发布持续占用缓存。后端 3,248 项 / 19,640 断言、真实 HTTP/DB 12 项、typecheck 与构建通过；
+[最终源码 CI](https://github.com/PaiMonCai/TuneX/actions/runs/38153895615) 全部通过：后端 3,248 项、
+HTTP/DB 136 项（0 skipped），真实路由 30、探测 49、Native both 37、TST 24 项均 0 FAIL，
+Agent/race/fuzz、迁移/升级、运维与密钥检查通过。三次实际选路均 confirmed，端口冲突后的
+受保护基线补偿与 payload、正常删除均已核对。本轮当前支持范围的 V2.3 自动验收收口。
+该版本的 Agent 和性能脚本内容与上述性能验收完全一致，固定 tree hash 见 V2.3 记录。
 执行范围为同空间 Native TCP RELAY、固定入口/出口、两或三个节点；UDP/TST 自动迁移、
 并行路径逐连接分流和 Native 新持久计费发送器未实现。完整状态与固定证据见
 [V2.3 记录](v2.3-routing.md)，真机/WAN 部署仍延后统一验收。
@@ -169,7 +182,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | 5a3e300 主 CI、Performance、108 个整形矩阵 case 与 300 秒 soak 成功；真实 TST 24 PASS、native both 37 PASS，均 0 FAIL | 文档后续提交不替换执行 SHA；以后涉及源码变更需重新取得证据；历史失败保留；本机无 GCC |
+| 当前候选 SHA 的 Linux CI/race | `dee1cf9` 完整主 CI/race 成功，真实路由 30、探测 49、TST 24、Native both 37 项均 0 FAIL；相同 Agent/采样器内容在 `046b916` 的固定旧基线性能、108 case 与 300 秒 soak 成功 | 逐项保留执行 SHA 和内容 hash；文档提交不替换执行 SHA；历史失败保留 |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |
