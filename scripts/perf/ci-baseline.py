@@ -74,25 +74,44 @@ def export_agent(repo: Path, sha: str, dest: Path) -> Path:
     return dest / "agent"
 
 
-def measure(repo: Path, sha: str, root: Path, out: Path, env: dict, args) -> dict:
+def build_agent(repo: Path, sha: str, root: Path, env: dict) -> tuple[Path, Path]:
     agent = export_agent(repo, sha, root)
     binary = root / ("tunex-agent.exe" if os.name == "nt" else "tunex-agent")
     command(["go", "build", "-buildvcs=false", "-o", str(binary), "."], agent, env)
+    return agent, binary
+
+
+def measure_native(binary: Path, sha: str, out: Path, args) -> dict:
     stream_args = baseline.parse_args(["--agent-binary", str(binary), "--out", str(out),
                                        "--profile", args.profile, "--scenarios", *args.scenarios])
     artifact = baseline.run(stream_args)
     artifact["environment"]["source_sha"] = sha
-    raw = []
-    for package, names in BENCHMARKS.items():
-        raw.append(command(["go", "test", f"./internal/{package}", "-run", "^$",
-                            "-bench", "^Benchmark(" + "|".join(names) + ")$", "-benchmem",
-                            "-benchtime", args.benchtime, "-count", str(args.count)], agent, env))
-    benchmark_raw = "\n".join(raw)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "go-benchmarks.txt").write_text(benchmark_raw, encoding="utf-8")
-    artifact["scenarios"]["go_transport"] = benchmark_metrics(benchmark_raw, args.count)
-    baseline.write_outputs(artifact, out)
+    (out / "native-phase.json").write_text(json.dumps(artifact, indent=2, sort_keys=True,
+                                                     allow_nan=False) + "\n", encoding="utf-8")
     return artifact
+
+
+def measure_pair(repo: Path, root: Path, out: Path, env: dict, args) -> list[dict]:
+    sides = (("anchor", args.base), ("candidate", args.head))
+    # Build both before measuring either. Native latency must not follow a heavy
+    # transport benchmark on only one side; keep matching workload phases adjacent.
+    builds = [build_agent(repo, sha, root / side, env) for side, sha in sides]
+    artifacts = [measure_native(binary, sha, out / side, args)
+                 for (_, binary), (side, sha) in zip(builds, sides)]
+    raw: list[list[str]] = [[], []]
+    for package, names in BENCHMARKS.items():
+        for index, (agent, _) in enumerate(builds):
+            raw[index].append(command(["go", "test", f"./internal/{package}", "-run", "^$",
+                                       "-bench", "^Benchmark(" + "|".join(names) + ")$", "-benchmem",
+                                       "-benchtime", args.benchtime, "-count", str(args.count)], agent, env))
+    for index, (side, _) in enumerate(sides):
+        benchmark_raw = "\n".join(raw[index])
+        (out / side / "go-benchmarks.txt").write_text(benchmark_raw, encoding="utf-8")
+        artifacts[index]["scenarios"]["go_transport"] = benchmark_metrics(benchmark_raw, args.count)
+        artifacts[index]["measurement_order"] = "build_both-native_pair-securelink_pair-tstruntime_pair"
+        baseline.write_outputs(artifacts[index], out / side)
+    return artifacts
 
 
 def main(argv=None) -> int:
@@ -122,8 +141,7 @@ def main(argv=None) -> int:
         # Separate exports and output directories preserve both sides. Both are
         # measured sequentially with the candidate harness on this exact host.
         root = Path(tempfile.mkdtemp(prefix="ci-pair-", dir=scratch))
-        artifacts = [measure(repo, sha, root / side, out / side, env, args)
-                     for side, sha in (("anchor", args.base), ("candidate", args.head))]
+        artifacts = measure_pair(repo, root, out, env, args)
         receipt["comparison"] = baseline.compare_results(artifacts[1], artifacts[0], args.max_regression)
         receipt["passed"] = receipt["comparison"]["passed"]
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:

@@ -1,7 +1,10 @@
 import importlib.util
 from pathlib import Path
 import sys
+import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("ci_baseline_test", Path(__file__).with_name("ci-baseline.py"))
 gate = importlib.util.module_from_spec(spec)
@@ -27,6 +30,34 @@ class BenchmarkReceiptTest(unittest.TestCase):
                     self.samples().replace("2 allocs/op", "2 unknown", 1)):
             with self.subTest(raw=raw[:100]), self.assertRaises(ValueError):
                 gate.benchmark_metrics(raw, 3)
+
+    def test_native_pair_is_not_interleaved_with_heavy_transport_load(self):
+        events = []
+
+        def build(repo, sha, root, env):
+            events.append(("build", sha))
+            return root, root / "agent"
+
+        def native(binary, sha, out, args):
+            events.append(("native", sha))
+            out.mkdir(parents=True)
+            return {"scenarios": {}}
+
+        def transport(argv, cwd, env):
+            events.append(("transport", cwd.name))
+            return "samples"
+
+        args = SimpleNamespace(base="base", head="head", benchtime="500ms", count=3)
+        with tempfile.TemporaryDirectory() as tmp, patch.object(gate, "build_agent", side_effect=build), \
+                patch.object(gate, "measure_native", side_effect=native), \
+                patch.object(gate, "command", side_effect=transport), \
+                patch.object(gate, "benchmark_metrics", return_value={}), \
+                patch.object(gate.baseline, "write_outputs"):
+            root = Path(tmp)
+            gate.measure_pair(root, root / "builds", root / "out", {}, args)
+        self.assertEqual(events[:4], [("build", "base"), ("build", "head"),
+                                     ("native", "base"), ("native", "head")])
+        self.assertEqual(events[4:], [("transport", "anchor"), ("transport", "candidate")] * 2)
 
 
 if __name__ == "__main__":

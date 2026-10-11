@@ -33,6 +33,11 @@ Ubuntu Runner、Go、amd64 架构、GOMAXPROCS=4 和候选 harness 顺序测量�
 - 工件记录源码 SHA、二进制 SHA256、实际编译架构/Go、环境和 workload。
   原始 benchmark、JSON/CSV 与比较收据即使失败也上传，保存 14 天。
 
+先构建两端，再相邻采样两端 native 负载；之后分别相邻测量两端 securelink
+与 tstruntime。避免只有候选 native 采样紧随重度 Go transport 负载。原生
+阶段另存 `native-phase.json`，最终 `stream-baseline-*.json` 包含完整 transport
+指标。CI 工件名称包含源码 SHA 和运行次数，复测保留独立收据。
+
 可在固定主机运行相同流程；`BASE_SHA` / `HEAD_SHA` 必须是完整 40 位 commit SHA：
 
 ```sh

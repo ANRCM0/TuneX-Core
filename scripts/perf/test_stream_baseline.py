@@ -506,6 +506,8 @@ class ComparisonTest(unittest.TestCase):
     def test_schema_v1_anchor_remains_compatible(self):
         anchor = self._artifact(100, 10)
         anchor["schema_version"] = 1
+        for summary in anchor["scenarios"]["direct"].values():
+            summary.pop("p99")
         result = baseline.compare_results(self._artifact(100, 10), anchor)
         self.assertTrue(result["passed"])
 
@@ -567,6 +569,22 @@ class ComparisonTest(unittest.TestCase):
         anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
         anchor["scenarios"]["direct"]["ingress_profiles"] = {"heap": {"bytes": 1024}}
         self.assertTrue(baseline.compare_results(candidate, anchor)["passed"])
+
+    def test_schema_v2_requires_tail_fields_and_workload(self):
+        anchor = self._artifact(100, 10)
+        del anchor["scenarios"]["direct"]["direct_connect_ms"]["p99"]
+        self.assertFalse(baseline.compare_results(self._artifact(100, 10), anchor)["passed"])
+        candidate = self._artifact(100, 10)
+        del candidate["workload"]["payload_kib"]
+        self.assertFalse(baseline.compare_results(candidate, self._artifact(100, 10))["passed"])
+
+    def test_malformed_artifact_shape_cannot_be_compared(self):
+        for field, value in (("schema_version", 99), ("profile", None),
+                             ("workload", []), ("scenarios", None), ("environment", [])):
+            artifact = self._artifact(100, 10)
+            artifact[field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                baseline.compare_results(artifact, self._artifact(100, 10))
 
 
 class CompleteWorkloadTest(unittest.TestCase):

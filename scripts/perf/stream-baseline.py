@@ -1816,6 +1816,17 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
     """
     if not 0 <= max_regression < 1:
         raise ValueError("max_regression must be in [0, 1)")
+    for artifact in (candidate, anchor):
+        if not isinstance(artifact, dict) or artifact.get("schema_version") not in (1, SCHEMA_VERSION):
+            raise ValueError("unsupported artifact schema")
+        if artifact.get("profile") not in PROFILES:
+            raise ValueError("artifact profile is required")
+        for key in ("workload", "scenarios"):
+            if not isinstance(artifact.get(key), dict):
+                raise ValueError(f"artifact {key} must be an object")
+        for key in ("environment", "dimensions"):
+            if key in artifact and not isinstance(artifact[key], dict):
+                raise ValueError(f"artifact {key} must be an object")
     if candidate.get("kind") != "stream-baseline" or anchor.get("kind") != "stream-baseline":
         raise ValueError("both artifacts must have kind=stream-baseline")
     if candidate.get("profile") != anchor.get("profile"):
@@ -1823,7 +1834,7 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
 
     workload_mismatch = []
     for key in ("payload_kib", "concurrency", "conn_rounds", "conn_timeouts", "transfers", "setups"):
-        if candidate.get("workload", {}).get(key) != anchor.get("workload", {}).get(key):
+        if key not in candidate["workload"] or key not in anchor["workload"] or candidate["workload"][key] != anchor["workload"][key]:
             workload_mismatch.append(key)
     if bool(candidate.get("profiles_enabled", False)) != bool(anchor.get("profiles_enabled", False)):
         workload_mismatch.append("profiles_enabled")
@@ -1886,6 +1897,8 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
             for stat in ("median", "p95", "p99"):
                 # Schema v1 has no p99; absent anchor fields cannot define a gate.
                 if stat not in anchor_value:
+                    if stat != "p99" or anchor["schema_version"] != 1:
+                        invalid.append(f"anchor.{scenario}.{name}.{stat}")
                     continue
                 check(f"{scenario}.{name}.{stat}", anchor_value[stat], candidate_value.get(stat))
         candidate_scalars = dict(_scalar_metrics(candidate_metrics))
