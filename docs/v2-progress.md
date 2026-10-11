@@ -45,7 +45,11 @@ V2.2 P3 已继续实现连接独占、惰性分配的 TCP 接收临时缓冲，�
 业务流、UDP 队列与控制帧的 payload 所有权有明确回归。对 `d534143` 的同机
 五轮 A/B 中，TSTStream/mTLS 每操作分配中位数减少 90.3%/91.5%。新增
 接收/发送所有权测试连续 20 轮、Agent 全量/vet、15 秒一致性 fuzz 均通过；
-当前源码的 Linux CI/race、真实 shared-Link 集成和性能门禁待取得新收据。
+`9edcd86` 的 Linux CI/race 和真实 shared-Link 集成已通过；首轮性能门禁
+因原生 relay RTT p95 超线被拒绝，Linux TST/mTLS 分配分别减少约 90%/92%，
+完整 TST TCP runtime 分配减少约 52%。已修订 native setup 与 payload 的
+采样顺序，保持指标和阈值，新 harness 双端重测待收据。优化后的热点复测
+已解析，通知分配成为下一项评估对象。
 
 V2.2 P4 可选 QUIC ADR、威胁模型与兼容策略已形成，协议实现和独立评审仍待
 执行。P5 同一 Ubuntu Runner 的双源码、多轮交错采样及严格工件校验已通过：
@@ -67,7 +71,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | 047483e 已通过 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
+| 当前候选 SHA 的 Linux CI/race | 9edcd86 已通过 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |

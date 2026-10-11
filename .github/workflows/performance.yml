@@ -41,6 +41,8 @@ jobs:
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.mod
+      - name: Verify performance harness contracts
+        run: python3 -B -m unittest discover -s scripts/perf -p 'test_*.py'
       - name: Compare baseline and candidate on this runner
         env:
           BASE_SHA: ${{ inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}

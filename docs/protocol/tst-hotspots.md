@@ -50,5 +50,34 @@ UDP datagram 和控制帧保留独立 payload，公开 `ReadFrame` 的所有权�
 
 所有权、截断与错误路径测试连续 20 轮通过；同机无 profiling 五轮 A/B 的
 TSTStream/mTLS 每操作分配中位数分别减少 90.3%/91.5%，详见
-[工作记录](../v2.2-performance.md)。当前优化的 Linux race/集成/性能 CI
-及长稳仍待验证，不能以先前源码的采样或 CI 代替。
+[工作记录](../v2.2-performance.md)。当前优化的
+[Linux race/集成 CI](https://github.com/PaiMonCai/TuneX/actions/runs/38112786502)
+已通过；首轮同 runner 门禁因原生 relay RTT p95 超线而拒绝。新 harness
+的双端重测及长稳仍待验证，不能以先前源码的采样代替。
+
+## 接收优化后复测：9edcd86
+
+固定源码 `9edcd863e458d5375b25a078ee2d8508dab94082`；同一 Windows/amd64
+主机、Go 1.26.3、GOMAXPROCS=4、16 KiB mTLS 负载，CGO_ENABLED=0。
+沿用本文的五类采样参数，文件路径改为
+`scripts/perf/results/receive-hotspots/`；命令、环境、源码 SHA、stdout、
+原始采样与文件 hash 保存在该目录的 `manifest.json`。四份 pprof 及完整
+trace 转换后的 scheduler pprof 均解析成功。
+
+带诊断开销的三轮为 316.95/321.88/345.46 MB/s、1,510/1,442/1,409 B/op、
+23/22/22 allocs/op。CPU profile 时长约 8.70 秒，累计 CPU 样本 22.41 秒；
+与前一轮执行次数和持续时间不同，不能直接用累计 MB 或耗时推断改善比例。
+分配改善依据仍是工作记录中的无 profiling 同机 A/B。
+
+| 采样 | 当前观测 | 后续意义 |
+| --- | --- | --- |
+| alloc_space | 累计采样约 254.36 MB；`signalLocked` flat 63.50%，`send` 10.22%，`queueControlLocked` 8.45%；`readFrame` 不再位于主要分配源 | 接收临时分配热点已消除；下一项评估通知与控制队列分配 |
+| CPU | Windows `runtime.cgocall` flat 57.52%；AES-GCM 加密/解密 3.08%/2.68% | 仍不能据此推断 Linux 开销或跳过 TLS |
+| block | 累计等待 37.94 秒，channel receive 65.30%、select 34.42% | 请求应答与背压等待，不能直接称为死锁 |
+| mutex | 累计 contention delay 151.23 ms | 仅支持该 workload，未代替多规则高并发 |
+| trace scheduler | 累计调度延迟 4.88 秒，`signalLocked` flat 64.77% | 进一步定位唤醒路径，不等于该函数自身 CPU 开销 |
+
+`signalLocked` 通过关闭并替换通知 channel 广播状态变化，调用方会在锁内读取
+该 channel，再在锁外等待。后续减少通知分配时，必须覆盖注册与唤醒之间的
+竞态、多个等待方、deadline/cancel、队列与流控 credit、RESET/Close 以及
+公平写队列，不能仅删除或合并 channel 更新。此项优化尚未实现。

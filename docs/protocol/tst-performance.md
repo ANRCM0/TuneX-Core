@@ -137,7 +137,14 @@ Median allocated bytes decreased 90.3% and 91.5% respectively. Raw output,
 commands, baseline SHA and candidate Go file hashes remain under
 `scripts/perf/results/receive-pool/`. These are sequential local samples;
 throughput variation does not establish a production capacity gain. The current
-candidate still requires Linux CI/race and the same-runner performance gate.
+candidate `9edcd863e458d5375b25a078ee2d8508dab94082` has passed
+[Linux CI/race and shared-Link integration](https://github.com/PaiMonCai/TuneX/actions/runs/38112786502).
+The [first same-runner gate](https://github.com/PaiMonCai/TuneX/actions/runs/38112786534)
+failed the native relay concurrent RTT p95 check, despite passing the TST
+allocation checks. Native connection setup bursts preceded payload measurement;
+the revised harness measures payload first and records phase order explicitly.
+It retains the RTT timing, sample counts and 35% threshold. Both builds must be
+remeasured with the revised harness; old receipts retain their failure status.
 
 These short host samples show encryption/framing overhead versus a local baseline;
 they are not production capacity, WAN latency, handshake DoS or an old-protocol

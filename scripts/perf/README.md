@@ -21,6 +21,12 @@ python3 -B scripts/perf/stream-baseline.py \
 旧 Linux anchor 不是跨平台容量标准。`--rtt-ms` / `--packet-loss-percent` 只是
 外部测量标签，本脚本不会进行网络整形。
 
+原生 payload 测量先执行吞吐和并发往返，最后执行入口建连压力。TCP setup
+仅等到入口握手完成，关闭客户端后下游拨号/接受/回收可能仍在进行；将数百
+次 setup 放在 payload 前面会引入阶段干扰。该修订不改变 RTT 的计时范围、
+样本数量或阈值。`workload.stream_phase_order` 明确记录顺序；字段缺失按
+旧顺序解释，新旧顺序不允许直接比较，必须用同一新 harness 重测两端。
+
 ## 同一 Runner 上比较两个源码版本
 
 [Performance workflow](../../.github/workflows/performance.yml) 在相关 push/PR

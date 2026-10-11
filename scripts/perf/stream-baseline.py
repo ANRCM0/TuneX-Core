@@ -6,7 +6,7 @@
 「每个协议各有自己的场景」，而三种协议共用同一个 stream 运行时
 （DEVELOPMENT.md §6.1），所以场景之间只有「入口 listener 的形态」不同：
 
-  · `direct` / `relay`  TCP（**未改动**，仍是被冻结的参照）；
+  · `direct` / `relay`  TCP（拓扑仍是原生转发参照，采样顺序写入 workload）；
   · `tls`             入口是 TLS listener（自签证书临时生成），握手后同一条路径；
   · `ws`              入口是 WebSocket listener（RFC 6455 握手 + 分帧），
                       解帧后的字节流走同一条路径。
@@ -26,7 +26,7 @@
 
   DIRECT throughput            回环 echo 目标 + 一次 apply DIRECT
   RELAY throughput             两台 Agent（ingress/egress）+ apply RELAY
-  connection setup latency     建连到首个字节返回的耗时
+  connection setup latency     TCP 入口握手完成；不代表下游已建立或收到首字节
   concurrent connections       同时保持 N 条连接并各跑一次往返
   CPU                          /proc/<pid>/stat 的 utime+stime 增量
   RSS                          /proc/<pid>/status 的 VmRSS
@@ -80,6 +80,8 @@ from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
 SCHEMA_VERSION = 2
+STREAM_PHASE_ORDER = ["throughput", "concurrency", "connection_setup"]
+LEGACY_STREAM_PHASE_ORDER = ["throughput", "connection_setup", "concurrency"]
 
 # ── 默认工作量 ──
 #
@@ -1438,7 +1440,7 @@ def scenario_factory(scenario: str) -> Callable[[Path, Path], dict]:
 
 
 def measure_stream_scenario(scenario: str, topology: dict, profile: dict) -> dict:
-    """三种协议共用的一条流水线：吞吐 / 建连 / 并发。
+    """三种协议共用的一条流水线：吞吐 / 并发 / 建连。
 
     差异全部收敛到"用哪个 transfer / setup / opener"，统计口径与产物形状完全一致
     —— 这样 tls 与 direct 的数字才有可比性，而"可比"正是基线存在的意义。
@@ -1449,12 +1451,15 @@ def measure_stream_scenario(scenario: str, topology: dict, profile: dict) -> dic
         # 先证明字节流是**对的**，再谈它有多快（见 measure_ws_integrity）。
         out.update(measure_ws_integrity(topology))
     out.update(measure_throughput(topology, profile, scenario, PROTOCOL_TRANSFER[protocol]))
-    out.update(measure_connection_setup(topology, profile, scenario, PROTOCOL_SETUP[protocol]))
     if protocol == "tcp":
         out.update(measure_concurrency(topology, profile, scenario))
     else:
         out.update(measure_concurrency(topology, profile, scenario,
                                        concurrent_session_round, PROTOCOL_OPENER[protocol]))
+    # TCP setup only waits for the ingress handshake. Hundreds of immediately
+    # closed clients can leave downstream dials/accepts in progress; measuring
+    # payload afterwards would mix that backlog into its RTT distribution.
+    out.update(measure_connection_setup(topology, profile, scenario, PROTOCOL_SETUP[protocol]))
     return out
 
 
@@ -1695,6 +1700,7 @@ def run(args: argparse.Namespace) -> dict:
         raise SystemExit(f"agent binary not found: {binary} (build it first, or pass --agent-binary)")
 
     profile = dict(PROFILES[args.profile])
+    profile["stream_phase_order"] = list(STREAM_PHASE_ORDER)
     if args.payload_kib is not None:
         profile["payload_kib"] = args.payload_kib
     if args.setups is not None:
@@ -1830,6 +1836,9 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
         for key in ("workload", "scenarios"):
             if not isinstance(artifact.get(key), dict):
                 raise ValueError(f"artifact {key} must be an object")
+        if "stream_phase_order" in artifact["workload"] and artifact["workload"]["stream_phase_order"] not in (
+                STREAM_PHASE_ORDER, LEGACY_STREAM_PHASE_ORDER):
+            raise ValueError("unknown stream measurement phase order")
         for key in ("environment", "dimensions"):
             if key in artifact and not isinstance(artifact[key], dict):
                 raise ValueError(f"artifact {key} must be an object")
@@ -1842,6 +1851,9 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
     for key in ("payload_kib", "concurrency", "conn_rounds", "conn_timeouts", "transfers", "setups"):
         if key not in candidate["workload"] or key not in anchor["workload"] or candidate["workload"][key] != anchor["workload"][key]:
             workload_mismatch.append(key)
+    if candidate["workload"].get("stream_phase_order", LEGACY_STREAM_PHASE_ORDER) != anchor["workload"].get(
+            "stream_phase_order", LEGACY_STREAM_PHASE_ORDER):
+        workload_mismatch.append("stream_phase_order")
     if bool(candidate.get("profiles_enabled", False)) != bool(anchor.get("profiles_enabled", False)):
         workload_mismatch.append("profiles_enabled")
     if candidate.get("native_rounds", 1) != anchor.get("native_rounds", 1):

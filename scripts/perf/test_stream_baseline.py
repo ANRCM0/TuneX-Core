@@ -610,8 +610,46 @@ class ComparisonTest(unittest.TestCase):
         self.assertIn("native_rounds", baseline.compare_results(candidate, self._artifact(100, 10))["workload_mismatch"])
         self.assertEqual(baseline.parse_args(["--setups", "500"]).setups, 500)
 
+    def test_setup_phase_order_cannot_be_compared_to_a_legacy_anchor(self):
+        anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+        candidate["workload"]["stream_phase_order"] = list(baseline.STREAM_PHASE_ORDER)
+        result = baseline.compare_results(candidate, anchor)
+        self.assertFalse(result["passed"])
+        self.assertIn("stream_phase_order", result["workload_mismatch"])
+        anchor["workload"]["stream_phase_order"] = list(baseline.STREAM_PHASE_ORDER)
+        self.assertTrue(baseline.compare_results(candidate, anchor)["passed"])
+        candidate["workload"]["stream_phase_order"] = ["unknown"]
+        with self.assertRaises(ValueError):
+            baseline.compare_results(candidate, anchor)
+
 
 class CompleteWorkloadTest(unittest.TestCase):
+    def test_setup_burst_cannot_contaminate_payload_or_concurrent_rtt(self):
+        from unittest.mock import patch
+        for scenario in baseline.SCENARIO_PROTOCOL:
+            with self.subTest(scenario=scenario):
+                setup_pending = False
+                measured = []
+
+                def payload(*args, **kwargs):
+                    self.assertFalse(setup_pending, "downstream setup backlog entered payload measurement")
+                    measured.append("payload")
+                    return {}
+
+                def setup(*args, **kwargs):
+                    nonlocal setup_pending
+                    setup_pending = True
+                    return {}
+
+                with patch.object(baseline, "measure_throughput", side_effect=payload), \
+                        patch.object(baseline, "measure_concurrency", side_effect=payload), \
+                        patch.object(baseline, "measure_connection_setup", side_effect=setup), \
+                        patch.object(baseline, "measure_ws_integrity", return_value={}):
+                    result = baseline.measure_stream_scenario(scenario, {}, {})
+                self.assertEqual(len(measured), 2)
+                self.assertTrue(setup_pending)
+                self.assertEqual(result[f"{scenario}_error_count"], 0)
+
     def test_partial_throughput_cannot_be_a_successful_measurement(self):
         with self.assertRaises(RuntimeError):
             baseline.measure_throughput({"listen_port": 1}, {"payload_kib": 1, "transfers": 1},
