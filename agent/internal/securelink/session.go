@@ -379,8 +379,10 @@ func (s *Session) writeLoop() {
 }
 
 func (s *Session) readLoop() {
+	var reader frameReader
+	defer reader.release()
 	for {
-		f, err := ReadFrame(s.conn)
+		f, err := reader.read(s.conn)
 		if err != nil {
 			s.fail(err)
 			return

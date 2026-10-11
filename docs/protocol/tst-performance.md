@@ -100,6 +100,14 @@ returned only after the writer completes or the queue discards it. Timeout and
 cancellation do not reclaim memory still referenced by carrier I/O. Returned
 buffers are cleared in full before another Link or Workspace can reuse them.
 
+The receive loop now lazily holds one 16 KiB DATA scratch buffer per active TCP
+Link, sharing the same bounded idle cache. DATA is copied into the stream's
+receive buffer before scratch reuse. UDP and control payloads own independent
+storage; the public ReadFrame API also retains caller ownership. Only reader
+exit returns and erases scratch, after carrier I/O ends, including failures.
+This adds up to 16 KiB of active storage per Link receiving TCP DATA, in exchange
+for avoiding a payload and header allocation on every DATA frame.
+
 Windows/amd64 A/B was repeated after adding plaintext erasure, on the same
 i5-12500H host with Go 1.26.3, 16 workers, 16 KiB frames and
 `-benchtime 500ms -count 5`. The baseline is an export of `1e7bd43`; the candidate
@@ -114,6 +122,22 @@ improvement; they do not establish production capacity or WAN behavior.
 | TSTMutualTLS | 274.25, 230.99, 245.32 | 35,305–35,415 bytes, 28 allocations |
 | TSTStream (pre-pool, amd64 A/B) | 456.00, 533.95, 452.41, 445.69, 526.09 | 34,726–34,761 bytes, 31–32 allocations |
 | TSTStream (pooled + erasure, amd64 A/B) | 497.30, 542.08, 495.75, 603.72, 592.40 | 18,309–18,375 bytes, 30 allocations |
+
+Receive optimization A/B against `d534143`, on the same Windows/amd64 host,
+Go 1.26.3, GOMAXPROCS=4, CGO_ENABLED=0, 16 KiB frames, five 500ms runs:
+
+| Benchmark | MB/s samples | Allocation per operation |
+| --- | --- | --- |
+| TSTStream (before receive reuse) | 846.58, 736.36, 729.06, 796.28, 720.10 | 18,274–18,306 bytes, 29–30 allocations |
+| TSTStream (receive reuse) | 865.46, 805.13, 672.33, 876.83, 990.12 | 1,759–1,794 bytes, 25 allocations |
+| TSTMutualTLS (before receive reuse) | 187.01, 247.36, 219.98, 248.25, 167.82 | 18,089–18,169 bytes, 25–27 allocations |
+| TSTMutualTLS (receive reuse) | 204.94, 231.37, 258.64, 302.42, 258.92 | 1,516–1,584 bytes, 23 allocations |
+
+Median allocated bytes decreased 90.3% and 91.5% respectively. Raw output,
+commands, baseline SHA and candidate Go file hashes remain under
+`scripts/perf/results/receive-pool/`. These are sequential local samples;
+throughput variation does not establish a production capacity gain. The current
+candidate still requires Linux CI/race and the same-runner performance gate.
 
 These short host samples show encryption/framing overhead versus a local baseline;
 they are not production capacity, WAN latency, handshake DoS or an old-protocol

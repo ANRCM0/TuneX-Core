@@ -3,6 +3,7 @@ package securelink
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"io"
 	"testing"
 )
@@ -67,12 +68,20 @@ func TestOpenHasNoTargetOrDuplicateFields(t *testing.T) {
 }
 
 func FuzzReadFrame(f *testing.F) {
-	for _, seed := range []string{"08000000000000000000000000000008000000000000000000000000", "030000000000000000000001ffffffff00000000", "0400000000000000000000010000000000000000"} {
+	for _, seed := range []string{"08000000000000000000000000000008000000000000000000000000", "030000000000000000000001ffffffff00000000", "0400000000000000000000010000000000000000", "030000000000000000000001000000040000000001020304", "0600000000000000000000010000000200000001abcd"} {
 		data, _ := hex.DecodeString(seed)
 		f.Add(data)
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		frame, err := ReadFrame(bytes.NewReader(data))
+		var reader frameReader
+		defer reader.release()
+		borrowed, readErr := reader.read(bytes.NewReader(data))
+		if !errors.Is(readErr, err) || frame.Type != borrowed.Type ||
+			frame.StreamID != borrowed.StreamID || frame.Sequence != borrowed.Sequence ||
+			!bytes.Equal(frame.Payload, borrowed.Payload) {
+			t.Fatal("session parser differs from public frame parser")
+		}
 		if err == nil {
 			if len(frame.Payload) > MaxDatagram {
 				t.Fatal("unbounded payload")

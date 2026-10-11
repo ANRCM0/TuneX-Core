@@ -39,12 +39,16 @@ go test ./internal/securelink -run '^$' -bench '^BenchmarkTSTMutualTLS$' \
 pprof 并解析；安装的 386 trace 工具因地址空间耗尽未能读取这份大文件。
 工具构建和结果都留在 workspace 的忽略目录，未修改全局 Go 安装。
 
-## 下一项优化的约束
+## 接收优化与所有权约束
 
-接收临时 payload 如果复用，必须在帧校验后使用、复制至业务接收缓冲后才归还；
-不能提前清零应用仍在读取的数据。截断、协议错误、stream reset、carrier failure
-和 session close 都须回收，并继续验证原有流控和 sibling 隔离。UDP datagram
-保留消息边界及独立队列，不随着 TCP 临时 buffer 优化一起改动。
+本轮已按采样结果实现连接独占的 TCP DATA 临时缓冲：首次需要时取得 16 KiB，
+帧校验后复制至业务接收缓冲，再复用至下一帧。读循环退出后清零完整缓冲并
+归还有界缓存；不能提前清零应用仍在读取的数据，也不能在 carrier I/O 结束
+前归还。截断、协议错误、carrier failure 和 session close 都走读循环的
+最终回收；RESET 后已复制的字节仍可读，迟到帧仍仅返回 Link credit。
+UDP datagram 和控制帧保留独立 payload，公开 `ReadFrame` 的所有权不变。
 
-该优化尚未实现。先补所有权、截断与错误路径测试，再重复同一 workload 的
-无 profiling A/B，最后在 Linux race/长稳中验证，不能仅凭本表宣布完成。
+所有权、截断与错误路径测试连续 20 轮通过；同机无 profiling 五轮 A/B 的
+TSTStream/mTLS 每操作分配中位数分别减少 90.3%/91.5%，详见
+[工作记录](../v2.2-performance.md)。当前优化的 Linux race/集成/性能 CI
+及长稳仍待验证，不能以先前源码的采样或 CI 代替。

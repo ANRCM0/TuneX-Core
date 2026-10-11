@@ -64,14 +64,21 @@ func acquireDataPayload(n int) []byte {
 }
 
 func releaseFramePayload(f Frame) {
-	if !f.pooled || cap(f.Payload) != MaxData {
+	if !f.pooled {
+		return
+	}
+	releaseDataPayload(f.Payload)
+}
+
+func releaseDataPayload(payload []byte) {
+	if cap(payload) != MaxData {
 		return
 	}
 	// The cache is shared between Links and Workspaces. Erase plaintext,
 	// including the unused tail of a smaller frame, before making it reusable.
-	clear(f.Payload[:MaxData])
+	clear(payload[:MaxData])
 	select {
-	case dataPayloadPool <- f.Payload[:MaxData]:
+	case dataPayloadPool <- payload[:MaxData]:
 	default:
 	}
 }
@@ -118,10 +125,35 @@ func validFrame(f Frame) bool {
 	}
 }
 
-// ReadFrame checks the header before allocating any payload memory.
+// ReadFrame checks the header before allocating any payload memory. The returned
+// payload belongs to the caller and is unaffected by subsequent frame reads.
 func ReadFrame(r io.Reader) (Frame, error) {
 	var header [HeaderSize]byte
-	if _, err := io.ReadFull(r, header[:]); err != nil {
+	return readFrame(r, header[:], nil)
+}
+
+// frameReader is owned exclusively by Session.readLoop. Only DATA payloads
+// borrow its scratch buffer: handleLocked copies them before the next read.
+// Control frames and queued datagrams must retain independent payload storage.
+type frameReader struct {
+	header [HeaderSize]byte
+	data   []byte
+}
+
+func (r *frameReader) read(conn io.Reader) (Frame, error) {
+	return readFrame(conn, r.header[:], &r.data)
+}
+
+// release runs after the read loop exits, never while carrier I/O may still
+// reference the scratch buffer. Each active TCP Link holds at most 16 KiB.
+func (r *frameReader) release() {
+	releaseDataPayload(r.data)
+	r.data = nil
+	clear(r.header[:])
+}
+
+func readFrame(r io.Reader, header []byte, data *[]byte) (Frame, error) {
+	if _, err := io.ReadFull(r, header); err != nil {
 		return Frame{}, err
 	}
 	length := binary.BigEndian.Uint32(header[12:16])
@@ -130,7 +162,14 @@ func ReadFrame(r io.Reader) (Frame, error) {
 		return Frame{}, ErrProtocol
 	}
 	f := Frame{Type: header[0], StreamID: binary.BigEndian.Uint64(header[4:12]), Sequence: binary.BigEndian.Uint32(header[16:20])}
-	f.Payload = make([]byte, int(length))
+	if data != nil && f.Type == TypeData && length != 0 {
+		if *data == nil {
+			*data = acquireDataPayload(MaxData)
+		}
+		f.Payload = (*data)[:int(length)]
+	} else {
+		f.Payload = make([]byte, int(length))
+	}
 	if _, err := io.ReadFull(r, f.Payload); err != nil {
 		return Frame{}, err
 	}

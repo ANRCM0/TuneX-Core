@@ -41,6 +41,12 @@ amd64 完整 Agent 单测与 vet 通过。本机无 GCC，Linux CI/race/fuzz 已
 固定 Linux 主机容量、多连接性能和长稳验收仍待执行。详见
 [V2.2 工作记录](v2.2-performance.md)。
 
+V2.2 P3 已继续实现连接独占、惰性分配的 TCP 接收临时缓冲，终止后清零归还；
+业务流、UDP 队列与控制帧的 payload 所有权有明确回归。对 `d534143` 的同机
+五轮 A/B 中，TSTStream/mTLS 每操作分配中位数减少 90.3%/91.5%。新增
+接收/发送所有权测试连续 20 轮、Agent 全量/vet、15 秒一致性 fuzz 均通过；
+当前源码的 Linux CI/race、真实 shared-Link 集成和性能门禁待取得新收据。
+
 V2.2 P4 可选 QUIC ADR、威胁模型与兼容策略已形成，协议实现和独立评审仍待
 执行。P5 同一 Ubuntu Runner 的双源码、多轮交错采样及严格工件校验已通过：
 `047483e` 主 CI 和 Performance 均成功，每端 direct/relay 各 1,500 个建连、
