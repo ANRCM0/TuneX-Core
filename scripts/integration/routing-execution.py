@@ -42,7 +42,7 @@ def plain_refused(ip,port):
     except OSError: return True
 
 def main():
-    fid=None; stopped=False; role_before=None; echo=None; receipts=[]
+    fid=None; stopped=False; role_before=None; echo=None; receipts=[]; history=[]; diagnostics={}
     signal.signal(signal.SIGALRM,H.alarm);signal.setitimer(signal.ITIMER_REAL,720)
     H.acquire_lock()
     try:
@@ -110,6 +110,18 @@ def main():
         message=str(exc)
         H.check(False,f"R45 acceptance failed: {type(exc).__name__} {message}" if len(message)<160 and 'PRIVATE' not in message else f"R45 acceptance failed: {type(exc).__name__}")
     finally:
+        if fid:
+            try:
+                policy=request("GET",f"/api/routing/policies/{fid}")
+                diagnostics["last_decision"]=policy.get("last_decision")
+                diagnostics["controller_state"]=policy.get("controller_state")
+                current=route_state(fid)
+                diagnostics["forward"]={key:current.get(key) for key in ("id","config_revision","applied_revision","apply_status","middle_node_id","routing_security_version")}
+                history=request("GET",f"/api/routing/policies/{fid}/history")
+            except Exception: diagnostics["snapshot_state"]="unavailable"
+            try:diagnostics["proposal"]=request("GET",f"/api/routing/policies/{fid}/decision")
+            except Exception:diagnostics["proposal_state"]="unavailable"
+        OUT.joinpath("routing-execution-observations.json").write_text(json.dumps({"method":"real_linux_agents_and_socket_faults","receipts":receipts,"history":history,"diagnostics":diagnostics},indent=2),encoding="utf-8")
         if stopped:H.docker(["start",CONTAINER],allow=True)
         if fid:
             try:

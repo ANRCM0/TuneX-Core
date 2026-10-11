@@ -5,14 +5,15 @@
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const web = resolve(here, "../../../..");
 if (basename(web) !== "web") throw new Error("Fixture artifacts must stay under web/");
-const origin = "http://127.0.0.1:41974";
+const fixture = process.env.TUNEX_BROWSER_FIXTURE === "routing" ? "routing" : "native-both";
+const origin = `http://127.0.0.1:${fixture === "routing" ? 41976 : 41974}`;
 const chrome = process.env.NATIVE_BOTH_CHROME ?? [
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -33,12 +34,12 @@ try {
 } catch (error) {
   if (error.message.includes("already in use")) throw error;
 }
-const profile = await mkdtemp(resolve(web, ".native-both-browser-"));
+const profile = await mkdtemp(resolve(web, `.${fixture}-browser-`));
 let server, browser, ws, cdp;
 let serverLog = "";
 const errors = [];
 try {
-  server = spawn(process.execPath, [resolve(here, "browser-native-both-server.ts")], { cwd: web, windowsHide: true });
+  server = spawn(process.env.TUNEX_FIXTURE_BUN ?? process.execPath, [resolve(here, `browser-${fixture}-server.ts`)], { cwd: web, windowsHide: true });
   server.on("error", (error) => { serverLog += String(error); });
   for (const stream of [server.stdout, server.stderr]) stream.on("data", (data) => { serverLog = (serverLog + data).slice(-8000); });
   await until(async () => server.exitCode === null && (await fetch(origin)).ok, "fixture server");
@@ -69,17 +70,43 @@ try {
   await cdp("Runtime.enable"); await cdp("Page.enable");
   await cdp("Page.navigate", { url: origin });
   await until(async () => (await cdp("Runtime.evaluate", { expression: "!!document.querySelector('[data-testid=fixture-gates]')", returnByValue: true })).result.value, "fixture DOM");
-  const checks = await readFile(resolve(here, "browser-native-both-checks.js"), "utf8");
-  const result = await cdp("Runtime.evaluate", { expression: `${checks}\nwindow.runNativeBothFixtureChecks()`, awaitPromise: true, returnByValue: true });
+  const responsive = [];
+  if (fixture === "routing") {
+    await until(async () => (await cdp("Runtime.evaluate", { expression: "!![...document.querySelectorAll('button')].find(b=>b.textContent==='Preview candidates')", returnByValue: true })).result.value, "routing fields");
+    await mkdir(resolve(web, "test-artifacts/routing"), { recursive: true });
+    for (const width of [360, 390, 768, 1024, 1280, 1440]) {
+      await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: false });
+      const layout = await cdp("Runtime.evaluate", { expression: "document.documentElement.scrollWidth <= innerWidth", returnByValue: true });
+      if (!layout.result.value) throw new Error(`Routing layout overflows at ${width}px`);
+      responsive.push(width);
+      const capture = await cdp("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
+      await writeFile(resolve(web, `test-artifacts/routing/${width}.png`), Buffer.from(capture.data, "base64"));
+    }
+  }
+  const checks = await readFile(resolve(here, `browser-${fixture}-checks.js`), "utf8");
+  const result = await cdp("Runtime.evaluate", { expression: `${checks}\nwindow.${fixture === "routing" ? "runRoutingFixtureChecks" : "runNativeBothFixtureChecks"}()`, awaitPromise: true, returnByValue: true });
   if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
   if (errors.length) throw new Error(`Fixture console errors: ${errors.join("\n")}`);
-  console.log(JSON.stringify({ ...result.result.value, consoleErrors: errors.length }, null, 2));
+  const receipt = { ...result.result.value, consoleErrors: errors.length, responsive };
+  if (fixture === "routing") await writeFile(resolve(web, "test-artifacts/routing/receipt.json"), JSON.stringify(receipt, null, 2));
+  console.log(JSON.stringify(receipt, null, 2));
 } catch (error) {
+  console.error(error);
   if (cdp) console.error((await cdp("Runtime.evaluate", { expression: "document.body.innerText.slice(-5000)", returnByValue: true }).catch(() => null))?.result.value);
   console.error(serverLog);
   throw error;
 } finally {
   if (cdp) await cdp("Browser.close").catch(() => {});
+  // Windows Chromium has child processes; terminate only this isolated tree so
+  // profile files are released before bounded cleanup.
+  if (process.platform === "win32" && browser?.pid) {
+    await new Promise((done) => {
+      const cleanup = 'Get-CimInstance Win32_Process -Filter "Name = \'chrome.exe\'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:TUNEX_BROWSER_CLEANUP_PROFILE) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }';
+      const kill = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", cleanup],
+        { windowsHide: true, stdio: "ignore", env: { ...process.env, TUNEX_BROWSER_CLEANUP_PROFILE: profile } });
+      kill.once("exit", done); kill.once("error", done);
+    });
+  }
   ws?.close();
   for (const child of [browser, server]) {
     if (child && child.exitCode === null) {
@@ -88,7 +115,7 @@ try {
     }
   }
   // Never recursively remove a computed path outside this workspace's web root.
-  if (dirname(resolve(profile)) !== web || !basename(profile).startsWith(".native-both-browser-"))
+  if (dirname(resolve(profile)) !== web || !basename(profile).startsWith(`.${fixture}-browser-`))
     throw new Error("Unsafe fixture profile cleanup path");
   await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }

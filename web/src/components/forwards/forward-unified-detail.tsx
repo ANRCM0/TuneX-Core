@@ -8,8 +8,10 @@ import { accessAddress, forwardPath, forwardState, forwardTrafficEvidence, forwa
 import { unifiedForwardText } from "@/lib/forward-unified-i18n";
 import { formatBytes } from "@/lib/utils";
 import type { DiagnoseReport, PortForward, TrafficPoint } from "@/lib/types";
+import { ForwardRoutingCard } from "./forward-routing-card";
 
-type Tab = "overview" | "config" | "traffic" | "diagnosis" | "history";
+type Tab = "overview" | "config" | "traffic" | "diagnosis" | "history" | "routing";
+const detailTabs: Tab[] = ["overview", "config", "traffic", "diagnosis", "history", "routing"];
 export function ForwardStateBadge({ forward, locale }: { forward: PortForward; locale: string }) {
   const state = forwardState(forward);
   return <Badge data-testid="forward-runtime-state" variant={state === "ready" ? "success" : state === "error" ? "destructive" : "outline"}>{unifiedForwardText(locale, state)}</Badge>;
@@ -61,13 +63,13 @@ export function ForwardUnifiedDetail({ forward, workspaceId, locale, initialTab 
     </div>
     {!canUpdate || !canCopy || !canDelete ? <p className="text-xs text-[var(--muted-foreground)]">{T("permissionHint")}</p> : null}
     <div role="tablist" aria-label={T("details")} className="flex gap-1 overflow-x-auto border-b border-[var(--border)] pb-2">
-      {(["overview", "config", "traffic", "diagnosis", "history"] as Tab[]).map((value) => <button key={value} id={`forward-tab-${value}`} role="tab" aria-selected={tab === value} aria-controls={`forward-panel-${value}`}
+      {detailTabs.map((value) => <button key={value} id={`forward-tab-${value}`} role="tab" aria-selected={tab === value} aria-controls={`forward-panel-${value}`}
         tabIndex={tab === value ? 0 : -1} onClick={() => { setTab(value); setError(null); }} onKeyDown={(event) => {
-          const tabs: Tab[] = ["overview", "config", "traffic", "diagnosis", "history"];
+          const tabs = detailTabs;
           if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
-          event.preventDefault(); const next = event.key === "Home" ? tabs[0] : event.key === "End" ? tabs[4] : tabs[(tabs.indexOf(value) + (event.key === "ArrowRight" ? 1 : 4)) % 5];
+          event.preventDefault(); const next = event.key === "Home" ? tabs[0] : event.key === "End" ? tabs[tabs.length - 1] : tabs[(tabs.indexOf(value) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
           setTab(next); document.getElementById(`forward-tab-${next}`)?.focus();
-        }} className={`shrink-0 rounded-md px-3 py-2 text-sm ${tab === value ? "bg-[var(--muted)] font-medium" : "text-[var(--muted-foreground)]"}`}>{T(value)}</button>)}
+        }} className={`shrink-0 rounded-md px-3 py-2 text-sm ${tab === value ? "bg-[var(--muted)] font-medium" : "text-[var(--muted-foreground)]"}`}>{value === "routing" ? locale === "en" ? "Advanced routing" : "高级路由" : T(value)}</button>)}
     </div>
     <div role="tabpanel" id={`forward-panel-${tab}`} aria-labelledby={`forward-tab-${tab}`} className="min-h-44 space-y-4">
       {error ? <p role="alert" className="text-sm text-[var(--destructive)]">{error}</p> : null}
@@ -92,6 +94,7 @@ export function ForwardUnifiedDetail({ forward, workspaceId, locale, initialTab 
           {segment.error_code ? <p className="text-xs text-[var(--destructive)]">{segment.error_code}</p> : null}</section>)}
         {report?.next_step ? <p className="text-sm"><strong>{T("next")}: </strong>{report.next_step}</p> : null}</> : null}
       {tab === "history" && history ? history.length ? <div className="space-y-3">{history.map((entry) => <div key={`${entry.revision}-${entry.created_at}`} className="rounded-md border border-[var(--border)] p-3 text-sm"><div>{T("expectedRevision")} {entry.revision} · {T(entry.desired_status)}</div><time dateTime={entry.created_at} className="text-xs text-[var(--muted-foreground)]">{new Date(entry.created_at).toLocaleString(locale === "en" ? "en-US" : "zh-CN")}</time></div>)}</div> : <p>{T("noHistory")}</p> : null}
+      {tab === "routing" ? <ForwardRoutingCard key={`${workspaceId}-${forward.id}`} forwardId={forward.id} workspaceId={workspaceId} locale={locale} canUpdate={canUpdate} /> : null}
     </div>
   </>;
   if (!drawer) return <div className="space-y-4">{content}</div>;

@@ -56,3 +56,4 @@ scripts/integration/state.json
 scripts/integration/evidence/
 scripts/integration/__pycache__/
 web/test-artifacts/
+web/.routing-browser-*/

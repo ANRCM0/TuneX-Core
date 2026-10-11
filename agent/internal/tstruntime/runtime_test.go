@@ -241,12 +241,18 @@ func TestRealTCPUDPAndBoth(t *testing.T) {
 			var samples []TrafficSample
 			for time.Now().Before(deadline) {
 				samples, _ = mi.TrafficSamples()
-				var total int64
+				var totalIn, totalOut, totalConnections int64
 				for _, s := range samples {
-					n, _ := trafficNumber(s.BytesOut)
-					total += n
+					in, _ := trafficNumber(s.BytesIn)
+					out, _ := trafficNumber(s.BytesOut)
+					connections, _ := trafficNumber(s.Connections)
+					totalIn += in
+					totalOut += out
+					totalConnections += connections
 				}
-				if total > 0 {
+				// Upload and download persistence run independently. Seeing
+				// the echo's download is not a barrier for the upload sample.
+				if totalIn > 0 && totalOut > 0 && totalConnections > 0 {
 					break
 				}
 				time.Sleep(10 * time.Millisecond)
