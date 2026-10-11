@@ -75,7 +75,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
@@ -136,6 +136,7 @@ class Summary:
     max: float | None
     mean: float | None
     unit: str = ""
+    samples: list[float] = field(default_factory=list)
 
     @staticmethod
     def of(values: Sequence[float], unit: str = "") -> "Summary":
@@ -150,6 +151,7 @@ class Summary:
             max=float(max(values)),
             mean=float(statistics.fmean(values)),
             unit=unit,
+            samples=[float(value) for value in values],
         )
 
     def to_json(self) -> dict:
@@ -1695,6 +1697,8 @@ def run(args: argparse.Namespace) -> dict:
     profile = dict(PROFILES[args.profile])
     if args.payload_kib is not None:
         profile["payload_kib"] = args.payload_kib
+    if args.setups is not None:
+        profile["setups"] = args.setups
     result: dict = {
         "schema_version": SCHEMA_VERSION,
         "kind": "stream-baseline",
@@ -1796,8 +1800,10 @@ def _scalar_metrics(metrics: dict) -> Iterable[tuple[str, float]]:
             for key, child in value.items():
                 child_name = f"{prefix}.{key}" if prefix else key
                 yield from walk(child_name, child)
-        elif isinstance(value, (int, float)) and not isinstance(value, bool):
-            yield prefix, float(value)
+        elif isinstance(value, (int, float)):
+            # Preserve malformed bool gauges so validation can reject them;
+            # coercing True to 1.0 would fabricate an observed measurement.
+            yield prefix, value if isinstance(value, bool) else float(value)
 
     for name, value in metrics.items():
         if name.endswith("_profiles"):
@@ -1838,6 +1844,8 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
             workload_mismatch.append(key)
     if bool(candidate.get("profiles_enabled", False)) != bool(anchor.get("profiles_enabled", False)):
         workload_mismatch.append("profiles_enabled")
+    if candidate.get("native_rounds", 1) != anchor.get("native_rounds", 1):
+        workload_mismatch.append("native_rounds")
     for key, value in anchor.get("dimensions", {}).items():
         if candidate.get("dimensions", {}).get(key) != value:
             workload_mismatch.append(f"dimensions.{key}")
@@ -1855,7 +1863,7 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
     def numeric(value: object) -> bool:
         return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
-    def check(name: str, before: object, after: object) -> None:
+    def check(name: str, before: object, after: object, enforced: bool = True) -> None:
         if not numeric(before):
             invalid.append(f"anchor.{name}")
             return
@@ -1870,7 +1878,7 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
         else:
             regressed = change < -max_regression if higher else change > max_regression
         checks.append({"metric": name, "anchor": before, "candidate": after,
-                       "relative_change": change, "regressed": regressed})
+                       "relative_change": change, "regressed": regressed, "enforced": enforced})
 
     for scenario, anchor_metrics in anchor.get("scenarios", {}).items():
         if not isinstance(anchor_metrics, dict):
@@ -1900,7 +1908,10 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
                     if stat != "p99" or anchor["schema_version"] != 1:
                         invalid.append(f"anchor.{scenario}.{name}.{stat}")
                     continue
-                check(f"{scenario}.{name}.{stat}", anchor_value[stat], candidate_value.get(stat))
+                # Go ns/op is a whole-run average, not a per-operation latency
+                # sample. Its five-run tails are reported, while median is gated.
+                check(f"{scenario}.{name}.{stat}", anchor_value[stat], candidate_value.get(stat),
+                      enforced=scenario != "go_transport" or stat == "median")
         candidate_scalars = dict(_scalar_metrics(candidate_metrics))
         for name, before in _scalar_metrics(anchor_metrics):
             check(f"{scenario}.{name}", before, candidate_scalars.get(name))
@@ -1908,7 +1919,7 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
     if not checks:
         invalid.append("no_comparable_metrics")
 
-    regressions = [item for item in checks if item["regressed"]]
+    regressions = [item for item in checks if item["regressed"] and item["enforced"]]
     return {
         "kind": "stream-baseline-comparison",
         "schema_version": SCHEMA_VERSION,
@@ -1919,6 +1930,7 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
         "invalid": invalid,
         "passed": not regressions and not missing and not workload_mismatch and not environment_mismatch and not invalid,
         "regressions": regressions,
+        "run_distribution_variations": [item for item in checks if item["regressed"] and not item["enforced"]],
         "missing": missing,
         "checks": checks,
     }
@@ -1928,6 +1940,8 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="TuneX stream performance baseline (tcp/tls/ws)")
     parser.add_argument("--agent-binary", default="agent/tunex-agent",
                         help="path to the built tunex-agent binary")
+    parser.add_argument("--setups", type=int, default=None,
+                        help="override the connection setup sample count")
     parser.add_argument("--out", default="scripts/perf/results",
                         help="output directory for the JSON/CSV artifacts")
     parser.add_argument("--profile", choices=sorted(PROFILES), default="quick")
@@ -1957,6 +1971,9 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.setups is not None and args.setups <= 0:
+        print("error: --setups must be positive", file=sys.stderr)
+        return 2
     if args.payload_kib is not None and args.payload_kib <= 0:
         print("error: --payload-kib must be positive", file=sys.stderr)
         return 2

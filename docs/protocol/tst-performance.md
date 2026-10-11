@@ -65,7 +65,11 @@ enabled profiling. Files remain local diagnostic evidence, not a capacity claim.
 The [same-runner workflow](../../.github/workflows/performance.yml) exports two
 exact commits, builds both offline, and measures them sequentially using the
 same harness and resources. It includes direct/relay native metrics and all six
-Go transport benchmarks, five samples each. Both raw samples and comparison
+Go transport benchmarks, five samples each. Native workloads are measured in
+three alternating pairs, with 500 connection setup samples per round; business
+quantiles are recomputed from combined raw samples. Go benchmark run averages
+are gated by median, with run-tail variation reported separately; those values
+are not individual-operation tail latencies. Both raw samples and comparison
 receipts are archived even on failure. The shared CI threshold is 35%; fixed-host
 operators can tighten it. A failed capture or comparison fails the workflow.
 This does not establish WAN behavior or replace long-running capacity tests.

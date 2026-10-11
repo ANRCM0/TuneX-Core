@@ -537,6 +537,12 @@ class ComparisonTest(unittest.TestCase):
         self.assertEqual(result["regressions"][0]["metric"], "direct.direct_error_count")
         self.assertIsNone(result["regressions"][0]["relative_change"])
 
+    def test_boolean_resource_or_error_counter_is_not_numeric(self):
+        anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+        anchor["scenarios"]["direct"]["direct_error_count"] = False
+        candidate["scenarios"]["direct"]["direct_error_count"] = 0
+        self.assertFalse(baseline.compare_results(candidate, anchor)["passed"])
+
     def test_sampling_and_environment_mismatch_fail_closed(self):
         anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
         anchor["dimensions"] = {"rtt_ms": 10}
@@ -585,6 +591,24 @@ class ComparisonTest(unittest.TestCase):
             artifact[field] = value
             with self.subTest(field=field), self.assertRaises(ValueError):
                 baseline.compare_results(artifact, self._artifact(100, 10))
+
+    def test_go_run_average_tail_is_reported_but_median_cost_is_gated(self):
+        anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+        for artifact in (anchor, candidate):
+            artifact["scenarios"]["go_transport"] = {
+                "PlainTCP_latency_ns": dict(artifact["scenarios"]["direct"]["direct_connect_ms"])}
+        candidate["scenarios"]["go_transport"]["PlainTCP_latency_ns"]["p99"] = 100
+        result = baseline.compare_results(candidate, anchor)
+        self.assertTrue(result["passed"])
+        self.assertEqual(len(result["run_distribution_variations"]), 1)
+        candidate["scenarios"]["go_transport"]["PlainTCP_latency_ns"]["median"] = 20
+        self.assertFalse(baseline.compare_results(candidate, anchor)["passed"])
+
+    def test_repeated_round_count_and_setup_override_are_explicit(self):
+        candidate = self._artifact(100, 10)
+        candidate["native_rounds"] = 3
+        self.assertIn("native_rounds", baseline.compare_results(candidate, self._artifact(100, 10))["workload_mismatch"])
+        self.assertEqual(baseline.parse_args(["--setups", "500"]).setups, 500)
 
 
 class CompleteWorkloadTest(unittest.TestCase):

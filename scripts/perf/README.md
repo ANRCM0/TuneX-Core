@@ -29,14 +29,24 @@ Ubuntu Runner、Go、amd64 架构、GOMAXPROCS=4 和候选 harness 顺序测量�
 
 - 真实 native direct/relay：吞吐、p95/p99、CPU、RSS、goroutine、错误计数。
 - Go transport：plain TCP/UDP、TST stream/mTLS、TST runtime TCP/UDP；每项五轮，
-  包含 ns/op、MB/s、B/op、allocs/op 的分布。
+  包含 ns/op、MB/s、B/op、allocs/op 的轮次分布；门禁比较其中位数。
 - 工件记录源码 SHA、二进制 SHA256、实际编译架构/Go、环境和 workload。
   原始 benchmark、JSON/CSV 与比较收据即使失败也上传，保存 14 天。
 
-先构建两端，再相邻采样两端 native 负载；之后分别相邻测量两端 securelink
-与 tstruntime。避免只有候选 native 采样紧随重度 Go transport 负载。原生
-阶段另存 `native-phase.json`，最终 `stream-baseline-*.json` 包含完整 transport
-指标。CI 工件名称包含源码 SHA 和运行次数，复测保留独立收据。
+先以 `-trimpath` 构建两端，再进行三轮交错 native 采样（A/B、B/A、A/B），
+每轮每端至少采集 500 次建连。原始数值样本写入 JSON，合并后重新计算业务
+median/p95/p99，不平均各轮分位数。错误数累计，资源读数取轮次中位数；任一
+轮的失败、缺失或非有限值均不能通过。之后相邻测量两端 securelink 与
+tstruntime，避免候选 native 采样紧随重度 Go transport 负载。
+
+Go benchmark 的 `ns/op` 是一整轮的平均操作成本，五轮平均值的 p99 不代表
+业务单包 p99。因此 Go 指标按中位数门禁，轮次尾部分布变化保留在收据的
+`run_distribution_variations`；native 业务 p95/p99 继续执行相同相对门禁。
+所有字段仍须通过有限值、单位和样本完整性校验。
+
+各轮原生阶段另存 `round-N/native-phase.json`，最终 `stream-baseline-*.json`
+包含完整指标和各轮环境。CI 工件名称包含源码 SHA 和运行次数。可用
+`--native-rounds` / `--setup-samples` 控制重采样；比较条件仍须一致。
 
 可在固定主机运行相同流程；`BASE_SHA` / `HEAD_SHA` 必须是完整 40 位 commit SHA：
 

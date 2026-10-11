@@ -41,13 +41,13 @@ class BenchmarkReceiptTest(unittest.TestCase):
         def native(binary, sha, out, args):
             events.append(("native", sha))
             out.mkdir(parents=True)
-            return {"scenarios": {}}
+            return {"scenarios": {}, "environment": {}}
 
         def transport(argv, cwd, env):
             events.append(("transport", cwd.name))
             return "samples"
 
-        args = SimpleNamespace(base="base", head="head", benchtime="500ms", count=3)
+        args = SimpleNamespace(base="base", head="head", benchtime="500ms", count=3, native_rounds=3)
         with tempfile.TemporaryDirectory() as tmp, patch.object(gate, "build_agent", side_effect=build), \
                 patch.object(gate, "measure_native", side_effect=native), \
                 patch.object(gate, "command", side_effect=transport), \
@@ -55,9 +55,30 @@ class BenchmarkReceiptTest(unittest.TestCase):
                 patch.object(gate.baseline, "write_outputs"):
             root = Path(tmp)
             gate.measure_pair(root, root / "builds", root / "out", {}, args)
-        self.assertEqual(events[:4], [("build", "base"), ("build", "head"),
+        self.assertEqual(events[:8], [("build", "base"), ("build", "head"),
+                                     ("native", "base"), ("native", "head"),
+                                     ("native", "head"), ("native", "base"),
                                      ("native", "base"), ("native", "head")])
-        self.assertEqual(events[4:], [("transport", "anchor"), ("transport", "candidate")] * 2)
+        self.assertEqual(events[8:], [("transport", "anchor"), ("transport", "candidate")] * 2)
+
+    def test_tail_is_computed_from_combined_raw_samples(self):
+        # Averaging per-round quantiles gives a different, invalid tail.
+        values = [gate.baseline.Summary.of([1, 1, 1], "ms").to_json(),
+                  gate.baseline.Summary.of([2, 2, 100], "ms").to_json()]
+        result = gate.combine_metrics(values)
+        self.assertEqual(result["count"], 6)
+        self.assertEqual(result["p99"], gate.baseline.percentile([1, 1, 1, 2, 2, 100], 99))
+        self.assertNotEqual(result["p99"], sum(value["p99"] for value in values) / 2)
+        self.assertEqual(gate.combine_metrics([{"direct_error_count": 0}, {"direct_error_count": 1}]),
+                         {"direct_error_count": 1})
+
+    def test_incomplete_repeated_samples_or_resources_fail_closed(self):
+        first = {"latency": gate.baseline.Summary.of([1, 2], "ms").to_json(), "cpu": 1.0}
+        for broken in ({"latency": first["latency"]}, dict(first, cpu=None),
+                       dict(first, latency=dict(first["latency"], samples=[1])),
+                       dict(first, latency=dict(first["latency"], samples=[1, float("nan")]))):
+            with self.subTest(broken=broken), self.assertRaises(ValueError):
+                gate.combine_metrics([first, broken])
 
 
 if __name__ == "__main__":

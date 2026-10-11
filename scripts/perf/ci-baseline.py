@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path, PurePosixPath
 import re
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -77,13 +78,14 @@ def export_agent(repo: Path, sha: str, dest: Path) -> Path:
 def build_agent(repo: Path, sha: str, root: Path, env: dict) -> tuple[Path, Path]:
     agent = export_agent(repo, sha, root)
     binary = root / ("tunex-agent.exe" if os.name == "nt" else "tunex-agent")
-    command(["go", "build", "-buildvcs=false", "-o", str(binary), "."], agent, env)
+    command(["go", "build", "-trimpath", "-buildvcs=false", "-o", str(binary), "."], agent, env)
     return agent, binary
 
 
 def measure_native(binary: Path, sha: str, out: Path, args) -> dict:
     stream_args = baseline.parse_args(["--agent-binary", str(binary), "--out", str(out),
                                        "--profile", args.profile, "--scenarios", *args.scenarios])
+    stream_args.setups = args.setup_samples
     artifact = baseline.run(stream_args)
     artifact["environment"]["source_sha"] = sha
     out.mkdir(parents=True, exist_ok=True)
@@ -92,13 +94,46 @@ def measure_native(binary: Path, sha: str, out: Path, args) -> dict:
     return artifact
 
 
+def combine_metrics(values: list, name: str = ""):
+    first = values[0]
+    if isinstance(first, dict):
+        if any(not isinstance(value, dict) or set(value) != set(first) for value in values):
+            raise ValueError("incomplete repeated measurement")
+        if "median" in first:
+            samples = []
+            for value in values:
+                raw = value.get("samples")
+                if not isinstance(raw, list) or not raw or len(raw) != value["count"] or value["unit"] != first["unit"]:
+                    raise ValueError("missing repeated raw samples or mismatched units")
+                if any(not isinstance(item, (int, float)) or isinstance(item, bool) or not math.isfinite(item) for item in raw):
+                    raise ValueError("invalid repeated raw samples")
+                samples.extend(raw)
+            return baseline.Summary.of(samples, first["unit"]).to_json()
+        return {key: combine_metrics([value[key] for value in values], key) for key in first}
+    if isinstance(first, (int, float)) and not isinstance(first, bool):
+        if any(not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) for value in values):
+            raise ValueError("missing repeated resource gauge")
+        return sum(values) if name.endswith("_error_count") else statistics.median(values)
+    if any(value is None for value in values) and any(value is not None for value in values):
+        raise ValueError("inconsistent resource measurement availability")
+    return first
+
+
 def measure_pair(repo: Path, root: Path, out: Path, env: dict, args) -> list[dict]:
     sides = (("anchor", args.base), ("candidate", args.head))
     # Build both before measuring either. Native latency must not follow a heavy
     # transport benchmark on only one side; keep matching workload phases adjacent.
     builds = [build_agent(repo, sha, root / side, env) for side, sha in sides]
-    artifacts = [measure_native(binary, sha, out / side, args)
-                 for (_, binary), (side, sha) in zip(builds, sides)]
+    runs: list[list[dict]] = [[], []]
+    for round_index in range(args.native_rounds):
+        order = (0, 1) if round_index % 2 == 0 else (1, 0)
+        for index in order:
+            side, sha = sides[index]
+            runs[index].append(measure_native(builds[index][1], sha,
+                                              out / side / f"round-{round_index + 1}", args))
+    artifacts = [dict(items[0], scenarios=combine_metrics([item["scenarios"] for item in items]),
+                      native_rounds=args.native_rounds, repeated_environments=[item["environment"] for item in items])
+                 for items in runs]
     raw: list[list[str]] = [[], []]
     for package, names in BENCHMARKS.items():
         for index, (agent, _) in enumerate(builds):
@@ -109,7 +144,7 @@ def measure_pair(repo: Path, root: Path, out: Path, env: dict, args) -> list[dic
         benchmark_raw = "\n".join(raw[index])
         (out / side / "go-benchmarks.txt").write_text(benchmark_raw, encoding="utf-8")
         artifacts[index]["scenarios"]["go_transport"] = benchmark_metrics(benchmark_raw, args.count)
-        artifacts[index]["measurement_order"] = "build_both-native_pair-securelink_pair-tstruntime_pair"
+        artifacts[index]["measurement_order"] = "build_both-alternating_native_pairs-securelink_pair-tstruntime_pair"
         baseline.write_outputs(artifacts[index], out / side)
     return artifacts
 
@@ -122,13 +157,15 @@ def main(argv=None) -> int:
     parser.add_argument("--profile", choices=baseline.PROFILES, default="quick")
     parser.add_argument("--scenarios", nargs="+", choices=["direct", "relay"], default=["direct", "relay"])
     parser.add_argument("--count", type=int, default=5)
+    parser.add_argument("--native-rounds", type=int, default=3)
+    parser.add_argument("--setup-samples", type=int, default=500)
     parser.add_argument("--benchtime", default="500ms")
     parser.add_argument("--max-regression", type=float, default=0.35)
     args = parser.parse_args(argv)
     if not all(re.fullmatch(r"[0-9a-fA-F]{40}", sha) for sha in (args.base, args.head)):
         parser.error("--base and --head must be full commit SHAs")
-    if args.count < 3 or not 0 <= args.max_regression < 1:
-        parser.error("at least three benchmark samples and a threshold in [0, 1) are required")
+    if args.count < 3 or args.native_rounds < 1 or args.setup_samples < 100 or not 0 <= args.max_regression < 1:
+        parser.error("at least three Go samples, one native round, 100 setup samples and a threshold in [0, 1) are required")
     repo = Path(__file__).resolve().parents[2]
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
