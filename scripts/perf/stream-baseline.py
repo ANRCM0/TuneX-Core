@@ -90,9 +90,9 @@ LEGACY_STREAM_PHASE_ORDER = ["throughput", "connection_setup", "concurrency"]
 # 人工对比，不用于每次提交。
 PROFILES = {
     "quick": {"payload_kib": 64, "transfers": 40, "conn_timeouts": 30,
-              "concurrency": 16, "conn_rounds": 20, "setups": 50},
+              "concurrency": 16, "conn_rounds": 20, "setups": 50, "hot_reload_samples": 100},
     "full": {"payload_kib": 1024, "transfers": 120, "conn_timeouts": 120,
-             "concurrency": 128, "conn_rounds": 40, "setups": 400},
+             "concurrency": 128, "conn_rounds": 40, "setups": 400, "hot_reload_samples": 200},
 }
 
 # All pprof files are opt-in; ordinary /debug/runtime gauges remain available
@@ -188,8 +188,15 @@ class EchoTarget:
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._sock.bind(("127.0.0.1", 0))
         self._sock.listen(128)
+        # Closing a listening socket in another thread need not interrupt its
+        # blocked accept on every host. Bound the wait and join owned workers.
+        self._sock.settimeout(0.1)
         self.host, self.port = self._sock.getsockname()
         self._stop = threading.Event()
+        self.accepted = threading.Event()
+        self._lock = threading.Lock()
+        self._connections: set[socket.socket] = set()
+        self._workers: set[threading.Thread] = set()
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()
 
@@ -197,9 +204,25 @@ class EchoTarget:
         while not self._stop.is_set():
             try:
                 conn, _ = self._sock.accept()
+            except socket.timeout:
+                continue
             except OSError:
                 return
-            threading.Thread(target=self._handle, args=(conn,), daemon=True).start()
+            with self._lock:
+                if self._stop.is_set():
+                    conn.close()
+                    return
+                worker = threading.Thread(target=self._handle, args=(conn,), daemon=True)
+                self._connections.add(conn)
+                self._workers.add(worker)
+                try:
+                    worker.start()
+                except BaseException:
+                    self._connections.discard(conn)
+                    self._workers.discard(worker)
+                    conn.close()
+                    raise
+                self.accepted.set()
 
     def _handle(self, conn: socket.socket) -> None:
         try:
@@ -211,6 +234,10 @@ class EchoTarget:
                     conn.sendall(chunk)
         except OSError:
             return
+        finally:
+            with self._lock:
+                self._connections.discard(conn)
+                self._workers.discard(threading.current_thread())
 
     def close(self) -> None:
         self._stop.set()
@@ -218,6 +245,19 @@ class EchoTarget:
             self._sock.close()
         except OSError:
             pass
+        with self._lock:
+            connections, workers = list(self._connections), list(self._workers)
+        for conn in connections:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            conn.close()
+        deadline = time.monotonic() + 2
+        for worker in [self._thread, *workers]:
+            worker.join(timeout=max(0, deadline - time.monotonic()))
+            if worker.is_alive():
+                raise RuntimeError("echo target worker did not stop")
 
 
 # ======================================================================
@@ -1507,7 +1547,7 @@ def measure_hot_reload(topology: dict, profile: dict, prefix: str) -> dict:
     """
     agent: AgentProcess = topology["ingress"]
     samples = []
-    for i in range(min(profile["conn_timeouts"] // 4 + 1, 20)):
+    for i in range(profile["hot_reload_samples"]):
         alt = EchoTarget()
         try:
             cfg = {
@@ -1524,7 +1564,10 @@ def measure_hot_reload(topology: dict, profile: dict, prefix: str) -> dict:
             applied = time.perf_counter() - started
             # 新目标真的要能用：只在 apply 返回后就宣布成功，会把"没生效"测成
             # "很快"。这里必须等一次真实往返穿过新 upstream。
-            transfer_once("127.0.0.1", topology["listen_port"], b"hot-reload")
+            payload = b"hot-reload"
+            received, _ = transfer_once("127.0.0.1", topology["listen_port"], payload)
+            if received != len(payload) or not alt.accepted.is_set():
+                raise RuntimeError("hot reload did not reach the new echo target")
             effective = time.perf_counter() - started
             samples.append((applied, effective))
         finally:
@@ -1738,6 +1781,7 @@ def run(args: argparse.Namespace) -> dict:
     profile = dict(PROFILES[args.profile])
     profile["stream_phase_order"] = list(STREAM_PHASE_ORDER)
     profile["resource_phase"] = "after_stream_quiescence"
+    profile["hot_reload_verification"] = "target_accept_and_complete_payload"
     if args.payload_kib is not None:
         profile["payload_kib"] = args.payload_kib
     if args.setups is not None:
@@ -1883,6 +1927,12 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
             raise ValueError("unknown resource measurement phase")
         if artifact.get("go_sample_order", "batched") not in ("batched", "alternating_process_pairs"):
             raise ValueError("unknown Go benchmark sample order")
+        count = artifact["workload"].get("hot_reload_samples")
+        if "hot_reload_samples" in artifact["workload"] and (type(count) is not int or not 1 <= count <= 1000):
+            raise ValueError("hot reload sample count must be an integer in [1, 1000]")
+        if artifact["workload"].get("hot_reload_verification", "echo_without_target_check") not in (
+                "echo_without_target_check", "target_accept_and_complete_payload"):
+            raise ValueError("unknown hot reload verification mode")
         for key in ("environment", "dimensions"):
             if key in artifact and not isinstance(artifact[key], dict):
                 raise ValueError(f"artifact {key} must be an object")
@@ -1901,6 +1951,20 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
     if candidate["workload"].get("resource_phase", "end_of_workload") != anchor["workload"].get(
             "resource_phase", "end_of_workload"):
         workload_mismatch.append("resource_phase")
+    # Legacy quick/full collected only 8/20 samples per native round. Never
+    # compare their tails with a new workload's larger lifecycle population.
+    def hot_reload_count(artifact: dict) -> int:
+        workload = artifact["workload"]
+        if "hot_reload_samples" in workload:
+            return workload["hot_reload_samples"]
+        legacy = workload.get("conn_timeouts")
+        return min(legacy // 4 + 1, 20) if type(legacy) is int and legacy > 0 else 0
+
+    if hot_reload_count(candidate) != hot_reload_count(anchor):
+        workload_mismatch.append("hot_reload_samples")
+    if candidate["workload"].get("hot_reload_verification", "echo_without_target_check") != anchor["workload"].get(
+            "hot_reload_verification", "echo_without_target_check"):
+        workload_mismatch.append("hot_reload_verification")
     if candidate.get("go_sample_order", "batched") != anchor.get("go_sample_order", "batched"):
         workload_mismatch.append("go_sample_order")
     if bool(candidate.get("profiles_enabled", False)) != bool(anchor.get("profiles_enabled", False)):
@@ -1960,6 +2024,10 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
                 workload_mismatch.append(f"{scenario}.{name}.unit")
             for side, value in (("anchor", anchor_value), ("candidate", candidate_value)):
                 if not numeric(value.get("count")) or value["count"] <= 0:
+                    invalid.append(f"{side}.{scenario}.{name}.count")
+                artifact = anchor if side == "anchor" else candidate
+                if name.endswith(("_hot_reload_apply_ms", "_hot_reload_effective_ms")) and value.get("count") != (
+                        hot_reload_count(artifact) * artifact.get("native_rounds", 1)):
                     invalid.append(f"{side}.{scenario}.{name}.count")
             if anchor_value.get("count") != candidate_value.get("count"):
                 workload_mismatch.append(f"{scenario}.{name}.count")

@@ -136,6 +136,66 @@ class ProfileTest(unittest.TestCase):
             self.assertGreater(full[key], quick[key], key)
 
 
+class EchoTargetLifecycleTest(unittest.TestCase):
+    def test_close_releases_connected_clients_and_listener(self):
+        target = baseline.EchoTarget()
+        self.addCleanup(target.close)
+        clients = []
+        for _ in range(2):
+            client = socket.create_connection((target.host, target.port), timeout=2)
+            self.addCleanup(client.close)
+            client.settimeout(2)
+            client.sendall(b"still-connected")
+            self.assertEqual(client.recv(64), b"still-connected")
+            clients.append(client)
+        # Keep the clients open: fixture shutdown must stop its own readers.
+        target.close()
+        for client in clients:
+            self.assertEqual(client.recv(1), b"")
+        self.assertFalse(target._thread.is_alive())
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reclaimed:
+            reclaimed.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            reclaimed.bind((target.host, target.port))
+            reclaimed.listen(1)
+
+    def test_repeated_idle_targets_join_their_accept_workers(self):
+        for _ in range(20):
+            target = baseline.EchoTarget()
+            target.close()
+            self.assertFalse(target._thread.is_alive())
+
+
+class HotReloadMeasurementTest(unittest.TestCase):
+    def test_declared_sample_count_reaches_each_new_target(self):
+        from unittest.mock import Mock, patch
+        configs = []
+        agent = Mock()
+        agent.apply_tunnel.side_effect = configs.append
+        original = baseline.transfer_once
+
+        def transfer(host, port, payload):
+            cfg = configs[-1]
+            return original(cfg["remote_host"], cfg["remote_port"], payload, timeout=2)
+
+        with patch.object(baseline, "transfer_once", side_effect=transfer):
+            metrics = baseline.measure_hot_reload({"ingress": agent, "listen_port": 1},
+                                                  {"hot_reload_samples": 3}, "direct")
+        self.assertEqual([cfg["revision"] for cfg in configs], [100, 101, 102])
+        self.assertTrue(all(metric["count"] == 3 for metric in metrics.values()))
+        self.assertTrue(all(len(metric["samples"]) == 3 for metric in metrics.values()))
+
+    def test_partial_payload_or_another_target_cannot_be_effective(self):
+        from unittest.mock import Mock, patch
+        for received in (0, len(b"hot-reload")):
+            with self.subTest(received=received), patch.object(
+                    baseline, "transfer_once", return_value=(received, 0)):
+                # No connection reaches the newly allocated target, even when
+                # a different endpoint returns the expected number of bytes.
+                with self.assertRaisesRegex(RuntimeError, "new echo target"):
+                    baseline.measure_hot_reload({"ingress": Mock(), "listen_port": 1},
+                                                {"hot_reload_samples": 1}, "direct")
+
+
 class CpuAccountingTest(unittest.TestCase):
     def test_own_process_cpu_is_measurable(self):
         # 采样器必须能读到自己（基线里读的是被测 Agent 进程）。
@@ -633,6 +693,45 @@ class ComparisonTest(unittest.TestCase):
             target[marker] = "unknown"
             with self.assertRaises(ValueError):
                 baseline.compare_results(candidate, anchor)
+
+    def test_legacy_and_larger_hot_reload_populations_cannot_mix(self):
+        anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+        del anchor["workload"]["hot_reload_samples"]
+        result = baseline.compare_results(candidate, anchor)
+        self.assertFalse(result["passed"])
+        self.assertIn("hot_reload_samples", result["workload_mismatch"])
+
+    def test_hot_reload_count_must_match_all_native_rounds(self):
+        anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+        for artifact in (anchor, candidate):
+            artifact["native_rounds"] = 3
+            artifact["workload"]["hot_reload_samples"] = 5
+            for metric in ("direct_hot_reload_apply_ms", "direct_hot_reload_effective_ms"):
+                artifact["scenarios"]["direct"][metric] = baseline.Summary.of([1] * 15, "ms").to_json()
+        self.assertTrue(baseline.compare_results(candidate, anchor)["passed"])
+        candidate["scenarios"]["direct"]["direct_hot_reload_apply_ms"] = baseline.Summary.of([1] * 14, "ms").to_json()
+        result = baseline.compare_results(candidate, anchor)
+        self.assertFalse(result["passed"])
+        self.assertIn("candidate.direct.direct_hot_reload_apply_ms.count", result["invalid"])
+
+    def test_malformed_hot_reload_workload_is_rejected(self):
+        for count in (True, None, 0, 1001, "100"):
+            candidate = self._artifact(100, 10)
+            candidate["workload"]["hot_reload_samples"] = count
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                baseline.compare_results(candidate, self._artifact(100, 10))
+
+    def test_hot_reload_target_verification_modes_must_match(self):
+        anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+        candidate["workload"]["hot_reload_verification"] = "target_accept_and_complete_payload"
+        result = baseline.compare_results(candidate, anchor)
+        self.assertFalse(result["passed"])
+        self.assertIn("hot_reload_verification", result["workload_mismatch"])
+        anchor["workload"]["hot_reload_verification"] = "target_accept_and_complete_payload"
+        self.assertTrue(baseline.compare_results(candidate, anchor)["passed"])
+        candidate["workload"]["hot_reload_verification"] = "unknown"
+        with self.assertRaises(ValueError):
+            baseline.compare_results(candidate, anchor)
 
 
 class CompleteWorkloadTest(unittest.TestCase):

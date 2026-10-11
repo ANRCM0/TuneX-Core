@@ -232,3 +232,61 @@ retains synchronous traffic persistence; its median ns/op increased by 0.23%.
 Artifact: `performance-266eb445a14fdc8317ec16abbdbbb37dee04d6d8-1`, also retained
 under `scripts/perf/results/ci-266eb44/`. Fixed-host multi-stream, WAN and long-run
 capacity remain unverified; the internal change alters no wire or API contract.
+
+## Reusable control queue (08a480d)
+
+Source: `08a480def4ef73bc33d0d628886640bc431e9fbf`. Control requests now use a
+Session-owned FIFO ring instead of advancing a slice and repeatedly allocating
+storage. It starts at eight slots on demand, grows to the existing 1,024-frame
+limit and reuses storage after draining. Popping clears payload/completion
+references, while the writer owns the copied request until I/O completes.
+Cancellation, slot reuse and Session failure do not erase an in-flight payload.
+Failure clears queued requests and drops the ring storage. On amd64 retained
+slots cost 512 bytes to 64 KiB per used Session, excluding payloads/channels;
+this is a retention tradeoff, not a process-wide memory bound.
+
+Window-update merging, stream/connection credit ceilings, FIFO, queue
+backpressure, ordered OPEN admission and the eight-control-frame budget before
+data polling retain their existing contracts. Queue regressions passed 100
+repetitions, the complete securelink suite passed ten repetitions, and all Agent
+tests/vet passed on Windows/amd64. Fifty additional repetitions passed for
+eight-stream TCP transfers/digests/half-close/flow control, blocked siblings,
+UDP boundaries, cancelled OPEN and packet-quota isolation.
+
+Five alternating independent processes per transport against `472c0bc`, using
+Go 1.26.3, GOMAXPROCS=4, CGO_ENABLED=0 and 500 ms/count=1, reduced median
+TSTStream/mTLS B/op from 845/641 to 707/513. Full TCP runtime B/op went from
+126,677 to 122,032; synchronous durable traffic accounting remains enabled.
+All 24 metric distributions have five valid samples. Raw output, order,
+commands, candidate file hashes and distributions are retained under
+`scripts/perf/results/control-queue/`. Host latency varies; these values do not
+establish production throughput or WAN latency.
+
+[Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38118781281) passed
+for this exact source, including race, fuzz, runtime ownership and real shared-Link
+acceptance. TST reports 24 PASS/0 FAIL and native both reports 37 PASS/0 FAIL.
+Parser fuzz completed 195,557 executions in 15 seconds without failure. The
+fixed-source five-profile analysis is documented in the
+[hotspot report](tst-hotspots.md); the control queue is no longer among the
+top ten allocation sources in that mTLS sample. Waiting subscriptions and send
+completion notifications still allocate.
+
+The first [performance gate](https://github.com/PaiMonCai/TuneX/actions/runs/38118781289)
+against `472c0bc` failed after 11m35s. Recomputing all 138 checks reproduces
+the receipt: only native DIRECT hot-reload apply p99 exceeded the unchanged
+35% threshold, from 0.710 to 1.311 ms (+84.5%). There were 24 hot-reload samples,
+including one candidate observation of 1.447 ms. The failure is retained under
+`scripts/perf/results/ci-08a480d/`; its cause has not been established.
+TSTStream/mTLS median B/op still decreased from 780/562 to 657/462, and full
+TCP runtime B/op from 116,676 to 115,249. These improvements do not override
+the failing lifecycle tail.
+
+The next measurement uses 100 hot reloads per quick native round, 300 raw
+samples per side, retaining all metrics, timing boundaries and the 35% gate.
+The workload declares sample count and target verification; legacy receipts
+cannot mix with this population. Each replacement target must receive the
+connection and return the complete payload; its accept and client workers
+are shut down and joined. Eight additional harness contracts pass locally
+(86 total; two Linux `/proc` checks skipped on Windows). An explicit comparison
+against the original `472c0bc` baseline remains required; a same-Agent-source
+control run cannot establish the optimization's performance.

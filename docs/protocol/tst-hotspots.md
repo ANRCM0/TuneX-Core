@@ -114,3 +114,33 @@ trace 转换后的 scheduler pprof 均解析成功。
 队列上限、WINDOW_UPDATE 合并、控制帧优先级与数据轮询、出队后的 I/O
 所有权，以及取消/关闭时仅回收队列内对象。当前不复用 channel，也不跳过
 必要广播或同步计量。固定 Linux、多 stream 和 WAN/长稳复测仍单独待验收。
+
+## 控制队列优化后复测：08a480d
+
+固定源码 `08a480def4ef73bc33d0d628886640bc431e9fbf`，采集时工作区已提交。
+同一 Windows/amd64、Go 1.26.3、GOMAXPROCS=4、CGO_ENABLED=0，沿用
+16 KiB mTLS、`-benchtime=2s -count=3` 及 CPU/heap/block/mutex/trace
+参数。四份 pprof 与完整 trace 转换后的 scheduler pprof 均已解析；原始文件、
+命令、源码 SHA、stdout、文件 hash 与分析完成标记保存于
+`scripts/perf/results/control-hotspots/manifest.json`。
+
+带诊断开销的三轮为 344.57/327.10/345.12 MB/s、493/466/458 B/op、
+14/14/13 allocs/op。CPU profile 时长约 9.19 秒、累计 CPU 样本 23.93 秒。
+采样次数和持续时间与前一轮不同，累计分配/等待总量不用于计算改善比例；
+无 profiling 的五轮交错 A/B 见 [工作记录](../v2.2-performance.md)。
+
+| 采样 | 当前观测 | 后续意义 |
+| --- | --- | --- |
+| alloc_space | 累计约 97.95 MB；`subscribeLocked` flat 28.59%，`send` 25.53%，TLS `readFromUntil` 14.80%，`WriteFrame` 8.68%，`creditFrame` 5.62%；控制队列退出前十项 | 槽位复用减少队列分配，真正的等待注册与发送完成通知仍需评估生命周期 |
+| CPU | Windows `runtime.cgocall` flat 58.71%，AES-GCM 加密/解密 2.72%/2.05% | 不能由本机系统调用占比推断 Linux 开销或改变 TLS 要求 |
+| block | 累计约 41.29 秒，channel receive 66.28%、select 33.54% | 跨 goroutine 的累计等待归因，不能直接称为死锁 |
+| mutex | 累计约 92.36 ms contention delay | 仅适用于当前 workload，未代替多规则高并发归因 |
+| trace scheduler | 累计约 5.15 秒，`signalLocked` flat 65.60% | 广播调度仍然存在，唤醒归属不等于该函数 CPU 耗时 |
+
+队列容量、FIFO、credit 合并、控制优先级/数据轮询及满队列发送的 cancel/重试
+回归连续 100 轮通过。实际 writer 在 payload I/O 中暂停时，原槽位复用与
+session failure 均不会擦除正在写出的 payload；失败释放保留的队列存储。
+最多保留 1024 槽位，amd64 为 64 KiB/Session，不含 payload/channel。
+下一项优化必须先明确完成通知在取消、迟到写完成、RESET 和 carrier failure
+中的所有权，不能直接复用仍可能被生产方引用的 channel。固定 Linux、多流、
+真实 WAN 和跨日长稳仍待验收。

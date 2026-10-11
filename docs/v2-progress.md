@@ -82,7 +82,9 @@ V2.2 P3 已继续实现惰性分配、最多 1024 槽位的控制帧环形队列
 完整 securelink 连续 10 轮、Agent 全量与 vet 通过。对 `472c0bc` 的 Windows
 五轮交错 A/B 中，TSTStream/mTLS 分配量减少 16.3%/20.0%，完整 TCP runtime
 减少 3.7%。槽位最多保留 64 KiB/Session（amd64，不含 payload/channel）；
-Linux CI/race、真实 shared-Link 和严格性能门禁待本轮候选新收据，详见
+`08a480d` Linux CI/race 与真实 shared-Link 已通过，首轮性能门禁因原生
+direct 热更新 apply p99 增加 84.5% 失败，原始工件已复算保留。正增加
+生命周期采样并完善采集器目标回收，保持原基线和 35% 阈值复验，详见
 [工作记录](v2.2-performance.md)。
 
 ## 实网发现与修复
@@ -97,7 +99,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | 266eb44 CI/race/真实集成及严格性能门禁已通过 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
+| 当前候选 SHA 的 Linux CI/race | 08a480d CI/race/真实集成已通过；严格性能门禁首轮失败、复验待执行 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |

@@ -32,6 +32,15 @@ python3 -B scripts/perf/stream-baseline.py \
 或 0 替代。等待收据单独记录在 `quiescence`，CPU 增量包含回收和该阶段的
 admin 采样开销。`workload.resource_phase` 标记此口径，拒绝与旧时点混比。
 
+热更新单独声明 `workload.hot_reload_samples`：quick 每轮 100 次，full 每轮
+200 次；CI 三轮 quick 合并 300 个原始样本，再计算 apply/effective 的 p95/p99。
+旧 quick 每轮只有 8 次（总计 24），旧 full 每轮 20 次；新旧数量不能直接混比。
+计时仍从 apply 前开始，apply 返回与新目标实际 payload 返回分别记录，所有
+原始值和相对门禁保留。新目标必须收到连接并返回完整 payload；
+`hot_reload_verification` 标记该验证方式。目标关闭后等待接受线程和已连接
+客户端的读线程退出，避免采集器自身的资源留至后续轮次。该修订不放宽阈值，
+也不能仅凭新一轮通过就认定旧失败只有噪声。
+
 每类 Go transport 仍各五个样本，但两端改为 A/B、B/A 交错的独立进程，
 每进程 `-count=1`。完整 TST runtime 基准启用真实流量账本，每次记账会
 同步保存私有状态并执行文件/目录 sync；其耗时包含存储，不能等同于纯帧
