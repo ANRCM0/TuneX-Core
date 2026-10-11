@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -75,6 +76,13 @@ func startRuntime(ctx context.Context, cfg *agentconfig.Config) *agentRuntime {
 	// startedAt is sampled once here: uptime must measure the agent process, not
 	// the moment the reporter happened to build a payload.
 	startedAt := time.Now()
+	if cfg.Profile {
+		// Lock and blocking profiles are disabled by the runtime by default. Turn
+		// them on only for an explicitly enabled profiling window; the admin
+		// endpoints remain bearer-authenticated and opt-in as well.
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(5)
+	}
 	role := cfg.Role
 	if role == "" {
 		role = agentconfig.RoleBoth
@@ -248,6 +256,7 @@ func startRuntime(ctx context.Context, cfg *agentconfig.Config) *agentRuntime {
 				NodeID:     cfg.NodeID,
 				Version:    version,
 				Role:       role,
+				Profile:    cfg.Profile,
 				// ownership: the fencing counters/state are part of the node's
 				// health surface, so an operator can see refusals and lapsed
 				// leases without opening the agent log.

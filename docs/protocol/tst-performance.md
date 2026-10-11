@@ -37,6 +37,25 @@ pinned host. A missing scenario or metric fails closed and is written to the
 `*-comparison.json` receipt. The anchor is a same-host reference, not a release
 capacity claim.
 
+For a profiling run, opt in explicitly. The Agent then exposes pprof only on
+the authenticated admin listener and the harness stores CPU, trace, heap,
+allocation, goroutine, block, mutex and thread-create artifacts beside the
+baseline JSON:
+
+```text
+python3 scripts/perf/stream-baseline.py \
+  --agent-binary scripts/perf/.bin/tunex-agent \
+  --out scripts/perf/results-profile \
+  --scenarios direct relay \
+  --capture-profiles --profile-seconds 3
+```
+
+Profiling is disabled by default (`TUNEX_AGENT_PROFILE=false`). The profile
+endpoints are never mounted on a separate unauthenticated port, and profile
+bytes are kept out of the JSON/CSV so the machine-readable result stays small.
+The files are diagnostic evidence, not a capacity claim; compare them on a
+fixed host with the same workload and candidate SHA.
+
 The transport benchmark matrix includes plain TCP, plain UDP, TST TCP and TST
 UDP. UDP uses a 1200-byte datagram to stay below common loopback/MTU limits;
 the full runtime tests separately cover larger packet rejection and bounded

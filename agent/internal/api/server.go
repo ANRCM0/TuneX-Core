@@ -7,6 +7,7 @@
 //	PATCH  /node/targets       hot-update one tunnel's egress target pool
 //	GET    /health             version / role / ports / egress pools
 //	GET    /debug/runtime      process runtime gauges (goroutines / RSS / CPU)
+//	GET    /debug/pprof/...    Go profiles (heap / goroutine / allocs / block / mutex / threadcreate)
 //
 // Mutating routes require a bearer token; by default the server binds to
 // loopback (127.0.0.1:9090 — the local admin port, separate from the
@@ -28,6 +29,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"runtime"
 	"sort"
 	"strconv"
@@ -70,6 +72,10 @@ type Options struct {
 	NodeID     string // reported by /health
 	Version    string // reported by /health
 	Role       string // reported by /health
+	// Profile enables authenticated /debug/pprof/* handlers on this admin
+	// listener. It defaults false and is intentionally not a retired network
+	// port flag: profiling must share the admin authentication boundary.
+	Profile bool
 
 	// Ownership is the fencing view: the durable epoch fence plus the lease clock's
 	// counters. nil omits the section entirely (an older build, or
@@ -165,7 +171,34 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/tunnel/", s.withAuth(s.handleTunnel))
 	mux.HandleFunc("/node/targets", s.withAuth(s.handleTargets))
 	mux.HandleFunc("/debug/runtime", s.withAuth(s.handleRuntimeStats))
+	// pprof lives inside the authenticated admin plane rather than on its own
+	// listener. The retired -pprof-port flag must stay retired, and a profile
+	// endpoint is exactly the kind of process internals that must not become
+	// unauthenticated: the same loopback bind plus bearer token that guards
+	// /debug/runtime guards this too. It is opt-in (see Options.Profile) so a
+	// production node keeps serving no profiling surface at all.
+	if s.opts.Profile {
+		mountPprof(mux, s.withAuth)
+	}
 	return mux
+}
+
+// ProfileNames are the runtime profiles exposed under /debug/pprof. The set is
+// closed on purpose: the index plus these named profiles is what the V2.2
+// profiling workflow (heap / alloc / lock contention / scheduling latency /
+// CPU) needs, and nothing else is reachable.
+var ProfileNames = []string{
+	"allocs", "block", "goroutine", "heap", "mutex", "threadcreate",
+}
+
+func mountPprof(mux *http.ServeMux, wrap func(http.HandlerFunc) http.HandlerFunc) {
+	mux.HandleFunc("/debug/pprof/profile", wrap(pprof.Profile))
+	mux.HandleFunc("/debug/pprof/symbol", wrap(pprof.Symbol))
+	mux.HandleFunc("/debug/pprof/trace", wrap(pprof.Trace))
+	mux.HandleFunc("/debug/pprof/", wrap(pprof.Index))
+	for _, name := range ProfileNames {
+		mux.HandleFunc("/debug/pprof/"+name, wrap(pprof.Handler(name).ServeHTTP))
+	}
 }
 
 // RuntimeStats is the /debug/runtime payload.

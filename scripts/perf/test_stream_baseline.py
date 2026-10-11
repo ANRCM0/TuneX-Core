@@ -357,6 +357,49 @@ class ScenarioRegistryTest(unittest.TestCase):
             baseline.scenario_factory("quic")
 
 
+class ProfileCaptureTest(unittest.TestCase):
+    def test_capture_is_opt_in(self):
+        self.assertFalse(baseline.parse_args([]).capture_profiles)
+        self.assertTrue(baseline.parse_args(["--capture-profiles"]).capture_profiles)
+        self.assertEqual(baseline.parse_args(["--profile-seconds", "3"]).profile_seconds, 3)
+
+    def test_profile_flag_reaches_the_measured_agents(self):
+        # 采集开关必须一路传到拓扑构造函数，否则工件会声称有 profile 而磁盘上
+        # 什么都没有（pprof 默认关闭，这是刻意的安全默认值）。
+        seen: list[bool] = []
+        original = baseline.direct_topology
+        try:
+            baseline.direct_topology = lambda binary, root, profile_enabled=False: (
+                seen.append(profile_enabled) or {"agents": []})
+            build = baseline.scenario_factory("direct")
+            build(Path("agent"), Path("root"), profile_enabled=True)
+            build(Path("agent"), Path("root"))
+        finally:
+            baseline.direct_topology = original
+        self.assertEqual(seen, [True, False])
+
+    def test_snapshot_names_are_covered_by_the_capture_set(self):
+        # heap/goroutine 是文档里承诺的"随时可读"的运行时快照；采集集合必须
+        # 至少包含它们，否则 --capture-profiles 会静默少存一份资料。
+        for name in baseline.PROFILE_SNAPSHOT_NAMES:
+            self.assertIn(name, baseline.PROFILE_CAPTURE_NAMES)
+
+    def test_capture_records_paths_and_never_inlines_profile_bytes(self):
+        class FakeAgent:
+            label = "ingress"
+
+            def request_bytes(self, path: str) -> bytes:
+                return b"profile-bytes"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            captured = baseline.capture_profiles(
+                {"agents": [FakeAgent()]}, Path(tmp) / "profiles", "direct")
+        entry = captured["ingress_profiles"]["heap"]
+        self.assertNotIn("data", entry)
+        self.assertEqual(entry["bytes"], len(b"profile-bytes"))
+        self.assertEqual(captured["ingress_profiles"]["cpu"]["seconds"], 1)
+
+
 class ComparisonTest(unittest.TestCase):
     def _artifact(self, throughput: float, latency: float) -> dict:
         summary = lambda median, p95, p99: {

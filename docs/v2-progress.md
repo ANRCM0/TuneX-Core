@@ -24,6 +24,13 @@ Web 完整源测试及 Next 41 路由构建通过；隔离源码的 `npm ci`、t
 
 Parser fuzz 在 15 秒执行 960,760 次，24 个新增 corpus，无失败；TCP、mTLS/TST 与含持久计量的 runtime 实测见 [性能基线](protocol/tst-performance.md) 和 Agent 证据。不发布生产吞吐量或优于旧协议的结论。
 
+V2.2 P2 profiling surface 已实现：Agent 默认不挂载 pprof；显式 `--profile`
+或 `TUNEX_AGENT_PROFILE=true` 后，`/debug/pprof/*` 仍受 admin bearer token
+保护。`stream-baseline.py --capture-profiles` 可采集 CPU/trace、heap、allocs、
+goroutine、block、mutex 和 thread-create 文件，并在 JSON 中记录脱敏路径与大小。
+本机 direct loopback smoke 已生成 runtime profile 文件；这只是工具链验证，
+不替代固定 Linux 主机上的性能对比或发布容量结论。
+
 Python harness 契约 3 项、相关 shell 语法、原生依赖扫描和当前文档本地链接检查通过。安装器完整 gate 在 Windows Git Bash 下失败，涉及 POSIX 文件权限等宿主差异；保留严格检查，不标为通过。
 
 ## 实网发现与修复

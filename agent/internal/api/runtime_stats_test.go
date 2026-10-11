@@ -79,3 +79,35 @@ func TestDebugRuntimeReportsLiveGauges(t *testing.T) {
 			stats.HeapAllocBytes, stats.HeapSysBytes)
 	}
 }
+
+func TestPprofIsDisabledByDefault(t *testing.T) {
+	srv := newTestServer(t, manager.NewTunnelManager(manager.NewEgressManager(), ""))
+	req := httptest.NewRequest(http.MethodGet, "/debug/pprof/heap", nil)
+	req.Header.Set("Authorization", "Bearer test-token")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("pprof must be disabled by default, got %d", rec.Code)
+	}
+}
+
+func TestPprofUsesAdminAuthenticationWhenEnabled(t *testing.T) {
+	tunnels := manager.NewTunnelManager(manager.NewEgressManager(), "")
+	srv, err := New(Options{ListenHost: "127.0.0.1", Token: "test-token", Profile: true}, tunnels, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unauthenticated := httptest.NewRequest(http.MethodGet, "/debug/pprof/heap", nil)
+	unauthenticatedRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(unauthenticatedRec, unauthenticated)
+	if unauthenticatedRec.Code != http.StatusUnauthorized {
+		t.Fatalf("pprof must require admin auth, got %d", unauthenticatedRec.Code)
+	}
+	authenticated := httptest.NewRequest(http.MethodGet, "/debug/pprof/heap", nil)
+	authenticated.Header.Set("Authorization", "Bearer test-token")
+	authenticatedRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(authenticatedRec, authenticated)
+	if authenticatedRec.Code != http.StatusOK {
+		t.Fatalf("authenticated pprof heap = %d, want 200", authenticatedRec.Code)
+	}
+}

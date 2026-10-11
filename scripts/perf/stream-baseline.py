@@ -91,6 +91,12 @@ PROFILES = {
              "concurrency": 128, "conn_rounds": 40, "setups": 400},
 }
 
+# Cheap, always-on snapshots that require no profile flag: they are plain
+# runtime gauges over the authenticated admin plane. The heavyweight pprof
+# captures (heap/allocs/lock profiles) are opt-in via --capture-profiles.
+PROFILE_SNAPSHOT_NAMES = ("heap", "goroutine")
+PROFILE_CAPTURE_NAMES = ("allocs", "block", "goroutine", "heap", "mutex", "threadcreate")
+
 
 # ======================================================================
 # 统计工具（纯函数：可离线单测）
@@ -328,7 +334,8 @@ class AgentProcess:
 
     def __init__(self, binary: Path, state_dir: Path, role: str,
                  listen_ip: str = "127.0.0.1", label: str = "agent",
-                 panel: "FakePanel | None" = None) -> None:
+                 panel: "FakePanel | None" = None,
+                 profile_enabled: bool = False) -> None:
         self.binary = binary
         self.state_dir = state_dir
         self.role = role
@@ -339,6 +346,7 @@ class AgentProcess:
         self.token = "perf-" + "".join(random.choices("0123456789abcdef", k=24))
         self.credential = "perfcred-" + "".join(random.choices("0123456789abcdef", k=24))
         self.panel = panel
+        self.profile_enabled = profile_enabled
         self.agent_id = "".join(random.choices("0123456789abcdef", k=32))
         self.port = _free_port()
         self.proc: subprocess.Popen | None = None
@@ -360,6 +368,8 @@ class AgentProcess:
             "--node-id", self.label,
             "--agent-id", self.agent_id,
         ]
+        if self.profile_enabled:
+            argv.append("--profile")
         if self.panel is not None:
             # 面板驱动的期望状态：这才让 restore / LKG / 重启收敛这些路径真的
             # 被走到（只用 admin API 只会造出"手工塞进去的隧道"）。
@@ -395,6 +405,12 @@ class AgentProcess:
             return json.loads(raw)
         except json.JSONDecodeError:
             return {"raw": raw}
+
+    def request_bytes(self, path: str) -> bytes:
+        req = urllib.request.Request(self.admin_url(path), method="GET")
+        req.add_header("Authorization", f"Bearer {self.token}")
+        with urllib.request.urlopen(req, timeout=60) as res:
+            return res.read()
 
     def apply_tunnel(self, config: dict) -> dict:
         return self.request("POST", "/tunnel", config)
@@ -1037,12 +1053,13 @@ def concurrent_session_round(host: str, port: int, concurrency: int, payload: by
 # 场景
 # ======================================================================
 
-def direct_topology(binary: Path, root: Path) -> dict:
+def direct_topology(binary: Path, root: Path, profile_enabled: bool = False) -> dict:
     """DIRECT：client → ingress agent → echo target（面板驱动的期望状态）。"""
     target = EchoTarget()
     panel = FakePanel()
     panel.start()
-    ingress = AgentProcess(binary, root / "ingress", role="INGRESS", label="ingress", panel=panel)
+    ingress = AgentProcess(binary, root / "ingress", role="INGRESS", label="ingress", panel=panel,
+                           profile_enabled=profile_enabled)
     listen_port = _free_port()
     panel.set_desired(ingress.credential, [{
         "id": "perf-direct",
@@ -1063,7 +1080,7 @@ def direct_topology(binary: Path, root: Path) -> dict:
             "listen_port": listen_port, "agents": [ingress], "probe_port": listen_port}
 
 
-def relay_topology(binary: Path, root: Path) -> dict:
+def relay_topology(binary: Path, root: Path, profile_enabled: bool = False) -> dict:
     """RELAY：client → ingress → egress agent → echo target。
 
     两台**独立进程**：同进程里跑 RELAY+EGRESS 会把两端 CPU 混成一份读数，也让
@@ -1074,8 +1091,10 @@ def relay_topology(binary: Path, root: Path) -> dict:
     target = EchoTarget()
     panel = FakePanel()
     panel.start()
-    ingress = AgentProcess(binary, root / "ingress", role="INGRESS", label="ingress", panel=panel)
-    egress = AgentProcess(binary, root / "egress", role="EGRESS", label="egress", panel=panel)
+    ingress = AgentProcess(binary, root / "ingress", role="INGRESS", label="ingress", panel=panel,
+                           profile_enabled=profile_enabled)
+    egress = AgentProcess(binary, root / "egress", role="EGRESS", label="egress", panel=panel,
+                          profile_enabled=profile_enabled)
 
     egress_port = _free_port()
     # 出口先起（§1.3 铁律一），入口再指向它。
@@ -1109,7 +1128,7 @@ def relay_topology(binary: Path, root: Path) -> dict:
             "listen_port": listen_port, "agents": [ingress, egress], "probe_port": listen_port}
 
 
-def stream_topology(binary: Path, root: Path, tunnel: dict) -> dict:
+def stream_topology(binary: Path, root: Path, tunnel: dict, profile_enabled: bool = False) -> dict:
     """DIRECT 形态的通用拓扑：入口 Agent + 回环 echo target，配置由面板下发。
 
     与 `direct_topology` 的步骤逐条一致，只是隧道配置由调用方给出（TLS 需要证书
@@ -1119,7 +1138,8 @@ def stream_topology(binary: Path, root: Path, tunnel: dict) -> dict:
     target = EchoTarget()
     panel = FakePanel()
     panel.start()
-    ingress = AgentProcess(binary, root / "ingress", role="INGRESS", label="ingress", panel=panel)
+    ingress = AgentProcess(binary, root / "ingress", role="INGRESS", label="ingress", panel=panel,
+                           profile_enabled=profile_enabled)
     listen_port = _free_port()
     config = dict(tunnel, ingress_port=listen_port,
                   remote_host=target.host, remote_port=target.port)
@@ -1135,7 +1155,7 @@ def stream_topology(binary: Path, root: Path, tunnel: dict) -> dict:
             "probe_port": listen_port, "config": config}
 
 
-def tls_topology(binary: Path, root: Path) -> dict:
+def tls_topology(binary: Path, root: Path, profile_enabled: bool = False) -> dict:
     """TLS 场景拓扑：入口 listener 是一个 TLS server，证书是临时自签的。"""
     cert_path = root / "certs" / "perf.crt"
     key_path = root / "certs" / "perf.key"
@@ -1147,17 +1167,17 @@ def tls_topology(binary: Path, root: Path) -> dict:
         "tls_cert_path": str(cert_path),
         "tls_key_path": str(key_path),
         "revision": 1,
-    })
+    }, profile_enabled=profile_enabled)
 
 
-def ws_topology(binary: Path, root: Path) -> dict:
+def ws_topology(binary: Path, root: Path, profile_enabled: bool = False) -> dict:
     """WS 场景拓扑：入口 listener 是一个 RFC 6455 server，握手后转发解帧字节。"""
     return stream_topology(binary, root / "topology", {
         "id": "perf-ws",
         "mode": "DIRECT",
         "protocol": "ws",
         "revision": 1,
-    })
+    }, profile_enabled=profile_enabled)
 
 
 def wait_listener(host: str, port: int, timeout: float = 30.0) -> float:
@@ -1261,6 +1281,43 @@ def collect_gauges(topology: dict) -> dict:
     return {agent.label: agent.gauge() for agent in topology["agents"]}
 
 
+def capture_profiles(topology: dict, out_dir: Path, scenario: str,
+                     seconds: int = 1) -> dict:
+    """把每个 Agent 的 pprof 产物写到磁盘，并在 JSON 里只记录文件路径。
+
+    二进制 profile 可能有几十 MB，放进 JSON 会让基线工件无法被人读、也无法被
+    diff 工具比较，所以工件里只留路径和字节数。采集失败不能中断整轮基线：
+    记下 error 即可，调用方能看出这一项没有测到。
+    """
+    out: dict = {}
+    for agent in topology["agents"]:
+        captured: dict = {}
+        for name in PROFILE_CAPTURE_NAMES:
+            path = out_dir / scenario / agent.label / f"{name}.pprof"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                payload = agent.request_bytes(f"/debug/pprof/{name}?debug=0")
+                path.write_bytes(payload)
+                captured[name] = {"path": str(path), "bytes": len(payload)}
+            except (OSError, RuntimeError, urllib.error.URLError) as exc:
+                captured[name] = {"error": str(exc)}
+        for name, endpoint, suffix in (
+                ("cpu", f"/debug/pprof/profile?seconds={seconds}", ".pprof"),
+                ("trace", f"/debug/pprof/trace?seconds={seconds}", ".trace"),
+        ):
+            path = out_dir / scenario / agent.label / f"{name}{suffix}"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                payload = agent.request_bytes(endpoint)
+                path.write_bytes(payload)
+                captured[name] = {"path": str(path), "bytes": len(payload),
+                                  "seconds": seconds}
+            except (OSError, RuntimeError, urllib.error.URLError) as exc:
+                captured[name] = {"error": str(exc), "seconds": seconds}
+        out[f"{agent.label}_profiles"] = captured
+    return out
+
+
 # ── 场景注册表 ──
 #
 # 场景名既是 JSON 的 key，也是所有指标的前缀，所以它必须能区分协议：
@@ -1301,9 +1358,16 @@ def scenario_factory(scenario: str) -> Callable[[Path, Path], dict]:
         "ws": ws_topology,
     }
     try:
-        return factories[scenario]
+        factory = factories[scenario]
     except KeyError:
         raise ValueError(f"unknown scenario {scenario!r}") from None
+
+    def build(binary: Path, root: Path, profile_enabled: bool = False) -> dict:
+        # 只有显式 --capture-profiles 时拓扑才带 --profile 启动；默认基线
+        # 保持生产形态的 Agent（无 profiling 端点）。
+        return factory(binary, root, profile_enabled=profile_enabled)
+
+    return build
 
 
 def measure_stream_scenario(scenario: str, topology: dict, profile: dict) -> dict:
@@ -1566,13 +1630,15 @@ def run(args: argparse.Namespace) -> dict:
             "network_shaping": False,
         },
         "environment": environment(binary),
+        "profiles_enabled": bool(args.capture_profiles),
         "scenarios": {},
     }
 
     root = Path(tempfile.mkdtemp(prefix="tunex-perf-"))
     try:
         for scenario in args.scenarios:
-            topology = scenario_factory(scenario)(binary, root / scenario)
+            topology = scenario_factory(scenario)(binary, root / scenario,
+                                                  profile_enabled=args.capture_profiles)
             try:
                 key = scenario
                 result["scenarios"][key] = {}
@@ -1584,6 +1650,10 @@ def run(args: argparse.Namespace) -> dict:
                     # 生命周期"，在 RELAY 上重跑只是把同一个数字测两遍。
                     result["scenarios"][key].update(measure_hot_reload(topology, profile, scenario))
                 result["scenarios"][key].update(measure_gauges(topology, before))
+                if args.capture_profiles:
+                    result["scenarios"][key].update(
+                        capture_profiles(topology, Path(args.out) / "profiles", key,
+                                         args.profile_seconds))
             finally:
                 _teardown(topology)
 
@@ -1740,6 +1810,12 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--profile", choices=sorted(PROFILES), default="quick")
     parser.add_argument("--payload-kib", type=int, default=None,
                         help="override the message size recorded and measured (positive KiB)")
+    parser.add_argument("--capture-profiles", action="store_true",
+                        help="start the measured Agents with --profile and save pprof "
+                             "artifacts (heap/allocs/goroutine/mutex/block/threadcreate) "
+                             "next to the JSON artifact")
+    parser.add_argument("--profile-seconds", type=int, default=1,
+                        help="duration for CPU/trace profiles when --capture-profiles is set")
     parser.add_argument("--rtt-ms", type=float, default=None,
                         help="record an externally injected RTT; this harness does not shape it")
     parser.add_argument("--packet-loss-percent", type=float, default=None,
@@ -1760,6 +1836,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     if args.payload_kib is not None and args.payload_kib <= 0:
         print("error: --payload-kib must be positive", file=sys.stderr)
+        return 2
+    if args.profile_seconds <= 0:
+        print("error: --profile-seconds must be positive", file=sys.stderr)
         return 2
     if args.rtt_ms is not None and args.rtt_ms < 0:
         print("error: --rtt-ms must be non-negative", file=sys.stderr)

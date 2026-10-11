@@ -258,6 +258,43 @@ func TestEnvIntKnobsAreApplied(t *testing.T) {
 	})
 }
 
+func TestProfileIsOptInAndReadsEnvironment(t *testing.T) {
+	t.Setenv("TUNEX_AGENT_PROFILE", "true")
+	cfg, err := Parse([]string{}, "test")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !cfg.Profile {
+		t.Fatal("TUNEX_AGENT_PROFILE=true must enable the profile surface")
+	}
+	t.Setenv("TUNEX_AGENT_PROFILE", "false")
+	cfg, err = Parse([]string{}, "test")
+	if err != nil {
+		t.Fatalf("parse false: %v", err)
+	}
+	if cfg.Profile {
+		t.Fatal("TUNEX_AGENT_PROFILE=false must disable the profile surface")
+	}
+}
+
+func TestProfileRejectsMalformedEnvironment(t *testing.T) {
+	t.Setenv("TUNEX_AGENT_PROFILE", "sometimes")
+	if _, err := Parse([]string{}, "test"); err == nil {
+		t.Fatal("malformed TUNEX_AGENT_PROFILE must fail closed")
+	}
+}
+
+func TestProfileFlagOverridesEnvironment(t *testing.T) {
+	t.Setenv("TUNEX_AGENT_PROFILE", "false")
+	cfg, err := Parse([]string{"--profile"}, "test")
+	if err != nil {
+		t.Fatalf("parse profile flag: %v", err)
+	}
+	if !cfg.Profile {
+		t.Fatal("--profile must enable the profile surface")
+	}
+}
+
 // ── 面板迁移回退（task-44）的配置面真值表 ─────────────────────────────────
 //
 // 判据只有一条：**两个键齐备才启用**（备用地址 + 迁移 id）。只填一个 = 配置写坏了，

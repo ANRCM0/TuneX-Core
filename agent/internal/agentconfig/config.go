@@ -20,9 +20,12 @@ import (
 type Config struct {
 	// AgentID is the immutable Panel-issued physical Agent identity.
 	// It does not change when the display node name or INGRESS/EGRESS/BOTH role changes.
-	AgentID         string
-	NodeID          string
-	Debug           bool
+	AgentID string
+	NodeID  string
+	Debug   bool
+	// Profile enables the authenticated admin pprof handlers. It is disabled
+	// by default and is intended for short, controlled profiling windows.
+	Profile         bool
 	ListenIP        string
 	Role            string
 	PanelHTTPURL    string
@@ -276,6 +279,7 @@ func Parse(args []string, version string) (*Config, error) {
 	fs.StringVar(&cfg.ConfigFile, "c", cfg.ConfigFile, "Config file (shorthand)")
 	fs.BoolVar(&cfg.Debug, "debug", cfg.Debug, "Enable debug mode")
 	fs.BoolVar(&cfg.Debug, "d", cfg.Debug, "Enable debug mode (shorthand)")
+	fs.BoolVar(&cfg.Profile, "profile", cfg.Profile, "Enable authenticated /debug/pprof handlers")
 	fs.StringVar(&cfg.AgentID, "agent-id", cfg.AgentID, "Immutable Panel-issued Agent ID")
 	fs.StringVar(&cfg.NodeID, "node-id", cfg.NodeID, "Human-readable node name (defaults to hostname)")
 	fs.StringVar(&cfg.NodeID, "n", cfg.NodeID, "Node ID (shorthand)")
@@ -382,6 +386,18 @@ func applyDefaults(cfg *Config, file string) error {
 			*dst = v
 		}
 	}
+	envBool := func(key string, dst *bool) error {
+		v, ok := os.LookupEnv("TUNEX_" + key)
+		if !ok || strings.TrimSpace(v) == "" {
+			return nil
+		}
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err != nil {
+			return fmt.Errorf("TUNEX_%s=%q 不是 boolean", key, v)
+		}
+		*dst = parsed
+		return nil
+	}
 	// Integer environment values fail closed when malformed; silently falling
 	// back would make the running Agent disagree with the operator's config.
 	envInt := func(key string, dst *int) error {
@@ -410,6 +426,9 @@ func applyDefaults(cfg *Config, file string) error {
 	envStr("NODE_CREDENTIAL", &cfg.NodeCredential)
 	envStr("INGRESS_RANGE", &cfg.IngressRange)
 	envStr("EGRESS_RANGE", &cfg.EgressRange)
+	if err := envBool("AGENT_PROFILE", &cfg.Profile); err != nil {
+		return err
+	}
 	// LookupEnv (not envStr): an explicitly empty TUNEX_STATE_DIR must be able
 	// to turn the durable cache OFF, which "unset" cannot express.
 	if v, ok := os.LookupEnv("TUNEX_STATE_DIR"); ok {
@@ -431,6 +450,7 @@ Usage:
 Flags:
   -c, --config string             Config file (default $HOME/.tunex-agent.yaml)
   -d, --debug                     Enable debug mode
+      --profile                   Enable authenticated /debug/pprof handlers
   -h, --help                      help for TuneX agent
   -l, --listen-ip string          Interface tunnels bind when the config does not pin one
       --agent-id string           Immutable Panel-issued Agent ID

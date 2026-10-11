@@ -57,6 +57,8 @@ func setScalar(cfg *Config, key, val string) {
 		cfg.NodeID = val
 	case "debug":
 		cfg.Debug = parseBool(val)
+	case "profile":
+		cfg.Profile = parseBool(val)
 	case "listen-ip", "listen_ip":
 		cfg.ListenIP = val
 	case "role":
