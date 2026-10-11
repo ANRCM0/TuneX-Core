@@ -115,7 +115,10 @@ V2.3 已进入 R1：统一 Workspace 图投影 Native NodeBinding/TST LinkResour
 当前 Forward 的授权出口，提供能力发现、拓扑查询和候选策略预览，默认关闭。
 环路、断边、跳数、载体/角色、revision/digest 与目标授权均显式校验；健康/质量
 未测量时保留 unknown/null。25 项专项和本机全量 3,210 项后端测试通过，真实
-MySQL/Redis/HTTP 7 项集成通过，业务资源前后无写入。当前提交 Linux 证据待取得；
+MySQL/Redis/HTTP 7 项集成通过，业务资源前后无写入。固定源码 `0d90619` 的
+[Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38131964218) 全部通过：
+后端全量 3,210 项、HTTP/DB 131 项（0 skipped），TST 真实链路 24 项、Native both
+真实链路 37 项均无失败；Agent race/fuzz、Web、运维与凭据/依赖检查通过。
 R2 探测、R3 策略持久化/选择、R4 切换、R5 多跳执行仍待开发，见
 [V2.3 记录](v2.3-routing.md)。
 
