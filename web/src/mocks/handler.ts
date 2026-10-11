@@ -296,6 +296,17 @@ export async function handleMock(method: string, path: string, req: MockRequest)
   }
 
   const ctx: rt.MockAuthedRouteContext = { method, clean, seg, q, db, user, req, scopeId };
+  if (seg[0] === "routing") {
+    if (!scopeMembership) return notFound("工作空间不存在");
+    const grants = mockEffectivePermissions(db, scopeMembership);
+    if (!grants.permissions["forward:read"] || !grants.permissions["node:read"])
+      return fail(403, "工作空间角色无权操作", "permission_denied");
+    // Demo discovery follows the production default-off contract. Browser
+    // acceptance uses an independent HTTP fixture, not invented live routing.
+    if (method === "GET" && seg[1] === "capabilities") return ok({ enabled: false, stage: "experimental", schema_versions: [1],
+      features: { policy_storage: false, policy_preview: false, active_probes: false, path_selection: false, multi_hop_execution: false } });
+    return fail(409, "路由预览尚未启用", "routing_disabled");
+  }
   {
     const result = await handleWorkspacesMock(ctx);
     if (result) return result;
