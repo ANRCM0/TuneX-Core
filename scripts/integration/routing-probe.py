@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import signal
+import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -36,7 +37,7 @@ def footprint(ids):
 
 
 def main():
-    rules, servers, observations = [], [], []
+    rules, servers, observations, edge_observations = [], [], [], []
     signal.signal(signal.SIGALRM, H.alarm)
     signal.setitimer(signal.ITIMER_REAL, 420)
     H.acquire_lock()
@@ -66,16 +67,39 @@ def main():
             detail, _ = request("GET", f"/api/forwards/{fid}")
             revisions[fid] = detail["config_revision"]
 
+        receipt, _ = request("POST", "/api/forward-operations", {
+            "idempotency_key": str(uuid.uuid4()), "name": f"{H.FIXTURE_PREFIX}-R2-tst", "path": "relay", "transport": "tst_v1",
+            "protocol": "both", "ingress_node_id": H.ING, "egress_node_id": H.EGR, "listen_port": 21092,
+            "target_host": targets["relay"], "target_port": 3053, "transport_options": {"selection": "auto"}})
+        tst = A.await_operation(receipt["operation_id"])
+        rules.append(tst["id"])
+        revisions[tst["id"]] = tst["config_revision"]
+        with A.tcp(21092) as client:
+            H.check(A.tcp_payload(client, b"R2-tst-business"), "R2 TST Forward has real TCP payload before its target probe")
+
         before = footprint(rules)
-        for mode, fid in zip(("direct", "relay"), rules):
+        for mode, fid in zip(("direct", "relay", "tst"), rules):
             body = {"schema_version": 1, "forward_id": fid, "expected_revision": revisions[fid]}
-            observation, headers = request("POST", "/api/routing/probes", body)
+            measured = {}
+            def measure():
+                status, response, hdr = H.req("POST", "/api/routing/probes", body)
+                if status == 429:
+                    return False
+                if status != 200:
+                    raise RuntimeError(f"probe rejected_{response.get('code', 'unknown')}")
+                measured.update(observation=H.unwrap(response), headers=hdr)
+                return True
+            if not H.wait_until(measure, timeout=45, interval=2):
+                raise TimeoutError("normal shared node cooldown did not elapse")
+            observation, headers = measured["observation"], measured["headers"]
             observations.append(observation)
             expected_node = H.ING if mode == "direct" else H.EGR
             H.check(observation["node_id"] == expected_node and observation["state"] == "reachable"
                     and observation["samples"][0]["status"] == "reachable"
                     and observation["tcp_connect_success_rate"] == 1,
                     f"R2 {mode} authenticated actual Agent connects only to its configured target")
+            H.check(observation["transport"] == ("tst_v1" if mode == "tst" else "native_plain"),
+                    f"R2 {mode} measurement preserves the actual authorized transport")
             H.check(observation["rtt_ms"] is None and observation["loss_percent"] is None
                     and observation["tls_handshake_success_rate"] is None
                     and not observation["udp_verified"] and not observation["end_to_end_verified"],
@@ -91,7 +115,30 @@ def main():
             H.check(status == 429 and result.get("code") == "probe_budget_exhausted", f"R2 {mode} immediate repeat is budget limited")
         H.check(footprint(rules) == before, "R2 probes do not modify Forward revisions, desired state or port leases")
 
-        direct, relay = rules
+        graph, _ = request("GET", "/api/routing/topology")
+        edge = next(e for e in graph["edges"] if e["transport"] == "native_plain" and e["from_node_id"] == H.ING and e["to_node_id"] == H.EGR)
+        quality = {}
+        def measure_edge():
+            status, response, _ = H.req("POST", "/api/routing/edge-probes", {"schema_version": 1, "edge_id": edge["id"]})
+            if status == 429:
+                return False
+            if status != 200:
+                raise RuntimeError(f"edge probe rejected_{response.get('code', 'unknown')}")
+            quality.update(H.unwrap(response))
+            return True
+        H.check(H.wait_until(measure_edge, timeout=45, interval=2), "R2 real inter-node quality respects shared probe budgets")
+        edge_observations.append(quality)
+        H.check(quality.get("scope") == "node_to_node_icmp" and quality.get("packets_sent") == 5 and quality.get("packets_received") == 5
+                and quality.get("rtt_ms") is not None and quality.get("loss_percent") == 0,
+                "R2 real Agent performs five authorized ICMP round trips on the isolated network")
+        H.check(quality.get("handshake_success_rate") is None and quality.get("end_to_end_verified") is False
+                and not any(key in json.dumps(quality) for key in ('"host"', '"peer_address"', '"detail"', 'credential')),
+                "R2 ICMP facts remain separate from handshake and end-to-end reachability")
+        cached, _ = request("GET", f"/api/routing/edge-probes/{edge['id']}")
+        H.check(cached["observation"]["observation_id"] == quality["observation_id"], "R2 edge cache is scoped to current adjacency identity")
+        H.check(footprint(rules) == before, "R2 edge probes also leave all business revisions and leases unchanged")
+
+        direct, relay, tst_id = rules
         body = {"schema_version": 1, "forward_id": direct, "expected_revision": revisions[direct]}
         status, result, _ = H.req("POST", "/api/routing/probes", {**body, "host": "127.0.0.1", "port": 1})
         H.check(status == 400 and result.get("code") == "invalid_input", "R2 user supplied target is rejected before network activity")
@@ -142,7 +189,7 @@ def main():
             server.stop()
         signal.setitimer(signal.ITIMER_REAL, 0)
         RESULT.write_text("\n".join(H.RESULTS) + f"\n{H.PASS} PASS / {H.FAIL} FAIL\n", encoding="utf-8")
-        OBSERVATIONS.write_text(json.dumps({"method": "actual_agent_tcp_connect", "observations": observations}, indent=2) + "\n", encoding="utf-8")
+        OBSERVATIONS.write_text(json.dumps({"method": "actual_agent_probes", "observations": observations, "edge_observations": edge_observations}, indent=2) + "\n", encoding="utf-8")
         H.release_lock()
     return 1 if H.FAIL else 0
 

@@ -157,6 +157,28 @@ if (process.env.TUNEX_DB_TEST !== '1') {
     await t.test('reads and previews leave business revisions, leases, operations and deployments unchanged', async () => {
       assert.deepEqual(await footprint(owner, forwardIds, nodeIds, linkIds), before);
     });
+    await t.test('persistent policy saves use optimistic versions, scoped write authorization and no business mutations', async () => {
+      const body = { schema_version: 1, expected_policy_version: 0, intent: input(), enabled: false,
+        auto_failover: true, auto_failback: false, failure_threshold: 2, recovery_threshold: 3, cooldown_ms: 30000,
+        max_rtt_ms: 200, max_loss_percent: 20, min_handshake_success_rate: 0.8 };
+      process.env.TUNEX_ROUTING_POLICIES_ENABLED = 'false';
+      assert.equal((await request(`/policies/${native.id}`, 'PUT', owner, body)).status, 409);
+      process.env.TUNEX_ROUTING_POLICIES_ENABLED = 'true';
+      const saved = await request(`/policies/${native.id}`, 'PUT', owner, body);
+      assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
+      assert.equal((await saved.json()).data.version, 1);
+      const concurrent = await Promise.all([1, 2].map(() => request(`/policies/${native.id}`, 'PUT', owner, { ...body, expected_policy_version: 1 })));
+      assert.deepEqual(concurrent.map((r) => r.status).sort(), [200, 409]);
+      assert.equal((await request(`/policies/${native.id}`, 'GET', outside)).status, 404);
+      assert.equal((await request(`/policies/${native.id}`, 'PUT', viewer, body, owner.workspace)).status, 403);
+      const stored = (await (await request(`/policies/${native.id}`, 'GET', owner)).json()).data;
+      assert.equal(stored.version, 2); assert.equal(stored.authority_current, true); assert.equal(stored.execution_enabled, false);
+      const decision = await request(`/policies/${native.id}/decision`, 'GET', owner);
+      assert.equal(decision.status, 200); assert.equal((await decision.json()).data.reason, 'policy_disabled');
+      assert.deepEqual(await footprint(owner, forwardIds, nodeIds, linkIds), before);
+      await db.routingPolicy.deleteMany({ where: { workspace_id: owner.workspace } });
+      process.env.TUNEX_ROUTING_POLICIES_ENABLED = 'false';
+    });
     await t.test('routing probes have a separate default-off switch and no user supplied targets', async () => {
       const body = { schema_version: 1, forward_id: native.id, expected_revision: 1 };
       process.env.TUNEX_ROUTING_PROBES_ENABLED = 'false';
@@ -166,7 +188,7 @@ if (process.env.TUNEX_DB_TEST !== '1') {
       assert.equal((await request('/probes', 'POST', owner, { ...body, host: '127.0.0.1', port: 1 })).status, 400);
       assert.equal((await request('/probes', 'POST', viewer, body, owner.workspace)).status, 403);
       const unsupported = await request('/probes', 'POST', owner, { ...body, forward_id: tst.id });
-      assert.equal(unsupported.status, 422); assert.equal((await unsupported.json()).code, 'probe_transport_unsupported');
+      assert.equal(unsupported.status, 409); assert.equal((await unsupported.json()).code, 'probe_capability_unavailable');
       assert.equal((await request(`/probes/${native.id}`, 'GET', outside)).status, 404);
       const missingCap = await request('/probes', 'POST', owner, body);
       assert.equal(missingCap.status, 409); assert.equal((await missingCap.json()).code, 'probe_capability_unavailable');

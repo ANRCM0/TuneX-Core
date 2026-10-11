@@ -51,6 +51,7 @@ const (
 	ActionApplyLink           = "apply_link"
 	ActionRemoveLink          = "remove_link"
 	ActionDiagnoseLink        = "diagnose_link_forward"
+	ActionDiagnoseRoute       = "diagnose_route_edge"
 	CapabilityTSTLink         = "forward.link.tst.v1"
 	CapabilityRuntimePolicy   = "forward.policy.runtime.v1"
 	CapabilityTrafficRotation = "forward.traffic.rotation.v1"
@@ -61,6 +62,7 @@ const (
 // implements. Adding a name here without implementing it in execute() is caught
 // by TestAdvertisedCapabilitiesMatchExecute, not by production.
 var advertisedActions = []string{
+	ActionDiagnoseRoute,
 	ActionApplyTunnel,
 	ActionRemoveTunnel,
 	ActionSuspendTunnel,

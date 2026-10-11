@@ -91,7 +91,9 @@ export function projectRoutingTopology(workspace: number, facts: RoutingFacts, n
     const target = exitId && nodeIds.has(exitId) ? exitId : null;
     if (!path || !protocol || !transport) issues.push("unsupported_forward_contract");
     if (!ingress || !target) issues.push("endpoint_unavailable");
-    if (row.middle_node_id !== null || row.federated_egress_peer || path === "direct" && (row.link_resource_id !== null || row.egress_node_id !== null))
+    if (row.middle_node_id !== null && (path !== "relay" || transport !== "native_plain" || protocol !== "tcp" ||
+      row.middle_node_id === ingress || row.middle_node_id === target || !nodeIds.has(row.middle_node_id)) ||
+      row.federated_egress_peer || path === "direct" && (row.link_resource_id !== null || row.egress_node_id !== null))
       issues.push("unsupported_forward_topology");
     if (!row.config_revision || row.config_revision < 1) issues.push("revision_unavailable");
     const targetAddress = path === "relay" && transport === "native_plain" ? row.egress_pool?.targets[0]
@@ -102,9 +104,12 @@ export function projectRoutingTopology(workspace: number, facts: RoutingFacts, n
       (!row.egress_pool || row.egress_pool.node_id !== target || row.egress_pool.status !== "active")) issues.push("target_authority_invalid");
     const edge = path === "relay" ? edges.find((e) => e.transport === transport && e.from_node_id === ingress && e.to_node_id === target &&
       (row.link_resource_id === null || e.id === `link:${row.link_resource_id}`)) : undefined;
-    if (path === "relay" && !edge) issues.push("carrier_edge_unavailable");
+    const hops = row.middle_node_id !== null ? [ingress, row.middle_node_id, target] : [ingress, target];
+    const currentEdges = path === "relay" ? hops.slice(1).map((to, i) => edges.find((e) => e.transport === transport &&
+      e.from_node_id === hops[i] && e.to_node_id === to && (row.link_resource_id === null || e.id === `link:${row.link_resource_id}`))) : [];
+    if (path === "relay" && currentEdges.some((e) => !e)) issues.push("carrier_edge_unavailable");
     return { id: row.id, workspace_id: workspace, revision: row.config_revision, path, protocol, transport,
-      ingress_node_id: ingress, target_node_id: target, current_edge_ids: edge ? [edge.id] : [],
+      ingress_node_id: ingress, target_node_id: target, current_edge_ids: currentEdges.flatMap((e) => e ? [e.id] : []),
       desired_status: row.desired_status, apply_status: row.apply_status, issues: issues.sort() };
   }).sort((a, b) => a.id - b.id);
   notices.sort((a, b) => a.id - b.id);

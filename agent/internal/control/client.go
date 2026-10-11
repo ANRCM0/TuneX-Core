@@ -98,9 +98,10 @@ type Envelope struct {
 }
 
 type QueuedCommand struct {
-	Envelope Envelope                `json:"envelope"`
-	Config   *forwarder.TunnelConfig `json:"config"`
-	Link     *tstruntime.Config      `json:"link,omitempty"`
+	RouteProbe *diag.RouteRequest      `json:"route_probe,omitempty"`
+	Envelope   Envelope                `json:"envelope"`
+	Config     *forwarder.TunnelConfig `json:"config"`
+	Link       *tstruntime.Config      `json:"link,omitempty"`
 	// Probe carries a diagnose request. It is a separate field rather than a
 	// synthetic TunnelConfig: a probe is not a tunnel, and pretending otherwise
 	// would let a malformed probe look like a config apply.
@@ -429,6 +430,10 @@ func (c *Client) execute(ctx context.Context, cmd *QueuedCommand) ackPayload {
 	// instead of applied: otherwise a single wrong field could install a config
 	// for a different tunnel, or one the panel believes is a different revision.
 	resourceID := strings.TrimSpace(cmd.Envelope.ResourceID)
+	if cmd.RouteProbe != nil && cmd.Envelope.Action != ActionDiagnoseRoute {
+		ack.ErrorCode, ack.Error = "invalid_payload", "route_probe requires diagnose_route_edge"
+		return ack
+	}
 	if resourceID == "" {
 		ack.ErrorCode, ack.Error = "invalid_command", "missing resource_id"
 		return ack
@@ -590,6 +595,19 @@ func (c *Client) execute(ctx context.Context, cmd *QueuedCommand) ackPayload {
 		// not connect_ip or a report from before this native apply. Reuse the
 		// serialized full-state publisher already used by Link mutations.
 		c.reportLinkState(ctx)
+	case ActionDiagnoseRoute:
+		if cmd.RouteProbe == nil || cmd.Probe != nil || cmd.LookingGlass != nil || cmd.LinkProbe != nil || cmd.Config != nil || cmd.Link != nil {
+			ack.ErrorCode, ack.Error = "invalid_payload", "expected isolated route probe"
+			return ack
+		}
+		results, err := diag.RouteProbe(ctx, *cmd.RouteProbe)
+		if err != nil {
+			ack.ErrorCode, ack.Error = "invalid_payload", "invalid route probe"
+			return ack
+		}
+		ack.OK, ack.Results = true, results
+		rev := cmd.Envelope.Revision
+		ack.AppliedRevision = &rev
 	case ActionDiagnoseTunnel:
 		if cmd.Probe == nil {
 			ack.ErrorCode, ack.Error = "invalid_payload", "missing probe request"

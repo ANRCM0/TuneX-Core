@@ -7,6 +7,9 @@ import { loadRoutingTopology, routingEnabled } from "../services/routing-topolog
 import { collectRoutingProbe, readRoutingProbe, defaultRoutingProbeDeps, routingProbesEnabled,
   type RoutingProbeDeps } from "../services/routing-probe.ts";
 import { RoutingProbeInputSchema, ROUTING_PROBE_LIMITS } from "../domain/routing/probe.ts";
+import { RoutingPolicyInputSchema } from "../domain/routing/policy.ts";
+import { saveRoutingPolicy, readRoutingPolicy, defaultRoutingPolicyDeps, routingPoliciesEnabled, evaluateRoutingPolicy } from "../services/routing-policy.ts";
+import { collectRoutingEdgeProbe, readRoutingEdgeProbe, defaultRoutingEdgeProbeDeps, RoutingEdgeProbeInputSchema } from "../services/routing-edge-probe.ts";
 import { RoutingError, RoutingPreviewSchema, previewRoutingPolicy, ROUTING_LIMITS, ROUTING_SCHEMA_VERSION,
   ROUTING_MAX_CANDIDATES, ROUTING_MAX_HOPS, ROUTING_MAX_REQUEST_BYTES } from "../domain/routing/model.ts";
 
@@ -72,8 +75,8 @@ export function createRoutingRoutes(deps: {
     await next();
   });
   routingRoutes.get("/capabilities", (c) => c.json({ data: { schema_versions: [ROUTING_SCHEMA_VERSION], enabled: enabled(), stage: "experimental",
-    features: { workspace_topology: enabled(), policy_preview: enabled(), policy_storage: false,
-      active_probes: probesEnabled(), native_tcp_target_probes: probesEnabled(), tst_target_probes: false,
+    features: { workspace_topology: enabled(), policy_preview: enabled(), policy_storage: routingPoliciesEnabled(),
+      active_probes: probesEnabled(), native_tcp_target_probes: probesEnabled(), tst_target_probes: probesEnabled(), node_icmp_edge_probes: probesEnabled(),
       path_selection: false, failover: false, multi_hop_execution: false },
     limits: { ...ROUTING_LIMITS, candidates: ROUTING_MAX_CANDIDATES, hops: ROUTING_MAX_HOPS,
       request_bytes: ROUTING_MAX_REQUEST_BYTES, probes: ROUTING_PROBE_LIMITS } } }));
@@ -96,6 +99,37 @@ export function createRoutingRoutes(deps: {
     if (!probesEnabled()) throw new RoutingError("routing_probes_disabled", 409);
     const id = z.coerce.number().int().positive().max(2_147_483_647).parse(c.req.param("forwardId"));
     return c.json({ data: await readRoutingProbe(c.get("workspace")!.id, id, await probeDeps()) });
+  });
+  routingRoutes.put("/policies/:forwardId", async (c) => {
+    const access = c.get("workspace")!, actor = c.get("user")!;
+    if (!canWorkspaceResourceAction(access, "use", "node")) throw workspacePermissionDenied();
+    if (!routingPoliciesEnabled()) throw new RoutingError("routing_policies_disabled", 409);
+    const input = RoutingPolicyInputSchema.parse(await readRoutingJson(c.req.raw));
+    if (String(input.intent.forward_id) !== c.req.param("forwardId")) throw new RoutingError("invalid_input", 400);
+    const dependencies = await defaultRoutingPolicyDeps((creator) => {
+      if (!canWorkspaceResourceAction(access, "update", "forward", creator === actor.id)) throw workspacePermissionDenied();
+    });
+    return c.json({ data: await saveRoutingPolicy(access.id, actor.id, input, dependencies) });
+  });
+  routingRoutes.post("/edge-probes", async (c) => {
+    const access = c.get("workspace")!;
+    if (!canWorkspaceResourceAction(access, "use", "node")) throw workspacePermissionDenied();
+    if (!probesEnabled()) throw new RoutingError("routing_probes_disabled", 409);
+    const input = RoutingEdgeProbeInputSchema.parse(await readRoutingJson(c.req.raw));
+    return c.json({ data: await collectRoutingEdgeProbe(access.id, input, await defaultRoutingEdgeProbeDeps()) });
+  });
+  routingRoutes.get("/edge-probes/:edgeId", async (c) => {
+    const input = RoutingEdgeProbeInputSchema.parse({ schema_version: 1, edge_id: c.req.param("edgeId") });
+    if (!probesEnabled()) throw new RoutingError("routing_probes_disabled", 409);
+    return c.json({ data: await readRoutingEdgeProbe(c.get("workspace")!.id, input.edge_id, await defaultRoutingEdgeProbeDeps()) });
+  });
+  routingRoutes.get("/policies/:forwardId", async (c) => {
+    const id = z.coerce.number().int().positive().max(2_147_483_647).parse(c.req.param("forwardId"));
+    return c.json({ data: await readRoutingPolicy(c.get("workspace")!.id, id) });
+  });
+  routingRoutes.get("/policies/:forwardId/decision", async (c) => {
+    const id = z.coerce.number().int().positive().max(2_147_483_647).parse(c.req.param("forwardId"));
+    return c.json({ data: await evaluateRoutingPolicy(c.get("workspace")!.id, id) });
   });
   return routingRoutes;
 }

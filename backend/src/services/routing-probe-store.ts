@@ -19,7 +19,7 @@ return 1`;
 export const routingProbeKeys = {
   busy: (workspace: number) => scopedKey(workspace, "routing_probe", "busy"),
   cooldown: (workspace: number, node: number) => scopedKey(workspace, "routing_probe", "cooldown", node),
-  observation: (workspace: number, forward: number) => scopedKey(workspace, "routing_probe", "observation", forward),
+  observation: (workspace: number, forward: number | string) => scopedKey(workspace, "routing_probe", "observation", forward),
 };
 export const routingProbeStore: RoutingProbeStore = {
   async acquire(workspace, node, token) {

@@ -39,6 +39,7 @@ import {
 } from "./orchestrator.ts";
 
 export interface QueuedAgentCommand {
+  route_probe?: { peer_address: string } | null;
   link_probe?: { forward_id: number; revision: number; timeout_ms?: number } | null;
   link?: TstPlacementConfig | null;
   envelope: CommandEnvelope;
@@ -141,6 +142,7 @@ export interface AgentDiagnoseResult {
   elapsed_ms: number;
   resolved_ip?: string;
   detail?: string;
+  route_quality?: { packets_sent: number; packets_received: number; rtt_ms: number | null };
 }
 
 const COMMAND_TTL_S = 120;
@@ -267,6 +269,7 @@ export async function enqueueAgentCommand(
   link?: TstPlacementConfig | null,
   linkProbe?: QueuedAgentCommand["link_probe"],
   expectedTargets?: { host: string; port: number }[],
+  routeProbe?: QueuedAgentCommand["route_probe"],
 ): Promise<{ scope: number }> {
   const scope = await (deps.resolveScope ?? nodeScope)(nodeId);
   const item: QueuedAgentCommand = {
@@ -274,6 +277,7 @@ export async function enqueueAgentCommand(
     config,
     ...(link ? { link } : {}),
     ...(linkProbe ? { link_probe: linkProbe } : {}),
+    ...(routeProbe ? { route_probe: routeProbe } : {}),
     ...(probe ? { probe } : {}),
     ...(lookingGlass ? { looking_glass: lookingGlass } : {}),
     queued_at: new Date().toISOString(),
@@ -453,12 +457,14 @@ export async function storeAgentCommandAck(
   }
 
   const results = normalizeDiagnoseResults(ack.results);
+  if (results?.some((r) => r.route_quality) && pending.action !== "diagnose_route_edge")
+    throw new TypeError("route quality is only accepted for diagnose_route_edge");
   if (results) {
     // A probe-shaped answer must cover exactly the requested target set. 
     // widened "probe-shaped" from one action to two (diagnose_tunnel, looking_glass)
     // rather than duplicating the rule: both ACK a bounded list of host/port
     // observations, and for both a partial list reads as "this path is fine".
-    const probeLike = pending.action === "diagnose_tunnel" || pending.action === "diagnose_link_forward" || pending.action === "looking_glass";
+    const probeLike = pending.action === "diagnose_tunnel" || pending.action === "diagnose_link_forward" || pending.action === "diagnose_route_edge" || pending.action === "looking_glass";
     if (probeLike) {
       const expected = pending.expected_targets ?? [];
       const problem = matchExpectedTargets(expected, results);
@@ -473,7 +479,7 @@ export async function storeAgentCommandAck(
     }
     normalized.results = results;
   } else if (
-    (pending.action === "diagnose_tunnel" || pending.action === "diagnose_link_forward" || pending.action === "looking_glass") && ack.ok
+    (pending.action === "diagnose_tunnel" || pending.action === "diagnose_link_forward" || pending.action === "diagnose_route_edge" || pending.action === "looking_glass") && ack.ok
   ) {
     throw new TypeError(`${pending.action} ack returned no results`);
   }
@@ -516,10 +522,21 @@ export function normalizeDiagnoseResults(value: unknown): AgentDiagnoseResult[] 
     if (typeof row.status !== "string" || row.status.length > 32) {
       throw new TypeError("result status is missing or too long");
     }
+    let quality: AgentDiagnoseResult["route_quality"];
+    if (row.route_quality !== undefined) {
+      const q = row.route_quality as Record<string, unknown>;
+      if (!q || typeof q !== "object" || Object.keys(q).some((key) => !["packets_sent", "packets_received", "rtt_ms"].includes(key)) ||
+        !Number.isInteger(q.packets_sent) || (q.packets_sent as number) < 0 || (q.packets_sent as number) > 5 ||
+        !Number.isInteger(q.packets_received) || (q.packets_received as number) < 0 || (q.packets_received as number) > (q.packets_sent as number) ||
+        q.rtt_ms !== null && (!Number.isFinite(q.rtt_ms) || (q.rtt_ms as number) < 0 || (q.rtt_ms as number) > 2000) ||
+        ((q.packets_received as number) === 0) !== (q.rtt_ms === null)) throw new TypeError("invalid_route_quality");
+      quality = { packets_sent: q.packets_sent as number, packets_received: q.packets_received as number, rtt_ms: q.rtt_ms as number | null };
+    }
     out.push({
       host: row.host,
       port: row.port as number,
       status: row.status,
+      ...(quality ? { route_quality: quality } : {}),
       elapsed_ms: Number.isFinite(row.elapsed_ms) ? Math.max(0, Math.trunc(row.elapsed_ms as number)) : 0,
       ...(typeof row.resolved_ip === "string" && row.resolved_ip.length <= DIAGNOSE_RESULT_HOST_MAX
         ? { resolved_ip: row.resolved_ip } : {}),

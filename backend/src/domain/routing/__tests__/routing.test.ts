@@ -77,13 +77,23 @@ describe("V2.3 scoped graph facts", () => {
     facts.forwards[1]!.egress_node_id = 2;
     expect(projectRoutingTopology(7, facts).forwards[1]!.issues).toContain("carrier_edge_unavailable");
   });
-  test("unknown protocols, federation, middle placement and missing revisions fail closed", () => {
+  test("unknown protocols, federation, invalid middle placement and missing revisions fail closed", () => {
     for (const patch of [{ forward_protocol: "quic" }, { forward_protocol: null }, { tunnel_mode: null },
-      { middle_node_id: 2 }, { federated_egress_peer: "external" }, { config_revision: null }, { egress_pool: null }]) {
+      { middle_node_id: 1 }, { middle_node_id: 99 }, { federated_egress_peer: "external" }, { config_revision: null }, { egress_pool: null }]) {
       const facts = fixture(); Object.assign(facts.forwards[0]!, patch);
       const graph = projectRoutingTopology(7, facts);
       expect(() => previewRoutingPolicy(graph, draft(graph))).toThrow();
     }
+  });
+  test("confirmed Native TCP middle placement projects both authorized adjacency edges", () => {
+    const facts = fixture(); facts.forwards[0]!.middle_node_id = 2;
+    const graph = projectRoutingTopology(7, facts);
+    expect(graph.forwards[0]!.issues).toEqual([]);
+    expect(graph.forwards[0]!.current_edge_ids).toEqual(["binding:11", "binding:12"]);
+    facts.bindings = facts.bindings.filter((b) => b.id !== 12);
+    expect(projectRoutingTopology(7, facts).forwards[0]!.issues).toContain("carrier_edge_unavailable");
+    facts.forwards[0]!.forward_protocol = "both";
+    expect(projectRoutingTopology(7, facts).forwards[0]!.issues).toContain("unsupported_forward_topology");
   });
   test("a foreign endpoint is suppressed from the public Forward projection", () => {
     const facts = fixture(); facts.forwards[0]!.egress_node_id = 999;

@@ -28,6 +28,7 @@ export const COMMAND_ACTIONS = [
   "apply_link",
   "remove_link",
   "diagnose_link_forward",
+  "diagnose_route_edge",
   "apply_tunnel",
   "remove_tunnel",
   "update_targets",
@@ -164,6 +165,7 @@ export const ACTION_SPECS: Readonly<Record<CommandAction, ActionSpec>> = {
   apply_link: { mutating: true, resources: ["link"], minRevision: 1 },
   remove_link: { mutating: true, resources: ["link"], minRevision: 1 },
   diagnose_link_forward: { mutating: false, resources: ["link"], minRevision: 1 },
+  diagnose_route_edge: { mutating: false, resources: ["node"], minRevision: 0 },
   apply_tunnel: { mutating: true, resources: ["tunnel"], minRevision: 1 },
   remove_tunnel: { mutating: true, resources: ["tunnel"], minRevision: 1 },
   update_targets: { mutating: true, resources: ["tunnel"], minRevision: 1 },
@@ -346,6 +348,7 @@ export interface CommandAckPayload {
 }
 
 export type CommandPayload =
+  | RouteEdgeProbePayload
   | DiagnoseLinkForwardPayload
   | CollectDiagnosticsPayload
   | DiagnoseTunnelPayload
@@ -385,6 +388,8 @@ export type DiagnoseTunnelEnvelope = CommandEnvelopeBase & { action: "diagnose_t
 export type CollectDiagnosticsEnvelope = CommandEnvelopeBase & { action: "collect_diagnostics"; payload: CollectDiagnosticsPayload };
 export type LookingGlassEnvelope = CommandEnvelopeBase & { action: "looking_glass"; payload: LookingGlassPayload };
 export interface DiagnoseLinkForwardPayload { forward_id: number; revision: number; timeout_ms?: number }
+export interface RouteEdgeProbePayload { peer_address: string }
+export type RouteEdgeProbeEnvelope = CommandEnvelopeBase & { action: "diagnose_route_edge"; payload: RouteEdgeProbePayload };
 export type DiagnoseLinkForwardEnvelope = CommandEnvelopeBase & { action: "diagnose_link_forward"; payload: DiagnoseLinkForwardPayload };
 /** Secret-free command metadata; the complete encrypted carrier config is a sibling. */
 export interface LinkCommandPayload {
@@ -400,6 +405,7 @@ export type LinkEnvelope = CommandEnvelopeBase & {
 
 /** 判别联合：`switch (env.action)` 即可把 payload 收敛到具体类型。 */
 export type CommandEnvelope =
+  | RouteEdgeProbeEnvelope
   | DiagnoseLinkForwardEnvelope
   | LinkEnvelope
   | CollectDiagnosticsEnvelope

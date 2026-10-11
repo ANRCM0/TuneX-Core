@@ -146,6 +146,7 @@ model Workspace {
   tunnels          Tunnel[]
   policy_assignments WorkspacePolicyAssignment[]
   custom_roles     WorkspaceCustomRole[]
+  routing_policies RoutingPolicy[]
   /// V5-WP17（契约 F6）：该租户拥有的 DNS 凭据。NULL 归属的 provider 是平台级，
   /// 不在任何租户的列表里。
   dns_providers    DNSProvider[]     @relation("workspace_dns_providers")
@@ -822,6 +823,8 @@ model Tunnel {
   // node_port_lease 行（契约 §1、§7）。
   federated_egress_peer String? @db.VarChar(64)
 
+  routing_policy RoutingPolicy?
+
   @@index([tunnel_mode])
   @@index([forward_protocol])
   @@index([ingress_node_id])
@@ -829,6 +832,28 @@ model Tunnel {
   @@index([egress_pool_id])
   @@index([apply_status])
   @@map("tunnel")
+}
+
+/// Routing intent and controller memory; Forward desired/runtime state remains in Tunnel/ForwardRevision.
+model RoutingPolicy {
+  id Int @id @default(autoincrement())
+  workspace_id Int
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  forward_id Int @unique
+  forward Tunnel @relation(fields: [forward_id], references: [id], onDelete: Cascade)
+  version Int @default(1)
+  state_version Int @default(0)
+  created_by_id Int
+  forward_revision Int
+  authority_digest String @db.Char(64)
+  enabled Boolean @default(false)
+  intent Json
+  controller_state Json
+  last_decision Json?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  @@index([workspace_id, enabled])
+  @@map("routing_policy")
 }
 
 /// V4-WP1 Forward Revision Snapshot（DEVELOPMENT.md §13.3.2）。

@@ -140,6 +140,7 @@ describe("A. 统一命令（§7.9 六个动作 + V4-WP11C 诊断）", () => {
       "apply_link",
       "remove_link",
       "diagnose_link_forward",
+      "diagnose_route_edge",
       "apply_tunnel",
       "remove_tunnel",
       "update_targets",

@@ -85,12 +85,13 @@ type Request struct {
 
 // Result is the outcome of one probe, with the facts the panel renders.
 type Result struct {
-	Host       string `json:"host"`
-	Port       int    `json:"port"`
-	Status     Status `json:"status"`
-	ElapsedMS  int64  `json:"elapsed_ms"`
-	ResolvedIP string `json:"resolved_ip,omitempty"`
-	Detail     string `json:"detail,omitempty"`
+	RouteQuality *RouteQuality `json:"route_quality,omitempty"`
+	Host         string        `json:"host"`
+	Port         int           `json:"port"`
+	Status       Status        `json:"status"`
+	ElapsedMS    int64         `json:"elapsed_ms"`
+	ResolvedIP   string        `json:"resolved_ip,omitempty"`
+	Detail       string        `json:"detail,omitempty"`
 	/**
 	 * Hops 是逐跳结果（目前只有 traceroute/traceroute6 会填）。
 	 *

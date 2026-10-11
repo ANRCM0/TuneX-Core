@@ -172,3 +172,49 @@ test("routing probes require both exact-value default-off switches", () => {
       if (previous[i] === undefined) delete process.env[key]; else process.env[key] = previous[i];
   }
 });
+
+function tstFixture() {
+  const forward = row(); forward.tunnel_mode = "relay"; forward.link_resource_id = 8;
+  forward.egress_node = { ...forward.ingress_node, id: 2, node_id: "agent-two",
+    state_report: { ...forward.ingress_node.state_report, capabilities: ["diagnose_link_forward"] } };
+  const endpoint = (id: number) => ({ id, workspace_id: 7, connect_host: "node.test", version: "2.3", capabilities: ["forward.link.tst.v1"] });
+  const link = { id: 8, carrier: "tst_v1", generation: 3, desired_version: 1, status: "active" };
+  const deployment = { id: 12, generation: 3, version: 1, status: "active", lease_expires_at: new Date(liveStamp.getTime() + 90_000),
+    binding_snapshot: { spec: { link_id: 8, workspace_id: 7, version: 1, generation: 3, ingress: endpoint(1), egress: endpoint(2),
+      carrier_port: 24000, lease_expires_at: new Date(liveStamp.getTime() + 90_000).toISOString(), bindings: [{ forward_id: 4, revision: 1,
+        protocol: "tcp", listen_port: 21000, target_host: "target.test", target_port: 443 }] } },
+    placements: ["ingress", "egress"].map((role, i) => ({ node_id: i + 1, role, runtime_id: `tunex-tst-8-${role}`,
+      generation: 3, applied_generation: 3, config_digest: String(i).repeat(64), status: "running" })) };
+  const calls: any[] = [];
+  const client = { tunnel: { findFirst: async () => forward }, nodeBinding: { findFirst: async () => { throw new Error("TST has no Native binding"); } },
+    linkResource: { findFirst: async (arg: unknown) => { calls.push(arg); return link; } },
+    linkDeployment: { findUnique: async () => deployment } };
+  return { forward, link, deployment, calls, load: () => loadRoutingProbePlan(7, 4, client as never, liveStamp) };
+}
+test("TST probe binds the confirmed current deployment and resolves only the immutable authorized target", async () => {
+  const f = tstFixture(); const a = await f.load();
+  expect(a).toMatchObject({ transport: "tst_v1", generation: 3, nodeId: 2, resourceId: "tunex-tst-8-egress", targets: [{ host: "target.test", port: 443 }] });
+  expect(f.calls[0]).toEqual({ where: { id: 8, workspace_id: 7 }, select: { id: true, carrier: true, generation: true, desired_version: true, status: true } });
+  f.deployment.placements[1]!.config_digest = "f".repeat(64);
+  expect((await f.load()).identityDigest).not.toBe(a.identityDigest);
+  const collection = fixture(); collection.plan.transport = "tst_v1";
+  const result = await collectRoutingProbe(7, input, collection.deps);
+  expect(result.transport).toBe("tst_v1"); expect(result.end_to_end_verified).toBe(false);
+  expect((await readRoutingProbe(7, 4, collection.deps)).state).toBe("reachable");
+  collection.plan.transport = "native_plain";
+  expect((await readRoutingProbe(7, 4, collection.deps)).observation).toBeNull();
+});
+test("TST probe rejects stale generations, foreign identities, unconfirmed placements and target drift", async () => {
+  const mutations: ((f: ReturnType<typeof tstFixture>) => void)[] = [
+    (f) => { f.link.generation++; }, (f) => { f.link.desired_version++; }, (f) => { f.link.status = "degraded"; },
+    (f) => { f.deployment.lease_expires_at = liveStamp; }, (f) => { f.deployment.status = "pending"; },
+    (f) => { f.deployment.placements[1]!.applied_generation = 2; },
+    (f) => { f.deployment.placements[1]!.node_id = 9; }, (f) => { f.deployment.placements[1]!.runtime_id = "foreign-runtime"; },
+    (f) => { f.deployment.binding_snapshot.spec.workspace_id = 9; }, (f) => { f.deployment.binding_snapshot.spec.egress.workspace_id = 9; },
+    (f) => { f.deployment.binding_snapshot.spec.bindings[0]!.target_port++; },
+    (f) => { f.deployment.binding_snapshot.spec.bindings[0]!.revision++; },
+  ];
+  for (const mutate of mutations) { const f = tstFixture(); mutate(f); await expect(f.load()).rejects.toThrow("probe_link_unconfirmed"); }
+  const f = tstFixture(); f.forward.egress_node!.state_report.capabilities = [];
+  await expect(f.load()).rejects.toThrow("probe_capability_unavailable");
+});

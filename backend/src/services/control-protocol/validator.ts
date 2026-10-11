@@ -141,6 +141,7 @@ export const ACTION_PAYLOAD_KEYS = {
   apply_link: new Set(["link_id", "workspace_id", "node_id", "config_digest"]),
   remove_link: new Set(["link_id", "workspace_id", "node_id"]),
   diagnose_link_forward: new Set(["forward_id", "revision", "timeout_ms"]),
+  diagnose_route_edge: new Set(["peer_address"]),
   apply_tunnel: new Set(["tunnel"]),
   remove_tunnel: new Set(["reason"]),
   update_targets: new Set(["targets"]),
@@ -419,6 +420,11 @@ export function validatePayload(action: CommandAction, payload: unknown): string
     case "collect_diagnostics": {
       const extra = unknownKeys(payload, [...ACTION_PAYLOAD_KEYS.collect_diagnostics]);
       if (extra.length > 0) return `payload 含未定义字段: ${extra.join(", ")}`;
+      return null;
+    }
+    case "diagnose_route_edge": {
+      if (unknownKeys(payload, [...ACTION_PAYLOAD_KEYS.diagnose_route_edge]).length || typeof payload.peer_address !== "string" ||
+        payload.peer_address.length < 2 || payload.peer_address.length > 45 || !/^[0-9a-fA-F:.]+$/.test(payload.peer_address)) return "invalid_route_probe";
       return null;
     }
     case "diagnose_link_forward": {
@@ -865,6 +871,7 @@ export class ControlValidator {
       }
       case "diagnose_tunnel":
       case "diagnose_link_forward":
+      case "diagnose_route_edge":
         // : a diagnose is READ-ONLY. It must not enter the mutation path,
         // which would apply the revision gate and advance the resource status —
         // a diagnostic that mutates is not a diagnostic.

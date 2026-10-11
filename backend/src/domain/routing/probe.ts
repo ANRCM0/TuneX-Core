@@ -20,7 +20,7 @@ const SampleSchema = z.object({
 export const RoutingProbeObservationSchema = z.object({
   schema_version: z.literal(1), observation_id: z.string().uuid(), workspace_id: id,
   forward_id: id, revision: id, node_id: id, method: z.literal("tcp_connect"),
-  transport: z.literal("native_plain"), evidence_protocol: z.literal("tcp"),
+  transport: z.enum(["native_plain", "tst_v1"]), evidence_protocol: z.literal("tcp"),
   timing_basis: z.literal("dns_and_tcp_connect"),
   scope: z.literal("node_to_configured_targets"), started_at: z.string().datetime(),
   observed_at: z.string().datetime(), expires_at: z.string().datetime(),
@@ -54,6 +54,7 @@ export interface RoutingProbeResult extends RoutingProbeTarget {
 export function summarizeRoutingProbe(input: {
   observationId: string; workspaceId: number; forwardId: number; revision: number; nodeId: number;
   targets: RoutingProbeTarget[]; results: RoutingProbeResult[]; startedAt: Date; observedAt: Date;
+  transport?: "native_plain" | "tst_v1";
 }): RoutingProbeObservation {
   if (!input.targets.length || input.targets.length > ROUTING_PROBE_LIMITS.targets || input.results.length !== input.targets.length)
     throw new RoutingError("probe_result_invalid", 503);
@@ -78,7 +79,7 @@ export function summarizeRoutingProbe(input: {
     : successful === 0 ? "unreachable" : "mixed";
   return RoutingProbeObservationSchema.parse({ schema_version: 1, observation_id: input.observationId,
     workspace_id: input.workspaceId, forward_id: input.forwardId, revision: input.revision, node_id: input.nodeId,
-    method: "tcp_connect", transport: "native_plain", evidence_protocol: "tcp", timing_basis: "dns_and_tcp_connect", scope: "node_to_configured_targets",
+    method: "tcp_connect", transport: input.transport ?? "native_plain", evidence_protocol: "tcp", timing_basis: "dns_and_tcp_connect", scope: "node_to_configured_targets",
     started_at: input.startedAt.toISOString(), observed_at: input.observedAt.toISOString(),
     expires_at: new Date(input.startedAt.getTime() + ROUTING_PROBE_LIMITS.freshness_ms).toISOString(), state, samples,
     tcp_connect_success_rate: connects.length ? successful / connects.length : null,
