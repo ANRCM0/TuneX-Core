@@ -914,6 +914,38 @@ describe("V4-F1 ingress ownership handoff", () => {
 });
 
 describe("V5.4 middle-hop topology cutover", () => {
+  it("same middle-node listener edit reuses one transit lease and restores it after failed cutover", async () => {
+    const { f, deps, orch } = removeMiddleHopEnv();
+    Object.assign(f.snapshots.find((s) => s.revision === 7)!, { middle_node_id: 23, listen_port: 10002 });
+    Object.assign(f.tunnels[0]!, { middle_node_id: 23, listen_port: 10002, applied_revision: 6 });
+    f.leases.forEach((lease) => Object.assign(lease, { protocol: "tcp", bind_scope: "*", link_id: null }));
+    f.bindings.push({ id: 1, ingress_node_id: 11, egress_node_id: 23 }, { id: 2, ingress_node_id: 23, egress_node_id: 22 });
+    Object.assign(deps.db.nodeBinding, { findMany: async () => f.bindings });
+    const readNode = deps.db.node.findUnique;
+    deps.db.node.findUnique = async (args: unknown) => {
+      const row = await readNode(args) as Record<string, unknown>;
+      return (args as { where: { id: number } }).where.id === 23 ? { ...row, role: "both" } : row;
+    };
+    const transitCalls: Array<Record<string, unknown>> = [];
+    orch.dispatchTransit = (async (input: Record<string, unknown>) => {
+      transitCalls.push(input);
+      return { ok: true, host: "10.0.1.23" };
+    }) as typeof orch.dispatchTransit;
+    const dispatch = orch.dispatchIngress;
+    orch.dispatchIngress = (async (input: Record<string, unknown>) => input.revision === 7
+      ? { ok: false, error_code: "agent_rejected", error: "fixture listener conflict" }
+      : dispatch(input)) as typeof orch.dispatchIngress;
+    const result = await registerRollout({ tunnelId: 1, revision: 7, baseRevision: 6,
+      impact: impact({ listener_replacement: true, listen_port_change: true }) }, deps);
+    expect(result.ok).toBe(false);
+    expect(result.compensated, JSON.stringify(result)).toBe(true);
+    expect(f.rollouts[0]!.compensated).toBe(true);
+    expect(transitCalls.map((call) => [call.port, call.revision])).toEqual([[23000, 7], [23000, 8]]);
+    expect(f.leases.filter((lease) => lease.node_id === 23 && lease.status === "active")).toHaveLength(1);
+    expect(f.tunnels[0]).toMatchObject({ listen_port: 10001, middle_node_id: 23,
+      config_revision: 8, applied_revision: 8, apply_status: "active" });
+  });
+
   it("failed transit preparation restores a shared exit and ingress above every cleanup fence", async () => {
     const { f, deps, orch } = removeMiddleHopEnv();
     Object.assign(f.snapshots.find((s) => s.revision === 6)!, { middle_node_id: null });

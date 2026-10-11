@@ -38,6 +38,8 @@ def rollout_state(fid):
         const safe=v=>typeof v==='string' && /^[a-z][a-z0-9_]{0,63}$/.test(v)?v:null;
         return rows.map(r=>({revision:r.revision,base_revision:r.base_revision,phase:safe(r.phase),last_error_code:safe(r.last_error_code),
             compensated:r.compensated,compensation_error_present:r.compensation_error!==null,
+            compensation_failure_stages:['snapshot','egress','transit','ingress','direct'].filter(s=>r.compensation_error?.includes('replay '+s+':') ||
+                s==='snapshot'&&r.compensation_error?.includes('rollback snapshot')),
             steps:(Array.isArray(r.steps?.steps)?r.steps.steps:[]).slice(0,64).map(s=>({phase:safe(s.phase),kind:safe(s.kind),
                 completed:Array.isArray(r.cleaned)&&r.cleaned.includes(s.idempotency_key)}))}));"""%fid)
 

@@ -553,7 +553,7 @@ async function runStep(
       //
       // 非联邦路径**一行都不进这里**（`federatedEgressPeerOf(...) === null`）。
       const declareFederated = federatedEgressPeerOf(ctx.desired) !== null;
-      const preferredPort =
+      let preferredPort =
         step.port ??
         (declareFederated && step.direction === "ingress"
           ? await existingIngressPort(deps, ctx.tunnelId)
@@ -561,6 +561,20 @@ async function runStep(
       const leaseType = step.direction === "egress" ? "egress" : "ingress";
       const portProtocol = (await dispatchFactsFor(ctx.tunnelId, deps.db))?.protocol ?? null;
       const portBindScope = step.direction === "ingress" ? ctx.desired.listen_ip : "*";
+      if (preferredPort == null && step.meta?.reason === "transit_hop") {
+        // Transit ports are owned by NodePortLease, not copied into snapshots.
+        // Re-preparing the same middle node must reuse its one active lease;
+        // allocating another leaves ambiguous ownership and breaks rollback.
+        const leases = await deps.db.nodePortLease.findMany({ where: { node_id: nodeId,
+          tunnel_id: ctx.tunnelId, status: "active" }, take: 2,
+          select: { port: true, lease_type: true, link_id: true, protocol: true, bind_scope: true } }) as
+          Array<{ port: number; lease_type?: string; link_id?: number | null; protocol?: string; bind_scope?: string }>;
+        const held = leases[0];
+        if (leases.length > 1 || held && (held.lease_type && held.lease_type !== "egress" || held.link_id != null ||
+            held.protocol && held.protocol !== leaseProtocol(portProtocol) || held.bind_scope && held.bind_scope !== "*"))
+          return { ok: false, error_code: "transit_lease_ambiguous", error: "中间跳缺少唯一匹配的端口租约" };
+        preferredPort = held?.port ?? null;
+      }
       // `AcquirePortResult.reused` 同时覆盖“已有 active lease”与“revive released row”，
       // 但失败补偿只应保留前者。先拍一张 active ownership 快照，才能区分这两种语义。
       let preexistingActiveLeaseId: number | null = null;
