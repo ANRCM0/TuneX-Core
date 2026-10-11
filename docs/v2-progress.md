@@ -109,7 +109,7 @@ goroutine 2 → 2、FD 7 → 7。全部原始矩阵、soak 及双 SHA 门禁复�
 方案 P4 的 ADR/威胁模型/兼容策略已交付，完整 QUIC 实现待评审后开展。
 按用户决定，真机部署、固定主机容量、真实 WAN 和跨日验证延后统一验收。
 
-## V2.3 R1 开发
+## V2.3 R1/R2 开发
 
 V2.3 已进入 R1：统一 Workspace 图投影 Native NodeBinding/TST LinkResource 与
 当前 Forward 的授权出口，提供能力发现、拓扑查询和候选策略预览，默认关闭。
@@ -119,7 +119,11 @@ MySQL/Redis/HTTP 7 项集成通过，业务资源前后无写入。固定源码 
 [Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38131964218) 全部通过：
 后端全量 3,210 项、HTTP/DB 131 项（0 skipped），TST 真实链路 24 项、Native both
 真实链路 37 项均无失败；Agent race/fuzz、Web、运维与凭据/依赖检查通过。
-R2 探测、R3 策略持久化/选择、R4 切换、R5 多跳执行仍待开发，见
+R2 已开始 Native TCP/both 目标连接观测：使用已授权配置与现有 Agent 诊断命令，
+增加独立默认关闭开关、Workspace/节点预算、结果身份与过期校验。本机全量后端
+3,226 项、真实认证/MySQL/Redis 10 项通过；对应源码 Linux 实际 Agent 测量待取得，
+不将 TCP 目标事实填成节点/载体健康、RTT、丢包或 UDP 成功。R2 TST/载体质量、
+R3 策略持久化/选择、R4 切换、R5 多跳执行仍待开发，见
 [V2.3 记录](v2.3-routing.md)。
 
 ## 实网发现与修复

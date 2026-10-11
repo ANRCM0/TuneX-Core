@@ -4,6 +4,7 @@ import type { AppVariables } from "../../middlewares/auth.ts";
 import { createRoutingRoutes } from "../routing.ts";
 import { canWorkspaceResourceAction, workspacePermissionDenied, type WorkspaceAccess } from "../../services/workspace.ts";
 import type { RoutingTopology } from "../../domain/routing/model.ts";
+import type { RoutingProbeDeps } from "../../services/routing-probe.ts";
 
 function setup(patch: Partial<WorkspaceAccess> = {}, enabled = true) {
   const access: WorkspaceAccess = { id: 7, role: "owner", kind: "personal", personalWorkspaceId: 7, customRoleId: null, ...patch };
@@ -89,4 +90,52 @@ test("stale revision and foreign resource errors remain distinct, DB failures re
   s.fail();
   const failed = await s.app.request("/api/routing/topology");
   expect(failed.status).toBe(503); expect(await failed.text()).not.toContain("private-db");
+});
+
+function probeSetup(patch: Partial<WorkspaceAccess> = {}, probesEnabled = true) {
+  const access: WorkspaceAccess = { id: 7, role: "owner", kind: "personal", personalWorkspaceId: 7, customRoleId: null, ...patch };
+  const calls: string[] = []; let raw: string | null = null;
+  const deps: RoutingProbeDeps = { load: async (_ws, id) => {
+    calls.push("load");
+    if (id !== 4) throw new Error("private-probe-target-and-password");
+    return { workspaceId: 7, forwardId: 4, revision: 1, nodeId: 1, resourceId: "tunex-4-direct",
+      targets: [{ host: "private.test", port: 8443 }], identityDigest: "a".repeat(64) };
+  }, issue: async () => ({ ok: true, results: [{ host: "private.test", port: 8443, status: "reachable", elapsed_ms: 1 }] }),
+  store: { acquire: async () => true, release: async () => {}, read: async () => raw,
+    write: async (_w, _f, value) => { raw = value; return true; } } };
+  const app = new Hono<{ Variables: AppVariables }>();
+  app.route("/api/routing", createRoutingRoutes({ enabled: () => true, probesEnabled: () => probesEnabled,
+    access: async () => access, probeDeps: async () => { calls.push("deps"); return deps; } }));
+  const request = (body: unknown = { schema_version: 1, forward_id: 4, expected_revision: 1 }) =>
+    app.request("/api/routing/probes", { method: "POST", body: JSON.stringify(body) });
+  return { app, calls, deps, request };
+}
+test("probe HTTP requires node use while cached reads retain read permissions and no-store", async () => {
+  const viewer = probeSetup({ role: "viewer" });
+  expect((await viewer.request()).status).toBe(403); expect(viewer.calls).toEqual([]);
+  const read = await viewer.app.request("/api/routing/probes/4");
+  expect(read.status).toBe(200); expect(read.headers.get("cache-control")).toBe("no-store");
+  expect((await read.json() as { data: { state: string } }).data.state).toBe("unknown");
+  const s = probeSetup(); const response = await s.request();
+  expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(await response.text()).not.toContain("private.test");
+});
+test("separate probe switch and invalid bodies deny before constructing command dependencies", async () => {
+  const off = probeSetup({}, false);
+  expect((await off.request()).status).toBe(409); expect(off.calls).toEqual([]);
+  expect((await off.app.request("/api/routing/probes/4")).status).toBe(409);
+  const s = probeSetup();
+  for (const body of [{ schema_version: 1, forward_id: 4, expected_revision: 1, host: "127.0.0.1" },
+    { schema_version: 1, forward_id: 4, expected_revision: 1, padding: "x".repeat(40_000) }])
+    expect((await s.request(body)).status).toBe(body.padding ? 413 : 400);
+  expect((await s.app.request("/api/routing/probes/4x")).status).toBe(400); expect(s.calls).toEqual([]);
+});
+test("probe HTTP returns revision conflicts, retryable budgets and sanitized infrastructure errors", async () => {
+  const s = probeSetup();
+  expect((await s.request({ schema_version: 1, forward_id: 4, expected_revision: 2 })).status).toBe(409);
+  s.deps.store.acquire = async () => false;
+  const busy = await s.request(); expect(busy.status).toBe(429);
+  expect(busy.headers.get("retry-after")).toBe("60"); expect(busy.headers.get("cache-control")).toBe("no-store");
+  const failed = await s.app.request("/api/routing/probes/5"); expect(failed.status).toBe(503);
+  expect(await failed.text()).not.toContain("private-probe");
 });

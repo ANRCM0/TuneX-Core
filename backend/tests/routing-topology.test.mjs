@@ -16,6 +16,8 @@ if (process.env.TUNEX_DB_TEST !== '1') {
   const { db } = await import('../src/db.ts');
   const { redis } = await import('../src/redis.ts');
   const { canonicalConfigDigest } = await import('../src/domain/link/core-contract.ts');
+  const { loadRoutingProbePlan } = await import('../src/services/routing-probe.ts');
+  const { routingProbeStore, routingProbeKeys } = await import('../src/services/routing-probe-store.ts');
   after(async () => { redis.disconnect(); await db.$disconnect(); });
   const nonce = randomUUID();
   let ip = 0;
@@ -154,6 +156,51 @@ if (process.env.TUNEX_DB_TEST !== '1') {
     });
     await t.test('reads and previews leave business revisions, leases, operations and deployments unchanged', async () => {
       assert.deepEqual(await footprint(owner, forwardIds, nodeIds, linkIds), before);
+    });
+    await t.test('routing probes have a separate default-off switch and no user supplied targets', async () => {
+      const body = { schema_version: 1, forward_id: native.id, expected_revision: 1 };
+      process.env.TUNEX_ROUTING_PROBES_ENABLED = 'false';
+      assert.equal((await request('/probes', 'POST', owner, body)).status, 409);
+      assert.equal((await request(`/probes/${native.id}`, 'GET', owner)).status, 409);
+      process.env.TUNEX_ROUTING_PROBES_ENABLED = 'true';
+      assert.equal((await request('/probes', 'POST', owner, { ...body, host: '127.0.0.1', port: 1 })).status, 400);
+      assert.equal((await request('/probes', 'POST', viewer, body, owner.workspace)).status, 403);
+      const unsupported = await request('/probes', 'POST', owner, { ...body, forward_id: tst.id });
+      assert.equal(unsupported.status, 422); assert.equal((await unsupported.json()).code, 'probe_transport_unsupported');
+      assert.equal((await request(`/probes/${native.id}`, 'GET', outside)).status, 404);
+      const missingCap = await request('/probes', 'POST', owner, body);
+      assert.equal(missingCap.status, 409); assert.equal((await missingCap.json()).code, 'probe_capability_unavailable');
+    });
+    await t.test('real native probe planner scopes active targets and returns unknown without a measurement', async () => {
+      await db.nodeStateReport.update({ where: { node_id: egress.id }, data: { reported_at: new Date(),
+        capabilities: ['apply_tunnel', 'diagnose_tunnel', 'forward.protocol.both.native.v1'],
+        capability_manifest: { schema_version: 2, protocols: ['tcp', 'udp', 'both'], transports: ['stream', 'datagram', 'mixed'],
+          runtime: [], diagnostics: ['tunnel_probe'] } } });
+      const plan = await loadRoutingProbePlan(owner.workspace, native.id);
+      assert.equal(plan.nodeId, egress.id); assert.deepEqual(plan.targets, [{ host: 'example.test', port: 443 }]);
+      const absent = await request(`/probes/${native.id}`, 'GET', owner);
+      assert.equal(absent.status, 200); assert.equal(absent.headers.get('cache-control'), 'no-store');
+      assert.equal((await absent.json()).data.state, 'unknown');
+      const stale = await request('/probes', 'POST', owner, { schema_version: 1, forward_id: native.id, expected_revision: 2 });
+      assert.equal(stale.status, 409); assert.equal((await stale.json()).code, 'revision_conflict');
+    });
+    await t.test('real Redis atomically caps Workspace/node probes and fences an expired writer', async () => {
+      const token = randomUUID();
+      assert.equal(await routingProbeStore.acquire(owner.workspace, egress.id, token), true);
+      assert.equal(await routingProbeStore.acquire(owner.workspace, ingress.id, randomUUID()), false);
+      await routingProbeStore.release(owner.workspace, 'foreign-token');
+      assert.equal(await redis.exists(routingProbeKeys.busy(owner.workspace)), 1);
+      assert(await redis.pttl(routingProbeKeys.busy(owner.workspace)) > 0);
+      assert(await redis.pttl(routingProbeKeys.cooldown(owner.workspace, egress.id)) > 0);
+      const denied = await request('/probes', 'POST', owner, { schema_version: 1, forward_id: native.id, expected_revision: 1 });
+      assert.equal(denied.status, 429); assert.equal(denied.headers.get('retry-after'), '60');
+      assert.equal(await routingProbeStore.write(owner.workspace, native.id, '{}', 'foreign-token'), false);
+      assert.equal(await routingProbeStore.read(owner.workspace, native.id), null);
+      await routingProbeStore.release(owner.workspace, token);
+      assert.equal(await redis.exists(routingProbeKeys.busy(owner.workspace)), 0);
+      assert.equal(await routingProbeStore.acquire(owner.workspace, egress.id, randomUUID()), false);
+      assert.deepEqual(await footprint(owner, forwardIds, nodeIds, linkIds), before);
+      process.env.TUNEX_ROUTING_PROBES_ENABLED = 'false';
     });
   });
 }

@@ -88,6 +88,13 @@ V2.3 R1 的纯图/策略与真实 HTTP 路由测试位于 `backend/src/domain/ro
 `TUNEX_ROUTING_ENABLED=false` 为默认值；接口和 R2–R5 范围见
 [V2.3 路由开发](v2.3-routing.md)。
 
+V2.3 R2 Native 目标探测专项在 `backend/src/services/__tests__/routing-probe.test.ts`，
+真实 HTTP 权限测试沿用 routing 路由测试。`routing-topology.test.mjs` 另验证独立
+默认关闭开关、目标快照、拒绝路径及真实 Redis Lua 预算/过期写者围栏。
+core CI 的 `scripts/integration/routing-probe.py` 使用真实 Agent/目标 socket 验证
+TCP 观测、目标失效、配置身份变化与实际经过的过期窗口；结果属于目标段，不是
+链路 RTT/丢包/UDP 或端到端健康证明。真机部署继续延后统一验收。
+
 ## 证据与平台矩阵
 
 已完成的数值与范围写入上方证据文件；未运行项保持待验证。Web 组件 fixture 的交互和生产 CSS 检查只证明被加载组件；完整登录/Workspace/API/Agent 浏览器流程已由真实业务浏览器证据单独记录。

@@ -75,7 +75,7 @@ export const RoutingPreviewSchema = z.object({
 export type RoutingPreviewInput = z.infer<typeof RoutingPreviewSchema>;
 
 export class RoutingError extends Error {
-  constructor(public readonly code: string, public readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503) {
+  constructor(public readonly code: string, public readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 429 | 503) {
     super(code);
   }
 }

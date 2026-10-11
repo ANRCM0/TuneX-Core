@@ -4,11 +4,14 @@ import { z } from "zod";
 import type { AppVariables } from "../middlewares/auth.ts";
 import { resolveWorkspaceAccess, canWorkspaceResourceAction, workspacePermissionDenied } from "../services/workspace.ts";
 import { loadRoutingTopology, routingEnabled } from "../services/routing-topology.ts";
+import { collectRoutingProbe, readRoutingProbe, defaultRoutingProbeDeps, routingProbesEnabled,
+  type RoutingProbeDeps } from "../services/routing-probe.ts";
+import { RoutingProbeInputSchema, ROUTING_PROBE_LIMITS } from "../domain/routing/probe.ts";
 import { RoutingError, RoutingPreviewSchema, previewRoutingPolicy, ROUTING_LIMITS, ROUTING_SCHEMA_VERSION,
   ROUTING_MAX_CANDIDATES, ROUTING_MAX_HOPS, ROUTING_MAX_REQUEST_BYTES } from "../domain/routing/model.ts";
 
 /** Bound actual bytes, including streaming requests and false Content-Length headers. */
-async function readPreviewJson(request: Request): Promise<unknown> {
+async function readRoutingJson(request: Request): Promise<unknown> {
   if (!request.body) throw new RoutingError("invalid_input", 400);
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -37,10 +40,13 @@ async function readPreviewJson(request: Request): Promise<unknown> {
 /** Injectable read boundary keeps HTTP tests independent of process-wide module mocks. */
 export function createRoutingRoutes(deps: {
   load?: typeof loadRoutingTopology; access?: typeof resolveWorkspaceAccess; enabled?: typeof routingEnabled;
+  probesEnabled?: typeof routingProbesEnabled; probeDeps?: () => Promise<RoutingProbeDeps>;
 } = {}) {
   const load = deps.load ?? loadRoutingTopology;
   const resolveAccess = deps.access ?? resolveWorkspaceAccess;
   const enabled = deps.enabled ?? routingEnabled;
+  const probesEnabled = () => enabled() && (deps.probesEnabled ?? routingProbesEnabled)();
+  const probeDeps = async () => ({ ...await (deps.probeDeps ?? defaultRoutingProbeDeps)(), enabled: probesEnabled });
   const routingRoutes = new Hono<{ Variables: AppVariables }>();
   routingRoutes.onError((error, c) => {
     c.header("Cache-Control", "no-store");
@@ -50,7 +56,10 @@ export function createRoutingRoutes(deps: {
       return new Response(response.body, { status: response.status, headers });
     }
     if (error instanceof z.ZodError) return c.json({ error: "路由参数不合法", code: "invalid_input" }, 400);
-    if (error instanceof RoutingError) return c.json({ error: error.code, code: error.code }, error.status);
+    if (error instanceof RoutingError) {
+      if (error.code === "probe_budget_exhausted") c.header("Retry-After", String(ROUTING_PROBE_LIMITS.reservation_ms / 1000));
+      return c.json({ error: error.code, code: error.code }, error.status);
+    }
     return c.json({ error: "路由拓扑暂不可用", code: "routing_unavailable" }, 503);
   });
   routingRoutes.use("*", async (c, next) => {
@@ -64,15 +73,29 @@ export function createRoutingRoutes(deps: {
   });
   routingRoutes.get("/capabilities", (c) => c.json({ data: { schema_versions: [ROUTING_SCHEMA_VERSION], enabled: enabled(), stage: "experimental",
     features: { workspace_topology: enabled(), policy_preview: enabled(), policy_storage: false,
-      active_probes: false, path_selection: false, failover: false, multi_hop_execution: false },
-    limits: { ...ROUTING_LIMITS, candidates: ROUTING_MAX_CANDIDATES, hops: ROUTING_MAX_HOPS, request_bytes: ROUTING_MAX_REQUEST_BYTES } } }));
+      active_probes: probesEnabled(), native_tcp_target_probes: probesEnabled(), tst_target_probes: false,
+      path_selection: false, failover: false, multi_hop_execution: false },
+    limits: { ...ROUTING_LIMITS, candidates: ROUTING_MAX_CANDIDATES, hops: ROUTING_MAX_HOPS,
+      request_bytes: ROUTING_MAX_REQUEST_BYTES, probes: ROUTING_PROBE_LIMITS } } }));
   routingRoutes.get("/topology", async (c) => c.json({ data: await load(c.get("workspace")!.id) }));
   routingRoutes.post("/preview", async (c) => {
     const access = c.get("workspace")!;
     if (!canWorkspaceResourceAction(access, "use", "node")) throw workspacePermissionDenied();
     // Parse before querying; oversized/invalid candidate populations do not reach the DB.
-    const input = RoutingPreviewSchema.parse(await readPreviewJson(c.req.raw));
+    const input = RoutingPreviewSchema.parse(await readRoutingJson(c.req.raw));
     return c.json({ data: previewRoutingPolicy(await load(access.id), input) });
+  });
+  routingRoutes.post("/probes", async (c) => {
+    const access = c.get("workspace")!;
+    if (!canWorkspaceResourceAction(access, "use", "node")) throw workspacePermissionDenied();
+    if (!probesEnabled()) throw new RoutingError("routing_probes_disabled", 409);
+    const input = RoutingProbeInputSchema.parse(await readRoutingJson(c.req.raw));
+    return c.json({ data: await collectRoutingProbe(access.id, input, await probeDeps()) });
+  });
+  routingRoutes.get("/probes/:forwardId", async (c) => {
+    if (!probesEnabled()) throw new RoutingError("routing_probes_disabled", 409);
+    const id = z.coerce.number().int().positive().max(2_147_483_647).parse(c.req.param("forwardId"));
+    return c.json({ data: await readRoutingProbe(c.get("workspace")!.id, id, await probeDeps()) });
   });
   return routingRoutes;
 }
