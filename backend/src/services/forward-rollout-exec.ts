@@ -734,10 +734,9 @@ async function runStep(
       if (!outcome.ok) {
         return { ok: false, error_code: outcome.error_code, error: outcome.error };
       }
-      // 登记 next_hop 的 host 段：cutover_ingress 要拼 `<egress host>:<egress port>`。
+      // 持久资源携带 next_hop 的 host：cutover_ingress 要拼 `<egress host>:<egress port>`。
       // 只认 dispatchEgress 返回的 egress_host（它对「这台节点实际可寻址地址」
       // 做了判定），**不猜 IP**——猜错就是每个新连接都连不上的静默故障。
-      recordNextHop(ctx.rolloutId, nodeId, outcome.egress_host);
       return {
         ok: true,
         note: `egress ${nodeId}:${egressPort} applied（未切入口）`,
@@ -791,7 +790,6 @@ async function runStep(
       if (!outcome.ok) {
         return { ok: false, error_code: outcome.error_code, error: outcome.error };
       }
-      recordNextHop(ctx.rolloutId, nodeId, outcome.egress_host);
       return { ok: true, note: `egress ${nodeId}:${egressPort} 生效于 revision ${ctx.revision}`,
         sideEffect: { kind: "egress_apply", node_id: nodeId, port: egressPort, handle: null, host: outcome.egress_host } };
     }
@@ -1139,8 +1137,7 @@ async function runStep(
       if (!transit.ok) {
         return { ok: false, error_code: transit.error_code, error: transit.error };
       }
-      // 登记中间跳的可寻址 host：入口的 cutover 会用它拼 next_hop。
-      recordNextHop(ctx.rolloutId, middleNodeId, transit.host);
+      // 中间跳的确认地址随步骤持久化，入口的 cutover 会用它拼 next_hop。
       return { ok: true, note: `transit ${middleNodeId}:${port} → ${nextHop}`,
         sideEffect: { kind: "egress_apply", node_id: middleNodeId, port, handle: null, host: transit.host } };
     }
@@ -1318,8 +1315,8 @@ function resolveEgressPort(step: RolloutStep, ctx: RolloutExecContext): number {
 /**
  * 解析**某一跳**的节点间可寻址地址（`host:port`）。
  *
- * 只允许从**已登记**的节点事实里取 host（`recordNextHop` 的产物，来自那台节点自己的
- * dispatch 返回值）—— 不猜 IP：猜错就是"每个新连接都连不上"的静默故障。
+ * 只允许从**已确认的持久资源**里取 host（来自该节点 dispatch 返回值），
+ * 不猜 IP：猜错就是"每个新连接都连不上"的静默故障。
  *
  * `fallbackPort` 只在那一跳没有自己的 lease/apply 登记时才用（单跳出口沿用了 historical
  * `desired.egress_port`），中间跳没有这个回落：它的端口必须来自计划期的 acquire_port。
@@ -1329,7 +1326,7 @@ function resolveHopAddress(ctx: RolloutExecContext, nodeId: number, fallbackPort
   const lease = ctx.prepared.find((p) => p.kind === "lease" && p.node_id === nodeId && p.port != null);
   const port = prepared?.port ?? lease?.port ?? fallbackPort ?? 0;
   if (port <= 0) return null;
-  const host = nextHopHosts.get(ctx.rolloutId)?.get(nodeId);
+  const host = preparedHopHost(ctx.prepared, nodeId);
   if (!host) return null;
   return `${host}:${port}`;
 }
@@ -1355,20 +1352,17 @@ function resolveNextHop(ctx: RolloutExecContext): string | null {
 }
 
 /**
- * rolloutId → egressNodeId → 已解析的 egress host（dispatchEgress 的产物）。
- *
- * 为什么需要它：`cutover_ingress` 要拼 `<egress host>:<egress port>`，而 host
- * 只能来自 `dispatchEgress` 的返回值（它做过 `node_unaddressable` 判定）。
- * 成功 ACK 的 host 与完成键一同持久化；新进程从账本恢复此表。
- * 旧账本缺地址时，按同 revision 重放准备命令取证，再执行未完成的入口切换。
+ * Read the latest confirmed address from this execution's durable ledger.
+ * Keeping a global rollout cache would retain every completed rollout and let
+ * a late executor's ACK overwrite another execution's local facts.
+ * Legacy resources without a host require same-generation preparation replay.
  */
-const nextHopHosts = new Map<number, Map<number, string>>();
-
-/** 登记一次成功的 egress 下发出的 host（覆盖写：同 rollout 同节点只认最后一次）。 */
-function recordNextHop(rolloutId: number, egressNodeId: number, host: string): void {
-  const byRollout = nextHopHosts.get(rolloutId) ?? new Map<number, string>();
-  byRollout.set(egressNodeId, host);
-  nextHopHosts.set(rolloutId, byRollout);
+function preparedHopHost(prepared: PreparedResource[], nodeId: number): string | null {
+  for (let index = prepared.length - 1; index >= 0; index--) {
+    const resource = prepared[index]!;
+    if (resource.kind === "egress_apply" && resource.node_id === nodeId && resource.host) return resource.host;
+  }
+  return null;
 }
 
 /* ================================================================== */
@@ -1946,11 +1940,6 @@ async function executeRolloutOwned(
   const desired = planSnapshot(plan, "desired");
   const applied = planSnapshot(plan, "applied");
   const prepared = readLedger<PreparedResource[]>(row.prepared, []);
-  nextHopHosts.delete(rolloutId);
-  for (const resource of prepared) {
-    if (resource.kind === "egress_apply" && resource.node_id && resource.host)
-      recordNextHop(rolloutId, resource.node_id, resource.host);
-  }
   // Older ledgers did not persist confirmed hop addresses. Replay only the
   // required preparation at the same generation, through the normal admission
   // and ACK gates, before cutting over an ingress that has not yet completed.
@@ -1958,7 +1947,7 @@ async function executeRolloutOwned(
     const replayNodes = new Set<number>();
     for (const step of plan.steps) {
       if (["prepare_egress", "prepare_transit", "cutover_egress"].includes(step.kind) && step.node_id &&
-          completed.has(step.idempotency_key) && !nextHopHosts.get(rolloutId)?.has(step.node_id) && !replayNodes.has(step.node_id)) {
+          completed.has(step.idempotency_key) && !preparedHopHost(prepared, step.node_id) && !replayNodes.has(step.node_id)) {
         completed.delete(step.idempotency_key);
         replayNodes.add(step.node_id);
       }
@@ -2040,7 +2029,7 @@ async function executeRolloutOwned(
       // S10.47：第一次 command 的 ACK 可能丢了，但 Agent 已真实应用。恢复时先用
       // state report 确认具体 resource 的 revision；确认后只补 ledger，不重发命令。
       const needsHopFacts = ["prepare_egress", "prepare_transit", "cutover_egress"].includes(step.kind) &&
-        step.node_id != null && !nextHopHosts.get(rolloutId)?.has(step.node_id);
+        step.node_id != null && !preparedHopHost(ctx.prepared, step.node_id);
       if (recoveringAmbiguous && !needsHopFacts && await runtimeConfirmsStepApplied(step, ctx, deps)) {
         const note = `${step.phase}:${step.kind} CONFIRMED runtime revision=${ctx.revision}`;
         await markStepCompleted(rolloutId, step.idempotency_key, { db });

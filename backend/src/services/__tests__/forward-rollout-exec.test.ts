@@ -1412,8 +1412,9 @@ describe("失败分流（§13.3.5 第三张表）", () => {
 /* ------------------------------------------------------------------ */
 
 describe("续跑：只重放未完成步骤", () => {
-  for (const legacy of [false, true]) {
-    it(`fresh Worker resumes confirmed relay preparation using ${legacy ? "same-generation legacy replay" : "durable hop facts"}`, async () => {
+  for (const evidence of ["durable", "legacy", "latest"] as const) {
+    const legacy = evidence === "legacy";
+    it(`fresh Worker resumes confirmed relay preparation using ${evidence === "latest" ? "the latest confirmed hop amid historical resources" : legacy ? "same-generation legacy replay" : "durable hop facts"}`, async () => {
       const { f } = modeSwitchEnv();
       const first = await registerRollout({ tunnelId: 1, revision: 7, baseRevision: 6,
         impact: impact({ mode_change: true, egress_node_change: true }) },
@@ -1421,6 +1422,12 @@ describe("续跑：只重放未完成步骤", () => {
           failOn: { dispatchIngress: true }, failCode: "ack_timeout", egressHost: "confirmed.example.test" }) });
       expect(first.status).toBe("waiting");
       if (legacy) for (const resource of f.rollouts[0]!.prepared) delete (resource as { host?: string }).host;
+      if (evidence === "latest") {
+        const prepared = f.rollouts[0]!.prepared;
+        prepared.unshift({ kind: "egress_apply", node_id: 21, port: 31000, handle: null, host: "stale.example.test" });
+        prepared.push({ kind: "egress_apply", node_id: 11, port: 10001, handle: null, host: "unrelated.example.test" });
+        prepared.push({ kind: "egress_apply", node_id: 21, port: 31000, handle: null });
+      }
       const fresh = fakeOrchestrator({ failOn: legacy ? {} : { dispatchEgress: true }, egressHost: "confirmed.example.test" });
       const resumed = await executeRollout(first.rolloutId!, { db: f.db, runtimeUse: async () => null,
         orchestrator: fresh, sleep: async () => {} });
