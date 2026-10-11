@@ -1254,7 +1254,8 @@ def measure_concurrency(topology: dict, profile: dict, prefix: str,
     }
 
 
-def measure_gauges(topology: dict, baseline_gauges: dict | None = None) -> dict:
+def measure_gauges(topology: dict, baseline_gauges: dict | None = None,
+                   current_gauges: dict | None = None) -> dict:
     """CPU / RSS / goroutines 的**结束读数**，以及整轮负载的 CPU 增量。
 
     两次读数（负载前 / 负载后）之差才是有意义的 CPU 数字：单次读数只是一个累计值，
@@ -1264,7 +1265,7 @@ def measure_gauges(topology: dict, baseline_gauges: dict | None = None) -> dict:
     out: dict = {}
     total_cpu: float | None = None
     for agent in topology["agents"]:
-        current = agent.gauge()
+        current = agent.gauge() if current_gauges is None else current_gauges[agent.label]
         out[f"{agent.label}_gauges"] = current
         before = (baseline_gauges or {}).get(agent.label, {})
         after_seconds, before_seconds = current.get("cpu_seconds"), before.get("cpu_seconds")
@@ -1290,6 +1291,41 @@ def measure_gauges(topology: dict, baseline_gauges: dict | None = None) -> dict:
 def collect_gauges(topology: dict) -> dict:
     """负载开始前的读数（供 measure_gauges 做差）。"""
     return {agent.label: agent.gauge() for agent in topology["agents"]}
+
+
+def await_stream_quiescence(topology: dict, before: dict, timeout: float = 15.0,
+                            quiet_seconds: float = 1.0) -> tuple[dict, dict]:
+    """Wait for workload workers to return to the pre-load goroutine counts.
+
+    A setup call only establishes the ingress socket; downstream workers can
+    still be starting or exiting after the client closes. Sampling immediately
+    counts this transient work. Sustained excess workers instead fail closed;
+    the harness never substitutes a minimum or zero for an observed gauge.
+    """
+    ceilings = {agent.label: before[agent.label].get("goroutines") for agent in topology["agents"]}
+    if any(not isinstance(n, int) or isinstance(n, bool) or n <= 0 for n in ceilings.values()):
+        raise RuntimeError("pre-load goroutine gauges are unavailable")
+    started = time.perf_counter()
+    quiet_since = None
+    polls = 0
+    while True:
+        current = collect_gauges(topology)
+        polls += 1
+        now = time.perf_counter()
+        counts = {label: gauge.get("goroutines") for label, gauge in current.items()}
+        if any(not isinstance(n, int) or isinstance(n, bool) or n <= 0 for n in counts.values()):
+            raise RuntimeError("post-load goroutine gauges are unavailable")
+        if all(counts[label] <= ceiling for label, ceiling in ceilings.items()):
+            if quiet_since is None:
+                quiet_since = now
+            if now - quiet_since >= quiet_seconds:
+                return current, {"elapsed_seconds": now - started, "polls": polls,
+                                 "before_goroutines": ceilings, "after_goroutines": counts}
+        else:
+            quiet_since = None
+        if now - started >= timeout:
+            raise RuntimeError("stream workload did not return to pre-load goroutine counts")
+        time.sleep(0.05)
 
 
 def capture_profiles(topology: dict, out_dir: Path, scenario: str,
@@ -1701,6 +1737,7 @@ def run(args: argparse.Namespace) -> dict:
 
     profile = dict(PROFILES[args.profile])
     profile["stream_phase_order"] = list(STREAM_PHASE_ORDER)
+    profile["resource_phase"] = "after_stream_quiescence"
     if args.payload_kib is not None:
         profile["payload_kib"] = args.payload_kib
     if args.setups is not None:
@@ -1721,6 +1758,7 @@ def run(args: argparse.Namespace) -> dict:
         "profiles_enabled": bool(args.capture_profiles),
         "scenarios": {},
         "profiling": {},
+        "quiescence": {},
     }
 
     root = Path(tempfile.mkdtemp(prefix="tunex-perf-"))
@@ -1736,7 +1774,8 @@ def run(args: argparse.Namespace) -> dict:
                     measure_stream_scenario(scenario, topology, profile))
                 # The resource delta covers the timed stream workload, excluding
                 # profiling and lifecycle operations which have separate phases.
-                result["scenarios"][key].update(measure_gauges(topology, before))
+                after, result["quiescence"][key] = await_stream_quiescence(topology, before)
+                result["scenarios"][key].update(measure_gauges(topology, before, after))
                 if args.capture_profiles:
                     result["profiling"][key] = capture_profiles(
                         topology, Path(args.out), key, args.profile_seconds,
@@ -1839,6 +1878,11 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
         if "stream_phase_order" in artifact["workload"] and artifact["workload"]["stream_phase_order"] not in (
                 STREAM_PHASE_ORDER, LEGACY_STREAM_PHASE_ORDER):
             raise ValueError("unknown stream measurement phase order")
+        if "resource_phase" in artifact["workload"] and artifact["workload"]["resource_phase"] not in (
+                "end_of_workload", "after_stream_quiescence"):
+            raise ValueError("unknown resource measurement phase")
+        if artifact.get("go_sample_order", "batched") not in ("batched", "alternating_process_pairs"):
+            raise ValueError("unknown Go benchmark sample order")
         for key in ("environment", "dimensions"):
             if key in artifact and not isinstance(artifact[key], dict):
                 raise ValueError(f"artifact {key} must be an object")
@@ -1854,6 +1898,11 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
     if candidate["workload"].get("stream_phase_order", LEGACY_STREAM_PHASE_ORDER) != anchor["workload"].get(
             "stream_phase_order", LEGACY_STREAM_PHASE_ORDER):
         workload_mismatch.append("stream_phase_order")
+    if candidate["workload"].get("resource_phase", "end_of_workload") != anchor["workload"].get(
+            "resource_phase", "end_of_workload"):
+        workload_mismatch.append("resource_phase")
+    if candidate.get("go_sample_order", "batched") != anchor.get("go_sample_order", "batched"):
+        workload_mismatch.append("go_sample_order")
     if bool(candidate.get("profiles_enabled", False)) != bool(anchor.get("profiles_enabled", False)):
         workload_mismatch.append("profiles_enabled")
     if candidate.get("native_rounds", 1) != anchor.get("native_rounds", 1):

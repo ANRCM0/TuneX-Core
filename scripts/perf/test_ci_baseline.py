@@ -59,7 +59,9 @@ class BenchmarkReceiptTest(unittest.TestCase):
                                      ("native", "base"), ("native", "head"),
                                      ("native", "head"), ("native", "base"),
                                      ("native", "base"), ("native", "head")])
-        self.assertEqual(events[8:], [("transport", "anchor"), ("transport", "candidate")] * 2)
+        self.assertEqual(events[8:], [("transport", "anchor"), ("transport", "candidate"),
+                                     ("transport", "candidate"), ("transport", "anchor"),
+                                     ("transport", "anchor"), ("transport", "candidate")] * 2)
 
     def test_tail_is_computed_from_combined_raw_samples(self):
         # Averaging per-round quantiles gives a different, invalid tail.

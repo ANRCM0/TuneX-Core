@@ -50,6 +50,13 @@ V2.2 P3 已继续实现连接独占、惰性分配的 TCP 接收临时缓冲，�
 完整 TST TCP runtime 分配减少约 52%。已修订 native setup 与 payload 的
 采样顺序，保持指标和阈值，新 harness 双端重测待收据。优化后的热点复测
 已解析，通知分配成为下一项评估对象。
+`36c7ebf` 主 CI 已通过，Agent 源码与 `9edcd86` 相同；新增 phase order
+校验与 CI harness 契约检查，本机 74 项自检（2 项 Windows 限制跳过）及
+500 次 setup 的双 Agent relay smoke 成功。
+`36c7ebf` 的显式性能重测仍有资源/建连/runtime 耗时三项超线，保留失败；
+分配改善再次重现。进一步加入资源回收等待与 Go 逐轮交错采样，保留持续
+goroutine 超额的失败语义以及完整 runtime 的同步记账；78 项自检（2 项
+Windows 跳过）与真实 relay smoke 已通过，新口径 Linux 验证待收据。
 
 V2.2 P4 可选 QUIC ADR、威胁模型与兼容策略已形成，协议实现和独立评审仍待
 执行。P5 同一 Ubuntu Runner 的双源码、多轮交错采样及严格工件校验已通过：
@@ -71,7 +78,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | 9edcd86 已通过 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
+| 当前候选 SHA 的 Linux CI/race | 36c7ebf CI 已通过；Agent 源码与已通过 race/集成的 9edcd86 相同 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |

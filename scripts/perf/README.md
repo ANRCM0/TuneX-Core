@@ -27,6 +27,16 @@ python3 -B scripts/perf/stream-baseline.py \
 样本数量或阈值。`workload.stream_phase_order` 明确记录顺序；字段缺失按
 旧顺序解释，新旧顺序不允许直接比较，必须用同一新 harness 重测两端。
 
+资源读数等待连接回收：所有 Agent 的 goroutine 数连续 1 秒不高于负载前
+读数后，才使用该次真实快照；15 秒内未达到或读数缺失则失败，不以最小值
+或 0 替代。等待收据单独记录在 `quiescence`，CPU 增量包含回收和该阶段的
+admin 采样开销。`workload.resource_phase` 标记此口径，拒绝与旧时点混比。
+
+每类 Go transport 仍各五个样本，但两端改为 A/B、B/A 交错的独立进程，
+每进程 `-count=1`。完整 TST runtime 基准启用真实流量账本，每次记账会
+同步保存私有状态并执行文件/目录 sync；其耗时包含存储，不能等同于纯帧
+处理。保持这部分语义及门禁，使用 `go_sample_order` 拒绝混比旧批量口径。
+
 ## 同一 Runner 上比较两个源码版本
 
 [Performance workflow](../../.github/workflows/performance.yml) 在相关 push/PR

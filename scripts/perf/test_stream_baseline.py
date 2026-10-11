@@ -622,6 +622,18 @@ class ComparisonTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             baseline.compare_results(candidate, anchor)
 
+    def test_resource_and_go_sample_phases_must_match(self):
+        for marker in ("resource_phase", "go_sample_order"):
+            anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+            target = candidate["workload"] if marker == "resource_phase" else candidate
+            target[marker] = "after_stream_quiescence" if marker == "resource_phase" else "alternating_process_pairs"
+            result = baseline.compare_results(candidate, anchor)
+            self.assertFalse(result["passed"])
+            self.assertIn(marker, result["workload_mismatch"])
+            target[marker] = "unknown"
+            with self.assertRaises(ValueError):
+                baseline.compare_results(candidate, anchor)
+
 
 class CompleteWorkloadTest(unittest.TestCase):
     def test_setup_burst_cannot_contaminate_payload_or_concurrent_rtt(self):
@@ -659,6 +671,45 @@ class CompleteWorkloadTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             baseline.measure_concurrency({"listen_port": 1}, {"concurrency": 2, "conn_rounds": 1},
                                          "direct", round_fn=lambda *args: (1, 0.01, [0.01]))
+
+
+class QuiescenceTest(unittest.TestCase):
+    def topology(self):
+        from types import SimpleNamespace
+        return {"agents": [SimpleNamespace(label="ingress")]}
+
+    def test_workers_rebounding_reset_the_quiet_window(self):
+        from unittest.mock import patch
+        values = [{"ingress": {"goroutines": n}} for n in (20, 10, 20, 10, 10, 10)]
+        with patch.object(baseline, "collect_gauges", side_effect=values), \
+                patch.object(baseline.time, "perf_counter", side_effect=[0, 0.1, 0.2, 0.6, 0.7, 1.1, 1.3]), \
+                patch.object(baseline.time, "sleep"):
+            gauges, receipt = baseline.await_stream_quiescence(
+                self.topology(), {"ingress": {"goroutines": 10}}, quiet_seconds=0.5)
+        self.assertEqual(gauges["ingress"]["goroutines"], 10)
+        self.assertEqual(receipt["polls"], 6)
+        self.assertEqual(receipt["elapsed_seconds"], 1.3)
+
+    def test_sustained_excess_workers_or_missing_gauges_cannot_pass(self):
+        from unittest.mock import patch
+        for count in (11, None, True):
+            with self.subTest(count=count), \
+                    patch.object(baseline, "collect_gauges", return_value={"ingress": {"goroutines": count}}), \
+                    patch.object(baseline.time, "perf_counter", side_effect=[0, 0.1, 0.6, 1.1]), \
+                    patch.object(baseline.time, "sleep"), self.assertRaises(RuntimeError):
+                baseline.await_stream_quiescence(self.topology(), {"ingress": {"goroutines": 10}}, timeout=1)
+
+    def test_resource_delta_uses_the_observed_quiet_snapshot(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        agent = SimpleNamespace(label="ingress", gauge=Mock(side_effect=AssertionError("resampled busy process")))
+        with patch.object(baseline, "cpu_hz", return_value=100):
+            result = baseline.measure_gauges({"agents": [agent]},
+                {"ingress": {"cpu_ticks": 10, "cpu_seconds": 0.1}},
+                {"ingress": {"cpu_ticks": 20, "cpu_seconds": 0.2, "goroutines": 10}})
+        self.assertAlmostEqual(result["agents_cpu_seconds_used_total"], 0.1)
+        self.assertEqual(result["ingress_gauges"]["goroutines"], 10)
+        agent.gauge.assert_not_called()
 
 
 class WSClientLoopbackTest(unittest.TestCase):

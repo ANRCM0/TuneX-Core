@@ -136,15 +136,22 @@ def measure_pair(repo: Path, root: Path, out: Path, env: dict, args) -> list[dic
                  for items in runs]
     raw: list[list[str]] = [[], []]
     for package, names in BENCHMARKS.items():
-        for index, (agent, _) in enumerate(builds):
-            raw[index].append(command(["go", "test", f"./internal/{package}", "-run", "^$",
-                                       "-bench", "^Benchmark(" + "|".join(names) + ")$", "-benchmem",
-                                       "-benchtime", args.benchtime, "-count", str(args.count)], agent, env))
+        # Runtime benchmarks include synchronous durable traffic accounting.
+        # Alternate independent processes so one build's five samples do not
+        # all precede the other's filesystem/scheduler conditions.
+        for sample in range(args.count):
+            order = (0, 1) if sample % 2 == 0 else (1, 0)
+            for index in order:
+                agent, _ = builds[index]
+                raw[index].append(command(["go", "test", f"./internal/{package}", "-run", "^$",
+                                           "-bench", "^Benchmark(" + "|".join(names) + ")$", "-benchmem",
+                                           "-benchtime", args.benchtime, "-count", "1"], agent, env))
     for index, (side, _) in enumerate(sides):
         benchmark_raw = "\n".join(raw[index])
         (out / side / "go-benchmarks.txt").write_text(benchmark_raw, encoding="utf-8")
         artifacts[index]["scenarios"]["go_transport"] = benchmark_metrics(benchmark_raw, args.count)
-        artifacts[index]["measurement_order"] = "build_both-alternating_native_pairs-securelink_pair-tstruntime_pair"
+        artifacts[index]["measurement_order"] = "build_both-alternating_native_pairs-alternating_go_process_pairs"
+        artifacts[index]["go_sample_order"] = "alternating_process_pairs"
         baseline.write_outputs(artifacts[index], out / side)
     return artifacts
 

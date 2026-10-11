@@ -146,6 +146,16 @@ the revised harness measures payload first and records phase order explicitly.
 It retains the RTT timing, sample counts and 35% threshold. Both builds must be
 remeasured with the revised harness; old receipts retain their failure status.
 
+The [revised-order run](https://github.com/PaiMonCai/TuneX/actions/runs/38113810872)
+also failed: the end-of-workload goroutine snapshot, relay setup p95, and full
+TST TCP runtime mean operation cost exceeded the gate. Allocation reductions
+repeated. Further measurements wait for workload goroutines to return to their
+pre-load count for one second (15-second timeout, missing gauges fail), and
+alternate independent Go benchmark processes for each of the five samples.
+The full runtime includes synchronous durable traffic accounting; it remains
+enabled and gated. Resource and Go sampling markers prevent comparing the
+new method to old receipts. Corresponding Linux verification remains pending.
+
 These short host samples show encryption/framing overhead versus a local baseline;
 they are not production capacity, WAN latency, handshake DoS or an old-protocol
 comparison. Variance is substantial. Repeat on the intended Linux host with
