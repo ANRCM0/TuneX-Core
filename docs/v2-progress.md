@@ -109,6 +109,16 @@ goroutine 2 → 2、FD 7 → 7。全部原始矩阵、soak 及双 SHA 门禁复�
 方案 P4 的 ADR/威胁模型/兼容策略已交付，完整 QUIC 实现待评审后开展。
 按用户决定，真机部署、固定主机容量、真实 WAN 和跨日验证延后统一验收。
 
+## V2.3 R1 开发
+
+V2.3 已进入 R1：统一 Workspace 图投影 Native NodeBinding/TST LinkResource 与
+当前 Forward 的授权出口，提供能力发现、拓扑查询和候选策略预览，默认关闭。
+环路、断边、跳数、载体/角色、revision/digest 与目标授权均显式校验；健康/质量
+未测量时保留 unknown/null。25 项专项和本机全量 3,210 项后端测试通过，真实
+MySQL/Redis/HTTP 7 项集成通过，业务资源前后无写入。当前提交 Linux 证据待取得；
+R2 探测、R3 策略持久化/选择、R4 切换、R5 多跳执行仍待开发，见
+[V2.3 记录](v2.3-routing.md)。
+
 ## 实网发现与修复
 
 真实测试启动当前 Panel、Worker、两个独立 Agent 与 MySQL/Redis，未注入 Ready，也未手改运行缓存。已修复 wildcard 契约、初版修订值、UDP sibling 隔离、双向 UDP 闲置、TLS 失败握手频率、上报枚举/可空字段、同 generation 租约乱序，以及原生首次部署路径。

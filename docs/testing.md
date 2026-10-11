@@ -81,6 +81,13 @@ Linux 可追加 `--condition loss`。
 
 独立安全审查需审查帧状态机、互信身份、快照授权、密钥生命周期、资源耗尽与缓存/统计恢复。内部代码评阅和 fuzz 不替代外部独立审查。
 
+V2.3 R1 的纯图/策略与真实 HTTP 路由测试位于 `backend/src/domain/routing/__tests__/`
+和 `backend/src/routes/__tests__/routing.test.ts`；真实认证/Workspace/Prisma 集成由
+`backend/tests/routing-topology.test.mjs` 在 `TUNEX_DB_TEST=1` 下执行，标准 CI 的
+`test:integration` 自动收集。该测试拒绝非 loopback 或非显式测试数据库。
+`TUNEX_ROUTING_ENABLED=false` 为默认值；接口和 R2–R5 范围见
+[V2.3 路由开发](v2.3-routing.md)。
+
 ## 证据与平台矩阵
 
 已完成的数值与范围写入上方证据文件；未运行项保持待验证。Web 组件 fixture 的交互和生产 CSS 检查只证明被加载组件；完整登录/Workspace/API/Agent 浏览器流程已由真实业务浏览器证据单独记录。
