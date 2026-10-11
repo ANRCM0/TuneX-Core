@@ -141,7 +141,7 @@ func (st *Stream) Read(p []byte) (int, error) {
 			s.mu.Unlock()
 			return 0, err
 		}
-		changed, deadline := s.changed, st.readDeadline
+		changed, deadline := s.subscribeLocked(), st.readDeadline
 		s.mu.Unlock()
 		if err := wait(context.Background(), changed, s.done, deadline); err != nil {
 			return 0, err
@@ -198,7 +198,7 @@ func (st *Stream) ReadDatagram(p []byte) (int, error) {
 			s.mu.Unlock()
 			return 0, err
 		}
-		changed, deadline := s.changed, st.readDeadline
+		changed, deadline := s.subscribeLocked(), st.readDeadline
 		s.mu.Unlock()
 		if err := wait(context.Background(), changed, s.done, deadline); err != nil {
 			return 0, err
@@ -258,7 +258,7 @@ func (st *Stream) reserve(n int) (time.Time, error) {
 			s.mu.Unlock()
 			return deadline, nil
 		}
-		changed := s.changed
+		changed := s.subscribeLocked()
 		s.mu.Unlock()
 		if err := wait(context.Background(), changed, s.done, deadline); err != nil {
 			return deadline, err

@@ -64,6 +64,13 @@ payload 先于 setup 压力、资源回收后使用真实快照、Go 独立进�
 
 Python harness 契约 3 项、相关 shell 语法、原生依赖扫描和当前文档本地链接检查通过。安装器完整 gate 在 Windows Git Bash 下失败，涉及 POSIX 文件权限等宿主差异；保留严格检查，不标为通过。
 
+V2.2 P3 继续实现按需状态通知：在同锁检查状态与注册等待，广播后清除
+当前 channel，无等待方时不分配，writer 唤醒保留。通知、两级流控、队列、
+deadline/cancel、RESET/Close 的回归连续 100 轮通过，全量 Agent/vet 通过。
+对 `690fc1d` 的 Windows 五轮交错 A/B 中，TSTStream/mTLS 分配量分别减少
+51.8%/58.1%；当前源码的 Linux CI/race、真实 shared-Link 和性能门禁待取得
+本轮收据。详情见 [V2.2 工作记录](v2.2-performance.md)。
+
 ## 实网发现与修复
 
 真实测试启动当前 Panel、Worker、两个独立 Agent 与 MySQL/Redis，未注入 Ready，也未手改运行缓存。已修复 wildcard 契约、初版修订值、UDP sibling 隔离、双向 UDP 闲置、TLS 失败握手频率、上报枚举/可空字段、同 generation 租约乱序，以及原生首次部署路径。

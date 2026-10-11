@@ -235,7 +235,10 @@ func TestCanceledPendingOpenDoesNotTearDownSibling(t *testing.T) {
 	for {
 		server.mu.Lock()
 		_, pending := server.streams[1]
-		changed := server.changed
+		var changed <-chan struct{}
+		if pending {
+			changed = server.subscribeLocked()
+		}
 		server.mu.Unlock()
 		if !pending {
 			break
@@ -356,7 +359,11 @@ func TestDatagramPacketQuotaPreservesSiblingTCP(t *testing.T) {
 	}
 	for {
 		server.mu.Lock()
-		closed, streamErr, changed := remoteUDP.closed, remoteUDP.err, server.changed
+		closed, streamErr := remoteUDP.closed, remoteUDP.err
+		var changed <-chan struct{}
+		if !closed {
+			changed = server.subscribeLocked()
+		}
 		server.mu.Unlock()
 		if closed {
 			if streamErr != ErrLimit {

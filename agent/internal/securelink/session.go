@@ -54,7 +54,7 @@ type Session struct {
 // deterministic framing fault tests without weakening the TLS production path.
 func NewSession(conn net.Conn, server bool) *Session {
 	s := &Session{conn: conn, server: server, streams: make(map[uint64]*Stream), nextID: 1,
-		txConn: ConnectionWindow, rxConn: ConnectionWindow, changed: make(chan struct{}),
+		txConn: ConnectionWindow, rxConn: ConnectionWindow,
 		wake: make(chan struct{}, 1), done: make(chan struct{}), data: make(map[uint64]outbound), accept: make(chan *Stream, MaxStreams)}
 	s.workers.Add(2)
 	go func() { defer s.workers.Done(); s.readLoop() }()
@@ -66,9 +66,20 @@ func (s *Session) Done() <-chan struct{} { return s.done }
 func (s *Session) Err() error            { s.mu.Lock(); defer s.mu.Unlock(); return s.err }
 func (s *Session) Close() error          { s.fail(ErrClosed); s.workers.Wait(); return nil }
 
+// subscribeLocked registers a waiter while the state check still holds mu.
+// Signals before the waiter enters select remain visible on this generation.
+func (s *Session) subscribeLocked() <-chan struct{} {
+	if s.changed == nil {
+		s.changed = make(chan struct{})
+	}
+	return s.changed
+}
+
 func (s *Session) signalLocked() {
-	close(s.changed)
-	s.changed = make(chan struct{})
+	if s.changed != nil {
+		close(s.changed)
+		s.changed = nil
+	}
 	select {
 	case s.wake <- struct{}{}:
 	default:
@@ -157,7 +168,7 @@ func (s *Session) Open(ctx context.Context, request OpenRequest) (*Stream, error
 			s.mu.Unlock()
 			return nil, err
 		}
-		changed := s.changed
+		changed := s.subscribeLocked()
 		s.mu.Unlock()
 		select {
 		case <-changed:
@@ -261,10 +272,12 @@ func (s *Session) send(ctx context.Context, f Frame, deadline time.Time) error {
 			s.control = append(s.control, request)
 			queued = true
 		}
-		changed := s.changed
+		var changed <-chan struct{}
 		if queued {
 			queuedForRelease = true
 			s.signalLocked()
+		} else {
+			changed = s.subscribeLocked()
 		}
 		s.mu.Unlock()
 		if queued {

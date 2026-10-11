@@ -82,4 +82,8 @@ trace 转换后的 scheduler pprof 均解析成功。
 `signalLocked` 通过关闭并替换通知 channel 广播状态变化，调用方会在锁内读取
 该 channel，再在锁外等待。后续减少通知分配时，必须覆盖注册与唤醒之间的
 竞态、多个等待方、deadline/cancel、队列与流控 credit、RESET/Close 以及
-公平写队列，不能仅删除或合并 channel 更新。此项优化尚未实现。
+公平写队列，不能仅删除或合并 channel 更新。后续已实现按需注册通知：
+检查状态与注册同锁，signal 关闭当前一轮后清除引用，无订阅时仍唤醒 writer。
+32 个等待方、deadline/cancel、credit/队列、RESET/Close 的新增回归连续
+100 轮通过，全量 Agent/vet 通过；当前 SHA 的性能与热点复测须以
+[后续收据](../v2.2-performance.md) 为准，本节旧 profile 不代表新源码。

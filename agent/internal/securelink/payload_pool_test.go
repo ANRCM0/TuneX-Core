@@ -55,7 +55,7 @@ func pausedSession(t *testing.T) (*Session, *Stream) {
 	a, b := net.Pipe()
 	s := &Session{conn: a, streams: make(map[uint64]*Stream),
 		txConn: ConnectionWindow, rxConn: ConnectionWindow, nextID: 3,
-		changed: make(chan struct{}), wake: make(chan struct{}, 1), done: make(chan struct{}),
+		wake: make(chan struct{}, 1), done: make(chan struct{}),
 		data: make(map[uint64]outbound)}
 	st := newStream(s, 1, OpenRequest{ForwardID: 1, Revision: 1, Protocol: "tcp"})
 	st.accepted = true
@@ -70,7 +70,10 @@ func awaitQueuedPayload(t *testing.T, s *Session) {
 	for {
 		s.mu.Lock()
 		_, queued := s.data[1]
-		changed := s.changed
+		var changed <-chan struct{}
+		if !queued {
+			changed = s.subscribeLocked()
+		}
 		s.mu.Unlock()
 		if queued {
 			return
