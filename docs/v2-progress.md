@@ -45,24 +45,22 @@ V2.2 P3 已继续实现连接独占、惰性分配的 TCP 接收临时缓冲，�
 业务流、UDP 队列与控制帧的 payload 所有权有明确回归。对 `d534143` 的同机
 五轮 A/B 中，TSTStream/mTLS 每操作分配中位数减少 90.3%/91.5%。新增
 接收/发送所有权测试连续 20 轮、Agent 全量/vet、15 秒一致性 fuzz 均通过；
-`9edcd86` 的 Linux CI/race 和真实 shared-Link 集成已通过；首轮性能门禁
-因原生 relay RTT p95 超线被拒绝，Linux TST/mTLS 分配分别减少约 90%/92%，
-完整 TST TCP runtime 分配减少约 52%。已修订 native setup 与 payload 的
-采样顺序，保持指标和阈值，新 harness 双端重测待收据。优化后的热点复测
-已解析，通知分配成为下一项评估对象。
-`36c7ebf` 主 CI 已通过，Agent 源码与 `9edcd86` 相同；新增 phase order
-校验与 CI harness 契约检查，本机 74 项自检（2 项 Windows 限制跳过）及
-500 次 setup 的双 Agent relay smoke 成功。
-`36c7ebf` 的显式性能重测仍有资源/建连/runtime 耗时三项超线，保留失败；
-分配改善再次重现。进一步加入资源回收等待与 Go 逐轮交错采样，保留持续
-goroutine 超额的失败语义以及完整 runtime 的同步记账；78 项自检（2 项
-Windows 跳过）与真实 relay smoke 已通过，新口径 Linux 验证待收据。
+`9edcd86` 的 Linux CI/race 和真实 shared-Link 集成已通过。最终 `46b0a96`
+Agent 源码与其相同，主 CI 和对 `d534143` 的显式性能门禁均成功。Linux
+TSTStream/mTLS B/op 中位数减少 90.3%/92.0%，完整 TST TCP runtime 减少
+52.0%，其 ns/op 中位数变化为 +0.85%。优化后的热点复测已解析，通知
+分配成为下一项评估对象；多连接/真实 WAN/跨日长稳仍待执行。
 
 V2.2 P4 可选 QUIC ADR、威胁模型与兼容策略已形成，协议实现和独立评审仍待
 执行。P5 同一 Ubuntu Runner 的双源码、多轮交错采样及严格工件校验已通过：
-`047483e` 主 CI 和 Performance 均成功，每端 direct/relay 各 1,500 个建连、
-960 个 RTT 样本、0 错误，六类 Go transport 各五轮。原始数据和失败历史均
-保留；固定主机容量、真实 RTT/丢包和跨日长稳仍未完成。
+`46b0a96` 每端 direct/relay 各 1,500 个建连、960 个 RTT 样本、0 错误，
+六类 Go transport 各五轮；138 项比较、90 项严格门禁均通过。修订包含
+payload 先于 setup 压力、资源回收后使用真实快照、Go 独立进程逐轮交错，
+78 项 harness 自检在 Linux 全部通过。本机真实 relay smoke 成功。
+指标、样本数和 35% 阈值保留，新增口径标记拒绝混比旧 anchor，完整 runtime
+同步记账没有跳过。首两轮失败、自动重复作业取消和所有原始工件均保留，
+见 [V2.2 记录](v2.2-performance.md)；固定主机容量、真实 RTT/丢包和跨日
+长稳仍未完成。
 
 Python harness 契约 3 项、相关 shell 语法、原生依赖扫描和当前文档本地链接检查通过。安装器完整 gate 在 Windows Git Bash 下失败，涉及 POSIX 文件权限等宿主差异；保留严格检查，不标为通过。
 
@@ -78,7 +76,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | 36c7ebf CI 已通过；Agent 源码与已通过 race/集成的 9edcd86 相同 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
+| 当前候选 SHA 的 Linux CI/race | 46b0a96 CI 已通过；Agent 源码与已通过 race/集成的 9edcd86 相同 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |

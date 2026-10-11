@@ -53,7 +53,9 @@ TSTStream/mTLS 每操作分配中位数分别减少 90.3%/91.5%，详见
 [工作记录](../v2.2-performance.md)。当前优化的
 [Linux race/集成 CI](https://github.com/PaiMonCai/TuneX/actions/runs/38112786502)
 已通过；首轮同 runner 门禁因原生 relay RTT p95 超线而拒绝。新 harness
-的双端重测及长稳仍待验证，不能以先前源码的采样代替。
+的双端重测后续已在 `46b0a96` 通过，详见
+[最终 Linux 证据](../v2.2-performance.md)。
+长稳仍待验证，不能以先前源码的采样代替。
 
 ## 接收优化后复测：9edcd86
 

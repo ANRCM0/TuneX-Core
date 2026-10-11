@@ -154,7 +154,30 @@ pre-load count for one second (15-second timeout, missing gauges fail), and
 alternate independent Go benchmark processes for each of the five samples.
 The full runtime includes synchronous durable traffic accounting; it remains
 enabled and gated. Resource and Go sampling markers prevent comparing the
-new method to old receipts. Corresponding Linux verification remains pending.
+new method to old receipts.
+
+The final [same-runner gate](https://github.com/PaiMonCai/TuneX/actions/runs/38114919742)
+passed at `46b0a96670443c329d3c11f988115580c412b7bb`, against `d534143`:
+138 comparisons, 90 enforced checks, no regression, invalid or missing data,
+and no sampling/environment mismatch. The 35% threshold remains unchanged.
+Each side has 1,500 setups and 960 concurrent RTT samples per native topology,
+zero workload errors, and five samples for all 24 Go metric distributions.
+All native resources returned to 12 goroutines per Agent before capture.
+Both earlier failed runs remain recorded.
+
+| Linux/amd64 median | Before receive reuse | After receive reuse |
+| --- | --- | --- |
+| TSTStream B/op | 18,287 | 1,774 |
+| TSTMutualTLS B/op | 18,027 | 1,451 |
+| Full TST TCP runtime B/op | 254,582 | 122,274 |
+| Full TST TCP runtime ns/op | 5,367,024 | 5,412,397 |
+
+Host: AMD EPYC 7763, Go 1.26.8, GOMAXPROCS=4, CGO_ENABLED=0. Agent source
+matches the race/integration-tested `9edcd86`. The full runtime preserves
+synchronous traffic persistence. Artifact:
+`performance-46b0a96670443c329d3c11f988115580c412b7bb-1`, also retained locally
+under `scripts/perf/results/ci-46b0a96/`. These results support allocation
+improvement under this workload; WAN and sustained capacity remain unverified.
 
 These short host samples show encryption/framing overhead versus a local baseline;
 they are not production capacity, WAN latency, handshake DoS or an old-protocol
