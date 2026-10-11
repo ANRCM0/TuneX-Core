@@ -262,13 +262,15 @@ func NewEgressWithOptions(cfg TunnelConfig, sel TargetSelector, opts EgressOptio
 		dialer := &net.Dialer{Timeout: dialTimeout}
 		dial = dialer.DialContext
 	}
-	return &EgressForwarder{
+	f := &EgressForwarder{
 		pipeTracker:  pipeTracker{cfg: cfg},
 		sel:          sel,
 		health:       newTargetHealth(opts.Observer),
 		dial:         dial,
 		clientSource: opts.ClientSource,
-	}, nil
+	}
+	configureRouteAuth(&f.pipeTracker)
+	return f, nil
 }
 
 // Start binds the egress port and begins load-balanced forwarding. Returns
@@ -300,6 +302,9 @@ func (f *EgressForwarder) Start() error {
 		dialCtx, cancel := context.WithTimeout(context.Background(), dialTimeout)
 		raw, err := dial(dialCtx, "tcp", addr)
 		cancel()
+		if err == nil {
+			raw, err = routeOutgoing(f.cfg.RouteAuth, raw)
+		}
 		health.recordDial(t, time.Since(start), err)
 		// Hand the outcome back to the health-aware selector when it asks for it.
 		// The selector may be running a circuit breaker, and a half-open probe

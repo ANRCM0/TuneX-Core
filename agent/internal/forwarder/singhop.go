@@ -90,7 +90,11 @@ func NewSingleHopTLS(cfg TunnelConfig, tlsConfig *tls.Config, diag *diagRecorder
 // arrive after it, and every connection always dials a complete address.
 func (f *SingleHopForwarder) Start() error {
 	return f.pipeTracker.start(func(net.Conn) (net.Conn, error) {
-		return net.DialTimeout("tcp", f.up.get(), dialTimeout)
+		raw, err := net.DialTimeout("tcp", f.up.get(), dialTimeout)
+		if err != nil {
+			return nil, err
+		}
+		return routeOutgoing(f.cfg.RouteAuth, raw)
 	})
 }
 

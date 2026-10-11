@@ -8,11 +8,17 @@ export TUNEX_LINK_MAINTENANCE_ENABLED=true
 export FORWARD_NATIVE_BOTH_ENABLED=true
 export TUNEX_ROUTING_ENABLED=true
 export TUNEX_ROUTING_PROBES_ENABLED=true
+export TUNEX_ROUTING_POLICIES_ENABLED=true
+export TUNEX_ROUTING_EXECUTION_ENABLED=true
+export TUNEX_ROUTING_MULTIHOP_ENABLED=true
+export TUNEX_ROUTING_HOP_AUTH_ENABLED=true
+export TUNEX_IT_INGRESS_B_ROLE=BOTH
 export TUNEX_IT_AGENT_VERSION=${TUNEX_IT_AGENT_VERSION:-0.0.0-it}
 bash "$HERE/setup.sh"
 python3 "$HERE/tst-forward.py"
 python3 "$HERE/native-both.py"
 python3 "$HERE/routing-probe.py"
+python3 "$HERE/routing-execution.py"
 echo "Evidence: $HERE/evidence/tst-forward-result.txt"
 echo "Evidence: $HERE/evidence/native-both-result.txt"
 echo "Evidence: $HERE/evidence/routing-probe-result.txt"

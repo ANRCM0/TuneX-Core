@@ -39,6 +39,7 @@ export function getOrchestrator(): Orchestrator | null {
     singleton = new Orchestrator({
       transport: new OutboundAgentTransport(),
       loadForwardPolicy: loadForwardPolicyForDispatch,
+      routingConfig: async (config, node) => (await import("./routing-runtime.ts")).attachRoutingHop(config, node),
       // Transport reachability is proven by ACK; do not probe Agent inbound.
       probeReachable: false,
     });

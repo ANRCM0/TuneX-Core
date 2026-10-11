@@ -17,6 +17,15 @@ type Identity struct {
 // TLSConfig performs ordinary certificate-chain verification and then checks
 // the exact control-plane peer URI. InsecureSkipVerify is never enabled.
 func TLSConfig(identity Identity) (*tls.Config, error) {
+	return tlsConfig(identity, ALPN)
+}
+
+// RoutingTLSConfig uses the same verified identity primitive with a separate ALPN.
+func RoutingTLSConfig(identity Identity) (*tls.Config, error) {
+	return tlsConfig(identity, "tunex-routing-hop/1")
+}
+
+func tlsConfig(identity Identity, alpn string) (*tls.Config, error) {
 	cert, err := tls.X509KeyPair([]byte(identity.CertificatePEM), []byte(identity.PrivateKeyPEM))
 	if err != nil || len(cert.Certificate) == 0 {
 		return nil, ErrIdentity
@@ -53,11 +62,11 @@ func TLSConfig(identity Identity) (*tls.Config, error) {
 		MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS13,
 		Certificates: []tls.Certificate{cert}, RootCAs: pool, ClientCAs: pool,
 		ClientAuth: tls.RequireAndVerifyClientCert,
-		NextProtos: []string{ALPN}, ServerName: "tst-node-" + peer[8] + ".tunex.invalid",
+		NextProtos: []string{alpn}, ServerName: "tst-node-" + peer[8] + ".tunex.invalid",
 		SessionTicketsDisabled: true,
 	}
 	cfg.VerifyConnection = func(state tls.ConnectionState) error {
-		if state.Version != tls.VersionTLS13 || state.NegotiatedProtocol != ALPN || len(state.VerifiedChains) == 0 ||
+		if state.Version != tls.VersionTLS13 || state.NegotiatedProtocol != alpn || len(state.VerifiedChains) == 0 ||
 			len(state.PeerCertificates) == 0 || !hasURI(state.PeerCertificates[0], identity.PeerURI) {
 			return ErrIdentity
 		}

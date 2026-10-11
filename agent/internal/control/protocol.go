@@ -56,6 +56,7 @@ const (
 	CapabilityRuntimePolicy   = "forward.policy.runtime.v1"
 	CapabilityTrafficRotation = "forward.traffic.rotation.v1"
 	CapabilityNativeBoth      = "forward.protocol.both.native.v1"
+	CapabilityRoutingHop      = "forward.routing.hop.mtls.v1"
 )
 
 // advertisedActions is the single source of truth for what this agent
@@ -73,11 +74,14 @@ var advertisedActions = []string{
 
 // Capabilities returns the actions this agent implements, sorted. The caller
 // gets a copy: a state report must not be able to mutate the agent's own list.
-type RuntimeFacts struct{ TSTLink, PolicyRuntime, TrafficRotation, NativeBoth bool }
+type RuntimeFacts struct{ TSTLink, PolicyRuntime, TrafficRotation, NativeBoth, RoutingHop bool }
 
 func Capabilities(facts ...RuntimeFacts) []string {
 	out := make([]string, len(advertisedActions))
 	copy(out, advertisedActions)
+	if len(facts) > 0 && facts[0].RoutingHop {
+		out = append(out, CapabilityRoutingHop)
+	}
 	if len(facts) > 0 && facts[0].NativeBoth {
 		out = append(out, CapabilityNativeBoth)
 	}

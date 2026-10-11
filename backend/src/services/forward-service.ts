@@ -184,6 +184,11 @@ export interface ForwardPatchOptions {
    * not part of the HTTP patch schema: users cannot forge provenance.
    */
   routeProfile?: { id: number; version: number } | null;
+  /** Internal worker fence, executed inside the existing desired-config transaction. */
+  routing?: {
+    check(tx: Prisma.TransactionClient): Promise<void>;
+    record(tx: Prisma.TransactionClient, revision: number): Promise<void>;
+  };
 }
 
 export type ForwardServiceError = {
@@ -1160,6 +1165,10 @@ export async function patchForward(
   if (!resolved.ok) return resolved.error;
 
   const { base, candidate, ctx, metadataOnly, desiredStatus } = resolved.data;
+  if (current.routing_security_version === 1 && (candidate.mode !== "relay" || candidate.protocol !== "tcp" ||
+      candidate.federated_egress_peer)) {
+    return error(409, "routing_security_scope_changed", "已保护路径只支持 TCP 和本工作空间节点");
+  }
 
   // 声明"出口腿放到 peer X"必须当场成立（存在 + trusted + 联邦已开启），
   // 否则会保存出一条每次都失败在远端的 Forward。只在声明**非空**时查库：
@@ -1186,7 +1195,7 @@ export async function patchForward(
     }
   }
 
-  if (metadataOnly) {
+  if (metadataOnly && !options.routing) {
     // §13.3.2：纯 metadata 修改不生成 revision、不触发 runtime 收敛。
     // When optimistic concurrency or internal provenance is involved, use a CAS
     // on the exact revision fact we just observed. config_revision may be NULL
@@ -1238,14 +1247,27 @@ export async function patchForward(
   let revision: number;
   try {
     const result = await withWorkspaceQuotaLock(workspaceId, async (tx, policy) => {
+      if (options.routing) {
+        await tx.$queryRaw`SELECT id FROM tunnel WHERE id = ${id} AND workspace_id = ${workspaceId} FOR UPDATE`;
+        await options.routing.check(tx);
+      }
       resolveForwardPolicy(candidate, policy.limits); // Requests stay immutable; delivery intersects fresh limits.
-      const resources = await prepareRelayRevisionResources(
-        tx,
-        current.id,
-        current,
-        candidate,
-        ctx,
-      );
+      // Routing may move the transit hop, never replace the user's target pool,
+      // reset target weights or change the exit's already leased port.
+      let resources: RelayRevisionResources;
+      if (options.routing) {
+        if (current.egress_pool_id == null || current.egress_node_id == null)
+          throw new (await import("../domain/routing/model.ts")).RoutingError("policy_authority_changed", 409);
+        const pool = await tx.egressPool.findFirst({ where: { id: current.egress_pool_id, node_id: current.egress_node_id,
+          status: "active", node: { node_group: { workspace_id: workspaceId } } },
+          include: { targets: { where: { status: "active" }, orderBy: { order_by: "asc" }, take: 129 } } });
+        if (!pool || !pool.targets.length || pool.targets.length > 128 || candidate.egress_node_id !== current.egress_node_id)
+          throw new (await import("../domain/routing/model.ts")).RoutingError("policy_authority_changed", 409);
+        resources = { poolId: pool.id, egressPort: current.egress_port,
+          targets: pool.targets.map(({host,port,weight,order_by}) => ({host,port,weight,order_by})) };
+      } else {
+        resources = await prepareRelayRevisionResources(tx,current.id,current,candidate,ctx);
+      }
       const written = await createForwardRevision(
         {
           tunnelId: current.id,
@@ -1298,11 +1320,15 @@ export async function patchForward(
           ...tlsPathsForCandidate(candidate),
         },
       });
+      await options.routing?.record(tx, written.revision);
       return { written, resources };
     });
     revision = result.written.revision;
     ctx.egressTargets = result.resources.targets;
   } catch (e) {
+    if (options.routing && e instanceof (await import("../domain/routing/model.ts")).RoutingError) {
+      return error(e.status === 403 ? 403 : 409, e.code, "路径执行条件已改变");
+    }
     if (e instanceof ForwardRevisionError) {
       return error(
         e.status as ForwardServiceError["status"],
@@ -1333,6 +1359,10 @@ export async function patchForward(
     currentResolvedListenPort: current.listen_port ?? null,
     bindingRequired: candidate.mode === "relay" && ctx.bindingExists === false,
   });
+  // A protected generation changes peer identities even if its logical path is retained.
+  if (options.routing || current.routing_security_version === 1) {
+    impact.metadata_only = false; impact.runtime_change = true; impact.listener_replacement = true;
+  }
 
   // ──  接入点：落库后走五阶段 rollout，替换  的"同步 reapply"出口 ──
   //

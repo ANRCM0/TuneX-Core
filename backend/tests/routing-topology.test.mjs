@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 
 if (process.env.TUNEX_DB_TEST !== '1') {
   test('V2.3 routing HTTP/DB acceptance requires TUNEX_DB_TEST=1', { skip: true }, () => {});
@@ -176,6 +176,44 @@ if (process.env.TUNEX_DB_TEST !== '1') {
       const decision = await request(`/policies/${native.id}/decision`, 'GET', owner);
       assert.equal(decision.status, 200); assert.equal((await decision.json()).data.reason, 'policy_disabled');
       assert.deepEqual(await footprint(owner, forwardIds, nodeIds, linkIds), before);
+      const { executeRoutingPolicy, routingDecisionHistory } = await import('../src/services/routing-controller.ts');
+      const flags = ['TUNEX_ROUTING_EXECUTION_ENABLED','TUNEX_ROUTING_HOP_AUTH_ENABLED','TUNEX_ROUTING_PROBES_ENABLED'];
+      const previous = Object.fromEntries(flags.map((flag)=>[flag,process.env[flag]]));
+      const sealBefore=process.env.TUNEX_LINK_SEAL_KEY;
+      process.env.TUNEX_LINK_SEAL_KEY=randomBytes(32).toString('hex'); flags.forEach((flag)=>process.env[flag]='true');
+      try {
+        const row=await db.routingPolicy.update({where:{forward_id:native.id},data:{enabled:true,intent:{...body,enabled:true,expected_policy_version:1}}});
+        const concurrent=await Promise.allSettled([executeRoutingPolicy(row),executeRoutingPolicy(row)]);
+        assert.equal(concurrent.filter((r)=>r.status==='fulfilled').length,1);
+        assert.equal(concurrent.filter((r)=>r.status==='rejected'&&r.reason.code==='policy_version_conflict').length,1);
+        const held=await db.routingPolicy.findUnique({where:{id:row.id}});
+        assert.equal(held.last_decision.state,'held'); assert.equal(held.state_version,1);
+        assert.deepEqual(await footprint(owner,forwardIds,nodeIds,linkIds),before);
+        assert.equal((await routingDecisionHistory(owner.workspace,native.id))[0].state,'held');
+        assert.equal((await request(`/policies/${native.id}/history`,'GET',outside)).status,404);
+        await db.workspaceMember.update({where:{workspace_id_user_id:{workspace_id:owner.workspace,user_id:owner.id}},data:{active:false}});
+        await assert.rejects(executeRoutingPolicy(held),(e)=>e.code==='routing_actor_revoked');
+        await db.workspaceMember.update({where:{workspace_id_user_id:{workspace_id:owner.workspace,user_id:owner.id}},data:{active:true}});
+        const pending={...held.last_decision,decision_id:randomUUID(),state:'pending',desired_revision:2,applied_revision:1,candidate_id:'primary'};
+        const waiting=await db.routingPolicy.update({where:{id:row.id},data:{last_decision:pending}});
+        await executeRoutingPolicy(waiting);
+        assert.equal((await db.routingPolicy.findUnique({where:{id:row.id}})).last_decision.state,'superseded');
+        // An exact desired generation without an Agent-confirmed apply must remain pending.
+        await db.tunnel.update({where:{id:native.id},data:{config_revision:2,apply_status:'applying'}});
+        const uncertain=await db.routingPolicy.update({where:{id:row.id},data:{last_decision:pending}});
+        await executeRoutingPolicy(uncertain);
+        assert.equal((await db.routingPolicy.findUnique({where:{id:row.id}})).last_decision.state,'pending');
+        await db.tunnel.update({where:{id:native.id},data:{applied_revision:2,apply_status:'active'}});
+        await executeRoutingPolicy(uncertain);
+        const confirmed=await db.routingPolicy.findUnique({where:{id:row.id}});
+        assert.equal(confirmed.last_decision.state,'confirmed'); assert.equal(confirmed.last_decision.applied_revision,2);
+        assert.equal(confirmed.controller_state.current_candidate_id,'primary');
+      } finally {
+        await db.workspaceMember.update({where:{workspace_id_user_id:{workspace_id:owner.workspace,user_id:owner.id}},data:{active:true}});
+        await db.tunnel.update({where:{id:native.id},data:{config_revision:1,applied_revision:1,apply_status:'active'}});
+        for(const flag of flags) {if(previous[flag]===undefined)delete process.env[flag];else process.env[flag]=previous[flag];}
+        if(sealBefore===undefined)delete process.env.TUNEX_LINK_SEAL_KEY;else process.env.TUNEX_LINK_SEAL_KEY=sealBefore;
+      }
       await db.routingPolicy.deleteMany({ where: { workspace_id: owner.workspace } });
       process.env.TUNEX_ROUTING_POLICIES_ENABLED = 'false';
     });

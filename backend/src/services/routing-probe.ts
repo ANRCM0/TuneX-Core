@@ -55,7 +55,9 @@ export async function loadRoutingProbePlan(workspaceId: number, forwardId: numbe
   if (row.middle_node_id !== null && (tst || row.forward_protocol !== "tcp" || row.tunnel_mode !== "relay") ||
     row.federated_egress_peer || !["direct", "relay"].includes(row.tunnel_mode ?? ""))
     throw new RoutingError("probe_topology_unsupported", 422);
-  if (!row.config_revision || row.desired_status !== "active" || row.apply_status !== "active" || row.applied_revision !== row.config_revision)
+  // A previously ACKed generation may now report a runtime error. Its configured
+  // target authority still exists; diagnosing that target does not promote Ready.
+  if (!row.config_revision || row.desired_status !== "active" || !["active", "error"].includes(row.apply_status ?? "") || row.applied_revision !== row.config_revision)
     throw new RoutingError("probe_forward_unconfirmed", 409);
   const node = row.tunnel_mode === "direct" ? row.ingress_node : row.egress_node;
   const role = row.tunnel_mode === "direct" ? "ingress" : "egress";

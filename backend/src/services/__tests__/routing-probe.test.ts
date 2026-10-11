@@ -132,9 +132,16 @@ test("production planner uses scoped whitelisted reads and binds target/credenti
   r.remote_port = 443; r.ingress_node.node_credential_hash = "rotated-private-hash";
   expect((await load(r)).plan.identityDigest).not.toBe(a.plan.identityDigest);
 });
+test("an ACKed generation with a runtime fault remains diagnosable without accepting unapplied generations", async () => {
+  const r = row(); r.apply_status = "error";
+  expect((await load(r)).plan.revision).toBe(1);
+  r.applied_revision = 0;
+  await expect(load(r)).rejects.toThrow("probe_forward_unconfirmed");
+});
 test("production planner fails closed for unsupported transport/protocol/topology, unconfirmed config and unauthorized nodes", async () => {
   const patches = [ { forward_protocol: "udp" }, { forward_protocol: "tls" }, { link_resource_id: 8 },
-    { middle_node_id: 2 }, { tunnel_mode: "invalid" }, { applied_revision: 0 }, { desired_status: "suspended" } ];
+    { middle_node_id: 2 }, { tunnel_mode: "invalid" }, { applied_revision: 0 }, { desired_status: "suspended" },
+    { apply_status: "applying" }, { apply_status: "pending" }, { apply_status: "suspended" } ];
   for (const patch of patches) await expect(load(Object.assign(row(), patch))).rejects.toThrow();
   await expect(load(null)).rejects.toThrow("forward_not_found");
   for (const patch of [{ lifecycle: "maintenance" }, { credential_revoked: true }, { last_seen_at: new Date(0) },

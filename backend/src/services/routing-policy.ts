@@ -8,6 +8,7 @@ import { readRoutingProbe, defaultRoutingProbeDeps } from "./routing-probe.ts";
 import { readRoutingEdgeProbe, defaultRoutingEdgeProbeDeps } from "./routing-edge-probe.ts";
 import { randomInt } from "node:crypto";
 import { loadRoutingTopology, routingEnabled } from "./routing-topology.ts";
+import { routingExecutionEnabled } from "./routing-runtime.ts";
 
 export function routingPoliciesEnabled() { return routingEnabled() && process.env.TUNEX_ROUTING_POLICIES_ENABLED === "true"; }
 
@@ -61,7 +62,7 @@ export function policyView(row: { version: number; forward_revision: number; int
   const intent: RoutingPolicyInput = RoutingPolicyInputSchema.parse(row.intent);
   return { schema_version: 1, version: row.version, forward_revision: row.forward_revision,
     policy: intent, controller_state: RoutingPolicyStateSchema.parse(row.controller_state),
-    last_decision: RoutingDecisionReceiptSchema.safeParse(row.last_decision).data ?? null, execution_enabled: false };
+    last_decision: RoutingDecisionReceiptSchema.safeParse(row.last_decision).data ?? null, execution_enabled: routingExecutionEnabled() };
 }
 
 export async function readRoutingPolicy(workspace: number, forward: number) {
@@ -96,8 +97,11 @@ export async function routingCandidateEvidence(workspace: number, policy: Routin
     const samples = candidate.edge_ids.map((id) => edges.get(id)!);
     if (!samples.length) blockers.push("carrier_quality_unmeasured");
     if (samples.some((s) => s.state === "unknown" || s.state === "stale")) blockers.push("carrier_observation_missing");
-    const measured = samples.length > 0 && samples.every((s) => s.state === "reachable" || s.state === "unreachable");
-    const observations = samples.flatMap((s) => s.observation ? [s.observation] : []);
+    // A measured failed edge proves path failure even if a later node cannot probe.
+    // Unknown edges alone never prove failure.
+    const measuredFailure = samples.some((s) => s.state === "unreachable");
+    const measured = measuredFailure || samples.length > 0 && samples.every((s) => s.state === "reachable" || s.state === "unreachable");
+    const observations = samples.flatMap((s) => (s.state === "reachable" || s.state === "unreachable") && s.observation ? [s.observation] : []);
     const starts = observations.map((o) => Date.parse(o.started_at)), expiry = observations.map((o) => Date.parse(o.expires_at));
     if (target.observation) expiry.push(Date.parse(target.observation.expires_at));
     const rate = target.state === "reachable" ? target.observation?.tcp_connect_success_rate ?? null : null;
@@ -105,7 +109,7 @@ export async function routingCandidateEvidence(workspace: number, policy: Routin
       observation_id: measured && target.observation ? canonicalConfigDigest(observations.map((o) => o.observation_id)) : null,
       observed_at: measured ? new Date(Math.min(...starts)).toISOString() : null,
       expires_at: measured ? new Date(Math.min(...expiry)).toISOString() : null,
-      state: !measured || target.state !== "reachable" ? "unknown" : samples.every((s) => s.state === "reachable") && !blockers.length ? "healthy" : "unhealthy",
+      state: !measured || target.state !== "reachable" ? "unknown" : !measuredFailure && samples.every((s) => s.state === "reachable") && !blockers.length ? "healthy" : "unhealthy",
       rtt_ms: measured && observations.every((o) => o.rtt_ms !== null) ? observations.reduce((sum, o) => sum + o.rtt_ms!, 0) : null,
       loss_percent: measured ? Math.max(...observations.map((o) => o.loss_percent!)) : null, handshake_success_rate: rate };
   });

@@ -24,6 +24,7 @@ import { defaultSettlementDeps, settleDuePeriods } from "./services/subscription
 import { createRuntimeReconcileSink } from "./services/runtime-reconcile-sink.ts";
 
 export const CRON_JOBS: Array<{ name: string; pattern?: string; everyMs?: number; desc: string }> = [
+  { name: "cron_routing", everyMs: 15_000, desc: "授权路径探测、策略选择与版本化切换" },
   { name: "cron_link_reconcile", everyMs: 30_000, desc: "共享 TST 链路重试与租约续期" },
   { name: "cron_forward_operations", everyMs: 30_000, desc: "恢复统一转发操作" },
   { name: "cron_save_traffic", pattern: "*/10 * * * *", desc: "Redis → MySQL 流量同步（OPS-01/OPS-03，幂等）" },
@@ -56,6 +57,9 @@ const worker = new Worker(
   async (job: Job) => {
     const started = Date.now();
     switch (job.name) {
+      case "cron_routing": {
+        return (await import("./services/routing-controller.ts")).runRoutingSweep();
+      }
       case "cron_forward_operations": {
         const { recoverForwardOperations } = await import("./services/forward-application.ts");
         return recoverForwardOperations();

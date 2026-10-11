@@ -317,6 +317,8 @@ jobs:
             scripts/integration/evidence/native-both-result.txt
             scripts/integration/evidence/routing-probe-result.txt
             scripts/integration/evidence/routing-probe-observations.json
+            scripts/integration/evidence/routing-execution-result.txt
+            scripts/integration/evidence/routing-execution-observations.json
             scripts/integration/evidence/abcd-core-diagnostics.json
           if-no-files-found: ignore
       - name: Stop disposable topology
@@ -354,6 +356,7 @@ jobs:
           python3 -m py_compile scripts/integration/tst-forward.py
           python3 -m py_compile scripts/integration/native-both.py
           python3 -m py_compile scripts/integration/routing-probe.py
+          python3 -m py_compile scripts/integration/routing-execution.py
           python3 -B -m unittest discover -s scripts/integration/tests -p 'test_*.py'
           python3 -B -m unittest discover -s scripts/perf -p 'test_*.py'
       - name: Current deployment contract

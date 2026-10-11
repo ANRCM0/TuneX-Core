@@ -824,6 +824,9 @@ model Tunnel {
   federated_egress_peer String? @db.VarChar(64)
 
   routing_policy RoutingPolicy?
+  /// Monotonic security floor: disabling routing automation never restores a plain hop.
+  routing_security_version Int @default(0)
+  routing_runtimes RoutingRuntime[]
 
   @@index([tunnel_mode])
   @@index([forward_protocol])
@@ -850,10 +853,39 @@ model RoutingPolicy {
   intent Json
   controller_state Json
   last_decision Json?
+  decisions RoutingDecision[]
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
   @@index([workspace_id, enabled])
   @@map("routing_policy")
+}
+
+model RoutingDecision {
+  id String @id @db.Char(36)
+  policy_id Int
+  policy RoutingPolicy @relation(fields: [policy_id], references: [id], onDelete: Cascade)
+  workspace_id Int
+  forward_id Int
+  policy_version Int
+  receipt Json
+  created_at DateTime @default(now())
+  @@index([workspace_id, forward_id, created_at])
+  @@map("routing_decision")
+}
+
+/// Private, revision-bound native hop identities. Never projected through user APIs.
+model RoutingRuntime {
+  id Int @id @default(autoincrement())
+  workspace_id Int
+  forward_id Int
+  forward Tunnel @relation(fields: [forward_id], references: [id], onDelete: Cascade)
+  revision Int
+  path Json
+  sealed_credentials Json
+  expires_at DateTime
+  created_at DateTime @default(now())
+  @@unique([forward_id, revision])
+  @@map("routing_runtime")
 }
 
 /// V4-WP1 Forward Revision Snapshot（DEVELOPMENT.md §13.3.2）。

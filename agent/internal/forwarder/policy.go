@@ -100,6 +100,9 @@ func policyRate(legacy, explicit int64) int64 {
 // hot swap: SetUpstream/Retarget cannot change an existing runtime's policy.
 // Invalid policy is never equivalent, even to another invalid configuration.
 func SameDataPlanePolicy(a, b TunnelConfig) bool {
+	if !sameRouteAuth(a.RouteAuth, b.RouteAuth) {
+		return false
+	}
 	x, err := NewDataPlanePolicy(a)
 	if err != nil {
 		return false

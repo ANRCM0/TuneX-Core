@@ -10,6 +10,7 @@ import { RoutingProbeInputSchema, ROUTING_PROBE_LIMITS } from "../domain/routing
 import { RoutingPolicyInputSchema } from "../domain/routing/policy.ts";
 import { saveRoutingPolicy, readRoutingPolicy, defaultRoutingPolicyDeps, routingPoliciesEnabled, evaluateRoutingPolicy } from "../services/routing-policy.ts";
 import { collectRoutingEdgeProbe, readRoutingEdgeProbe, defaultRoutingEdgeProbeDeps, RoutingEdgeProbeInputSchema } from "../services/routing-edge-probe.ts";
+import { routingExecutionEnabled, routingMultiHopEnabled, routingDecisionHistory } from "../services/routing-controller.ts";
 import { RoutingError, RoutingPreviewSchema, previewRoutingPolicy, ROUTING_LIMITS, ROUTING_SCHEMA_VERSION,
   ROUTING_MAX_CANDIDATES, ROUTING_MAX_HOPS, ROUTING_MAX_REQUEST_BYTES } from "../domain/routing/model.ts";
 
@@ -77,7 +78,8 @@ export function createRoutingRoutes(deps: {
   routingRoutes.get("/capabilities", (c) => c.json({ data: { schema_versions: [ROUTING_SCHEMA_VERSION], enabled: enabled(), stage: "experimental",
     features: { workspace_topology: enabled(), policy_preview: enabled(), policy_storage: routingPoliciesEnabled(),
       active_probes: probesEnabled(), native_tcp_target_probes: probesEnabled(), tst_target_probes: probesEnabled(), node_icmp_edge_probes: probesEnabled(),
-      path_selection: false, failover: false, multi_hop_execution: false },
+      path_selection: routingExecutionEnabled(), failover: routingExecutionEnabled(), multi_hop_execution: routingMultiHopEnabled(),
+      supported_execution: ["native_plain_relay_tcp"], secure_hops: routingExecutionEnabled() },
     limits: { ...ROUTING_LIMITS, candidates: ROUTING_MAX_CANDIDATES, hops: ROUTING_MAX_HOPS,
       request_bytes: ROUTING_MAX_REQUEST_BYTES, probes: ROUTING_PROBE_LIMITS } } }));
   routingRoutes.get("/topology", async (c) => c.json({ data: await load(c.get("workspace")!.id) }));
@@ -130,6 +132,10 @@ export function createRoutingRoutes(deps: {
   routingRoutes.get("/policies/:forwardId/decision", async (c) => {
     const id = z.coerce.number().int().positive().max(2_147_483_647).parse(c.req.param("forwardId"));
     return c.json({ data: await evaluateRoutingPolicy(c.get("workspace")!.id, id) });
+  });
+  routingRoutes.get("/policies/:forwardId/history", async (c) => {
+    const id = z.coerce.number().int().positive().max(2_147_483_647).parse(c.req.param("forwardId"));
+    return c.json({ data: await routingDecisionHistory(c.get("workspace")!.id, id) });
   });
   return routingRoutes;
 }

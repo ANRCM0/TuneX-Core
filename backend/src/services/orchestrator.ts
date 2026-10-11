@@ -54,6 +54,7 @@ export interface OrchestratorNode {
 
 /** Agent runtime configuration mirrored by the Go forwarder contract. */
 export interface AgentTunnelConfig extends ForwardPolicyInput {
+  route_auth?: import("./routing-runtime.ts").RouteHopConfig;
   policy_scope?: "runtime";
   /** 稳定 id：`tunex-<tunnelId>-<direction>`。Agent 以它为幂等键。 */
   id: string;
@@ -524,6 +525,7 @@ export interface OrchestratorOptions {
   loadForwardPolicy?: ForwardPolicySource;
   /** Selector admission reads the same advertised facts as runtime admission. */
   loadCapabilityFacts?: CapabilityFactsLoader;
+  routingConfig?: (config: AgentTunnelConfig, node: number) => Promise<AgentTunnelConfig>;
   /**：健康来源；省略则读观测投影并做  合成。 */
   healthSource?: TargetHealthSource;
   transport: AgentTransport;
@@ -614,6 +616,7 @@ export class Orchestrator {
    */
   private readonly healthSource: TargetHealthSource;
   private readonly loadCapabilityFacts: CapabilityFactsLoader | undefined;
+  private readonly routingConfig: OrchestratorOptions["routingConfig"];
 
   constructor(opts: OrchestratorOptions) {
     this.loadForwardPolicy = opts.loadForwardPolicy;
@@ -622,6 +625,7 @@ export class Orchestrator {
     this.probe = opts.probeReachable ?? true;
     this.healthSource = opts.healthSource ?? defaultTargetHealthSource;
     this.loadCapabilityFacts = opts.loadCapabilityFacts;
+    this.routingConfig = opts.routingConfig;
   }
 
   /* ---------------------------------------------------------------- */
@@ -1357,6 +1361,7 @@ export class Orchestrator {
             error: "apply 下发缺少 AgentTunnelConfig（编码错误）",
           };
         }
+        if (this.routingConfig) config = await this.routingConfig(config, node.id);
         raw = await (config.mode === "EGRESS"
           ? this.transport.applyEgress(node, config, envelope)
           : config.mode === "DIRECT"

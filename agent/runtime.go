@@ -138,6 +138,7 @@ func startRuntime(ctx context.Context, cfg *agentconfig.Config) *agentRuntime {
 	// its capability is independent of the optional TST runtime.
 	rt.linkFacts.PolicyRuntime = true
 	rt.linkFacts.NativeBoth = true
+	rt.linkFacts.RoutingHop = true
 	if rt.links != nil {
 		fromCache, err := control.RestoreLinks(ctx, tstruntime.HTTPSource{PanelURL: cfg.PanelHTTPURL, Credential: cfg.NodeCredential, AgentID: cfg.AgentID}, rt.links)
 		rt.restoredFromCache = fromCache

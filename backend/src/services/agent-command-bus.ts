@@ -1638,6 +1638,15 @@ export async function buildDesiredNodeSnapshot(
     if (outcome.kind === "skip") {
       skipped.push({ id: t.id, reason: outcome.reason });
     } else if (outcome.kind === "config") {
+      try {
+        // The full Prisma row carries the sticky security floor. Legacy fixtures
+        // and historical row projections have no protected grant to reconstruct.
+        if ((t as { routing_security_version?: number }).routing_security_version) {
+          outcome.config = await (await import("./routing-runtime.ts")).attachRoutingHop(outcome.config, nodeId);
+        }
+      } catch {
+        skipped.push({ id: t.id, reason: "routing_identity_unavailable" }); continue;
+      }
       const lease = leaseByTunnel.get(t.id);
       tunnels.push(
         lease && lease.owner_node_id === nodeId

@@ -349,6 +349,11 @@ export async function runFailoverSweep(options: FailoverSweepOptions = {}): Prom
   const dnsGate = options.dnsGate ?? defaultDnsGate;
   const dnsSuccessor = options.dnsSuccessor ?? defaultDdnsSuccessor;
   for (const tunnelId of tunnelIds) {
+    // Active route policies fix ingress/target authority; the placement controller cannot compete.
+    if (!options.execute) {
+      const managed = await db.routingPolicy.findFirst({ where: { forward_id: tunnelId, enabled: true }, select: { id: true } });
+      if (managed) { held++; continue; }
+    }
     // ── V5-WP17.4 ① 就绪性闸门（**执行器之前**）──
     //
     // 开了自动解析但 DNS 这条路写不通时**不迁移**：迁移让客户端在 TTL 内连旧地址是"短暂中断"，

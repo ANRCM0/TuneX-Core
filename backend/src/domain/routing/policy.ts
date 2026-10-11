@@ -28,6 +28,7 @@ export type RoutingPolicyState = z.infer<typeof RoutingPolicyStateSchema>;
 export const RoutingDecisionReceiptSchema = z.object({ schema_version: z.literal(1), decision_id: z.string().uuid(),
   workspace_id: z.number().int().positive(), forward_id: z.number().int().positive(), policy_version: z.number().int().positive(),
   expected_revision: z.number().int().positive(), applied_revision: z.number().int().positive().nullable(),
+  desired_revision: z.number().int().positive().nullable(),
   candidate_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).nullable(),
   edge_ids: z.array(z.string().regex(/^(binding|link):[1-9][0-9]{0,9}$/)).max(2), node_ids: z.array(z.number().int().positive()).max(3),
   state: z.enum(["held", "pending", "confirmed", "rejected", "failed", "superseded"]), reason: z.string().regex(/^[a-z0-9_]{1,64}$/),

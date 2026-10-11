@@ -494,6 +494,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	} else {
 		st = s.snapshot()
 	}
+	for i := range st.Tunnels {
+		st.Tunnels[i] = st.Tunnels[i].PublicConfig()
+	}
 	writeOK(w, st)
 }
 

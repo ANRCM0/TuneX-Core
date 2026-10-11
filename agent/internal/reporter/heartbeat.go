@@ -321,7 +321,7 @@ func (r *Reporter) reportedTunnels() []ReportedTunnel {
 		diags = r.cfg.diagnostics.DiagnosticsByTunnel()
 	}
 	for _, cfg := range configs {
-		entry := ReportedTunnel{TunnelConfig: cfg}
+		entry := ReportedTunnel{TunnelConfig: cfg.PublicConfig()}
 		if diag, ok := diags[cfg.ID]; ok {
 			copied := diag
 			entry.Diag = &copied

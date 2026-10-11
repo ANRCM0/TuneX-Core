@@ -358,6 +358,7 @@ func (h TargetHealth) StateValue() TargetHealthState {
 // ListenHost lets the operator pin the ingress interface, Revision carries the
 // monotonic revision the command layer needs. Neither changes the MVP semantics.
 type TunnelConfig struct {
+	RouteAuth   *RouteAuth `json:"route_auth,omitempty"`
 	ID          string     `json:"id"`
 	Mode        TunnelMode `json:"mode"`
 	IngressPort int        `json:"ingress_port"`
@@ -457,6 +458,19 @@ type TunnelConfig struct {
 // Clone returns a copy that shares no mutable state with c.
 func (c TunnelConfig) Clone() TunnelConfig {
 	out := c
+	if c.RouteAuth != nil {
+		grant := *c.RouteAuth
+		grant.NodeIDs = append([]int(nil), grant.NodeIDs...)
+		if grant.Incoming != nil {
+			identity := *grant.Incoming
+			grant.Incoming = &identity
+		}
+		if grant.Outgoing != nil {
+			identity := *grant.Outgoing
+			grant.Outgoing = &identity
+		}
+		out.RouteAuth = &grant
+	}
 	if len(c.Targets) > 0 {
 		out.Targets = make([]Target, len(c.Targets))
 		copy(out.Targets, c.Targets)
@@ -485,6 +499,9 @@ func (c *TunnelConfig) Validate() error {
 		return err
 	}
 	c.Protocol = protocol
+	if err := c.RouteAuth.validate(*c); err != nil {
+		return err
+	}
 	if err := c.validatePolicy(); err != nil {
 		return err
 	}

@@ -20,7 +20,7 @@ OBSERVATIONS = HERE / "evidence" / "routing-probe-observations.json"
 
 def request(method, path, body=None):
     status, response, headers = H.req(method, path, body)
-    if status not in (200, 201):
+    if status not in (200, 201, 202):
         code = response.get("code", "unknown")
         if not isinstance(code, str) or not code.replace("_", "").isalnum():
             code = "unknown"

@@ -168,8 +168,17 @@ export async function resolveWorkspaceMembership(
   if (id !== personal.id && c.req.header("authorization")?.toLowerCase().startsWith("bearer ")) {
     throw workspacePermissionDenied("团队空间需要工作空间凭证");
   }
+  return resolveWorkspaceActorMembership(user.id, id, accessDb, personal.id);
+}
+
+/** HTTP and background execution share the same scoped membership and custom-role kernel. */
+export async function resolveWorkspaceActorMembership(
+  actorId: number, id: number, accessDb: WorkspaceAccessDb = db, knownPersonalId?: number,
+): Promise<WorkspaceAccess> {
+  const personalId = knownPersonalId ?? (await accessDb.workspace.findUnique({ where: { personal_user_id: actorId }, select: { id: true } }))?.id;
+  if (!personalId) throw workspacePermissionDenied();
   const member = await accessDb.workspaceMember.findUnique({
-    where: { workspace_id_user_id: { workspace_id: id, user_id: user.id } },
+    where: { workspace_id_user_id: { workspace_id: id, user_id: actorId } },
     include: { workspace: { select: { kind: true } }, custom_role: { select: { id: true, workspace_id: true, permissions: true } } },
   });
   if (!member?.active) throw new HTTPException(404, { message: "工作空间不存在" });
@@ -187,11 +196,11 @@ export async function resolveWorkspaceMembership(
   const access: WorkspaceAccess = {
     id,
     role: member.role,
-    personalWorkspaceId: personal.id,
+    personalWorkspaceId: personalId,
     kind: member.workspace.kind,
     customRoleId: member.role_id ?? null,
     customPermissions: validCustomRole ? parseCustomPermissions(customRole!.permissions) : undefined,
-    actorId: user.id,
+    actorId,
   };
   return access;
 }
