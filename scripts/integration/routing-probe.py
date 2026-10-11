@@ -3,6 +3,7 @@
 from __future__ import annotations
 import importlib.util
 import json
+import re
 import signal
 import uuid
 from pathlib import Path
@@ -180,7 +181,9 @@ def main():
         H.check(status == 404, "R2 deleted Forward cannot expose an orphan observation")
     except Exception as exc:
         # No raw requests, target configs, ORM exceptions or secret-bearing tracebacks.
-        H.record(False, f"R2 acceptance failed: {type(exc).__name__}")
+        message = str(exc)
+        detail = message if re.fullmatch(r"(?:HTTP [0-9]{3} code=[a-z0-9_]+|operation_failed_[a-z0-9_]+)", message) else "details_redacted"
+        H.record(False, f"R2 acceptance failed: {type(exc).__name__} {detail}")
     finally:
         for fid in rules:
             status, _, _ = H.req("DELETE", f"/api/forwards/{fid}")
