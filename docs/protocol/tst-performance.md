@@ -290,3 +290,54 @@ are shut down and joined. Eight additional harness contracts pass locally
 (86 total; two Linux `/proc` checks skipped on Windows). An explicit comparison
 against the original `472c0bc` baseline remains required; a same-Agent-source
 control run cannot establish the optimization's performance.
+
+## Control-queue gate closure (3ef771d)
+
+The explicit [performance run](https://github.com/PaiMonCai/TuneX/actions/runs/38123323285)
+passed against the original baseline `472c0bcd7238903561c69ff605252b744cfb5753`;
+candidate is `3ef771d5ef2585fa1015db1661947b81368591c0`. Both builds were measured
+with the same revised harness. A deterministic real-socket regression reproduced
+the echo worker completing before `Thread.start` returned, leaving the old
+accepted-target flag unset. Publishing the flag before starting the worker fixes
+this path; completed payload and actual target acceptance remain required.
+Failure receipts now include harness file/function/line locations without
+exception text, source, locals or credentials. All 89 harness contracts passed
+on Linux; the scheduling regression passed 100 repetitions on Windows.
+
+All 138 comparisons, including 90 enforced checks, passed the unchanged 35%
+gate. An independent audit recomputed quantiles from each round's raw samples,
+checked merged populations and all 24 Go distributions against stdout, and
+reproduced every receipt check by metric identity. No missing/invalid data,
+environment/workload mismatch or additional run-distribution variation remained.
+
+| Linux/amd64 median | Baseline | Candidate |
+| --- | --- | --- |
+| TSTStream B/op; allocs/op | 778; 16 | 661; 15 |
+| TSTMutualTLS B/op; allocs/op | 567; 12 | 515; 11 |
+| Full TST TCP runtime B/op; allocs/op | 115,967; 465 | 114,547; 449 |
+| Full TST UDP runtime B/op; allocs/op | 35,060; 134 | 34,613; 130 |
+| Full TST TCP runtime ns/op | 6,076,351 | 5,853,499 |
+
+Ubuntu 24.04/amd64, AMD EPYC 7763, Go 1.26.8, GOMAXPROCS=4, CGO_ENABLED=0;
+the binaries differ. Per side, each native topology has 1,500 setups and 960
+concurrent RTT samples with zero errors. Direct hot reload has 300 apply and
+effective samples: apply p99 1.854 to 1.352 ms, effective p99 3.014 to 2.183 ms.
+All Agents in all six native rounds returned to 12 goroutines before actual
+resource capture, after about 1.08–2.35 seconds. Synchronous durable accounting
+is retained. The numbers describe this loopback workload.
+
+[Main CI](https://github.com/PaiMonCai/TuneX/actions/runs/38123322530) passed after
+rerunning its failed job at the same SHA: the first 15-second fuzz run ended with
+`context deadline exceeded` and no reported failing input; the rerun completed
+241,388 executions successfully. Both attempts are retained. Agent tests/vet,
+TST/runtime and native ownership races, backend/web/ops/security checks passed.
+Agent source is identical to `08a480d`, whose real integration evidence remains
+associated with that original SHA; this harness-only commit skipped integration.
+
+Artifact `performance-3ef771d5ef2585fa1015db1661947b81368591c0-1` and its independent
+audit, SHA256 manifest, CI receipt, raw JSON/CSV and stdout are retained under
+`scripts/perf/results/ci-3ef771d/`. Earlier failed measurements remain available.
+This closes the control-queue P3/P5 acceptance slice; fixed-host/WAN/long-run
+capacity and later roadmap stages remain pending. The revised population cannot
+be directly compared with the earlier 24-sample hot-reload result, and the new
+success does not establish the unique cause of the old failure.
