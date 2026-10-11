@@ -109,7 +109,7 @@ goroutine 2 → 2、FD 7 → 7。全部原始矩阵、soak 及双 SHA 门禁复�
 方案 P4 的 ADR/威胁模型/兼容策略已交付，完整 QUIC 实现待评审后开展。
 按用户决定，真机部署、固定主机容量、真实 WAN 和跨日验证延后统一验收。
 
-## V2.3 R1/R2 开发
+## V2.3 智能链路与高级路由
 
 V2.3 已进入 R1：统一 Workspace 图投影 Native NodeBinding/TST LinkResource 与
 当前 Forward 的授权出口，提供能力发现、拓扑查询和候选策略预览，默认关闭。
@@ -131,8 +131,31 @@ R2 已开始 Native TCP/both 目标连接观测：使用已授权配置与现有
 全量/go vet 通过；`46cc070` 的基础 CI 通过，但实际 TST 用例因测试脚本未接受正常 202
 而中止，已修正，不能记作完整通过。R4/R5 已接入事务围栏、可恢复执行记录、Native TCP
 逐跳 mTLS/TTL 与隔离 Linux 故障切换 gate，本机新增 Agent socket 与真实数据库负例通过。
-尚须完成该固定源码的 Linux 实际验收及问题修复，未将阶段标为完成，见
-[V2.3 记录](v2.3-routing.md)。
+`0ff9371` 的 [Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38144067133) 已完整通过：
+TST 24、Native both 37、授权探测 49、实际路由故障/回切 27 项，均无失败。修复旧节点删除围栏
+抢占下一版本的问题后，主三跳 → 备用两节点 → 主三跳及每次真实业务载荷均已确认。
+高级路由 UI 已加入转发详情，默认关闭能力发现、授权候选、阈值/权重、预览后保存、版本冲突、
+实际 receipt 和空间请求隔离已实现；Web 1,419 项测试与六宽度浏览器组件验收通过。
+
+后续源码 `07e247d` 修复受保护补偿身份、共用出口的准备失败恢复及 MySQL 原子发布账本，
+并补真实端口冲突回滚验收。本机后端 3,242 项 / 19,564 断言、真实 HTTP/DB 12 项通过；
+Linux 增强验收实际 29 PASS / 2 FAIL，端口冲突回滚暴露重复活动中转租约；`a3a2248` 修复后
+[Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38146396561) 全部通过：后端 3,243、
+HTTP/DB 136（0 skipped），实际路由 30、探测 49、Native both 37、TST 24 项，均无失败。
+固定旧基线 `46cc070` 对 `07e247d` 的
+[性能验收](https://github.com/PaiMonCai/TuneX/actions/runs/38145288357) 通过 138 检查、90 强制指标、
+0 回归；原 35% 阈值不变，clean/delay/loss 与 300 秒混合长稳成功。
+后续 `0abdd4d` 补 Worker 冷启动的完整恢复依赖、持久跳地址、原子资源/完成键与不可变回滚快照复用。
+本机后端 3,247 项 / 19,626 断言和生产恢复依赖下真实 HTTP/DB 12 项通过；
+[最终 Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38149532543) 全部通过：后端 3,247 项、
+HTTP/DB 136（0 skipped），实际路由 30、授权探测 49、Native both 37、TST 24 项均无失败。
+[同 SHA 固定旧基线性能](https://github.com/PaiMonCai/TuneX/actions/runs/38149544024) 的矩阵与
+300 秒混合长稳已通过，双 SHA 比较首次失败后正在复测。
+首次比较实际失败，唯一回归为 TST UDP 回环延迟中位数 +52.86%；当前 Agent tree 与
+此前通过的 `07e247d` 完全一致，存在较大样本波动，已保留失败工件并按同 SHA/原阈值复测失败 compare job。
+执行范围为同空间 Native TCP RELAY、固定入口/出口、两或三个节点；UDP/TST 自动迁移、
+并行路径逐连接分流和 Native 新持久计费发送器未实现。完整状态与固定证据见
+[V2.3 记录](v2.3-routing.md)，真机/WAN 部署仍延后统一验收。
 
 ## 实网发现与修复
 
