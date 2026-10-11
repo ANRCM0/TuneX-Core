@@ -41,6 +41,7 @@ backend/tests/v3-e2e/__pycache__/
 # 性能基线运行期产物；baseline/ 是提交进仓库的趋势锚点，必须保留。
 scripts/perf/.bin/
 scripts/perf/results/
+scripts/perf/results-profile/
 scripts/perf/__pycache__/
 
 # ForwardX 参考副本：只读研究用，永不进入提交

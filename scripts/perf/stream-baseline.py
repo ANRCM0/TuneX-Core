@@ -55,6 +55,7 @@ import base64
 import csv
 import hashlib
 import json
+import math
 import os
 import platform
 import random
@@ -73,6 +74,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
@@ -91,10 +93,8 @@ PROFILES = {
              "concurrency": 128, "conn_rounds": 40, "setups": 400},
 }
 
-# Cheap, always-on snapshots that require no profile flag: they are plain
-# runtime gauges over the authenticated admin plane. The heavyweight pprof
-# captures (heap/allocs/lock profiles) are opt-in via --capture-profiles.
-PROFILE_SNAPSHOT_NAMES = ("heap", "goroutine")
+# All pprof files are opt-in; ordinary /debug/runtime gauges remain available
+# without the profile flag. Profile artifacts are separate from timed metrics.
 PROFILE_CAPTURE_NAMES = ("allocs", "block", "goroutine", "heap", "mutex", "threadcreate")
 
 
@@ -367,9 +367,8 @@ class AgentProcess:
             "--role", self.role,
             "--node-id", self.label,
             "--agent-id", self.agent_id,
+            "--profile=true" if self.profile_enabled else "--profile=false",
         ]
-        if self.profile_enabled:
-            argv.append("--profile")
         if self.panel is not None:
             # 面板驱动的期望状态：这才让 restore / LKG / 重启收敛这些路径真的
             # 被走到（只用 admin API 只会造出"手工塞进去的隧道"）。
@@ -563,6 +562,8 @@ def concurrent_round(host: str, port: int, concurrency: int, payload: bytes,
                         break
                     received += len(chunk)
                 elapsed = time.perf_counter() - started
+                if received != len(payload):
+                    raise RuntimeError("concurrent TCP transfer returned a partial payload")
                 with lock:
                     latencies.append(elapsed)
         except Exception as exc:  # noqa: BLE001 —— 基线要把失败记成失败，而不是崩掉整轮
@@ -578,6 +579,8 @@ def concurrent_round(host: str, port: int, concurrency: int, payload: bytes,
     wall = time.perf_counter() - started
     if errors:
         raise RuntimeError(f"{len(errors)}/{concurrency} concurrent connections failed: {errors[0]!r}")
+    if len(latencies) != concurrency:
+        raise RuntimeError("concurrent TCP workload did not finish every connection")
     return len(latencies), wall, latencies
 
 
@@ -1206,6 +1209,8 @@ def measure_throughput(topology: dict, workers_profile: dict, prefix: str,
         transfer("127.0.0.1", topology["listen_port"], payload)
         for _ in range(workers_profile["transfers"])
     ]
+    if any(received != len(payload) for received, _ in samples):
+        raise RuntimeError("throughput workload returned a partial payload")
     summary = summarize_throughput(samples)
     return {f"{prefix}_throughput": summary.to_json()}
 
@@ -1234,6 +1239,8 @@ def measure_concurrency(topology: dict, profile: dict, prefix: str,
         else:
             count, wall, per_conn = round_fn(
                 "127.0.0.1", topology["listen_port"], profile["concurrency"], payload, opener)
+        if count != profile["concurrency"] or len(per_conn) != count:
+            raise RuntimeError("concurrent workload did not finish every connection")
         rounds.append((count * len(payload), wall))
         latencies.extend(per_conn)
     return {
@@ -1282,40 +1289,98 @@ def collect_gauges(topology: dict) -> dict:
 
 
 def capture_profiles(topology: dict, out_dir: Path, scenario: str,
-                     seconds: int = 1) -> dict:
-    """把每个 Agent 的 pprof 产物写到磁盘，并在 JSON 里只记录文件路径。
+                     seconds: int = 1, workload: Callable[[], None] | None = None) -> dict:
+    """Capture profiles in a separate load phase; retain failed receipts too.
 
-    二进制 profile 可能有几十 MB，放进 JSON 会让基线工件无法被人读、也无法被
-    diff 工具比较，所以工件里只留路径和字节数。采集失败不能中断整轮基线：
-    记下 error 即可，调用方能看出这一项没有测到。
+    CPU and trace must see real payload work, not the idle interval after the
+    benchmark. One worker keeps that workload running throughout captures.
+    Files have a unique directory per call so older receipts stay readable.
     """
-    out: dict = {}
-    for agent in topology["agents"]:
-        captured: dict = {}
-        for name in PROFILE_CAPTURE_NAMES:
-            path = out_dir / scenario / agent.label / f"{name}.pprof"
-            path.parent.mkdir(parents=True, exist_ok=True)
+    if not 1 <= seconds <= 20:
+        raise ValueError("profile seconds must be between 1 and 20")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    capture_root = Path(tempfile.mkdtemp(prefix="profiles-", dir=out_dir)) / scenario
+    stop, ready = threading.Event(), threading.Event()
+    stats = {"phase": "separate_profile_load" if workload else "snapshot_only",
+             "transfers": 0, "errors": 0}
+
+    def load() -> None:
+        while not stop.is_set():
             try:
-                payload = agent.request_bytes(f"/debug/pprof/{name}?debug=0")
-                path.write_bytes(payload)
-                captured[name] = {"path": str(path), "bytes": len(payload)}
-            except (OSError, RuntimeError, urllib.error.URLError) as exc:
-                captured[name] = {"error": str(exc)}
-        for name, endpoint, suffix in (
+                assert workload is not None
+                workload()
+                stats["transfers"] += 1
+            except Exception as exc:
+                stats["errors"] += 1
+                stats["error_type"] = type(exc).__name__
+                ready.set()
+                return
+            ready.set()
+
+    agents = topology["agents"]
+    captured = {agent.label: {} for agent in agents}
+
+    def capture(agent: AgentProcess, name: str, endpoint: str, suffix: str) -> None:
+        path = capture_root / agent.label / (name + suffix)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        entry: dict = {}
+        if name in ("cpu", "trace"):
+            entry["seconds"] = seconds
+        try:
+            payload = agent.request_bytes(endpoint)
+            if not payload:
+                raise RuntimeError("empty profile")
+            path.write_bytes(payload)
+            entry.update(path=str(path), bytes=len(payload))
+        except (OSError, RuntimeError, urllib.error.URLError) as exc:
+            # Raw errors can contain URLs/headers. Receipts keep bounded facts.
+            entry["error_type"] = type(exc).__name__
+            if isinstance(exc, urllib.error.HTTPError):
+                entry["http_status"] = exc.code
+                exc.close()
+        captured[agent.label][name] = entry
+
+    worker = threading.Thread(target=load, daemon=True) if workload else None
+    if worker:
+        worker.start()
+    try:
+        if worker and not ready.wait(timeout=10):
+            stats["errors"] += 1
+            stats["error_type"] = "LoadStartTimeout"
+        # Every measured Agent observes the same CPU/trace interval.
+        with ThreadPoolExecutor(max_workers=max(1, len(agents))) as executor:
+            for name, endpoint, suffix in (
                 ("cpu", f"/debug/pprof/profile?seconds={seconds}", ".pprof"),
                 ("trace", f"/debug/pprof/trace?seconds={seconds}", ".trace"),
-        ):
-            path = out_dir / scenario / agent.label / f"{name}{suffix}"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                payload = agent.request_bytes(endpoint)
-                path.write_bytes(payload)
-                captured[name] = {"path": str(path), "bytes": len(payload),
-                                  "seconds": seconds}
-            except (OSError, RuntimeError, urllib.error.URLError) as exc:
-                captured[name] = {"error": str(exc), "seconds": seconds}
-        out[f"{agent.label}_profiles"] = captured
-    return out
+                *((name, f"/debug/pprof/{name}?debug=0", ".pprof")
+                  for name in PROFILE_CAPTURE_NAMES),
+            ):
+                futures = [executor.submit(capture, agent, name, endpoint, suffix)
+                           for agent in agents]
+                for future in futures:
+                    future.result()
+    finally:
+        stop.set()
+        if worker:
+            worker.join(timeout=10)
+            if worker.is_alive():
+                stats["errors"] += 1
+                stats["error_type"] = "LoadStopTimeout"
+    passed = bool(agents) and stats["errors"] == 0 and all(
+        "error_type" not in entry for profiles in captured.values() for entry in profiles.values())
+    return {"passed": passed, "load": stats, "agents": captured}
+
+
+def profile_workload(topology: dict, scenario: str, profile: dict) -> Callable[[], None]:
+    payload = os.urandom(profile["payload_kib"] * 1024)
+    transfer = PROTOCOL_TRANSFER[SCENARIO_PROTOCOL[scenario]]
+
+    def run_transfer() -> None:
+        received, _ = transfer("127.0.0.1", topology["listen_port"], payload, timeout=5)
+        if received != len(payload):
+            raise RuntimeError("profile workload returned a partial payload")
+
+    return run_transfer
 
 
 # ── 场景注册表 ──
@@ -1590,6 +1655,19 @@ def environment(binary: Path | None) -> dict:
     if binary is not None:
         env["agent_version"] = _cmd([str(binary), "--version"])
         env["go_version"] = _cmd(["go", "version"]) or None
+        # The installed Go executable may target a different architecture from
+        # the measured binary (e.g. a 386 tool building amd64 on Windows).
+        build_info = _cmd(["go", "version", "-m", str(binary)])
+        lines = build_info.splitlines()
+        env["agent_go_version"] = lines[0].rsplit(": ", 1)[-1] if lines else None
+        env["agent_build_settings"] = {}
+        for line in lines[1:]:
+            fields = line.split()
+            if len(fields) == 2 and fields[0] == "build" and "=" in fields[1]:
+                key, value = fields[1].split("=", 1)
+                if key in ("GOARCH", "GOOS", "GOAMD64", "GOARM64", "CGO_ENABLED"):
+                    env["agent_build_settings"][key] = value
+        env["agent_binary_sha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
     env["git_rev"] = _cmd(["git", "rev-parse", "HEAD"])
     env["git_dirty"] = bool(_cmd(["git", "status", "--porcelain"]))
     # TLS 场景的证书是 openssl 现场生成的，所以它的版本是这条场景可复现性的一部分。
@@ -1632,6 +1710,7 @@ def run(args: argparse.Namespace) -> dict:
         "environment": environment(binary),
         "profiles_enabled": bool(args.capture_profiles),
         "scenarios": {},
+        "profiling": {},
     }
 
     root = Path(tempfile.mkdtemp(prefix="tunex-perf-"))
@@ -1645,15 +1724,17 @@ def run(args: argparse.Namespace) -> dict:
                 before = collect_gauges(topology)
                 result["scenarios"][key].update(
                     measure_stream_scenario(scenario, topology, profile))
+                # The resource delta covers the timed stream workload, excluding
+                # profiling and lifecycle operations which have separate phases.
+                result["scenarios"][key].update(measure_gauges(topology, before))
+                if args.capture_profiles:
+                    result["profiling"][key] = capture_profiles(
+                        topology, Path(args.out), key, args.profile_seconds,
+                        profile_workload(topology, key, profile))
                 if scenario == "direct":
                     # 热重载与重启收敛只跑 DIRECT：它们的对象是"单节点上的
                     # 生命周期"，在 RELAY 上重跑只是把同一个数字测两遍。
                     result["scenarios"][key].update(measure_hot_reload(topology, profile, scenario))
-                result["scenarios"][key].update(measure_gauges(topology, before))
-                if args.capture_profiles:
-                    result["scenarios"][key].update(
-                        capture_profiles(topology, Path(args.out) / "profiles", key,
-                                         args.profile_seconds))
             finally:
                 _teardown(topology)
 
@@ -1719,6 +1800,8 @@ def _scalar_metrics(metrics: dict) -> Iterable[tuple[str, float]]:
             yield prefix, float(value)
 
     for name, value in metrics.items():
+        if name.endswith("_profiles"):
+            continue
         if isinstance(value, dict) and "median" in value:
             continue
         yield from walk(name, value)
@@ -1739,13 +1822,49 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
         raise ValueError("candidate and anchor profiles must match")
 
     workload_mismatch = []
-    for key in ("payload_kib", "concurrency", "conn_rounds", "transfers", "setups"):
+    for key in ("payload_kib", "concurrency", "conn_rounds", "conn_timeouts", "transfers", "setups"):
         if candidate.get("workload", {}).get(key) != anchor.get("workload", {}).get(key):
             workload_mismatch.append(key)
+    if bool(candidate.get("profiles_enabled", False)) != bool(anchor.get("profiles_enabled", False)):
+        workload_mismatch.append("profiles_enabled")
+    for key, value in anchor.get("dimensions", {}).items():
+        if candidate.get("dimensions", {}).get(key) != value:
+            workload_mismatch.append(f"dimensions.{key}")
+    environment_mismatch = []
+    for key in ("platform", "machine", "cpu_count", "cpu_model", "go_version",
+                "agent_go_version", "agent_build_settings", "cgroup_cpu_max", "cgroup_memory_max"):
+        value = anchor.get("environment", {}).get(key)
+        if value is not None and candidate.get("environment", {}).get(key) != value:
+            environment_mismatch.append(key)
 
     checks: list[dict] = []
     missing: list[str] = []
+    invalid: list[str] = []
+
+    def numeric(value: object) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+    def check(name: str, before: object, after: object) -> None:
+        if not numeric(before):
+            invalid.append(f"anchor.{name}")
+            return
+        if not numeric(after):
+            missing.append(name)
+            return
+        before, after = float(before), float(after)
+        change = (after - before) / abs(before) if before else None
+        higher = _is_higher_better(name)
+        if before == 0:
+            regressed = after < 0 if higher else after > 0
+        else:
+            regressed = change < -max_regression if higher else change > max_regression
+        checks.append({"metric": name, "anchor": before, "candidate": after,
+                       "relative_change": change, "regressed": regressed})
+
     for scenario, anchor_metrics in anchor.get("scenarios", {}).items():
+        if not isinstance(anchor_metrics, dict):
+            invalid.append(f"anchor.{scenario}")
+            continue
         candidate_metrics = candidate.get("scenarios", {}).get(scenario)
         if not isinstance(candidate_metrics, dict):
             missing.append(f"{scenario}.*")
@@ -1757,35 +1876,24 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
             if not isinstance(candidate_value, dict) or "median" not in candidate_value:
                 missing.append(f"{scenario}.{name}")
                 continue
+            if anchor_value.get("unit") != candidate_value.get("unit"):
+                workload_mismatch.append(f"{scenario}.{name}.unit")
+            for side, value in (("anchor", anchor_value), ("candidate", candidate_value)):
+                if not numeric(value.get("count")) or value["count"] <= 0:
+                    invalid.append(f"{side}.{scenario}.{name}.count")
+            if anchor_value.get("count") != candidate_value.get("count"):
+                workload_mismatch.append(f"{scenario}.{name}.count")
             for stat in ("median", "p95", "p99"):
-                before, after = anchor_value.get(stat), candidate_value.get(stat)
-                if not isinstance(before, (int, float)) or not isinstance(after, (int, float)):
+                # Schema v1 has no p99; absent anchor fields cannot define a gate.
+                if stat not in anchor_value:
                     continue
-                if before <= 0:
-                    continue
-                change = (float(after) - float(before)) / float(before)
-                regressed = change < -max_regression if _is_higher_better(name) else change > max_regression
-                checks.append({
-                    "metric": f"{scenario}.{name}.{stat}",
-                    "anchor": float(before),
-                    "candidate": float(after),
-                    "relative_change": change,
-                    "regressed": regressed,
-                })
+                check(f"{scenario}.{name}.{stat}", anchor_value[stat], candidate_value.get(stat))
         candidate_scalars = dict(_scalar_metrics(candidate_metrics))
         for name, before in _scalar_metrics(anchor_metrics):
-            after = candidate_scalars.get(name)
-            if after is None or before <= 0:
-                continue
-            change = (after - before) / before
-            regressed = change < -max_regression if _is_higher_better(name) else change > max_regression
-            checks.append({
-                "metric": f"{scenario}.{name}",
-                "anchor": before,
-                "candidate": after,
-                "relative_change": change,
-                "regressed": regressed,
-            })
+            check(f"{scenario}.{name}", before, candidate_scalars.get(name))
+
+    if not checks:
+        invalid.append("no_comparable_metrics")
 
     regressions = [item for item in checks if item["regressed"]]
     return {
@@ -1794,7 +1902,9 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
         "profile": candidate.get("profile"),
         "max_regression": max_regression,
         "workload_mismatch": workload_mismatch,
-        "passed": not regressions and not missing and not workload_mismatch,
+        "environment_mismatch": environment_mismatch,
+        "invalid": invalid,
+        "passed": not regressions and not missing and not workload_mismatch and not environment_mismatch and not invalid,
         "regressions": regressions,
         "missing": missing,
         "checks": checks,
@@ -1812,7 +1922,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
                         help="override the message size recorded and measured (positive KiB)")
     parser.add_argument("--capture-profiles", action="store_true",
                         help="start the measured Agents with --profile and save pprof "
-                             "artifacts (heap/allocs/goroutine/mutex/block/threadcreate) "
+                             "artifacts (CPU/trace/heap/allocs/goroutine/mutex/block/threadcreate) "
                              "next to the JSON artifact")
     parser.add_argument("--profile-seconds", type=int, default=1,
                         help="duration for CPU/trace profiles when --capture-profiles is set")
@@ -1837,8 +1947,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.payload_kib is not None and args.payload_kib <= 0:
         print("error: --payload-kib must be positive", file=sys.stderr)
         return 2
-    if args.profile_seconds <= 0:
-        print("error: --profile-seconds must be positive", file=sys.stderr)
+    if not 1 <= args.profile_seconds <= 20:
+        print("error: --profile-seconds must be between 1 and 20", file=sys.stderr)
         return 2
     if args.rtt_ms is not None and args.rtt_ms < 0:
         print("error: --rtt-ms must be non-negative", file=sys.stderr)
@@ -1858,6 +1968,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     json_path, csv_path = write_outputs(result, Path(args.out))
+    if any(not receipt["passed"] for receipt in result.get("profiling", {}).values()):
+        print(f"error: profiling or its workload failed (receipt: {json_path})", file=sys.stderr)
+        return 4
     if args.compare is not None:
         try:
             anchor = json.loads(args.compare.read_text(encoding="utf-8"))

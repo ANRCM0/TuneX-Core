@@ -1,0 +1,61 @@
+name: Performance
+
+on:
+  push:
+    branches: [main]
+    paths: ['agent/**', 'scripts/perf/**', '.github/workflows/performance.yml']
+  pull_request:
+    paths: ['agent/**', 'scripts/perf/**', '.github/workflows/performance.yml']
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: 'Exact baseline commit SHA (40 hex characters)'
+        required: true
+      max_regression:
+        description: 'Relative regression threshold; tighten on a pinned host'
+        default: '0.35'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+      GOARCH: amd64
+      GOMAXPROCS: '4'
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.mod
+      - name: Compare baseline and candidate on this runner
+        env:
+          BASE_SHA: ${{ inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MAX_REGRESSION: ${{ inputs.max_regression || '0.35' }}
+        run: >-
+          python3 -B scripts/perf/ci-baseline.py
+          --base "$BASE_SHA" --head "$HEAD_SHA"
+          --max-regression "$MAX_REGRESSION"
+          --out scripts/perf/results/ci
+      - name: Preserve measurements and comparison even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-${{ github.sha }}
+          path: scripts/perf/results/ci/
+          if-no-files-found: error
+          retention-days: 14

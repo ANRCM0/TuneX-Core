@@ -22,6 +22,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.error
 from pathlib import Path
 
 MODULE_PATH = Path(__file__).with_name("stream-baseline.py")
@@ -378,12 +379,6 @@ class ProfileCaptureTest(unittest.TestCase):
             baseline.direct_topology = original
         self.assertEqual(seen, [True, False])
 
-    def test_snapshot_names_are_covered_by_the_capture_set(self):
-        # heap/goroutine 是文档里承诺的"随时可读"的运行时快照；采集集合必须
-        # 至少包含它们，否则 --capture-profiles 会静默少存一份资料。
-        for name in baseline.PROFILE_SNAPSHOT_NAMES:
-            self.assertIn(name, baseline.PROFILE_CAPTURE_NAMES)
-
     def test_capture_records_paths_and_never_inlines_profile_bytes(self):
         class FakeAgent:
             label = "ingress"
@@ -394,10 +389,88 @@ class ProfileCaptureTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             captured = baseline.capture_profiles(
                 {"agents": [FakeAgent()]}, Path(tmp) / "profiles", "direct")
-        entry = captured["ingress_profiles"]["heap"]
+            first = Path(captured["agents"]["ingress"]["heap"]["path"])
+            self.assertEqual(first.read_bytes(), b"profile-bytes")
+            second = baseline.capture_profiles(
+                {"agents": [FakeAgent()]}, Path(tmp) / "profiles", "direct")
+            self.assertNotEqual(first, Path(second["agents"]["ingress"]["heap"]["path"]))
+            self.assertEqual(first.read_bytes(), b"profile-bytes")
+        entry = captured["agents"]["ingress"]["heap"]
         self.assertNotIn("data", entry)
         self.assertEqual(entry["bytes"], len(b"profile-bytes"))
-        self.assertEqual(captured["ingress_profiles"]["cpu"]["seconds"], 1)
+        self.assertEqual(captured["agents"]["ingress"]["cpu"]["seconds"], 1)
+        self.assertTrue(captured["passed"])
+
+    def test_cpu_and_trace_are_captured_while_payload_load_runs(self):
+        active = threading.Event()
+        tested = []
+
+        def workload():
+            active.set()
+            threading.Event().wait(0.001)
+
+        class FakeAgent:
+            label = "ingress"
+
+            def request_bytes(self, path):
+                tested.append(active.is_set())
+                return b"profile-bytes"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            captured = baseline.capture_profiles(
+                {"agents": [FakeAgent()]}, Path(tmp), "direct", workload=workload)
+        self.assertEqual(tested, [True] * 8)
+        self.assertGreater(captured["load"]["transfers"], 0)
+        self.assertEqual(captured["load"]["errors"], 0)
+        self.assertTrue(captured["passed"])
+
+    def test_failed_capture_and_workload_fail_closed_without_secret_errors(self):
+        def workload():
+            raise OSError("secret-node-credential")
+
+        class FakeAgent:
+            label = "ingress"
+
+            def request_bytes(self, path):
+                raise urllib.error.HTTPError("http://secret-token", 401, "secret-token", {}, None)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            captured = baseline.capture_profiles(
+                {"agents": [FakeAgent()]}, Path(tmp), "relay", workload=workload)
+        self.assertFalse(captured["passed"])
+        self.assertEqual(captured["load"]["errors"], 1)
+        self.assertEqual(captured["agents"]["ingress"]["cpu"]["http_status"], 401)
+        self.assertNotIn("secret", json.dumps(captured))
+
+    def test_empty_profile_fails_and_duration_is_bounded(self):
+        class FakeAgent:
+            label = "ingress"
+
+            def request_bytes(self, path):
+                return b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            captured = baseline.capture_profiles({"agents": [FakeAgent()]}, Path(tmp), "direct")
+            self.assertFalse(captured["passed"])
+            for seconds in (0, 21):
+                with self.assertRaises(ValueError):
+                    baseline.capture_profiles({"agents": [FakeAgent()]}, Path(tmp), "direct", seconds)
+
+    def test_partial_profile_workload_is_an_error(self):
+        from unittest.mock import patch
+        with patch.dict(baseline.PROTOCOL_TRANSFER, tcp=lambda *args, **kwargs: (0, 0.001)):
+            with self.assertRaises(RuntimeError):
+                baseline.profile_workload({"listen_port": 1}, "direct", {"payload_kib": 1})()
+
+    def test_failed_profile_receipt_returns_nonzero_and_is_preserved(self):
+        from unittest.mock import patch
+        result = {"kind": "stream-baseline", "scenarios": {},
+                  "profiling": {"relay": {"passed": False}}}
+        with tempfile.TemporaryDirectory() as tmp, patch.object(baseline, "run", return_value=result):
+            self.assertEqual(baseline.main(["--out", tmp, "--capture-profiles"]), 4)
+            receipts = list(Path(tmp).glob("stream-baseline-*.json"))
+            self.assertEqual(len(receipts), 1)
+            self.assertFalse(json.loads(receipts[0].read_text())["profiling"]["relay"]["passed"])
 
 
 class ComparisonTest(unittest.TestCase):
@@ -435,6 +508,77 @@ class ComparisonTest(unittest.TestCase):
         anchor["schema_version"] = 1
         result = baseline.compare_results(self._artifact(100, 10), anchor)
         self.assertTrue(result["passed"])
+
+    def test_null_nonfinite_and_boolean_summary_values_fail_closed(self):
+        for value in (None, float("nan"), float("inf"), True):
+            with self.subTest(value=value):
+                candidate = self._artifact(100, 10)
+                candidate["scenarios"]["direct"]["direct_connect_ms"]["p99"] = value
+                result = baseline.compare_results(candidate, self._artifact(100, 10))
+                self.assertFalse(result["passed"])
+                self.assertIn("direct.direct_connect_ms.p99", result["missing"])
+                json.dumps(result, allow_nan=False)
+
+    def test_missing_nested_resource_metric_fails_closed(self):
+        anchor = self._artifact(100, 10)
+        anchor["scenarios"]["direct"]["ingress_gauges"] = {"rss_bytes": 1024}
+        result = baseline.compare_results(self._artifact(100, 10), anchor)
+        self.assertFalse(result["passed"])
+        self.assertIn("direct.ingress_gauges.rss_bytes", result["missing"])
+
+    def test_new_errors_regress_from_zero_baseline(self):
+        anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+        anchor["scenarios"]["direct"]["direct_error_count"] = 0
+        candidate["scenarios"]["direct"]["direct_error_count"] = 1
+        result = baseline.compare_results(candidate, anchor)
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["regressions"][0]["metric"], "direct.direct_error_count")
+        self.assertIsNone(result["regressions"][0]["relative_change"])
+
+    def test_sampling_and_environment_mismatch_fail_closed(self):
+        anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+        anchor["dimensions"] = {"rtt_ms": 10}
+        candidate["dimensions"] = {"rtt_ms": 20}
+        anchor["environment"] = {"machine": "x86_64", "go_version": "go1.26.3"}
+        candidate["environment"] = {"machine": "arm64", "go_version": "go1.26.4"}
+        candidate["profiles_enabled"] = True
+        candidate["scenarios"]["direct"]["direct_connect_ms"]["unit"] = "seconds"
+        result = baseline.compare_results(candidate, anchor)
+        self.assertFalse(result["passed"])
+        self.assertEqual(set(result["environment_mismatch"]), {"machine", "go_version"})
+        self.assertEqual(set(result["workload_mismatch"]), {
+            "profiles_enabled", "dimensions.rtt_ms", "direct.direct_connect_ms.unit"})
+
+    def test_empty_or_invalid_anchor_cannot_pass(self):
+        for metrics in ({}, {"direct": {}}, {"direct": {"direct_error_count": float("nan")}}):
+            anchor = self._artifact(100, 10)
+            anchor["scenarios"] = metrics
+            result = baseline.compare_results(self._artifact(100, 10), anchor)
+            self.assertFalse(result["passed"])
+            self.assertTrue(result["invalid"])
+
+    def test_empty_or_changed_sample_count_cannot_pass(self):
+        for count in (0, 1, None):
+            candidate = self._artifact(100, 10)
+            candidate["scenarios"]["direct"]["direct_connect_ms"]["count"] = count
+            self.assertFalse(baseline.compare_results(candidate, self._artifact(100, 10))["passed"])
+
+    def test_legacy_profile_sizes_are_not_performance_gauges(self):
+        anchor, candidate = self._artifact(100, 10), self._artifact(100, 10)
+        anchor["scenarios"]["direct"]["ingress_profiles"] = {"heap": {"bytes": 1024}}
+        self.assertTrue(baseline.compare_results(candidate, anchor)["passed"])
+
+
+class CompleteWorkloadTest(unittest.TestCase):
+    def test_partial_throughput_cannot_be_a_successful_measurement(self):
+        with self.assertRaises(RuntimeError):
+            baseline.measure_throughput({"listen_port": 1}, {"payload_kib": 1, "transfers": 1},
+                                        "direct", transfer=lambda *args: (1, 0.01))
+
+    def test_missing_concurrent_connection_cannot_be_a_successful_measurement(self):
+        with self.assertRaises(RuntimeError):
+            baseline.measure_concurrency({"listen_port": 1}, {"concurrency": 2, "conn_rounds": 1},
+                                         "direct", round_fn=lambda *args: (1, 0.01, [0.01]))
 
 
 class WSClientLoopbackTest(unittest.TestCase):

@@ -19,23 +19,23 @@ Run the pure harness checks with:
 python3 -B -m unittest discover -s scripts/perf -p 'test_*.py'
 ```
 
-Build the Agent, collect a quick artifact, and compare it with the checked-in
-same-host anchor:
+Build the Agent and collect a quick artifact:
 
 ```text
 (cd agent && go build -o ../scripts/perf/.bin/tunex-agent .)
 python3 scripts/perf/stream-baseline.py \
   --agent-binary scripts/perf/.bin/tunex-agent \
   --out scripts/perf/results \
-  --scenarios direct relay \
-  --compare scripts/perf/baseline/tcp-stream-anchor.json
+  --scenarios direct relay
 ```
 
-The comparison is a relative gate (20% by default) so shared runners do not
-turn millisecond noise into a false failure. Use `--max-regression` for a
-pinned host. A missing scenario or metric fails closed and is written to the
-`*-comparison.json` receipt. The anchor is a same-host reference, not a release
-capacity claim.
+Use `--compare` with an earlier artifact from the same host and workload. The
+checked-in historical Linux anchor is usable only when its recorded environment
+matches. The relative threshold defaults to 20%; it does not eliminate shared
+runner noise. Missing/nonfinite metrics, new errors from a zero baseline, changed
+sample counts/units, profiling modes, network labels or measured environments
+fail closed in the `*-comparison.json` receipt. Schema v1 anchors without p99
+can still compare the fields they actually measured. Empty comparisons fail.
 
 For a profiling run, opt in explicitly. The Agent then exposes pprof only on
 the authenticated admin listener and the harness stores CPU, trace, heap,
@@ -53,8 +53,22 @@ python3 scripts/perf/stream-baseline.py \
 Profiling is disabled by default (`TUNEX_AGENT_PROFILE=false`). The profile
 endpoints are never mounted on a separate unauthenticated port, and profile
 bytes are kept out of the JSON/CSV so the machine-readable result stays small.
-The files are diagnostic evidence, not a capacity claim; compare them on a
-fixed host with the same workload and candidate SHA.
+Captures run under a separate continuous payload load before lifecycle tests
+close the target. Resource deltas are sampled before that capture phase. Each
+capture has a unique directory, so subsequent runs preserve earlier profile
+receipts. Durations are bounded to 1–20 seconds per CPU/trace endpoint to fit
+within the admin listener's write timeout. Capture/load failure preserves the
+receipt and exits 4. Profile sizes are not performance metrics. The harness
+explicitly passes `--profile=false` in ordinary runs, even if its parent shell
+enabled profiling. Files remain local diagnostic evidence, not a capacity claim.
+
+The [same-runner workflow](../../.github/workflows/performance.yml) exports two
+exact commits, builds both offline, and measures them sequentially using the
+same harness and resources. It includes direct/relay native metrics and all six
+Go transport benchmarks, five samples each. Both raw samples and comparison
+receipts are archived even on failure. The shared CI threshold is 35%; fixed-host
+operators can tighten it. A failed capture or comparison fails the workflow.
+This does not establish WAN behavior or replace long-running capacity tests.
 
 The transport benchmark matrix includes plain TCP, plain UDP, TST TCP and TST
 UDP. UDP uses a 1200-byte datagram to stay below common loopback/MTU limits;

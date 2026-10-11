@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"runtime"
+	runtimepprof "runtime/pprof"
 	"testing"
 
 	"github.com/tunex/agent/internal/manager"
@@ -109,5 +110,59 @@ func TestPprofUsesAdminAuthenticationWhenEnabled(t *testing.T) {
 	srv.Handler().ServeHTTP(authenticatedRec, authenticated)
 	if authenticatedRec.Code != http.StatusOK {
 		t.Fatalf("authenticated pprof heap = %d, want 200", authenticatedRec.Code)
+	}
+}
+
+func TestPprofRoutesRequireAuthAndGet(t *testing.T) {
+	tunnels := manager.NewTunnelManager(manager.NewEgressManager(), "")
+	srv, err := New(Options{Token: "test-token", Profile: true}, tunnels, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := srv.Handler()
+	paths := []string{"/debug/pprof/", "/debug/pprof/profile", "/debug/pprof/trace", "/debug/pprof/symbol"}
+	for _, name := range profileNames {
+		paths = append(paths, "/debug/pprof/"+name)
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			unauthenticated := httptest.NewRecorder()
+			handler.ServeHTTP(unauthenticated, httptest.NewRequest(http.MethodGet, path, nil))
+			if unauthenticated.Code != http.StatusUnauthorized {
+				t.Fatalf("unauthenticated status = %d", unauthenticated.Code)
+			}
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			req.Header.Set("Authorization", "Bearer test-token")
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != http.MethodGet {
+				t.Fatalf("POST status = %d, Allow = %q", rec.Code, rec.Header().Get("Allow"))
+			}
+		})
+	}
+}
+
+func TestPprofPrefixDoesNotExposeOtherRuntimeProfiles(t *testing.T) {
+	const name = "tunex-api-private-test"
+	profile := runtimepprof.Lookup(name)
+	if profile == nil {
+		profile = runtimepprof.NewProfile(name)
+	}
+	value := new(int)
+	profile.Add(value, 0)
+	defer profile.Remove(value)
+	tunnels := manager.NewTunnelManager(manager.NewEgressManager(), "")
+	srv, err := New(Options{Token: "test-token", Profile: true}, tunnels, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/debug/pprof/" + name, "/debug/pprof/cmdline", "/debug/pprof/heap/extra"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer test-token")
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want 404", path, rec.Code)
+		}
 	}
 }

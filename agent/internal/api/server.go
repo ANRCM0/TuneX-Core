@@ -183,21 +183,39 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-// ProfileNames are the runtime profiles exposed under /debug/pprof. The set is
+// profileNames are the runtime profiles exposed under /debug/pprof. The set is
 // closed on purpose: the index plus these named profiles is what the V2.2
 // profiling workflow (heap / alloc / lock contention / scheduling latency /
 // CPU) needs, and nothing else is reachable.
-var ProfileNames = []string{
+var profileNames = [...]string{
 	"allocs", "block", "goroutine", "heap", "mutex", "threadcreate",
 }
 
 func mountPprof(mux *http.ServeMux, wrap func(http.HandlerFunc) http.HandlerFunc) {
-	mux.HandleFunc("/debug/pprof/profile", wrap(pprof.Profile))
-	mux.HandleFunc("/debug/pprof/symbol", wrap(pprof.Symbol))
-	mux.HandleFunc("/debug/pprof/trace", wrap(pprof.Trace))
-	mux.HandleFunc("/debug/pprof/", wrap(pprof.Index))
-	for _, name := range ProfileNames {
-		mux.HandleFunc("/debug/pprof/"+name, wrap(pprof.Handler(name).ServeHTTP))
+	get := func(handler http.HandlerFunc) http.HandlerFunc {
+		return wrap(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				w.Header().Set("Allow", http.MethodGet)
+				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+				return
+			}
+			handler(w, r)
+		})
+	}
+	mux.HandleFunc("/debug/pprof/profile", get(pprof.Profile))
+	mux.HandleFunc("/debug/pprof/symbol", get(pprof.Symbol))
+	mux.HandleFunc("/debug/pprof/trace", get(pprof.Trace))
+	mux.HandleFunc("/debug/pprof/", get(func(w http.ResponseWriter, r *http.Request) {
+		// Index also dispatches arbitrary registered runtime profiles. Keep the
+		// prefix handler from expanding the explicitly mounted allowlist.
+		if r.URL.Path != "/debug/pprof/" {
+			http.NotFound(w, r)
+			return
+		}
+		pprof.Index(w, r)
+	}))
+	for _, name := range profileNames {
+		mux.HandleFunc("/debug/pprof/"+name, get(pprof.Handler(name).ServeHTTP))
 	}
 }
 
