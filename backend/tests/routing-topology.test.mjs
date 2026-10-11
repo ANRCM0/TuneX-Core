@@ -265,11 +265,13 @@ if (process.env.TUNEX_DB_TEST !== '1') {
     await t.test('protected compensation dispatches the immutable baseline at a new authenticated generation', async () => {
       const { attachRoutingHop } = await import('../src/services/routing-runtime.ts');
       const { Orchestrator } = await import('../src/services/orchestrator.ts');
-      const { compensateRollout, indexRolloutNodes } = await import('../src/services/forward-rollout-exec.ts');
+      const { compensateRollout } = await import('../src/services/forward-rollout-exec.ts');
+      const { defaultRolloutResumeDeps } = await import('../src/services/forward-rollout-recovery.ts');
       const { markStepCompleted, appendPrepared, readKeySet, readLedger } = await import('../src/services/forward-rollout-state.ts');
       const previousKey = process.env.TUNEX_LINK_SEAL_KEY;
       process.env.TUNEX_LINK_SEAL_KEY = randomBytes(32).toString('hex');
       try {
+        for (const row of local.rows) await db.node.update({ where: { id: row.id }, data: { connect_ip: `127.0.0.${row.id}` } });
         await db.nodeStateReport.updateMany({ where: { node_id: { in: nodeIds } }, data: {
           reported_at: new Date(), capabilities: ['apply_tunnel', 'remove_tunnel', 'forward.routing.hop.mtls.v1'] } });
         await db.tunnel.update({ where: { id: native.id }, data: { routing_security_version: 1,
@@ -306,6 +308,16 @@ if (process.env.TUNEX_DB_TEST !== '1') {
           targets: [{ host: 'changed.example.test', port: 443, weight: 3, order_by: 10 }] } });
         await rejected(config); // Same path with changed targets is not the immutable baseline.
         await db.forwardRevision.deleteMany({ where: { tunnel_id: native.id, revision: 5 } });
+        // Crash boundary: the immutable rollback snapshot exists, the process
+        // cache and all confirmed rollback commands are still absent.
+        const savedRollback = await db.forwardRevision.create({ data: { ...baseline, revision: 5 } });
+        const recoveryDb = defaultRolloutResumeDeps().db;
+        const atomicResource = { kind: 'egress_apply', node_id: egress.id, port: 26200, host: `127.0.0.${egress.id}`, handle: null };
+        const atomicWrites = await Promise.all(Array.from({ length: 4 }, () =>
+          markStepCompleted(rollout.id, 'atomic-resource-step', { db: recoveryDb }, atomicResource)));
+        assert.equal(atomicWrites.filter(Boolean).length, 1);
+        const atomicLedger = await db.forwardRollout.findUniqueOrThrow({ where: { id: rollout.id } });
+        assert.equal(atomicLedger.prepared.filter((item) => item.host === atomicResource.host).length, 1);
         const configs = [], tombstones = new Map();
         const apply = async (node, value) => {
           assert(value.route_auth, 'protected_dispatch_must_not_fall_back_to_plaintext');
@@ -319,8 +331,8 @@ if (process.env.TUNEX_DB_TEST !== '1') {
               tombstones.set(`${node.id}:${id}`, envelope.revision);
               return { ok: true, applied_revision: envelope.revision };
             } } });
-        indexRolloutNodes(orchestrator, local.rows.map((row) => ({ ...row, connect_ip: `127.0.0.${row.id}` })));
-        assert.deepEqual(await compensateRollout(rollout.id, { db, orchestrator, runtimeUse: async () => null }), { ok: true });
+        assert.deepEqual(await compensateRollout(rollout.id, { db: recoveryDb, orchestrator, runtimeUse: async () => null }), { ok: true });
+        assert.equal((await db.forwardRevision.findFirstOrThrow({ where: { tunnel_id: native.id, revision: 5 } })).id, savedRollback.id);
         assert.deepEqual(configs.map((item) => item.node), [egress.id, ingress.id]);
         assert(configs.every((item) => item.value.revision === 5 && item.value.route_auth.revision === 5));
         assert.deepEqual(configs[0].value.route_auth.node_ids, [ingress.id, egress.id]);
@@ -328,6 +340,11 @@ if (process.env.TUNEX_DB_TEST !== '1') {
         const restored = await db.tunnel.findUniqueOrThrow({ where: { id: native.id } });
         assert.equal(restored.config_revision, 5); assert.equal(restored.applied_revision, 5);
         assert.equal(restored.middle_node_id, null); assert.equal(restored.routing_security_version, 1);
+        assert.equal((await db.forwardRollout.findUniqueOrThrow({ where: { id: rollout.id } })).compensated, true);
+        await db.forwardRollout.update({ where: { id: rollout.id }, data: { phase: 'compensating', compensated: false } });
+        const beforeFinalization = configs.length;
+        assert.deepEqual(await compensateRollout(rollout.id, { db: recoveryDb, orchestrator, runtimeUse: async () => null }), { ok: true });
+        assert.equal(configs.length, beforeFinalization);
         assert.equal((await db.forwardRollout.findUniqueOrThrow({ where: { id: rollout.id } })).compensated, true);
         await rejected({ ...config, revision: 4 }); // Historical and future snapshots remain fenced.
         await rejected({ ...config, revision: 6 });

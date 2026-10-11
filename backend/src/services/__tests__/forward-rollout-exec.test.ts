@@ -215,6 +215,8 @@ const fakeDb = () => {
       // V5.3 新契约：回滚产生新世代 ⇒ 补偿为"内容 = 基线"的新 revision 写快照。
       create: async (args: unknown) => {
         const a = args as { data: { tunnel_id: number; revision: number } };
+        if (snapshots.some((s) => s.tunnel_id === a.data.tunnel_id && s.revision === a.data.revision))
+          throw Object.assign(new Error("duplicate snapshot generation"), { code: "P2002" });
         const snapshot = { id: seq++, ...a.data };
         snapshots.push(snapshot);
         return snapshot;
@@ -1410,6 +1412,70 @@ describe("失败分流（§13.3.5 第三张表）", () => {
 /* ------------------------------------------------------------------ */
 
 describe("续跑：只重放未完成步骤", () => {
+  for (const legacy of [false, true]) {
+    it(`fresh Worker resumes confirmed relay preparation using ${legacy ? "same-generation legacy replay" : "durable hop facts"}`, async () => {
+      const { f } = modeSwitchEnv();
+      const first = await registerRollout({ tunnelId: 1, revision: 7, baseRevision: 6,
+        impact: impact({ mode_change: true, egress_node_change: true }) },
+        { db: f.db, runtimeUse: async () => null, orchestrator: fakeOrchestrator({
+          failOn: { dispatchIngress: true }, failCode: "ack_timeout", egressHost: "confirmed.example.test" }) });
+      expect(first.status).toBe("waiting");
+      if (legacy) for (const resource of f.rollouts[0]!.prepared) delete (resource as { host?: string }).host;
+      const fresh = fakeOrchestrator({ failOn: legacy ? {} : { dispatchEgress: true }, egressHost: "confirmed.example.test" });
+      const resumed = await executeRollout(first.rolloutId!, { db: f.db, runtimeUse: async () => null,
+        orchestrator: fresh, sleep: async () => {} });
+      expect(resumed.ok, JSON.stringify(resumed)).toBe(true);
+      expect(fresh.calls.dispatchEgress).toHaveLength(legacy ? 1 : 0);
+      expect(fresh.calls.dispatchIngress).toHaveLength(1);
+      expect(fresh.calls.dispatchIngress[0]).toMatchObject({ revision: 7, nextHop: "confirmed.example.test:31000",
+        ingressNode: { id: 11, node_id: "node-11", connect_ip: "10.0.0.11" } });
+      expect(f.rollouts[0]!.prepared).toContainEqual(expect.objectContaining({ kind: "egress_apply", host: "confirmed.example.test" }));
+    });
+  }
+
+  it("fresh Worker reuses a durable rollback snapshot and finalizes after a post-ledger crash without commands", async () => {
+    const { f } = directEnv();
+    const first = await registerRollout({ tunnelId: 1, revision: 7, baseRevision: 6,
+      impact: impact({ listen_port_change: true, listener_replacement: true }) },
+      { db: f.db, runtimeUse: async () => null, orchestrator: fakeOrchestrator({ failOn: { dispatchDirect: true }, failCode: "ack_timeout" }) });
+    const row = f.rollouts[0]!;
+    row.phase = "compensating";
+    const baseline = f.snapshots.find((s) => s.revision === 6)!;
+    const { id: _id, ...fields } = baseline;
+    f.addSnapshot({ ...fields, revision: 8 });
+    const saved = f.snapshots.find((s) => s.revision === 8)!;
+    const fresh = fakeOrchestrator();
+    const resumed = await executeRollout(first.rolloutId!, { db: f.db, runtimeUse: async () => null, orchestrator: fresh });
+    expect(resumed.compensated).toBe(true);
+    expect(resumed.phase).toBe("failed");
+    expect(f.snapshots.filter((s) => s.revision === 8)).toEqual([saved]);
+    expect(fresh.calls.dispatchDirect[0]).toMatchObject({ revision: 8, ingressPort: 10001,
+      ingressNode: { id: 11, node_id: "node-11", connect_ip: "10.0.0.11" } });
+    row.phase = "compensating"; row.compensated = false;
+    const afterLedger = fakeOrchestrator({ failOn: { removeTunnel: true, dispatchDirect: true } });
+    const finalized = await executeRollout(first.rolloutId!, { db: f.db, runtimeUse: async () => null, orchestrator: afterLedger });
+    expect(finalized.compensated).toBe(true);
+    expect(row.phase).toBe("failed");
+    expect(afterLedger.calls.removeTunnel).toHaveLength(0);
+    expect(afterLedger.calls.dispatchDirect).toHaveLength(0);
+  });
+
+  it("persisted rollback with different targets cannot be reused or dispatched", async () => {
+    const { f } = directEnv();
+    const first = await registerRollout({ tunnelId: 1, revision: 7, baseRevision: 6,
+      impact: impact({ listen_port_change: true, listener_replacement: true }) },
+      { db: f.db, runtimeUse: async () => null, orchestrator: fakeOrchestrator({ failOn: { dispatchDirect: true }, failCode: "ack_timeout" }) });
+    f.rollouts[0]!.phase = "compensating";
+    const { id: _id, ...baseline } = f.snapshots.find((s) => s.revision === 6)!;
+    f.addSnapshot({ ...baseline, revision: 8, target_host: "unauthorized.example.test" });
+    const fresh = fakeOrchestrator();
+    const result = await executeRollout(first.rolloutId!, { db: f.db, runtimeUse: async () => null, orchestrator: fresh });
+    expect(result.phase).toBe("degraded");
+    expect(result.compensated).toBe(false);
+    expect(fresh.calls.dispatchDirect).toHaveLength(0);
+    expect(f.snapshots.filter((s) => s.revision === 8)).toHaveLength(1);
+  });
+
   it("CUTOVER ACK 超时 ⇒ waiting；恢复后同 revision 重放并收敛，不做补偿", async () => {
     const { f } = directEnv();
     f.tunnels[0]!.applied_revision = 6;

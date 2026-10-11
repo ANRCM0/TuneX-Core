@@ -182,8 +182,16 @@ export function defaultRolloutResumeDeps(): ResumeRolloutsDeps {
     // Recovery runs the entire executor, not merely the initial scan. Provide
     // every ledger/topology/lease method lazily rather than casting a partial DB.
     db: {
+      $executeRaw: async (query, ...values) => {
+        const { db } = await import("../db.ts");
+        return db.$executeRaw(query, ...values);
+      },
+      $transaction: async (run, options) => {
+        const { db } = await import("../db.ts");
+        return db.$transaction(async (tx) => run(tx as unknown as import("./portPool.ts").PortPoolTransaction), options);
+      },
       tunnel: lazyModel("tunnel", ["findUnique", "update", "updateMany"]),
-      forwardRevision: lazyModel("forwardRevision", ["findFirst", "findMany"]),
+      forwardRevision: lazyModel("forwardRevision", ["findFirst", "findMany", "create"]),
       forwardRollout: lazyModel("forwardRollout", ["create", "findUnique", "findMany", "update", "updateMany"]),
       nodeBinding: lazyModel("nodeBinding", ["findUnique", "create"]),
       node: lazyModel("node", ["findUnique", "findMany", "update", "updateMany"]),

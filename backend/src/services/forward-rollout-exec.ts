@@ -25,6 +25,7 @@ import type { RuntimeUseDenied, RuntimeUseResource } from "./forward-capability.
 import { admitRuntimeFromStore } from "./runtime-admission.ts";
 import { nativeBothShapeError } from "./forward-native-both.ts";
 import { forwardPolicyValues } from "./forward-policy.ts";
+import { canonicalConfigDigest } from "../domain/link/core-contract.ts";
 import type { ForwardPolicyInput } from "./forward-policy.ts";
 // 远端出口腿的委托。编排只调这里的入口 —— 签名/重试/幂等键/镜像行
 // 全部有且只有一个实现（`federation/forward-hop.ts`），rollout 不再自己拼一遍。
@@ -740,7 +741,7 @@ async function runStep(
       return {
         ok: true,
         note: `egress ${nodeId}:${egressPort} applied（未切入口）`,
-        sideEffect: { kind: "egress_apply", node_id: nodeId, port: egressPort, handle: null },
+        sideEffect: { kind: "egress_apply", node_id: nodeId, port: egressPort, handle: null, host: outcome.egress_host },
       };
     }
 
@@ -790,7 +791,9 @@ async function runStep(
       if (!outcome.ok) {
         return { ok: false, error_code: outcome.error_code, error: outcome.error };
       }
-      return { ok: true, note: `egress ${nodeId}:${egressPort} 生效于 revision ${ctx.revision}` };
+      recordNextHop(ctx.rolloutId, nodeId, outcome.egress_host);
+      return { ok: true, note: `egress ${nodeId}:${egressPort} 生效于 revision ${ctx.revision}`,
+        sideEffect: { kind: "egress_apply", node_id: nodeId, port: egressPort, handle: null, host: outcome.egress_host } };
     }
 
     case "handoff_ingress_owner": {
@@ -1138,7 +1141,8 @@ async function runStep(
       }
       // 登记中间跳的可寻址 host：入口的 cutover 会用它拼 next_hop。
       recordNextHop(ctx.rolloutId, middleNodeId, transit.host);
-      return { ok: true, note: `transit ${middleNodeId}:${port} → ${nextHop}` };
+      return { ok: true, note: `transit ${middleNodeId}:${port} → ${nextHop}`,
+        sideEffect: { kind: "egress_apply", node_id: middleNodeId, port, handle: null, host: transit.host } };
     }
 
     default: {
@@ -1269,6 +1273,22 @@ export function indexRolloutNodes(
   nodeIndex.set(orchestrator, map);
 }
 
+/** Registration caches cannot survive a Worker restart. Resolve every local
+ * desired/baseline/cleanup node from durable IDs before continuing commands. */
+async function reloadRolloutNodes(row: RolloutRowView, deps: RolloutDeps): Promise<void> {
+  const desired = planSnapshot(row.steps, "desired"), applied = planSnapshot(row.steps, "applied");
+  const ids = new Set([desired, applied].flatMap((s) =>
+    [s.ingress_node_id, s.egress_node_id, s.middle_node_id ?? null]));
+  for (const step of readPlan(row.steps)?.steps ?? []) if (step.node_id) ids.add(step.node_id);
+  const localIds = [...ids].filter((id): id is number => Number.isInteger(id) && Number(id) > 0 && id !== FEDERATED_EGRESS_PLAN_NODE_ID);
+  const nodes = await Promise.all(localIds.map((id) => deps.db.node.findUnique({ where: { id },
+    select: { id: true, node_id: true, connect_ip: true, role: true } })));
+  const index = nodeIndex.get(deps.orchestrator) ?? new Map();
+  localIds.forEach((id) => index.delete(id));
+  nodes.forEach((node) => { if (node) { const fact = node as Parameters<Orchestrator["removeTunnel"]>[0]["node"]; index.set(fact.id, fact); } });
+  nodeIndex.set(deps.orchestrator, index);
+}
+
 /** ingress 端口：step 优先，其次本轮回迁的 lease，最后 desired。 */
 function resolveIngressPort(step: RolloutStep, ctx: RolloutExecContext): number {
   if (step.port != null) return step.port;
@@ -1339,9 +1359,8 @@ function resolveNextHop(ctx: RolloutExecContext): string | null {
  *
  * 为什么需要它：`cutover_ingress` 要拼 `<egress host>:<egress port>`，而 host
  * 只能来自 `dispatchEgress` 的返回值（它做过 `node_unaddressable` 判定）。
- * PREPARE 与 CUTOVER 之间隔着一次进程重启也成立——因为 key 是 rolloutId，
- * 而重放 PREPARE 的 `prepare_egress` 会在 cutover_ingress 之前被重放
- * （§3.5「续跑 = 重放未完成 steps」），重新 dispatch 一次就会重新登记。
+ * 成功 ACK 的 host 与完成键一同持久化；新进程从账本恢复此表。
+ * 旧账本缺地址时，按同 revision 重放准备命令取证，再执行未完成的入口切换。
  */
 const nextHopHosts = new Map<number, Map<number, string>>();
 
@@ -1356,19 +1375,20 @@ function recordNextHop(rolloutId: number, egressNodeId: number, host: string): v
 /* 补偿（§3.4）                                                        */
 /* ================================================================== */
 
+function snapshotContentDigest({ id: _id, revision: _revision, created_at: _time, ...fields }: Record<string, unknown>) {
+  return canonicalConfigDigest(fields);
+}
+
 /**
  * CUTOVER 失败后的回退。
  *
  * 顺序是 §3.4 的三步：
- *   1. 撤掉**本次已切过去的新** runtime（两端），用 `revision + 1` 让 Agent
- *      的 stale 闸门放行；
+ *   1. 撤掉本次尝试的 runtime，以失败 revision 围栏拒绝迟到命令；
  *   2. 对 `base_revision` 的完整 snapshot 重新 dispatch；
- *   3. 分流：成功 ⇒ `apply_status=error` + `apply_error` 带 `rollout_id` 与
+ *   3. 分流：恢复成功 ⇒ `apply_status=active` + `apply_error` 带 `rollout_id` 与
  *      `previous_revision`；失败 ⇒ `phase=degraded` + `compensation_error`。
  *
- * 第 2 步用**基线 revision 本身**（不是 +1）：Agent 的 `isStale(next,current)`
- * 判 `next < current` 才拒，同 revision 会让 `ReplaceListener` 判 equal ⇒
- * 幂等 no-op——「基线还在跑就别动它」正是要的行为。
+ * 第 2 步用失败 revision + 1，内容完整等于基线；重启后复用同一不可变快照。
  */
 export async function compensateRollout(
   rolloutId: number,
@@ -1378,11 +1398,31 @@ export async function compensateRollout(
     | (RolloutRowView & Record<string, unknown>)
     | null;
   if (!row) return { ok: false, error: `rollout ${rolloutId} 不存在` };
+  // The process may have died after recording confirmed rollback on Tunnel but
+  // before the terminal rollout CAS. Complete only that ledger write; sending
+  // failed-generation removals again would target an already restored runtime.
+  const tunnel = await deps.db.tunnel.findUnique({ where: { id: row.tunnel_id } }) as Record<string, unknown> | null;
+  if (row.phase === "compensating" && row.base_revision != null && tunnel?.apply_status === "active" &&
+      tunnel.config_revision === row.revision + 1 && tunnel.applied_revision === row.revision + 1) {
+    const [baseline, rollback] = await Promise.all([
+      deps.db.forwardRevision.findFirst({ where: { tunnel_id: row.tunnel_id, revision: row.base_revision } }),
+      deps.db.forwardRevision.findFirst({ where: { tunnel_id: row.tunnel_id, revision: row.revision + 1 } }),
+    ]) as Array<Record<string, unknown> | null>;
+    if (baseline && rollback && rollback.id === tunnel.desired_revision_id &&
+        snapshotContentDigest(baseline) === snapshotContentDigest(rollback)) {
+      const moved = await transitionRollout(rolloutId, "compensating", "failed", {
+        compensated: true, compensation_error: null, last_error_code: "cutover_failed_compensated",
+        updated_at: (deps.now?.() ?? new Date()).toISOString(),
+      }, { db: deps.db });
+      return moved ? { ok: true } : { ok: false, error: "compensation terminal transition lost CAS ownership" };
+    }
+  }
+  await reloadRolloutNodes(row, deps);
 
   const orchestrator = deps.orchestrator;
   const errors: string[] = [];
 
-  // ① 撤新 runtime（两端）。revision+1 让闸门放行。
+  // ① 撤新 runtime（两端），为 revision+1 的基线重放留下新世代。
   // 用 plan 里存的 desired 快照，而不是重读 tunnel 行：补偿必须针对**本次
   // 尝试切过去的那个**拓扑，而 tunnel 行可能已被后续编辑改写。
   // Fence the failed generation itself: an equal/older delayed apply is then
@@ -1484,11 +1524,20 @@ export async function compensateRollout(
         revision?: unknown;
       };
       // 新世代的快照必须存在，否则后续 rollout 按 revision 找基线会报"不存在"。
-      const rollbackSnapshot = await deps.db.forwardRevision
-        .create({ data: { ...baselineFields, tunnel_id: row.tunnel_id, revision: rollbackGeneration } } as never)
-        .catch((e: unknown) => {
-          errors.push(`rollback snapshot revision=${rollbackGeneration} 写入失败：${(e as Error)?.message ?? String(e)}`);
-        });
+      let rollbackSnapshot = await deps.db.forwardRevision.findFirst({
+        where: { tunnel_id: row.tunnel_id, revision: rollbackGeneration },
+      }) as Record<string, unknown> | null;
+      if (rollbackSnapshot && snapshotContentDigest(rollbackSnapshot) !== snapshotContentDigest(baseline)) {
+        errors.push(`rollback snapshot revision=${rollbackGeneration} 与基线内容不一致`);
+        rollbackSnapshot = null;
+      } else if (!rollbackSnapshot) {
+        rollbackSnapshot = await deps.db.forwardRevision
+          .create({ data: { ...baselineFields, tunnel_id: row.tunnel_id, revision: rollbackGeneration } } as never)
+          .catch((e: unknown) => {
+            errors.push(`rollback snapshot revision=${rollbackGeneration} 写入失败：${(e as Error)?.message ?? String(e)}`);
+            return null;
+          }) as Record<string, unknown> | null;
+      }
       rollbackSnapshotId = (rollbackSnapshot as { id?: number } | undefined)?.id ?? null;
       const baselineDenied = baselinePlanned.protocol === "both"
         ? await rolloutRuntimeDenial(row.tunnel_id, baselinePlanned, deps)
@@ -1870,6 +1919,7 @@ async function executeRolloutOwned(
   if (row.phase === "done" || row.phase === "failed" || row.phase === "degraded") {
     return { ok: row.phase === "done", rolloutId, phase: row.phase, completed: row.cleaned?.length ?? 0 };
   }
+  await reloadRolloutNodes(row, deps);
 
   // 崩溃若发生在「已切到 compensating、但补偿还没跑完」的窗口，恢复入口
   // 必须继续补偿，而不是把 compensating 伪装成 prepare。补偿动作本身按
@@ -1883,7 +1933,7 @@ async function executeRolloutOwned(
       error_code: comp.ok ? (row.last_error_code ?? "cutover_failed_compensated") : "compensation_failed",
       error: comp.error ?? row.last_error ?? undefined,
       completed: readKeySet(row.cleaned).length,
-      compensated: true,
+      compensated: comp.ok,
     };
   }
 
@@ -1896,6 +1946,24 @@ async function executeRolloutOwned(
   const desired = planSnapshot(plan, "desired");
   const applied = planSnapshot(plan, "applied");
   const prepared = readLedger<PreparedResource[]>(row.prepared, []);
+  nextHopHosts.delete(rolloutId);
+  for (const resource of prepared) {
+    if (resource.kind === "egress_apply" && resource.node_id && resource.host)
+      recordNextHop(rolloutId, resource.node_id, resource.host);
+  }
+  // Older ledgers did not persist confirmed hop addresses. Replay only the
+  // required preparation at the same generation, through the normal admission
+  // and ACK gates, before cutting over an ingress that has not yet completed.
+  if (plan.steps.some((step) => step.kind === "cutover_ingress" && !completed.has(step.idempotency_key))) {
+    const replayNodes = new Set<number>();
+    for (const step of plan.steps) {
+      if (["prepare_egress", "prepare_transit", "cutover_egress"].includes(step.kind) && step.node_id &&
+          completed.has(step.idempotency_key) && !nextHopHosts.get(rolloutId)?.has(step.node_id) && !replayNodes.has(step.node_id)) {
+        completed.delete(step.idempotency_key);
+        replayNodes.add(step.node_id);
+      }
+    }
+  }
   const ctx: RolloutExecContext = {
     rolloutId,
     tunnelId: row.tunnel_id,
@@ -1971,7 +2039,9 @@ async function executeRolloutOwned(
 
       // S10.47：第一次 command 的 ACK 可能丢了，但 Agent 已真实应用。恢复时先用
       // state report 确认具体 resource 的 revision；确认后只补 ledger，不重发命令。
-      if (recoveringAmbiguous && await runtimeConfirmsStepApplied(step, ctx, deps)) {
+      const needsHopFacts = ["prepare_egress", "prepare_transit", "cutover_egress"].includes(step.kind) &&
+        step.node_id != null && !nextHopHosts.get(rolloutId)?.has(step.node_id);
+      if (recoveringAmbiguous && !needsHopFacts && await runtimeConfirmsStepApplied(step, ctx, deps)) {
         const note = `${step.phase}:${step.kind} CONFIRMED runtime revision=${ctx.revision}`;
         await markStepCompleted(rolloutId, step.idempotency_key, { db });
         completed.add(step.idempotency_key);
@@ -1982,11 +2052,12 @@ async function executeRolloutOwned(
 
       const outcome = await runStep(step, ctx, { ...deps, db });
       if (outcome.ok) {
-        await markStepCompleted(rolloutId, step.idempotency_key, { db });
+        const recorded = await markStepCompleted(rolloutId, step.idempotency_key, { db }, outcome.sideEffect);
         completed.add(step.idempotency_key);
         ctx.completed = completed;
         if (outcome.sideEffect) {
-          await appendPrepared(rolloutId, outcome.sideEffect, { db });
+          // A legacy completion key may already exist without its hop facts.
+          if (!recorded) await appendPrepared(rolloutId, outcome.sideEffect, { db });
           ctx.prepared.push(outcome.sideEffect);
         }
         if (outcome.note) ctx.notes.push(`${step.phase}:${step.kind} ${outcome.note}`);
@@ -2122,10 +2193,10 @@ async function executeRolloutOwned(
           ok: false,
           rolloutId,
           phase: comp.ok && preparedCleanup.ok ? "failed" : "degraded",
-          error_code: cleanupError ? "compensation_failed" : outcome.error_code,
+          error_code: cleanupError || !comp.ok ? "compensation_failed" : outcome.error_code,
           error: errorParts.join("；"),
           completed: completed.size,
-          compensated: true,
+          compensated: comp.ok && preparedCleanup.ok,
         };
       }
 

@@ -4,7 +4,7 @@
  * This module owns resumable ledger shape and phase transitions. Runtime side
  * effects remain in forward-rollout-exec.ts.
  */
-import type { acquirePort, releaseLease } from "./portPool.ts";
+import type { acquirePort, releaseLease, PortPoolDb } from "./portPool.ts";
 import type { Orchestrator } from "./orchestrator.ts";
 import type { RolloutPlan, RolloutSnapshot } from "./forward-rollout.ts";
 import type { RuntimeUseDenied, RuntimeUseResource } from "./forward-capability.ts";
@@ -72,6 +72,8 @@ export interface PreparedResource {
    * 缺省/true = 本轮 acquire/revive 的资源，失败清理应回收。
    */
   owned_by_rollout?: boolean;
+  /** Confirmed hop address, persisted with completion for process-restart recovery. */
+  host?: string;
 }
 
 /** 一个 step 的执行结果。 */
@@ -132,6 +134,7 @@ export interface RolloutDeps {
  * 而替身只需要这几个方法。真库里 `db` 满足之（结构上兼容）。
  */
 export interface RolloutDb {
+  $transaction?: PortPoolDb["$transaction"];
   /** Real MySQL JSON arrays require atomic SQL append; Prisma Json has no push operator. */
   $executeRaw?: (query: TemplateStringsArray, ...values: unknown[]) => Promise<number>;
   tunnel: {
@@ -279,8 +282,17 @@ export async function markStepCompleted(
   rolloutId: number,
   key: string,
   deps: { db: RolloutDb },
+  resource?: PreparedResource,
 ): Promise<boolean> {
   if (deps.db.$executeRaw) {
+    if (resource) {
+      const count = await deps.db.$executeRaw`UPDATE forward_rollout
+        SET cleaned = JSON_ARRAY_APPEND(IF(JSON_TYPE(cleaned) = 'ARRAY', cleaned, JSON_ARRAY()), '$', ${key}),
+            prepared = JSON_ARRAY_APPEND(IF(JSON_TYPE(prepared) = 'ARRAY', prepared, JSON_ARRAY()), '$', CAST(${JSON.stringify(resource)} AS JSON)),
+            updated_at = CURRENT_TIMESTAMP(3)
+        WHERE id = ${rolloutId} AND JSON_CONTAINS(COALESCE(cleaned, JSON_ARRAY()), JSON_QUOTE(${key})) = 0`;
+      return count > 0;
+    }
     const count = await deps.db.$executeRaw`UPDATE forward_rollout
       SET cleaned = JSON_ARRAY_APPEND(IF(JSON_TYPE(cleaned) = 'ARRAY', cleaned, JSON_ARRAY()), '$', ${key}),
           updated_at = CURRENT_TIMESTAMP(3)
@@ -288,6 +300,7 @@ export async function markStepCompleted(
     return count > 0;
   }
   // In-memory dependency ports implement append semantics explicitly.
+  if (resource) await appendPrepared(rolloutId, resource, deps);
   const res = (await deps.db.forwardRollout.updateMany({
     where: { id: rolloutId },
     data: { cleaned: { push: key } },
