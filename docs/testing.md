@@ -64,6 +64,21 @@ go test ./internal/tstruntime -run '^$' -bench 'Benchmark(PlainUDP|TSTLoopback(U
 
 性能基线记录平台、CPU、样本、消息尺寸、并发数与 median/p95/p99；plain TCP/UDP、原生 relay、TLS/TST 分别实测，不预设新协议快于旧实现。`scripts/perf/stream-baseline.py --compare` 对固定同机 anchor 执行相对回归门禁。Parser fuzz、认证负例、版本/授权/代次拒绝、背压/半关闭、过期证书/租约、资源上限及 sibling 更新属于必需回归。
 
+V2.2 新增真实载体网络条件矩阵：
+
+```bash
+python3 -B scripts/perf/runtime-matrix.py --condition loss --out scripts/perf/results/runtime-loss
+python3 -B scripts/perf/runtime-matrix.py --mode soak --kinds tst_mixed --duration 600 --out scripts/perf/results/runtime-soak-local
+```
+
+第一个命令实际在隔离 Linux netns 中施加 20ms RTT、
+每方向 1% 随机丢包，验证完整 payload、持久字节、资源回收和真实 netem
+计数；clean/delay/loss 三组共 108 个 case。第二个命令运行本机持续负载；
+Linux 可追加 `--condition loss`。
+命令与工件口径见 [脚本说明](../scripts/perf/README.md)，固定源码执行结果见
+[V2.2 记录](v2.2-performance.md)。这些 CI/loopback workload 不替代真机部署
+或跨日验收；上述项目按用户决定延后统一进行。
+
 独立安全审查需审查帧状态机、互信身份、快照授权、密钥生命周期、资源耗尽与缓存/统计恢复。内部代码评阅和 fuzz 不替代外部独立审查。
 
 ## 证据与平台矩阵
@@ -74,7 +89,8 @@ go test ./internal/tstruntime -run '^$' -bench 'Benchmark(PlainUDP|TSTLoopback(U
 | --- | --- |
 | Windows Agent 单元/真实 socket | 本地执行，完整结果见 Agent 证据 |
 | Linux amd64/arm64 构建 | 交叉编译结果仅代表构建 |
-| Linux 实际运行/race/容器安装 | 需 Linux 与 Docker 实际执行 |
+| Linux 实际运行/race | 5a3e300 主 CI/race、真实容器 shared-Link、108 个隔离 netns case 和 300 秒丢包条件 soak 通过；原始执行证据见 V2.2 记录 |
+| 正式 Linux Compose 安装/升级/恢复/回退 | 延后统一真机验收，隔离 CI 容器测试不替代正式安装验证 |
 | Web 单元/Next build/真实业务浏览器 | 单测、typecheck、生产构建与当前隔离 Panel/Agent 浏览器验收通过；真实证据见 `web/test-artifacts/real-unified-forward-browser-evidence.json` |
 | 外部独立安全审查 | 尚未完成，TST 保持关闭 |
 | 长期运行/真实跨日/公开生产 | 尚未完成，无正式发布声明 |
