@@ -1,14 +1,58 @@
 # TST performance baseline
 
+## V2.2 baseline contract
+
+The repository now has two complementary baseline layers. The Go benchmarks
+measure transport and runtime paths without a Panel, while
+`scripts/perf/stream-baseline.py` measures real native direct/relay Agent
+topologies and emits a versioned JSON artifact plus a CSV projection.
+
+The artifact records message size, concurrency, platform, optional externally
+measured RTT/loss labels, median/p95/p99, throughput, CPU, RSS, goroutines and
+connection/setup metrics. RTT and packet loss are metadata unless an external
+runner shapes the network; the loopback harness does not pretend to emulate a
+WAN. Empty or unavailable values stay `null`.
+
+Run the pure harness checks with:
+
+```text
+python3 -B -m unittest discover -s scripts/perf -p 'test_*.py'
+```
+
+Build the Agent, collect a quick artifact, and compare it with the checked-in
+same-host anchor:
+
+```text
+(cd agent && go build -o ../scripts/perf/.bin/tunex-agent .)
+python3 scripts/perf/stream-baseline.py \
+  --agent-binary scripts/perf/.bin/tunex-agent \
+  --out scripts/perf/results \
+  --scenarios direct relay \
+  --compare scripts/perf/baseline/tcp-stream-anchor.json
+```
+
+The comparison is a relative gate (20% by default) so shared runners do not
+turn millisecond noise into a false failure. Use `--max-regression` for a
+pinned host. A missing scenario or metric fails closed and is written to the
+`*-comparison.json` receipt. The anchor is a same-host reference, not a release
+capacity claim.
+
+The transport benchmark matrix includes plain TCP, plain UDP, TST TCP and TST
+UDP. UDP uses a 1200-byte datagram to stay below common loopback/MTU limits;
+the full runtime tests separately cover larger packet rejection and bounded
+association queues.
+
 Executed local sample: Windows/amd64, Go standard runtime, Intel Core i5-12500H,
 16 logical benchmark workers. Command:
 
 ```text
 go test ./internal/securelink -run '^$' -bench 'Benchmark(PlainTCP|TSTMutualTLS|TSTStream)$' -benchmem -benchtime 500ms -count 3
+go test ./internal/tstruntime -run '^$' -bench 'Benchmark(PlainUDP|TSTLoopback(UDP|TCP))$' -benchmem -benchtime 500ms -count 3
 ```
 
-Each operation transfers a 16 KiB payload. Plain TCP and TST/mTLS use real loopback
-sockets; TSTStream isolates framing/flow control with net.Pipe. The TLS benchmark
+The securelink operations transfer a 16 KiB payload; the UDP runtime benchmarks
+use a 1200-byte datagram. Plain TCP and TST/mTLS use real loopback sockets;
+TSTStream isolates framing/flow control with net.Pipe. The TLS benchmark
 sets up one authenticated carrier outside the timed payload loop; it does not
 measure certificate issuance or per-connection handshake throughput.
 

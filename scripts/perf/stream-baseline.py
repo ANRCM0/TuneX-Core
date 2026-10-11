@@ -77,7 +77,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # ── 默认工作量 ──
 #
@@ -125,6 +125,7 @@ class Summary:
     count: int
     median: float | None
     p95: float | None
+    p99: float | None
     min: float | None
     max: float | None
     mean: float | None
@@ -133,11 +134,12 @@ class Summary:
     @staticmethod
     def of(values: Sequence[float], unit: str = "") -> "Summary":
         if not values:
-            return Summary(0, None, None, None, None, None, unit)
+            return Summary(0, None, None, None, None, None, None, unit)
         return Summary(
             count=len(values),
             median=percentile(values, 50),
             p95=percentile(values, 95),
+            p99=percentile(values, 99),
             min=float(min(values)),
             max=float(max(values)),
             mean=float(statistics.fmean(values)),
@@ -449,7 +451,7 @@ def cpu_hz() -> float:
     """每秒多少个调度 tick（Linux 常见 100，即 10ms 分辨率）。"""
     try:
         return float(os.sysconf("SC_CLK_TCK"))
-    except (OSError, ValueError):
+    except (AttributeError, OSError, ValueError):
         return 100.0
 
 
@@ -1311,7 +1313,7 @@ def measure_stream_scenario(scenario: str, topology: dict, profile: dict) -> dic
     —— 这样 tls 与 direct 的数字才有可比性，而"可比"正是基线存在的意义。
     """
     protocol = SCENARIO_PROTOCOL[scenario]
-    out: dict = {}
+    out: dict = {f"{scenario}_error_count": 0}
     if protocol == "ws":
         # 先证明字节流是**对的**，再谈它有多快（见 measure_ws_integrity）。
         out.update(measure_ws_integrity(topology))
@@ -1502,7 +1504,7 @@ def environment(binary: Path | None) -> dict:
     }
     try:
         env["loadavg"] = list(os.getloadavg())
-    except OSError:
+    except (AttributeError, OSError):
         env["loadavg"] = None
     try:
         env["cpu_model"] = next(
@@ -1549,11 +1551,20 @@ def run(args: argparse.Namespace) -> dict:
         raise SystemExit(f"agent binary not found: {binary} (build it first, or pass --agent-binary)")
 
     profile = dict(PROFILES[args.profile])
+    if args.payload_kib is not None:
+        profile["payload_kib"] = args.payload_kib
     result: dict = {
         "schema_version": SCHEMA_VERSION,
         "kind": "stream-baseline",
         "profile": args.profile,
         "workload": profile,
+        "dimensions": {
+            "message_size_bytes": profile["payload_kib"] * 1024,
+            "connection_count": profile["concurrency"],
+            "rtt_ms": args.rtt_ms,
+            "packet_loss_percent": args.packet_loss_percent,
+            "network_shaping": False,
+        },
         "environment": environment(binary),
         "scenarios": {},
     }
@@ -1610,11 +1621,114 @@ def flatten_metrics(result: dict) -> Iterable[tuple[str, str, object]]:
     for scenario, metrics in result.get("scenarios", {}).items():
         for name, value in sorted(metrics.items()):
             if isinstance(value, dict) and "median" in value:
-                for stat in ("median", "p95", "min", "max", "mean", "count"):
+                for stat in ("median", "p95", "p99", "min", "max", "mean", "count"):
                     if value.get(stat) is not None:
                         yield scenario, f"{name}.{stat}", value[stat]
             else:
                 yield scenario, name, value
+
+
+# These are deliberately relative checks.  Shared CI runners do not provide a
+# stable absolute throughput or latency floor, while a fixed anchor still
+# catches an accidental order-of-magnitude regression.  A caller can tighten
+# the default with --max-regression for a pinned host.
+def _is_higher_better(metric: str) -> bool:
+    return "throughput" in metric
+
+
+def _scalar_metrics(metrics: dict) -> Iterable[tuple[str, float]]:
+    """Yield scalar resource/error gauges while Summary fields are handled separately."""
+    def walk(prefix: str, value: object) -> Iterable[tuple[str, float]]:
+        if isinstance(value, dict):
+            if "median" in value:
+                return
+            for key, child in value.items():
+                child_name = f"{prefix}.{key}" if prefix else key
+                yield from walk(child_name, child)
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            yield prefix, float(value)
+
+    for name, value in metrics.items():
+        if isinstance(value, dict) and "median" in value:
+            continue
+        yield from walk(name, value)
+
+
+def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20) -> dict:
+    """Compare shared numeric summary fields and return a machine-readable gate.
+
+    The anchor is allowed to use schema v1 so the checked-in TCP artifact can
+    be reused after this schema adds p99.  Missing metrics are reported rather
+    than silently treated as zero; this keeps a partial scenario from passing.
+    """
+    if not 0 <= max_regression < 1:
+        raise ValueError("max_regression must be in [0, 1)")
+    if candidate.get("kind") != "stream-baseline" or anchor.get("kind") != "stream-baseline":
+        raise ValueError("both artifacts must have kind=stream-baseline")
+    if candidate.get("profile") != anchor.get("profile"):
+        raise ValueError("candidate and anchor profiles must match")
+
+    workload_mismatch = []
+    for key in ("payload_kib", "concurrency", "conn_rounds", "transfers", "setups"):
+        if candidate.get("workload", {}).get(key) != anchor.get("workload", {}).get(key):
+            workload_mismatch.append(key)
+
+    checks: list[dict] = []
+    missing: list[str] = []
+    for scenario, anchor_metrics in anchor.get("scenarios", {}).items():
+        candidate_metrics = candidate.get("scenarios", {}).get(scenario)
+        if not isinstance(candidate_metrics, dict):
+            missing.append(f"{scenario}.*")
+            continue
+        for name, anchor_value in anchor_metrics.items():
+            if not isinstance(anchor_value, dict) or "median" not in anchor_value:
+                continue
+            candidate_value = candidate_metrics.get(name)
+            if not isinstance(candidate_value, dict) or "median" not in candidate_value:
+                missing.append(f"{scenario}.{name}")
+                continue
+            for stat in ("median", "p95", "p99"):
+                before, after = anchor_value.get(stat), candidate_value.get(stat)
+                if not isinstance(before, (int, float)) or not isinstance(after, (int, float)):
+                    continue
+                if before <= 0:
+                    continue
+                change = (float(after) - float(before)) / float(before)
+                regressed = change < -max_regression if _is_higher_better(name) else change > max_regression
+                checks.append({
+                    "metric": f"{scenario}.{name}.{stat}",
+                    "anchor": float(before),
+                    "candidate": float(after),
+                    "relative_change": change,
+                    "regressed": regressed,
+                })
+        candidate_scalars = dict(_scalar_metrics(candidate_metrics))
+        for name, before in _scalar_metrics(anchor_metrics):
+            after = candidate_scalars.get(name)
+            if after is None or before <= 0:
+                continue
+            change = (after - before) / before
+            regressed = change < -max_regression if _is_higher_better(name) else change > max_regression
+            checks.append({
+                "metric": f"{scenario}.{name}",
+                "anchor": before,
+                "candidate": after,
+                "relative_change": change,
+                "regressed": regressed,
+            })
+
+    regressions = [item for item in checks if item["regressed"]]
+    return {
+        "kind": "stream-baseline-comparison",
+        "schema_version": SCHEMA_VERSION,
+        "profile": candidate.get("profile"),
+        "max_regression": max_regression,
+        "workload_mismatch": workload_mismatch,
+        "passed": not regressions and not missing and not workload_mismatch,
+        "regressions": regressions,
+        "missing": missing,
+        "checks": checks,
+    }
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -1624,6 +1738,16 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--out", default="scripts/perf/results",
                         help="output directory for the JSON/CSV artifacts")
     parser.add_argument("--profile", choices=sorted(PROFILES), default="quick")
+    parser.add_argument("--payload-kib", type=int, default=None,
+                        help="override the message size recorded and measured (positive KiB)")
+    parser.add_argument("--rtt-ms", type=float, default=None,
+                        help="record an externally injected RTT; this harness does not shape it")
+    parser.add_argument("--packet-loss-percent", type=float, default=None,
+                        help="record externally observed/injected loss; this harness does not shape it")
+    parser.add_argument("--compare", type=Path, default=None,
+                        help="compare the result with a JSON anchor and fail on regressions")
+    parser.add_argument("--max-regression", type=float, default=0.20,
+                        help="relative regression tolerated by --compare (default: 0.20)")
     parser.add_argument("--scenarios", nargs="+", choices=["direct", "relay", "tls", "ws"],
                         default=["direct", "relay"],
                         help="direct/relay are TCP; tls and ws are stream fronts "
@@ -1634,6 +1758,18 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.payload_kib is not None and args.payload_kib <= 0:
+        print("error: --payload-kib must be positive", file=sys.stderr)
+        return 2
+    if args.rtt_ms is not None and args.rtt_ms < 0:
+        print("error: --rtt-ms must be non-negative", file=sys.stderr)
+        return 2
+    if args.packet_loss_percent is not None and not 0 <= args.packet_loss_percent <= 100:
+        print("error: --packet-loss-percent must be between 0 and 100", file=sys.stderr)
+        return 2
+    if not 0 <= args.max_regression < 1:
+        print("error: --max-regression must be in [0, 1)", file=sys.stderr)
+        return 2
     try:
         result = run(args)
     except RuntimeError as exc:
@@ -1643,6 +1779,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     json_path, csv_path = write_outputs(result, Path(args.out))
+    if args.compare is not None:
+        try:
+            anchor = json.loads(args.compare.read_text(encoding="utf-8"))
+            comparison = compare_results(result, anchor, args.max_regression)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"error: unable to compare baseline: {exc}", file=sys.stderr)
+            return 2
+        comparison_path = json_path.with_name(json_path.stem + "-comparison.json")
+        comparison_path.write_text(json.dumps(comparison, indent=2, sort_keys=True) + "\n")
+        print(f"baseline comparison: {comparison_path}")
+        if not comparison["passed"]:
+            print("error: performance baseline regression or missing metric", file=sys.stderr)
+            return 3
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     print(f"baseline JSON: {json_path}")

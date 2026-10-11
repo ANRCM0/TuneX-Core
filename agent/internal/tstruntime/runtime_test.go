@@ -1142,6 +1142,89 @@ func BenchmarkTSTLoopbackTCP(b *testing.B) {
 	}
 }
 
+func BenchmarkTSTLoopbackUDP(b *testing.B) {
+	ingress, egress := identities(b)
+	_, target := echoTargets(b)
+	carrier, listen := freePort(b), freePort(b)
+	in := configFor(b, "ingress", ingress, carrier, []Binding{{ForwardID: 102, Revision: 1, Protocol: "udp", ListenHost: "127.0.0.1", ListenPort: listen}})
+	out := configFor(b, "egress", egress, carrier, []Binding{{ForwardID: 102, Revision: 1, Protocol: "udp", TargetHost: "127.0.0.1", TargetPort: target}})
+	mi, me := testManager(b, b.TempDir(), "in-udp"), testManager(b, b.TempDir(), "out-udp")
+	if _, e := me.Apply(out); e != nil {
+		b.Fatal(e)
+	}
+	if _, e := mi.Apply(in); e != nil {
+		b.Fatal(e)
+	}
+	conn, e := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: listen})
+	if e != nil {
+		b.Fatal(e)
+	}
+	defer conn.Close()
+	payload := bytes.Repeat([]byte("u"), 1200)
+	response := make([]byte, len(payload))
+	b.SetBytes(int64(len(payload) * 2))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if e := conn.SetDeadline(time.Now().Add(15 * time.Second)); e != nil {
+			b.Fatal(e)
+		}
+		if _, e := conn.Write(payload); e != nil {
+			b.Fatal(e)
+		}
+		n, _, e := conn.ReadFromUDP(response)
+		if e != nil {
+			b.Fatal(e)
+		}
+		if n != len(payload) || !bytes.Equal(payload, response[:n]) {
+			b.Fatalf("payload mismatch: got %d bytes", n)
+		}
+	}
+}
+
+func BenchmarkPlainUDP(b *testing.B) {
+	server, e := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1")})
+	if e != nil {
+		b.Fatal(e)
+	}
+	defer server.Close()
+	client, e := net.DialUDP("udp", nil, server.LocalAddr().(*net.UDPAddr))
+	if e != nil {
+		b.Fatal(e)
+	}
+	defer client.Close()
+	go func() {
+		buf := make([]byte, 65507)
+		for {
+			n, addr, e := server.ReadFromUDP(buf)
+			if e != nil {
+				return
+			}
+			_, _ = server.WriteToUDP(buf[:n], addr)
+		}
+	}()
+	payload := bytes.Repeat([]byte("u"), 1200)
+	response := make([]byte, len(payload))
+	b.SetBytes(int64(len(payload) * 2))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if e := client.SetDeadline(time.Now().Add(15 * time.Second)); e != nil {
+			b.Fatal(e)
+		}
+		if _, e := client.Write(payload); e != nil {
+			b.Fatal(e)
+		}
+		n, _, e := client.ReadFromUDP(response)
+		if e != nil {
+			b.Fatal(e)
+		}
+		if n != len(payload) || !bytes.Equal(payload, response[:n]) {
+			b.Fatalf("payload mismatch: got %d bytes", n)
+		}
+	}
+}
+
 func TestClosedOwnerCannotOverwriteReopenedCache(t *testing.T) {
 	a, _ := identities(t)
 	dir := t.TempDir()

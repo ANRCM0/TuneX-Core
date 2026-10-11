@@ -59,9 +59,10 @@ bash scripts/integration/a00-core-gate.sh
 cd agent
 go test ./internal/securelink -run '^$' -bench 'Benchmark(PlainTCP|TSTMutualTLS|TSTStream)$' -benchmem -benchtime 500ms -count 3
 go test ./internal/tstruntime -run '^$' -bench BenchmarkTSTLoopbackTCP -benchmem
+go test ./internal/tstruntime -run '^$' -bench 'Benchmark(PlainUDP|TSTLoopback(UDP|TCP))$' -benchmem -benchtime 500ms -count 3
 ```
 
-性能基线记录平台、CPU、样本与消息尺寸；plain TCP 与 TLS/TST 分别实测，不预设新协议快于旧实现。Parser fuzz、认证负例、版本/授权/代次拒绝、背压/半关闭、过期证书/租约、资源上限及 sibling 更新属于必需回归。
+性能基线记录平台、CPU、样本、消息尺寸、并发数与 median/p95/p99；plain TCP/UDP、原生 relay、TLS/TST 分别实测，不预设新协议快于旧实现。`scripts/perf/stream-baseline.py --compare` 对固定同机 anchor 执行相对回归门禁。Parser fuzz、认证负例、版本/授权/代次拒绝、背压/半关闭、过期证书/租约、资源上限及 sibling 更新属于必需回归。
 
 独立安全审查需审查帧状态机、互信身份、快照授权、密钥生命周期、资源耗尽与缓存/统计恢复。内部代码评阅和 fuzz 不替代外部独立审查。
 

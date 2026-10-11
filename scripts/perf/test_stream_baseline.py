@@ -77,13 +77,14 @@ class ThroughputTest(unittest.TestCase):
 class SummaryTest(unittest.TestCase):
     def test_empty_summary_serialises_null_not_zero(self):
         payload = baseline.Summary.of([], "ms").to_json()
-        for key in ("median", "p95", "min", "max", "mean"):
+        for key in ("median", "p95", "p99", "min", "max", "mean"):
             self.assertIsNone(payload[key], key)
         self.assertEqual(payload["count"], 0)
 
     def test_p95_is_never_below_median(self):
         summary = baseline.Summary.of([1, 2, 3, 100], "ms")
         self.assertGreaterEqual(summary.p95, summary.median)
+        self.assertGreaterEqual(summary.p99, summary.p95)
 
 
 class FlattenTest(unittest.TestCase):
@@ -91,7 +92,7 @@ class FlattenTest(unittest.TestCase):
         "schema_version": baseline.SCHEMA_VERSION,
         "scenarios": {
             "direct": {
-                "direct_throughput": {"count": 2, "median": 10.0, "p95": 12.0,
+                "direct_throughput": {"count": 2, "median": 10.0, "p95": 12.0, "p99": 12.0,
                                       "min": 9.0, "max": 12.0, "mean": 10.5, "unit": "MiB/s"},
                 "direct_concurrency": 16,
             }
@@ -102,6 +103,7 @@ class FlattenTest(unittest.TestCase):
         rows = dict((f"{scenario}.{name}", value) for scenario, name, value in baseline.flatten_metrics(self.RESULT))
         self.assertEqual(rows["direct.direct_throughput.median"], 10.0)
         self.assertEqual(rows["direct.direct_throughput.p95"], 12.0)
+        self.assertEqual(rows["direct.direct_throughput.p99"], 12.0)
         self.assertEqual(rows["direct.direct_concurrency"], 16)
 
     def test_artifacts_are_machine_readable(self):
@@ -137,6 +139,8 @@ class CpuAccountingTest(unittest.TestCase):
     def test_own_process_cpu_is_measurable(self):
         # 采样器必须能读到自己（基线里读的是被测 Agent 进程）。
         import os
+        if baseline._cpu_ticks(os.getpid()) is None:
+            self.skipTest("/proc process accounting is unavailable on this platform")
         value = baseline._cpu_seconds(os.getpid())
         self.assertIsNotNone(value)
         self.assertGreaterEqual(value, 0.0)
@@ -147,8 +151,12 @@ class CpuAccountingTest(unittest.TestCase):
         值）—— 对刚启动的进程恒为 0，症状是"CPU 永远是 0.0"，看起来像负载太轻。
         真实跑一段 CPU 的子进程必须能被测到大于 0。"""
         import subprocess
+        import os
         import sys
         import time
+
+        if baseline._cpu_ticks(os.getpid()) is None:
+            self.skipTest("/proc process accounting is unavailable on this platform")
 
         child = subprocess.Popen(
             [sys.executable, "-c", "x=0\nfor i in range(40_000_000): x += i"]
@@ -309,8 +317,8 @@ class TLSClientTest(unittest.TestCase):
         self.assertEqual(argv[0], "openssl")
         for flag in ("-x509", "-keyout", "-out", "-nodes", "-addext", "-subj"):
             self.assertIn(flag, argv, flag)
-        self.assertIn("/tmp/perf.crt", argv)
-        self.assertIn("/tmp/perf.key", argv)
+        self.assertIn(str(Path("/tmp/perf.crt")), argv)
+        self.assertIn(str(Path("/tmp/perf.key")), argv)
         san = argv[argv.index("-addext") + 1]
         self.assertIn("IP:127.0.0.1", san)
 
@@ -347,6 +355,43 @@ class ScenarioRegistryTest(unittest.TestCase):
     def test_unknown_scenario_fails_loudly(self):
         with self.assertRaises(ValueError):
             baseline.scenario_factory("quic")
+
+
+class ComparisonTest(unittest.TestCase):
+    def _artifact(self, throughput: float, latency: float) -> dict:
+        summary = lambda median, p95, p99: {
+            "count": 3, "median": median, "p95": p95, "p99": p99,
+            "min": median, "max": p99, "mean": median, "unit": "MiB/s",
+        }
+        return {
+            "kind": "stream-baseline", "schema_version": baseline.SCHEMA_VERSION,
+            "profile": "quick", "workload": dict(baseline.PROFILES["quick"]), "scenarios": {
+                "direct": {
+                    "direct_throughput": summary(throughput, throughput, throughput),
+                    "direct_connect_ms": summary(latency, latency, latency),
+                }
+            },
+        }
+
+    def test_relative_gate_distinguishes_throughput_and_latency(self):
+        result = baseline.compare_results(self._artifact(80, 12), self._artifact(100, 10), 0.15)
+        self.assertFalse(result["passed"])
+        names = {item["metric"] for item in result["regressions"]}
+        self.assertIn("direct.direct_throughput.median", names)
+        self.assertIn("direct.direct_connect_ms.median", names)
+
+    def test_missing_metrics_fail_closed(self):
+        candidate = self._artifact(100, 10)
+        del candidate["scenarios"]["direct"]["direct_connect_ms"]
+        result = baseline.compare_results(candidate, self._artifact(100, 10))
+        self.assertFalse(result["passed"])
+        self.assertIn("direct.direct_connect_ms", result["missing"])
+
+    def test_schema_v1_anchor_remains_compatible(self):
+        anchor = self._artifact(100, 10)
+        anchor["schema_version"] = 1
+        result = baseline.compare_results(self._artifact(100, 10), anchor)
+        self.assertTrue(result["passed"])
 
 
 class WSClientLoopbackTest(unittest.TestCase):

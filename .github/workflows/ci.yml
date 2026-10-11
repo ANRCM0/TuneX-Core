@@ -63,7 +63,7 @@ jobs:
             backend="$(match '^(backend/|shared/|Dockerfile$|docker-compose(\.prod|\.standalone)?\.ya?ml$|\.env\.production\.example$)')"
             web="$(match '^(web/|shared/|Dockerfile$)')"
             agent="$(match '^(agent/|shared/)')"
-            ops="$(match '^(scripts/(ops|integration)/|Dockerfile$|backend/Dockerfile$|agent/Dockerfile$|docker-compose(\.prod|\.standalone)?\.ya?ml$|\.env(\.production)?\.example$|docs/production-deploy\.md$)')"
+            ops="$(match '^(scripts/(ops|integration|perf)/|Dockerfile$|backend/Dockerfile$|agent/Dockerfile$|docker-compose(\.prod|\.standalone)?\.ya?ml$|\.env(\.production)?\.example$|docs/production-deploy\.md$)')"
           fi
 
           # Cheap secret scan is the one repository-wide invariant worth running
@@ -352,6 +352,7 @@ jobs:
           python3 -m py_compile scripts/integration/tst-forward.py
           python3 -m py_compile scripts/integration/native-both.py
           python3 -B -m unittest discover -s scripts/integration/tests -p 'test_*.py'
+          python3 -B -m unittest discover -s scripts/perf -p 'test_*.py'
       - name: Current deployment contract
         run: bash scripts/ops/tests/installer-static.sh
 
