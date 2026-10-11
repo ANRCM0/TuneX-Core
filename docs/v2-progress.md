@@ -28,17 +28,24 @@ V2.2 P2 profiling surface 已实现：Agent 默认不挂载 pprof；显式 `--pr
 或 `TUNEX_AGENT_PROFILE=true` 后，`/debug/pprof/*` 仍受 admin bearer token
 保护。`stream-baseline.py --capture-profiles` 可采集 CPU/trace、heap、allocs、
 goroutine、block、mutex 和 thread-create 文件，并在 JSON 中记录脱敏路径与大小。
-本机 direct loopback smoke 已生成 runtime profile 文件；这只是工具链验证，
-不替代固定 Linux 主机上的性能对比或发布容量结论。
+采集在持续真实 payload 负载下进行，文件不会覆盖旧收据，失败返回非零；
+真实双 Agent relay 的 14 份 pprof、2 份 trace 均解析通过。TST/mTLS 的 CPU、
+分配、锁和调度热点已形成报告，下一优化重点为接收临时分配。
 
 V2.2 P3 已完成第一条数据路径优化：TST TCP data frame 使用 16 KiB
 buffer，最多缓存 256 个闲置 buffer（4 MiB）。写完成、RESET、close 和
 session failure 明确归还；超时/取消不能提前回收正在写出的 buffer，归还前
 清零完整内容。同机 Windows/amd64 五轮 A/B 的每操作分配量从约 34.7 KiB
 降至 18.3 KiB，31–32 次降至 30 次分配。所有权/容量/清零回归连续 20 轮通过，
-amd64 完整 Agent 单测与 vet 通过。本机无 GCC，race 待当前候选 Linux CI；
+amd64 完整 Agent 单测与 vet 通过。本机无 GCC，Linux CI/race/fuzz 已通过；
 固定 Linux 主机容量、多连接性能和长稳验收仍待执行。详见
 [V2.2 工作记录](v2.2-performance.md)。
+
+V2.2 P4 可选 QUIC ADR、威胁模型与兼容策略已形成，协议实现和独立评审仍待
+执行。P5 同一 Ubuntu Runner 的双源码、多轮交错采样及严格工件校验已通过：
+`047483e` 主 CI 和 Performance 均成功，每端 direct/relay 各 1,500 个建连、
+960 个 RTT 样本、0 错误，六类 Go transport 各五轮。原始数据和失败历史均
+保留；固定主机容量、真实 RTT/丢包和跨日长稳仍未完成。
 
 Python harness 契约 3 项、相关 shell 语法、原生依赖扫描和当前文档本地链接检查通过。安装器完整 gate 在 Windows Git Bash 下失败，涉及 POSIX 文件权限等宿主差异；保留严格检查，不标为通过。
 
@@ -54,7 +61,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | 待执行 | Linux Runner 与候选源码；本机无已安装 WSL、Docker 或可用 GCC |
+| 当前候选 SHA 的 Linux CI/race | 047483e 已通过 | 以后涉及源码变更需重新取得对应 SHA 的 CI 证据；本机无 GCC |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |
