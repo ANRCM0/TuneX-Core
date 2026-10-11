@@ -935,6 +935,9 @@ describe("V5.4 middle-hop topology cutover", () => {
       (x) => Number((x.node as { id?: number } | undefined)?.id) === 23 && x.direction === "egress",
     );
     expect(transitRemovals.length).toBeGreaterThan(0);
+    // Agent removal tombstones reject apply <= removal revision. The next
+    // preferred-path return (revision 8) must remain strictly above this fence.
+    expect(transitRemovals.every((call) => call.revision === 7)).toBe(true);
 
     expect(f.leases.find((l) => l.node_id === 23 && l.port === 23000)?.status).toBe("released");
     expect(f.leases.find((l) => l.node_id === 22 && l.port === 22000)?.status).toBe("active");

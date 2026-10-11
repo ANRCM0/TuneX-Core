@@ -932,8 +932,9 @@ async function runStep(
             : ctx.applied?.mode === "direct"
               ? "direct"
               : "ingress",
-        // 撤旧用 revision+1：让 Agent 的 stale 闸门放行（orchestrator.ts 注释）。
-        revision: ctx.revision + 1,
+        // Retire the old placement at the cutover revision. Reserving the next
+        // revision here prevents a legitimate later return to the same node.
+        revision: ctx.revision,
         reason: `rollout ${ctx.rolloutId} drain ${step.kind}`,
       });
       if (!outcome.ok) {
@@ -1050,8 +1051,10 @@ async function runStep(
         tunnelId: ctx.tunnelId,
         node: nodeFor(orchestrator, nodeId),
         direction: "egress",
-        // revision+1：同 removeTunnel 的补偿口径，重复执行幂等。
-        revision: ctx.revision + 1,
+        // Fence this cutover generation, leaving the next generation available
+        // for a return to this node. A revision+1 tombstone would reject that
+        // legitimate apply even after the old runtime had been removed.
+        revision: ctx.revision,
         reason: `rollout ${ctx.rolloutId} ${step.kind === "drop_old_transit" ? "drop old transit" : "drop old egress"}`,
       });
       if (!outcome.ok) {

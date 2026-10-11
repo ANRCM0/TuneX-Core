@@ -139,7 +139,7 @@ export type RolloutStepKind =
   | "drain_egress"
   /** 旧端口租约释放（等 drain 完成）。 */
   | "release_old_lease"
-  /** 撤旧 EGRESS runtime（幂等 revision+1）。 */
+  /** 撤旧 EGRESS runtime（以本次 revision 为删除围栏）。 */
   | "drop_old_egress"
   /** V5.4：撤旧 middle/transit runtime（物理形态仍是 EGRESS runtime）。 */
   | "drop_old_transit";

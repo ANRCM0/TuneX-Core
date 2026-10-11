@@ -27,7 +27,18 @@ def request(method,path,body=None):
     return H.unwrap(response)
 
 def route_state(fid):
-    return H.db("return await db.tunnel.findUnique({where:{id:%d},select:{id:true,config_revision:true,applied_revision:true,apply_status:true,middle_node_id:true,routing_security_version:true,egress_port:true}});"%fid)
+    return H.db("return await db.tunnel.findUnique({where:{id:%d},select:{id:true,config_revision:true,applied_revision:true,apply_status:true,apply_error_code:true,middle_node_id:true,routing_security_version:true,egress_port:true}});"%fid)
+
+def rollout_state(fid):
+    # Closed projection only: raw errors, notes and plans can contain addresses,
+    # target configurations or private identities and must never be archived.
+    return H.db("""const rows=await db.forwardRollout.findMany({where:{tunnel_id:%d},orderBy:{id:'desc'},take:8,
+        select:{revision:true,base_revision:true,phase:true,last_error_code:true,compensated:true,compensation_error:true,steps:true,cleaned:true}});
+        const safe=v=>typeof v==='string' && /^[a-z][a-z0-9_]{0,63}$/.test(v)?v:null;
+        return rows.map(r=>({revision:r.revision,base_revision:r.base_revision,phase:safe(r.phase),last_error_code:safe(r.last_error_code),
+            compensated:r.compensated,compensation_error_present:r.compensation_error!==null,
+            steps:(Array.isArray(r.steps?.steps)?r.steps.steps:[]).slice(0,64).map(s=>({phase:safe(s.phase),kind:safe(s.kind),
+                completed:Array.isArray(r.cleaned)&&r.cleaned.includes(s.idempotency_key)}))}));"""%fid)
 
 def payload(port,message):
     try:
@@ -117,6 +128,9 @@ def main():
                 diagnostics["controller_state"]=policy.get("controller_state")
                 current=route_state(fid)
                 diagnostics["forward"]={key:current.get(key) for key in ("id","config_revision","applied_revision","apply_status","middle_node_id","routing_security_version")}
+                code=current.get("apply_error_code")
+                diagnostics["forward"]["apply_error_code"]=code if isinstance(code,str) and len(code)<=64 and code.replace("_","").isalnum() else None
+                diagnostics["rollouts"]=rollout_state(fid)
                 history=request("GET",f"/api/routing/policies/{fid}/history")
             except Exception: diagnostics["snapshot_state"]="unavailable"
             try:diagnostics["proposal"]=request("GET",f"/api/routing/policies/{fid}/decision")
