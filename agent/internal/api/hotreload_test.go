@@ -167,8 +167,15 @@ func TestAdminApplyTunnelTargetOnlyIsHotSwap(t *testing.T) {
 	}
 	defer held.Close()
 	roundTrip(t, held, "before\n")
-	if tunnels.Stats("t") == 0 {
-		t.Fatal("forwarded bytes stayed 0 after a completed round trip")
+	// The peer can read the echo before the relay goroutine returns from Write
+	// and publishes its counter. Wait for accounting, without weakening the
+	// requirement that both delivered directions survive the hot swap.
+	deadline := time.Now().Add(2 * time.Second)
+	for tunnels.Stats("t") < int64(2*len("before\n")) && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if got := tunnels.Stats("t"); got < int64(2*len("before\n")) {
+		t.Fatalf("forwarded bytes = %d after a completed round trip, want at least %d", got, 2*len("before\n"))
 	}
 	bytesBefore := tunnels.Stats("t")
 
