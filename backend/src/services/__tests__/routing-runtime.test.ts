@@ -1,6 +1,14 @@
 import { test, expect } from "bun:test";
 import { randomBytes, X509Certificate } from "node:crypto";
-import { prepareRoutingRuntime, projectRoutingHop, assertRoutingHopCapabilities } from "../routing-runtime.ts";
+import { prepareRoutingRuntime, projectRoutingHop, assertRoutingHopCapabilities, routingForwardId } from "../routing-runtime.ts";
+
+test("real orchestrator relay and egress IDs resolve to the same protected Forward", () => {
+  expect(routingForwardId("tunex-40-relay")).toBe(40);
+  expect(routingForwardId("tunex-40-egress")).toBe(40);
+  expect(routingForwardId("tunex-tst-40-egress")).toBeNull();
+  expect(routingForwardId("tunex-40-relay-bare")).toBeNull();
+  expect(routingForwardId("tunex-2147483648-relay")).toBeNull();
+});
 
 test("sealed route identities are private per edge, scoped and revision fenced", async () => {
   const previous=process.env.TUNEX_LINK_SEAL_KEY; const key=randomBytes(32).toString("hex"); process.env.TUNEX_LINK_SEAL_KEY=key;

@@ -63,11 +63,16 @@ export function projectRoutingHop(row: { workspace_id: number; forward_id: numbe
 }
 
 /** Shared by live dispatch and reconnect snapshots. A sticky protected Forward never emits a plain config. */
+export function routingForwardId(runtimeId: string): number | null {
+  const match = /^tunex-([1-9][0-9]*)-(?:relay|ingress|egress|middle|direct)$/.exec(runtimeId);
+  const id = match ? Number(match[1]) : 0;
+  return Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647 ? id : null;
+}
 export async function attachRoutingHop(config: AgentTunnelConfig, node: number): Promise<AgentTunnelConfig> {
-  const match = /^tunex-([1-9][0-9]*)-(?:ingress|egress|middle|direct)$/.exec(config.id);
-  if (!match) return config;
+  const forwardId = routingForwardId(config.id);
+  if (forwardId === null) return config;
   const { db } = await import("../db.ts");
-  const forward = await db.tunnel.findUnique({ where: { id: Number(match[1]) }, select: { id: true, workspace_id: true,
+  const forward = await db.tunnel.findUnique({ where: { id: forwardId }, select: { id: true, workspace_id: true,
     routing_security_version: true, config_revision: true, ingress_node_id: true, middle_node_id: true, egress_node_id: true,
     tunnel_mode: true, forward_protocol: true, link_resource_id: true, federated_egress_peer: true } });
   if (!forward || forward.routing_security_version === 0) return config;
