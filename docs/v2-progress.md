@@ -121,8 +121,12 @@ MySQL/Redis/HTTP 7 项集成通过，业务资源前后无写入。固定源码 
 真实链路 37 项均无失败；Agent race/fuzz、Web、运维与凭据/依赖检查通过。
 R2 已开始 Native TCP/both 目标连接观测：使用已授权配置与现有 Agent 诊断命令，
 增加独立默认关闭开关、Workspace/节点预算、结果身份与过期校验。本机全量后端
-3,226 项、真实认证/MySQL/Redis 10 项通过；对应源码 Linux 实际 Agent 测量待取得，
-不将 TCP 目标事实填成节点/载体健康、RTT、丢包或 UDP 成功。R2 TST/载体质量、
+3,226 项、真实认证/MySQL/Redis 10 项通过。固定源码 `ade5058` 的
+[Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38134197328) 全部通过：
+后端 3,226 项、HTTP/DB 134 项（0 skipped），实际 Agent 目标探测 gate 34 项
+（含 8 项前置检查），TST 24 项、Native both 37 项均无失败。目标关闭、配置身份
+失效、自然过期与预算已验证；不将 TCP 目标事实填成节点/载体健康、RTT、丢包
+或 UDP 成功。R2 TST/载体质量、
 R3 策略持久化/选择、R4 切换、R5 多跳执行仍待开发，见
 [V2.3 记录](v2.3-routing.md)。
 
