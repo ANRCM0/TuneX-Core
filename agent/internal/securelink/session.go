@@ -92,6 +92,14 @@ func (s *Session) fail(err error) {
 		st.datagrams = nil
 	}
 	s.streams = make(map[uint64]*Stream)
+	for _, request := range s.control {
+		releaseFramePayload(request.frame)
+	}
+	for _, request := range s.data {
+		releaseFramePayload(request.frame)
+	}
+	s.control = nil
+	s.data = make(map[uint64]outbound)
 	close(s.done)
 	s.signalLocked()
 	s.mu.Unlock()
@@ -219,8 +227,17 @@ func (s *Session) queueControlLocked(f Frame) error {
 	return nil
 }
 
+// send transfers pooled payload ownership to the queue on successful enqueue.
+// Cancellation after enqueue leaves reclamation to the queue/writer, because
+// carrier I/O may still reference the frame after this method returns.
 func (s *Session) send(ctx context.Context, f Frame, deadline time.Time) error {
 	request := outbound{frame: f, result: make(chan error, 1)}
+	queuedForRelease := false
+	defer func() {
+		if !queuedForRelease {
+			releaseFramePayload(f)
+		}
+	}()
 	for {
 		s.mu.Lock()
 		if s.err != nil {
@@ -246,6 +263,7 @@ func (s *Session) send(ctx context.Context, f Frame, deadline time.Time) error {
 		}
 		changed := s.changed
 		if queued {
+			queuedForRelease = true
 			s.signalLocked()
 		}
 		s.mu.Unlock()
@@ -349,6 +367,7 @@ func (s *Session) writeLoop() {
 		}
 		_ = s.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 		err := WriteFrame(s.conn, request.frame)
+		releaseFramePayload(request.frame)
 		if request.result != nil {
 			request.result <- err
 		}
@@ -514,6 +533,7 @@ func (s *Session) handleLocked(f Frame) error {
 		if queued, ok := s.data[st.id]; ok {
 			delete(s.data, st.id)
 			s.txConn += int64(len(queued.frame.Payload))
+			releaseFramePayload(queued.frame)
 			if queued.result != nil {
 				queued.result <- ErrClosed
 			}
@@ -596,6 +616,7 @@ func (s *Session) closeStreamLocked(st *Stream, err error) {
 	if queued, ok := s.data[st.id]; ok {
 		delete(s.data, st.id)
 		s.txConn += int64(len(queued.frame.Payload))
+		releaseFramePayload(queued.frame)
 		if queued.result != nil {
 			queued.result <- ErrClosed
 		}

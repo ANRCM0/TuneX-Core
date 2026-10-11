@@ -226,8 +226,9 @@ func (st *Stream) Write(p []byte) (int, error) {
 		if err != nil {
 			return total, err
 		}
-		payload := append([]byte(nil), p[:n]...)
-		err = st.session.send(context.Background(), Frame{Type: TypeData, StreamID: st.id, Payload: payload}, deadline)
+		payload := acquireDataPayload(n)
+		copy(payload, p[:n])
+		err = st.session.send(context.Background(), Frame{Type: TypeData, StreamID: st.id, Payload: payload, pooled: true}, deadline)
 		if err != nil {
 			_ = st.Close()
 			return total, err

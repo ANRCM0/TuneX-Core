@@ -42,6 +42,38 @@ type Frame struct {
 	StreamID uint64
 	Sequence uint32
 	Payload  []byte
+	// pooled payloads are owned by send until enqueue, then by the queue or
+	// writer. A caller timing out cannot release a frame still being written.
+	pooled bool
+}
+
+const pooledDataPayloads = 256
+
+// Retain at most 4 MiB of fixed-size frame buffers per process. Unlike
+// sync.Pool, this channel has a deterministic capacity; excess returned buffers
+// are left for the garbage collector.
+var dataPayloadPool = make(chan []byte, pooledDataPayloads)
+
+func acquireDataPayload(n int) []byte {
+	select {
+	case payload := <-dataPayloadPool:
+		return payload[:n]
+	default:
+		return make([]byte, n, MaxData)
+	}
+}
+
+func releaseFramePayload(f Frame) {
+	if !f.pooled || cap(f.Payload) != MaxData {
+		return
+	}
+	// The cache is shared between Links and Workspaces. Erase plaintext,
+	// including the unused tail of a smaller frame, before making it reusable.
+	clear(f.Payload[:MaxData])
+	select {
+	case dataPayloadPool <- f.Payload[:MaxData]:
+	default:
+	}
 }
 
 func payloadLimit(t byte) int {

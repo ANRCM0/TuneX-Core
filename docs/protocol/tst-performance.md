@@ -75,11 +75,27 @@ TSTStream isolates framing/flow control with net.Pipe. The TLS benchmark
 sets up one authenticated carrier outside the timed payload loop; it does not
 measure certificate issuance or per-connection handshake throughput.
 
-| Benchmark | Three MB/s samples | Allocation per operation |
+The TST TCP write path reuses fixed 16 KiB buffers. The cache retains at most
+256 idle buffers (4 MiB per process); this is not a bound on total Agent memory.
+The caller's bytes are still copied into owned storage. A queued payload is
+returned only after the writer completes or the queue discards it. Timeout and
+cancellation do not reclaim memory still referenced by carrier I/O. Returned
+buffers are cleared in full before another Link or Workspace can reuse them.
+
+Windows/amd64 A/B was repeated after adding plaintext erasure, on the same
+i5-12500H host with Go 1.26.3, 16 workers, 16 KiB frames and
+`-benchtime 500ms -count 5`. The baseline is an export of `1e7bd43`; the candidate
+is the pool implementation plus erasure and ownership regression tests.
+Raw samples and a source-diff digest are stored locally under
+`scripts/perf/results/p3/`. These local microbenchmarks establish allocation
+improvement; they do not establish production capacity or WAN behavior.
+
+| Benchmark | MB/s samples | Allocation per operation |
 | --- | --- | --- |
 | PlainTCP | 654.50, 766.51, 1026.15 | 0 bytes, 0 allocations |
 | TSTMutualTLS | 274.25, 230.99, 245.32 | 35,305–35,415 bytes, 28 allocations |
-| TSTStream | 676.93, 670.64, 637.45 | 34,683–34,700 bytes, 31 allocations |
+| TSTStream (pre-pool, amd64 A/B) | 456.00, 533.95, 452.41, 445.69, 526.09 | 34,726–34,761 bytes, 31–32 allocations |
+| TSTStream (pooled + erasure, amd64 A/B) | 497.30, 542.08, 495.75, 603.72, 592.40 | 18,309–18,375 bytes, 30 allocations |
 
 These short host samples show encryption/framing overhead versus a local baseline;
 they are not production capacity, WAN latency, handshake DoS or an old-protocol

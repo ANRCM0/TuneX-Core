@@ -31,6 +31,15 @@ goroutine、block、mutex 和 thread-create 文件，并在 JSON 中记录脱敏
 本机 direct loopback smoke 已生成 runtime profile 文件；这只是工具链验证，
 不替代固定 Linux 主机上的性能对比或发布容量结论。
 
+V2.2 P3 已完成第一条数据路径优化：TST TCP data frame 使用 16 KiB
+buffer，最多缓存 256 个闲置 buffer（4 MiB）。写完成、RESET、close 和
+session failure 明确归还；超时/取消不能提前回收正在写出的 buffer，归还前
+清零完整内容。同机 Windows/amd64 五轮 A/B 的每操作分配量从约 34.7 KiB
+降至 18.3 KiB，31–32 次降至 30 次分配。所有权/容量/清零回归连续 20 轮通过，
+amd64 完整 Agent 单测与 vet 通过。本机无 GCC，race 待当前候选 Linux CI；
+固定 Linux 主机容量、多连接性能和长稳验收仍待执行。详见
+[V2.2 工作记录](v2.2-performance.md)。
+
 Python harness 契约 3 项、相关 shell 语法、原生依赖扫描和当前文档本地链接检查通过。安装器完整 gate 在 Windows Git Bash 下失败，涉及 POSIX 文件权限等宿主差异；保留严格检查，不标为通过。
 
 ## 实网发现与修复
