@@ -44,6 +44,9 @@ def main():
     H.acquire_lock()
     try:
         H.setup()
+        # setup restores its TCP/WS baseline; this gate also creates a TST
+        # TCP+UDP Forward, so explicitly entitle UDP in the disposable fixture.
+        H.mysql("UPDATE capability_policy SET tunnel_types=JSON_ARRAY('tcp','tls','ws','udp'),revision=revision+1;")
         caps, _ = request("GET", "/api/routing/capabilities")
         H.check(caps["features"]["native_tcp_target_probes"] is True, "R2 isolated topology explicitly enables native target probes")
         for port in (3052, 3053):
