@@ -76,6 +76,15 @@ Linux 五轮交错采样中，TSTStream/mTLS 分配量分别减少 55.9%/60.0%�
 五类热点已复测解析；发送完成通知与控制队列成为下一项评估对象。多连接、
 真实 WAN/跨日长稳及后续版本仍待执行，见 [V2.2 工作记录](v2.2-performance.md)。
 
+V2.2 P3 已继续实现惰性分配、最多 1024 槽位的控制帧环形队列，排空后复用，
+出队清除引用，session failure 释放存储；保留窗口合并、满队列背压、OPEN
+顺序及每八个控制帧后的数据轮询。队列/写出所有权回归连续 100 轮通过，
+完整 securelink 连续 10 轮、Agent 全量与 vet 通过。对 `472c0bc` 的 Windows
+五轮交错 A/B 中，TSTStream/mTLS 分配量减少 16.3%/20.0%，完整 TCP runtime
+减少 3.7%。槽位最多保留 64 KiB/Session（amd64，不含 payload/channel）；
+Linux CI/race、真实 shared-Link 和严格性能门禁待本轮候选新收据，详见
+[工作记录](v2.2-performance.md)。
+
 ## 实网发现与修复
 
 真实测试启动当前 Panel、Worker、两个独立 Agent 与 MySQL/Redis，未注入 Ready，也未手改运行缓存。已修复 wildcard 契约、初版修订值、UDP sibling 隔离、双向 UDP 闲置、TLS 失败握手频率、上报枚举/可空字段、同 generation 租约乱序，以及原生首次部署路径。

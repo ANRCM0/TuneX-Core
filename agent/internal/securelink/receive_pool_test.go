@@ -121,9 +121,9 @@ func TestReceiveScratchDoesNotEscapeIntoStreamQueues(t *testing.T) {
 	if s.rxConn != ConnectionWindow-2*MaxData-int64(len("first UDPlast UDP")) {
 		t.Fatal("discarded late DATA changed receive accounting")
 	}
-	if len(s.control) != 2 || s.control[0].frame.Type != TypeWindowUpdate ||
-		binary.BigEndian.Uint32(s.control[0].frame.Payload) != MaxData ||
-		s.control[1].frame.Type != TypePong || string(s.control[1].frame.Payload) != "ping1234" {
+	if s.control.len() != 2 || s.control.at(0).frame.Type != TypeWindowUpdate ||
+		binary.BigEndian.Uint32(s.control.at(0).frame.Payload) != MaxData ||
+		s.control.at(1).frame.Type != TypePong || string(s.control.at(1).frame.Payload) != "ping1234" {
 		t.Fatal("late DATA credit or queued PONG was corrupted")
 	}
 	got := make([]byte, MaxData)

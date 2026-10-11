@@ -41,7 +41,7 @@ type Session struct {
 	wake         chan struct{}
 	done         chan struct{}
 	err          error
-	control      []outbound
+	control      controlQueue
 	data         map[uint64]outbound
 	cursor       uint64
 	controlBatch int
@@ -103,13 +103,14 @@ func (s *Session) fail(err error) {
 		st.datagrams = nil
 	}
 	s.streams = make(map[uint64]*Stream)
-	for _, request := range s.control {
+	for s.control.len() > 0 {
+		request, _ := s.control.pop()
 		releaseFramePayload(request.frame)
 	}
 	for _, request := range s.data {
 		releaseFramePayload(request.frame)
 	}
-	s.control = nil
+	s.control = controlQueue{}
 	s.data = make(map[uint64]outbound)
 	close(s.done)
 	s.signalLocked()
@@ -127,7 +128,7 @@ func (s *Session) Open(ctx context.Context, request OpenRequest) (*Stream, error
 		s.mu.Unlock()
 		return nil, err
 	}
-	if len(s.streams) >= MaxStreams || len(s.control) >= 1024 || s.nextID > ^uint64(0)-2 {
+	if len(s.streams) >= MaxStreams || s.control.len() >= controlQueueLimit || s.nextID > ^uint64(0)-2 {
 		s.mu.Unlock()
 		return nil, ErrLimit
 	}
@@ -139,7 +140,11 @@ func (s *Session) Open(ctx context.Context, request OpenRequest) (*Stream, error
 	queued := outbound{frame: Frame{Type: TypeOpen, StreamID: id, Payload: payload}, result: make(chan error, 1)}
 	// Allocation and OPEN enqueue share the lock: concurrent callers must not
 	// put stream 3 on the wire before stream 1.
-	s.control = append(s.control, queued)
+	if err := s.control.push(queued); err != nil {
+		delete(s.streams, id)
+		s.mu.Unlock()
+		return nil, err
+	}
 	s.signalLocked()
 	s.mu.Unlock()
 	var sendErr error
@@ -217,8 +222,8 @@ func safeCode(code string) []byte {
 
 func (s *Session) queueControlLocked(f Frame) error {
 	if f.Type == TypeWindowUpdate {
-		for i := range s.control {
-			prior := &s.control[i].frame
+		for i := 0; i < s.control.len(); i++ {
+			prior := &s.control.at(i).frame
 			if prior.Type == TypeWindowUpdate && prior.StreamID == f.StreamID {
 				n := uint64(binary.BigEndian.Uint32(prior.Payload)) + uint64(binary.BigEndian.Uint32(f.Payload))
 				if n > ConnectionWindow {
@@ -230,10 +235,9 @@ func (s *Session) queueControlLocked(f Frame) error {
 			}
 		}
 	}
-	if len(s.control) >= 1024 {
-		return ErrLimit
+	if err := s.control.push(outbound{frame: f}); err != nil {
+		return err
 	}
-	s.control = append(s.control, outbound{frame: f})
 	s.signalLocked()
 	return nil
 }
@@ -268,8 +272,7 @@ func (s *Session) send(ctx context.Context, f Frame, deadline time.Time) error {
 				s.data[f.StreamID] = request
 				queued = true
 			}
-		} else if len(s.control) < 1024 {
-			s.control = append(s.control, request)
+		} else if s.control.push(request) == nil {
 			queued = true
 		}
 		var changed <-chan struct{}
@@ -329,10 +332,8 @@ func wait(ctx context.Context, changed, done <-chan struct{}, deadline time.Time
 // Control gets bounded priority. At most one data frame per stream is pending,
 // and the cursor selects stream IDs in round-robin order.
 func (s *Session) popLocked() (outbound, bool) {
-	if len(s.control) > 0 && (s.controlBatch < 8 || len(s.data) == 0) {
-		request := s.control[0]
-		s.control[0] = outbound{}
-		s.control = s.control[1:]
+	if s.control.len() > 0 && (s.controlBatch < 8 || len(s.data) == 0) {
+		request, _ := s.control.pop()
 		s.controlBatch++
 		return request, true
 	}
