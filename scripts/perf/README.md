@@ -27,6 +27,13 @@ python3 -B scripts/perf/stream-baseline.py \
 样本数量或阈值。`workload.stream_phase_order` 明确记录顺序；字段缺失按
 旧顺序解释，新旧顺序不允许直接比较，必须用同一新 harness 重测两端。
 
+流量阶段的回显目标运行在独立 Python 子进程，避免目标端 accept/线程创建与
+计时客户端竞争同一个解释器。子进程启动不计入流量测量；结束时关闭已连接客户端、
+释放监听并等待进程退出。热更新仍使用独立目标的接受事件与完整 payload 验证。
+`workload.stream_target_model=isolated_process` 明确记录流量目标形态；旧工件缺失该字段时
+解释为 `shared_interpreter`，两种模型不允许混比，两边必须使用同一新版采样器重测。
+该隔离调整不改变样本数或回归阈值，也不构成 Agent 性能提升的证据。
+
 资源读数等待连接回收：所有 Agent 的 goroutine 数连续 1 秒不高于负载前
 读数后，才使用该次真实快照；15 秒内未达到或读数缺失则失败，不以最小值
 或 0 替代。等待收据单独记录在 `quiescence`，CPU 增量包含回收和该阶段的

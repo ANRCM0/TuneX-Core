@@ -266,6 +266,79 @@ class EchoTarget:
 # Agent 进程控制
 # ======================================================================
 
+class IsolatedEchoTarget:
+    """Keep target accept/worker activity out of the measuring client's interpreter."""
+
+    def __init__(self) -> None:
+        self.host, self.port = "127.0.0.1", 0
+        self.accepted = threading.Event()
+        self._ready = threading.Event()
+        self._failed = False
+        self._proc = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--echo-target-child"],
+                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                      text=True)
+        self._reader = threading.Thread(target=self._read, daemon=True)
+        self._reader.start()
+        if not self._ready.wait(5) or self._failed:
+            self.close()
+            raise RuntimeError("isolated echo target did not become ready")
+
+    def _read(self) -> None:
+        try:
+            assert self._proc.stdout is not None
+            ready = json.loads(self._proc.stdout.readline())
+            if ready.get("host") != self.host or type(ready.get("port")) is not int or not 1 <= ready["port"] <= 65535:
+                raise ValueError("invalid target address")
+            self.port = ready["port"]
+            self._ready.set()
+            for line in self._proc.stdout:
+                if line.strip() == "accepted":
+                    self.accepted.set()
+        except (OSError, ValueError, AssertionError):
+            self._failed = True
+            self._ready.set()
+
+    def close(self) -> None:
+        try:
+            if self._proc.poll() is None:
+                assert self._proc.stdin is not None
+                self._proc.stdin.write("stop\n")
+                self._proc.stdin.flush()
+                try:
+                    self._proc.wait(timeout=4)
+                except subprocess.TimeoutExpired:
+                    self._proc.kill()
+                    self._proc.wait(timeout=3)
+                    raise RuntimeError("isolated echo target did not stop")
+        finally:
+            if self._proc.stdin is not None:
+                self._proc.stdin.close()
+            self._reader.join(timeout=2)
+            if self._proc.stdout is not None:
+                self._proc.stdout.close()
+        if self._reader.is_alive() or self._proc.returncode != 0:
+            raise RuntimeError("isolated echo target exited abnormally")
+
+
+def echo_target_child() -> int:
+    target = EchoTarget()
+    print(json.dumps({"host": target.host, "port": target.port}), flush=True)
+
+    def notify_accepted() -> None:
+        while not target._stop.is_set():
+            if target.accepted.wait(0.1):
+                print("accepted", flush=True)
+                return
+
+    reporter = threading.Thread(target=notify_accepted, daemon=True)
+    reporter.start()
+    try:
+        sys.stdin.readline()
+    finally:
+        target.close()
+        reporter.join(timeout=1)
+    return 0
+
 # ======================================================================
 # 假面板（本地、无生产凭据）
 # ======================================================================
@@ -1123,7 +1196,7 @@ def concurrent_session_round(host: str, port: int, concurrency: int, payload: by
 
 def direct_topology(binary: Path, root: Path, profile_enabled: bool = False) -> dict:
     """DIRECT：client → ingress agent → echo target（面板驱动的期望状态）。"""
-    target = EchoTarget()
+    target = IsolatedEchoTarget()
     panel = FakePanel()
     panel.start()
     ingress = AgentProcess(binary, root / "ingress", role="INGRESS", label="ingress", panel=panel,
@@ -1156,7 +1229,7 @@ def relay_topology(binary: Path, root: Path, profile_enabled: bool = False) -> d
     走完 RELAY 的两跳与两个 listener，且 EGRESS 的 target pool 由面板那份 desired
     快照建立（restore.Apply 在构造 forwarder 之前先建池）。
     """
-    target = EchoTarget()
+    target = IsolatedEchoTarget()
     panel = FakePanel()
     panel.start()
     ingress = AgentProcess(binary, root / "ingress", role="INGRESS", label="ingress", panel=panel,
@@ -1199,11 +1272,10 @@ def relay_topology(binary: Path, root: Path, profile_enabled: bool = False) -> d
 def stream_topology(binary: Path, root: Path, tunnel: dict, profile_enabled: bool = False) -> dict:
     """DIRECT 形态的通用拓扑：入口 Agent + 回环 echo target，配置由面板下发。
 
-    与 `direct_topology` 的步骤逐条一致，只是隧道配置由调用方给出（TLS 需要证书
-    路径、WS 只是换一个协议名）。**没有**改写 `direct_topology`：那条路径是已冻结
-    的 TCP 参照，保持它逐字节不变比消除这点重复更重要。
+    与 `direct_topology` 使用同一个隔离回显目标，只是隧道配置由调用方给出
+    （TLS 需要证书路径，WS 只是换一个协议名）。
     """
-    target = EchoTarget()
+    target = IsolatedEchoTarget()
     panel = FakePanel()
     panel.start()
     ingress = AgentProcess(binary, root / "ingress", role="INGRESS", label="ingress", panel=panel,
@@ -1803,6 +1875,7 @@ def run(args: argparse.Namespace) -> dict:
     profile["stream_phase_order"] = list(STREAM_PHASE_ORDER)
     profile["resource_phase"] = "after_stream_quiescence"
     profile["hot_reload_verification"] = "target_accept_and_complete_payload"
+    profile["stream_target_model"] = "isolated_process"
     if args.payload_kib is not None:
         profile["payload_kib"] = args.payload_kib
     if args.setups is not None:
@@ -1963,6 +2036,9 @@ def compare_results(candidate: dict, anchor: dict, max_regression: float = 0.20)
         raise ValueError("candidate and anchor profiles must match")
 
     workload_mismatch = []
+    if candidate["workload"].get("stream_target_model", "shared_interpreter") != anchor["workload"].get(
+            "stream_target_model", "shared_interpreter"):
+        workload_mismatch.append("stream_target_model")
     for key in ("payload_kib", "concurrency", "conn_rounds", "conn_timeouts", "transfers", "setups"):
         if key not in candidate["workload"] or key not in anchor["workload"] or candidate["workload"][key] != anchor["workload"][key]:
             workload_mismatch.append(key)
@@ -2176,4 +2252,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--echo-target-child"]:
+        sys.exit(echo_target_child())
     sys.exit(main())

@@ -188,6 +188,44 @@ class EchoTargetLifecycleTest(unittest.TestCase):
             self.assertFalse(target._thread.is_alive())
 
 
+class IsolatedEchoTargetLifecycleTest(unittest.TestCase):
+    def test_child_serves_exact_payload_and_owns_a_separate_process(self):
+        import os
+        target = baseline.IsolatedEchoTarget()
+        self.addCleanup(target.close)
+        self.assertNotEqual(target._proc.pid, os.getpid())
+        self.assertIsNone(target._proc.poll())
+        received, _ = baseline.transfer_once(target.host, target.port, b"isolated-payload", timeout=2)
+        self.assertEqual(received, len(b"isolated-payload"))
+        self.assertTrue(target.accepted.wait(timeout=2))
+
+    def test_close_reaps_child_closes_held_clients_and_releases_listener(self):
+        target = baseline.IsolatedEchoTarget()
+        self.addCleanup(target.close)
+        with socket.create_connection((target.host, target.port), timeout=2) as client:
+            client.settimeout(2)
+            client.sendall(b"held-payload")
+            self.assertEqual(client.recv(64), b"held-payload")
+            target.close()
+            self.assertEqual(client.recv(1), b"")
+        self.assertEqual(target._proc.poll(), 0)
+        self.assertFalse(target._reader.is_alive())
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reclaimed:
+            reclaimed.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            reclaimed.bind((target.host, target.port))
+            reclaimed.listen(1)
+
+    def test_independent_targets_keep_distinct_acceptance_identities(self):
+        targets = [baseline.IsolatedEchoTarget() for _ in range(2)]
+        for target in targets:
+            self.addCleanup(target.close)
+        self.assertNotEqual(targets[0].port, targets[1].port)
+        self.assertNotEqual(targets[0]._proc.pid, targets[1]._proc.pid)
+        baseline.transfer_once(targets[0].host, targets[0].port, b"identity", timeout=2)
+        self.assertTrue(targets[0].accepted.wait(timeout=2))
+        self.assertFalse(targets[1].accepted.is_set())
+
+
 class HotReloadMeasurementTest(unittest.TestCase):
     def test_declared_sample_count_reaches_each_new_target(self):
         from unittest.mock import Mock, patch
@@ -613,6 +651,15 @@ class ComparisonTest(unittest.TestCase):
                 }
             },
         }
+
+    def test_target_process_model_must_match_including_legacy_artifacts(self):
+        candidate, anchor = self._artifact(100, 10), self._artifact(100, 10)
+        candidate["workload"]["stream_target_model"] = "isolated_process"
+        result = baseline.compare_results(candidate, anchor)
+        self.assertFalse(result["passed"])
+        self.assertIn("stream_target_model", result["workload_mismatch"])
+        anchor["workload"]["stream_target_model"] = "isolated_process"
+        self.assertTrue(baseline.compare_results(candidate, anchor)["passed"])
 
     def test_relative_gate_distinguishes_throughput_and_latency(self):
         result = baseline.compare_results(self._artifact(80, 12), self._artifact(100, 10), 0.15)
