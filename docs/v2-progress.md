@@ -91,6 +91,17 @@ direct 热更新 apply p99 增加 84.5% 失败，原始工件已复算保留。�
 本轮控制队列 P3/P5 自动验收收口，固定主机/WAN/长稳仍待执行，详见
 [工作记录](v2.2-performance.md)。
 
+## V2.2 自动验收收口
+
+V2.2 P1/P5 增加六拓扑真实 payload 矩阵：三种消息尺寸、低/8 并发，Linux
+独立 netns 中实际施加 clean、20ms RTT、20ms/1% 丢包，共 108 个 case；
+保存与复算实际 qdisc/丢弃计数、原始 RTT、吞吐、完整计量及资源回收。
+新增每秒资源收据与混合 TCP/UDP 持续负载，标准 CI 运行 300 秒。
+本机全量 Agent/vet、101 项 Python 检查通过（Windows 跳过 2 项 Linux 检查）；
+新矩阵、600 秒本机持续验证与对应源码 SHA 的 CI 执行结果待收据收口。
+方案 P4 的 ADR/威胁模型/兼容策略已交付，完整 QUIC 实现待评审后开展。
+按用户决定，真机部署、固定主机容量、真实 WAN 和跨日验证延后统一验收。
+
 ## 实网发现与修复
 
 真实测试启动当前 Panel、Worker、两个独立 Agent 与 MySQL/Redis，未注入 Ready，也未手改运行缓存。已修复 wildcard 契约、初版修订值、UDP sibling 隔离、双向 UDP 闲置、TLS 失败握手频率、上报枚举/可空字段、同 generation 租约乱序，以及原生首次部署路径。

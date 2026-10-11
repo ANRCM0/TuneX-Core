@@ -93,3 +93,53 @@ Git 导出和编译只使用本地提交及标准库，不下载依赖，不修�
 应检查收据、复测和 profile，不能自动提高阈值或刷新 anchor。短采样不能替代
 真实 RTT/丢包、多规则、长稳及发布容量验收。完整状态见
 [V2.2 工作记录](../../docs/v2.2-performance.md)。
+
+## 实际 RTT/丢包矩阵与持续负载
+
+`runtime-matrix.py` 编译 opt-in 的 Go 测试二进制，调用生产 forwarder/TST
+runtime，使用随机端口与临时私有状态。默认关闭 profiling，TST 同步持久记账
+保留；plain 不经过 Agent，native relay 使用 `RELAY → EGRESS → target`。
+六类拓扑为 plain TCP/UDP、native relay TCP、TST TCP/UDP、同 Link 的 TCP/UDP
+混合流。每类覆盖 64、1400、16384 字节、1/8 个并发客户端；混合流的低并发
+为 2，保证 TCP 与 UDP 同时存在。CI 的 clean/delay/loss 三组共 108 个 case。
+
+```sh
+python3 -B scripts/perf/runtime-matrix.py --out scripts/perf/results/runtime-clean
+# Linux：20ms RTT，无丢包；实际整形，不能在 Windows 以标签替代
+python3 -B scripts/perf/runtime-matrix.py --condition delay \
+  --out scripts/perf/results/runtime-delay
+# Linux：20ms RTT，每方向独立随机 1% 丢包
+python3 -B scripts/perf/runtime-matrix.py --condition loss \
+  --out scripts/perf/results/runtime-loss
+# Windows/Linux：持续 10 分钟，8 客户端共享一条 TLS/TCP carrier
+python3 -B scripts/perf/runtime-matrix.py --mode soak --kinds tst_mixed --duration 600 \
+  --out scripts/perf/results/runtime-soak
+```
+
+Linux 要求 `iproute2`、`unshare`、root 或无交互 sudo。每个 case 在新 netns
+中运行；先检查命名空间与 PID 1 不同，再仅启用该命名空间的 lo。未匹配流量
+进入 prio 1:1，选定 carrier 的双向端口进入 1:3/netem；每方向 delay=RTT/2。
+native 只整形 relay/egress 间 TCP，TST TCP/UDP 都整形 TLS/TCP carrier，
+plain 整形客户端/目标间协议。每组收据保存宿主 qdisc 前后快照，必须一致。
+netns 随进程结束销毁，测试也显式删除自己的 qdisc。
+
+每个 JSON 保存请求参数、实际 tc 命令/初始与最终 qdisc/分类器/包与丢弃计数、
+payload 完成与错误数、原始 RTT 样本、吞吐、每秒 Go heap/goroutine 与 Linux
+RSS/FD/CPU ticks、持续一秒满足阈值后的真实回收快照。测量端逐包加入客户端
+与序号，完整比较 echo；允许丢包时仅 plain UDP 超时作为丢包样本，损坏仍失败。
+TST 每条规则持久账本必须覆盖该规则所有完成的双向 payload 字节。
+审计端从原始样本复算 median/p95/p99 与吞吐，检查每协议数量、整形计数及
+延迟下限；loss 组必须至少观察到一次真实 netem drop。计数缺失、字段非法、
+资源未回收或进程失败均不能通过，失败工件仍上传。
+
+长运行保留每协议最多 10,000 个均匀 reservoir 样本及完整计数，避免只保存开头
+样本。每秒额外更新 `.progress.json`，中断仍有最近一份脱敏收据；最终 JSON
+保留所有资源采样。Windows 的 RSS/FD/CPU ticks 为 null，极短 RTT 原始零值
+保留，不从这种时钟分辨率推断亚毫秒 p95/p99。
+`matrix.json` 保存源码 SHA、工作树状态、Go 文件 hash 和二进制 hash；
+`--binary` 复用时明确只验证外部二进制 hash，不证明它来自当前工作树。
+
+Performance workflow 新增上述三组矩阵与 300 秒、20ms/1% 条件的混合流持续
+负载，原有双 SHA 性能回归门禁与 35% 阈值继续执行。标准 CI 与本机短时持续
+负载不证明固定主机容量、跨日长稳、真实 WAN 或正式部署通过；这些项目按
+用户决定延后统一验收。

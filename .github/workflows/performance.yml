@@ -24,6 +24,74 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  runtime-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        condition: [clean, delay, loss]
+    env:
+      GOTOOLCHAIN: local
+      GOARCH: amd64
+      GOMAXPROCS: '4'
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.mod
+      - name: Install isolated network shaping tools
+        run: sudo apt-get update && sudo apt-get install -y iproute2
+      - name: Verify matrix receipt contracts
+        run: python3 -B -m unittest discover -s scripts/perf -p 'test_runtime_matrix.py'
+      - name: Measure real payload with isolated network namespaces
+        run: >-
+          python3 -B scripts/perf/runtime-matrix.py
+          --condition '${{ matrix.condition }}'
+          --out scripts/perf/results/runtime-${{ matrix.condition }}
+      - name: Preserve per-case payload and shaping evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-${{ matrix.condition }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: scripts/perf/results/runtime-${{ matrix.condition }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  runtime-soak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+      GOARCH: amd64
+      GOMAXPROCS: '4'
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.mod
+      - name: Mixed-stream soak with real carrier delay and loss
+        run: >-
+          python3 -B scripts/perf/runtime-matrix.py
+          --mode soak --kinds tst_mixed --condition loss --duration 300
+          --out scripts/perf/results/runtime-soak
+      - name: Preserve periodic resources and completed payload audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-soak-${{ github.sha }}-${{ github.run_attempt }}
+          path: scripts/perf/results/runtime-soak/
+          if-no-files-found: error
+          retention-days: 14
+
   compare:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
