@@ -40,6 +40,7 @@ import { tunnelsRoutes } from "./routes/tunnels.ts";
 import { forwardsRoutes } from "./routes/forwards.ts";
 import { forwardOperationsRoutes } from "./routes/forward-operations.ts";
 import { routingRoutes } from "./routes/routing.ts";
+import { observabilityRoutes } from "./routes/observability.ts";
 import { linksRoutes } from "./routes/links.ts";
 import { ddnsRoutes } from "./routes/ddns.ts";
 // User/workspace announcements and the Admin announcement surface share the same backend truth.
@@ -70,6 +71,7 @@ export const APP_ROUTE_MOUNTS = [
   "/api/forwards",
   "/api/forward-operations",
   "/api/routing",
+  "/api/observability",
   "/api/ddns",
   "/api/workspaces",
   "/api/plans",
@@ -117,6 +119,12 @@ export function createApp() {
 
   // Development-only CORS; production stays same-origin by default.
   if (!env.isProduction) app.use("*", cors());
+
+  // Metrics authorization failures must be non-cacheable too, before global auth/CSRF/rate limiting.
+  app.use("/api/observability/*", async (c, next) => {
+    c.header("Cache-Control", "no-store");
+    await next();
+  });
 
   app.onError((err, c) => {
     if (err instanceof HTTPException) {
@@ -178,6 +186,7 @@ export function createApp() {
   app.route("/api/forwards", forwardsRoutes);
   app.route("/api/forward-operations", forwardOperationsRoutes);
   app.route("/api/routing", routingRoutes);
+  app.route("/api/observability", observabilityRoutes);
   app.route("/api/links", linksRoutes);
   app.route("/api/ddns", ddnsRoutes);
   app.route("/api/workspaces", workspaceRoutes);

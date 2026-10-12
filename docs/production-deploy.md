@@ -84,6 +84,9 @@ Agent 在 Panel 创建 Node 后通过 enrollment/upgrade 安装，主动发起�
 路径或身份重建会中断旧 TCP，客户端需重连；当前不自动迁移 UDP/TST 路径，也不做并行路径逐连接分流。
 完整支持范围与受保护补偿规则见 [V2.3 路由开发](v2.3-routing.md)。
 
+V2.4 的 `TUNEX_OBSERVABILITY_ENABLED` 同样默认关闭。显式开启仅提供认证与 Workspace
+权限保护的只读统一指标，不开启探测、告警或修复；详见 [指标口径与限制](v2.4-observability.md)。
+
 ## 备份与回退
 
 ```bash

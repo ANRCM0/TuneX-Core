@@ -18,5 +18,6 @@
 | [实现台账](v2-progress.md) | 工作包和执行验证状态。 |
 | [V2.2 性能记录](v2.2-performance.md) | P1–P5、优化对比、网络条件矩阵、持续负载和延后的环境验收。 |
 | [V2.3 路由开发](v2.3-routing.md) | R1–R5 拓扑、授权探测、持久策略、Native TCP 自动切换与逐跳身份；固定源码验收和支持限制。 |
+| [V2.4 可观测性](v2.4-observability.md) | O1–O5 状态、统一指标接口、来源/新鲜度、读取权限、验证与未完成范围。 |
 
 `TUNEX_TST_ENABLED=false` 和 `FORWARD_NATIVE_BOTH_ENABLED=false` 是发布默认值。能力枚举、编译成功、组件 fixture 和交叉编译各自只证明其覆盖范围。Linux 隔离容器实网与性能矩阵已有固定源码收据；独立安全审查、正式安装与实际发布后验证仍需单独证据。
