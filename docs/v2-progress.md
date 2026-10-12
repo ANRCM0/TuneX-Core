@@ -181,6 +181,14 @@ Forward/Node 双读取权限保护；凭据轮换、超限、跨空间引用和�
 [V2.4 记录](v2.4-observability.md)。O1 全采集、O2 可视化、O3 分段诊断、O4 告警与
 O5 授权修复仍未完成；真机/WAN 验收继续按用户决定延后。
 
+固定源码 `baa3475` 的 [Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38204757317)
+全部成功：后端 3266 项 / 19747 断言、HTTP/DB 143 项（0 skipped），新增指标专项 18 项、
+真实认证/MySQL/Redis 7 项通过；实际 TST 24、Native both 37、探测 49、路由故障/回切 30 项
+均 0 FAIL，三次路径 receipt 均 confirmed/exact revision，受保护补偿 payload 与正常删除通过。
+Agent/race/fuzz、Web、迁移/升级、运维与密钥/依赖检查通过；本地全量后端和构建同样通过。
+初版 `b37707f` 的 CI 随后续源码推送取消，不替换为成功。本轮 O1 第一增量自动验收收口，
+不表示完整 O1 或整个 V2.4 完成，未宣称新指标接口容量已验收。
+
 ## 实网发现与修复
 
 真实测试启动当前 Panel、Worker、两个独立 Agent 与 MySQL/Redis，未注入 Ready，也未手改运行缓存。已修复 wildcard 契约、初版修订值、UDP sibling 隔离、双向 UDP 闲置、TLS 失败握手频率、上报枚举/可空字段、同 generation 租约乱序，以及原生首次部署路径。
@@ -193,7 +201,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | `dee1cf9` 完整主 CI/race 成功，真实路由 30、探测 49、TST 24、Native both 37 项均 0 FAIL；相同 Agent/采样器内容在 `046b916` 的固定旧基线性能、108 case 与 300 秒 soak 成功 | 逐项保留执行 SHA 和内容 hash；文档提交不替换执行 SHA；历史失败保留 |
+| 当前候选 SHA 的 Linux CI/race | `baa3475` 完整主 CI/race 成功，后端 3266、HTTP/DB 143（0 skipped），真实路由 30、探测 49、TST 24、Native both 37 项均 0 FAIL；相同 Agent/采样器内容在 `046b916` 的固定旧基线性能、108 case 与 300 秒 soak 成功；新指标 API 容量未测 | 逐项保留执行 SHA 和内容 hash；文档提交不替换执行 SHA；历史失败保留 |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |
