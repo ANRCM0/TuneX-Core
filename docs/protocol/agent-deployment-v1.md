@@ -1,6 +1,6 @@
 # Agent Deployment Protocol v1 (ADP/1)
 
-- **Status**: Accepted for implementation (normative design; current V2 Agent does not implement ADP/1)
+- **Status**: Superseded by [ADP/2](agent-deployment-v2.md) under [ADR-0002](../decisions/0002-runtime-contract-closure.md). Historical design record only; MUST NOT be used for new implementation. Current V2 implements neither ADP/1 nor ADP/2.
 - **Version**: `protocolVersion: 1`
 - **Trust boundary**: Control ↔ Go Agent (control plane only)
 - **Transport**: mutually authenticated HTTPS/JSON (TLS 1.3 preferred); no external Agent admin listener required
@@ -189,4 +189,5 @@ The current V2 protocol is **not compatible** with ADP/1. Future ADP/1 minor com
 ## 12. Verification gates
 
 See [Acceptance Matrix](../testing/acceptance-v1.md). Required: complete snapshot deletion safety, duplicate/out-of-order delivery, crashed Writer/Worker/Agent, durable high-water, port reclaim fencing, withheld downstream, repeated restarts, TCP/UDP real traffic, secure transport no-downgrade, malformed/foreign-node/expired snapshot rejection, stale Observation suppression.
+
 
