@@ -96,7 +96,10 @@ export const userConsoleNav: NavGroup[] = [
     labelZh: "概览",
     labelEn: "Overview",
     plain: true,
-    items: [{ href: "/dashboard", labelKey: "common.dashboard", iconKey: "dashboard" }],
+    items: [
+      { href: "/dashboard", labelKey: "common.dashboard", iconKey: "dashboard" },
+      { href: "/monitor", labelKey: "observability.title", labelZh: "统一监控", labelEn: "Unified monitoring", iconKey: "adminDashboard" },
+    ],
   },
   {
     id: "forwards",

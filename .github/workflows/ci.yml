@@ -194,6 +194,9 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - uses: oven-sh/setup-bun@v2
       - run: npm ci
+      # Browser fixtures execute the real pure metric projector (Zod schemas),
+      # without starting Panel/Worker or generating a Prisma client.
+      - run: npm ci --prefix ../backend --ignore-scripts
       - run: npm run typecheck
       # Run the current source test tree. Historical milestone names are not
       # separate gates; retained regression tests simply behave like normal tests.
@@ -204,6 +207,37 @@ jobs:
         env:
           NEXT_PUBLIC_PAYMENTS_ENABLED: "false"
           NEXT_PUBLIC_API_MOCK: "1"
+      - name: Install isolated browser acceptance tools
+        run: |
+          python3 -m venv /tmp/tunex-metric-playwright
+          /tmp/tunex-metric-playwright/bin/pip install playwright==1.58.0
+          /tmp/tunex-metric-playwright/bin/python -m playwright install --with-deps chromium
+      - name: Unified monitoring browser acceptance
+        run: |
+          set -euo pipefail
+          mkdir -p .next/standalone/.next
+          cp -r .next/static .next/standalone/.next/static
+          if [ -d public ]; then cp -r public .next/standalone/public; fi
+          bun src/components/observability/__tests__/browser-metrics-server.ts > /tmp/tunex-metric-fixture.log 2>&1 &
+          FIXTURE_PID=$!
+          PORT=41979 HOSTNAME=127.0.0.1 NEXT_PUBLIC_API_MOCK=1 node .next/standalone/server.js > /tmp/tunex-metric-web.log 2>&1 &
+          WEB_PID=$!
+          trap 'kill "$FIXTURE_PID" "$WEB_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:41978/ > /dev/null && curl --fail --silent http://127.0.0.1:41979/login > /dev/null; then break; fi
+            sleep 1
+          done
+          TUNEX_METRIC_WEB_URL=http://127.0.0.1:41979 /tmp/tunex-metric-playwright/bin/python scripts/verify-observability-browser.py
+      - name: Upload monitoring browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unified-monitoring-browser-evidence
+          path: |
+            web/test-artifacts/v2.4-o2-browser/
+            /tmp/tunex-metric-fixture.log
+            /tmp/tunex-metric-web.log
+          if-no-files-found: error
 
   agent:
     needs: changes

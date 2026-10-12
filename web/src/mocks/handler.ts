@@ -296,6 +296,18 @@ export async function handleMock(method: string, path: string, req: MockRequest)
   }
 
   const ctx: rt.MockAuthedRouteContext = { method, clean, seg, q, db, user, req, scopeId };
+  if (seg[0] === "observability") {
+    if (!scopeMembership) return notFound("工作空间不存在");
+    const grants = mockEffectivePermissions(db, scopeMembership);
+    if (!grants.permissions["forward:read"] || !grants.permissions["node:read"])
+      return fail(403, "工作空间角色无权操作", "permission_denied");
+    // Discovery only: demo mode has no unified metric collectors.
+    if (method === "GET" && seg[1] === "capabilities" && seg.length === 2) return ok({ enabled: false, stage: "experimental", schema_versions: [1],
+      features: { workspace_snapshot: false, archived_usage: false, tst_ingress_usage: false, node_telemetry: false, target_tcp_observations: false,
+        active_connections: false, live_throughput: false, end_to_end_latency: false, error_rates: false, alerts: false, repair: false },
+      limits: { nodes: 256, links: 512, forwards: 2048, usage_groups: 4096, targets: 4096, targets_per_forward: 32, window_days: 31 } });
+    return fail(409, "统一指标尚未启用", "observability_disabled");
+  }
   if (seg[0] === "routing") {
     if (!scopeMembership) return notFound("工作空间不存在");
     const grants = mockEffectivePermissions(db, scopeMembership);
