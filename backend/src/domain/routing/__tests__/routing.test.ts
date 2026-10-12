@@ -115,6 +115,35 @@ describe("V2.3 scoped graph facts", () => {
     facts.nodes[0]!.state_report!.capabilities = [];
     expect(projectRoutingTopology(7, facts, now).digest).not.toBe(graph.digest);
   });
+  test("equivalent periodic reports update timestamps without invalidating a pending topology intent", () => {
+    const now = new Date("2026-10-12T10:00:00Z"), facts = fixture(now);
+    const before = projectRoutingTopology(7, facts, now), intent = draft(before);
+    const next = new Date(now.getTime() + 1000);
+    for (const node of facts.nodes) { node.state_report!.reported_at = next; node.last_seen_at = next; }
+    const after = projectRoutingTopology(7, facts, next);
+    expect(after.nodes[0]!.capabilities.reported_at).not.toBe(before.nodes[0]!.capabilities.reported_at);
+    expect(after.digest).toBe(before.digest);
+    expect(previewRoutingPolicy(after, intent).valid).toBe(true);
+  });
+  test("semantic capability, freshness, connection, authorization and revision changes still reject old intents", () => {
+    const now = new Date("2026-10-12T10:00:00Z"), before = projectRoutingTopology(7, fixture(now), now);
+    for (const mutate of [
+      (f: RoutingFacts) => { f.nodes[0]!.state_report!.capabilities = []; },
+      (f: RoutingFacts) => { f.nodes[0]!.state_report!.reported_at = new Date(now.getTime() - 90001); },
+      (f: RoutingFacts) => { f.nodes[0]!.last_seen_at = new Date(now.getTime() - 90001); },
+      (f: RoutingFacts) => { f.nodes[0]!.credential_revoked = true; },
+      (f: RoutingFacts) => { f.nodes[0]!.credential_rotated_at = now; },
+      (f: RoutingFacts) => { f.nodes[0]!.role = "egress"; },
+      (f: RoutingFacts) => { f.bindings = f.bindings.filter((b) => b.id !== 10); },
+      (f: RoutingFacts) => { f.forwards[0]!.config_revision = 5; },
+      (f: RoutingFacts) => { f.links[0]!.status = "retired"; },
+    ]) {
+      const facts = fixture(now); mutate(facts);
+      const after = projectRoutingTopology(7, facts, now);
+      expect(after.digest).not.toBe(before.digest);
+      expect(() => previewRoutingPolicy(after, draft(before))).toThrow("topology_conflict");
+    }
+  });
   test("all graph populations are bounded rather than silently truncated", () => {
     for (const key of Object.keys(ROUTING_LIMITS) as (keyof typeof ROUTING_LIMITS)[]) {
       const facts = fixture();

@@ -164,6 +164,12 @@ if (process.env.TUNEX_DB_TEST !== '1') {
       process.env.TUNEX_ROUTING_POLICIES_ENABLED = 'false';
       assert.equal((await request(`/policies/${native.id}`, 'PUT', owner, body)).status, 409);
       process.env.TUNEX_ROUTING_POLICIES_ENABLED = 'true';
+      // A fresh equivalent Agent report between GET topology and PUT policy
+      // must preserve the semantic graph identity and the original CAS intent.
+      await db.nodeStateReport.updateMany({ where: { node_id: { in: nodeIds } }, data: { reported_at: new Date() } });
+      const refreshed = (await (await request('/topology', 'GET', owner)).json()).data;
+      assert.notEqual(refreshed.nodes[0].capabilities.reported_at, graph.nodes[0].capabilities.reported_at);
+      assert.equal(refreshed.digest, graph.digest);
       const saved = await request(`/policies/${native.id}`, 'PUT', owner, body);
       assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
       assert.equal((await saved.json()).data.version, 1);

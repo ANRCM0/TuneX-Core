@@ -51,7 +51,10 @@ export interface RoutingTopology {
 
 /** Clocks are observational metadata, so an unchanged graph has an unchanged identity. */
 export function topologyDigest(graph: Omit<RoutingTopology, "digest" | "generated_at">): string {
-  return canonicalConfigDigest(graph);
+  return canonicalConfigDigest({ ...graph, nodes: graph.nodes.map((node) => ({ ...node,
+    // Equivalent periodic reports change this clock. Freshness state and admitted
+    // capabilities remain in the identity, so expiry and authority changes conflict.
+    capabilities: { ...node.capabilities, reported_at: null } })) });
 }
 
 const id = z.number().int().positive().max(2_147_483_647);
