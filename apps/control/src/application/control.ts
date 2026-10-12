@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { decideForwardChange, isCounter, isId, MAX_COUNTER, parseForwardSpec } from '@tunex/core';
 import type { Forward, ForwardSpec } from '@tunex/core';
 import { digest } from '@tunex/contracts';
+import type { Policy } from '@tunex/contracts';
 import { ControlError, invalid } from './errors.ts';
 import type { MySqlUnitOfWork } from '../infrastructure/mysql.ts';
 import type { Identity } from '../modules/identity.ts';
@@ -34,12 +35,12 @@ function revision(value: number): void {
 /** Coordinates owner-owned commands inside one durable acceptance transaction. */
 export class ControlApplication {
     readonly forwarding = new Forwarding();
-    readonly ledger = new RuntimeLedger();
+    readonly ledger:RuntimeLedger;
     readonly idempotency = new Idempotency();
     readonly db: MySqlUnitOfWork;
     readonly identity: Identity;
     readonly nodes: Nodes;
-    constructor(db: MySqlUnitOfWork, identity: Identity, nodes: Nodes) { this.db = db; this.identity = identity; this.nodes = nodes; }
+    constructor(db: MySqlUnitOfWork, identity: Identity, nodes: Nodes, policy?:Policy) { this.db = db; this.identity = identity; this.nodes = nodes;this.ledger=new RuntimeLedger(policy); }
     async create(actorId: string, scopeId: string, key: string | undefined, input: unknown): Promise<Accepted> {
         const spec = directSpec(input);
         const request = requestIdentity(actorId, scopeId, key, 'POST', `/api/v1/scopes/${scopeId}/forwards`, spec);

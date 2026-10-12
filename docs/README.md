@@ -45,3 +45,6 @@
 Current direct TCP/UDP lifecycle development and evidence: [Phase 2](development/phase2.md).
 
 Credential rotation, revocation and target-policy withdrawal: [Node security](development/node-security.md).
+
+Suspend-aware tickets, data-plane expiry checks and fault evidence:
+[Authorization faults](development/authorization-faults.md).

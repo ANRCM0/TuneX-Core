@@ -8,7 +8,8 @@ import type { RequestIdentity } from '../idempotency.ts';
 import type { ReservedSlot } from './planner.ts';
 import { compileDirect, compileSnapshot } from './planner.ts';
 import type { AuthorizedNodeFacts } from './planner.ts';
-import type { Assignment, Snapshot, Tombstone, ReportRequest } from '@tunex/contracts';
+import type { Assignment, Snapshot, Tombstone, ReportRequest, Policy } from '@tunex/contracts';
+import { DEFAULT_POLICY } from '@tunex/contracts';
 import { json } from '../../infrastructure/mysql.ts';
 import type { Forwarding } from '../forwarding.ts';
 import { targetAllowed } from '../target-policy.ts';
@@ -41,6 +42,8 @@ interface Retirement {
     safe: number;
 }
 export class RuntimeLedger {
+    private readonly policy:Policy;
+    constructor(policy:Policy={...DEFAULT_POLICY}){this.policy={...policy};}
     async assignments(tx: Transaction, forwarding: Forwarding, facts: AuthorizedNodeFacts, includeAccepted = false): Promise<Assignment[]> {
         const forwards = await forwarding.forNode(tx, facts.nodeId);
         if (!forwards.length)
@@ -81,7 +84,7 @@ export class RuntimeLedger {
             if (!assignments.some(a => a.assignmentId === old.assignmentId && a.deploymentGeneration === old.deploymentGeneration && a.bindingFence === old.bindingFence) && !tombstones.some(t => t.assignmentId === old.assignmentId && t.bindingFence === old.bindingFence && t.port === old.listener.port && t.protocol === old.protocol))
                 tombstones.push({ assignmentId: old.assignmentId, forwardId: old.forwardId, protocol: old.protocol, port: old.listener.port, bindingFence: old.bindingFence, retirementGeneration: MAX_COUNTER });
         }
-        compileSnapshot({ nodeId: facts.nodeId, sessionEpoch: MAX_COUNTER, snapshotGeneration: MAX_COUNTER, issuedAt: new Date(now).toISOString(), validUntil: new Date(now + 300000).toISOString(), assignments, tombstones });
+        compileSnapshot({ nodeId: facts.nodeId, sessionEpoch: MAX_COUNTER, snapshotGeneration: MAX_COUNTER, issuedAt: new Date(now).toISOString(), validUntil: new Date(now + this.policy.leaseSeconds*1000).toISOString(), assignments, tombstones,policy:this.policy });
     }
     async verifyPublishable(tx: Transaction, assignments: readonly Assignment[]): Promise<void> {
         for (const assignment of assignments) {
@@ -121,7 +124,7 @@ export class RuntimeLedger {
         const count = (await rows<{
             n: number;
         }>(tx, 'SELECT COUNT(*) n FROM port_slots WHERE node_id=? AND owner_id IS NOT NULL', [forward.spec.ingress.nodeId]))[0]!.n;
-        if (count > 1000)
+        if (count > this.policy.maxAssignmentsPerNode)
             throw new ControlError('RESOURCE_LIMIT', 429, 'Node assignment capacity exceeded');
         return slots;
     }

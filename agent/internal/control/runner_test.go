@@ -46,7 +46,7 @@ func TestSnapshotRenewalAndPersistenceBeforeBind(t *testing.T) {
 		json.NewEncoder(w).Encode(body)
 	}))
 	defer server.Close()
-	runner := &Runner{options: Options{URL: server.URL, NodeID: "node-a", BootID: "boot-a", Journal: filepath.Join(t.TempDir(), "journal.json")}, client: server.Client(), key: make([]byte, 32), journal: state.Journal{Fences: make(map[string]uint64), Retired: make(map[string]uint64)}, hello: contracts.HelloResponse{SessionEpoch: 1, Policy: contracts.Policy{ConnectTimeoutSeconds: 2, MaxTcpConnectionsPerAssignment: 8}}, instances: make(map[string]running)}
+	runner := &Runner{options: Options{URL: server.URL, NodeID: "node-a", BootID: "boot-a", Journal: filepath.Join(t.TempDir(), "journal.json")}, client: server.Client(), key: make([]byte, 32), journal: state.Journal{Fences: make(map[string]uint64), Retired: make(map[string]uint64)}, hello: contracts.HelloResponse{SessionEpoch: 1, Policy: contracts.Policy{LeaseSeconds: 300, MaxClockSkewSeconds: 5, ConnectTimeoutSeconds: 2, MaxTcpConnectionsPerAssignment: 8}}, instances: make(map[string]running)}
 	defer runner.stop()
 	ctx := context.Background()
 	// Future authorization cannot be used, even if structure and digest are valid.

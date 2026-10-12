@@ -65,6 +65,7 @@ jobs:
       - run: npm run test:phase1
       - run: npm run test:phase2
       - run: npm run test:security
+      - run: npm run test:faults
       - name: Preserve redacted acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -74,3 +75,4 @@ jobs:
             .artifacts/phase1/**/evidence.json
             .artifacts/phase2/**/evidence.json
             .artifacts/security/**/evidence.json
+            .artifacts/faults/**/evidence.json

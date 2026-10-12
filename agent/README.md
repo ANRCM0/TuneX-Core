@@ -24,3 +24,6 @@ Setup and network verification: [Phase 1](../docs/development/phase1.md).
 
 Credential rotation and trusted atomic keypair reload: [Node security](../docs/development/node-security.md).
 Use `--rotate` after online Hello; counters and current listener state are preserved.
+
+Suspend-aware immutable execution tickets now guard TCP/UDP data-plane IO as well
+as periodic cleanup. Fault and platform scope: [Authorization faults](../docs/development/authorization-faults.md).

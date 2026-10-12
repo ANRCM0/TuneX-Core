@@ -92,3 +92,24 @@ no existing system toolchain, Redis or database service was changed.
 Redacted local evidence: `.artifacts/linux-race.json`. This closes the Go Linux
 race-detector gap described above. It does not close Linux MySQL/HTTPS/independent
 Agent acceptance, namespace fault tests, capacity measurement or release rehearsal.
+
+## Authorization fault slice
+
+Baseline: `015b81c`. The direct runtime now uses a suspend-aware wall/uptime Guard
+and immutable execution tickets. TCP/UDP check tickets before data-plane IO;
+blocked-read completion is rechecked before bytes reach another endpoint. Clock
+failure latches closed; renewed snapshots do not renew old drain instances.
+
+The real Control/MySQL/Agent fault harness passed six short-policy scenarios:
+Control outage with bounded continuing TCP/UDP, hard cutoff, offline restart,
+online higher-generation recovery, drain hard cutoff and corrupt-state rejection.
+The existing lifecycle (22 checks) and Node security (8 checks) suites also passed.
+Native WSL/Linux Go race tests include the new authorization and forward packages.
+
+Pinned-version Linux container integration was attempted with a project-specific
+temporary daemon; registry and trusted cache connections timed out. The daemon
+was closed, existing WSL services were not changed. This is an environment evidence
+gap, not a passing integration result. Details: [Authorization faults](authorization-faults.md).
+
+Full goal remains active: OS time-sync status, Linux integration/capacity/recovery,
+remaining direct matrix, Relay, Web and release gates are still outstanding.

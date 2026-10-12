@@ -30,17 +30,18 @@ type tcpListenerSlot struct {
 }
 
 type TCP struct {
-	slot        *tcpListenerSlot
-	binding     contracts.Listen
-	config      contracts.DirectConfig
-	ctx         context.Context
-	cancel      context.CancelFunc
-	mutex       sync.Mutex
-	connections map[net.Conn]net.Conn
-	permits     chan struct{}
-	timeout     time.Duration
-	done        sync.WaitGroup
-	closeOnce   sync.Once
+	authorization executionAuthorization
+	slot          *tcpListenerSlot
+	binding       contracts.Listen
+	config        contracts.DirectConfig
+	ctx           context.Context
+	cancel        context.CancelFunc
+	mutex         sync.Mutex
+	connections   map[net.Conn]net.Conn
+	permits       chan struct{}
+	timeout       time.Duration
+	done          sync.WaitGroup
+	closeOnce     sync.Once
 }
 
 func validateTCPAssignment(assignment contracts.Assignment) error {
@@ -59,6 +60,14 @@ func newTCP(slot *tcpListenerSlot, assignment contracts.Assignment, permits chan
 }
 
 func Start(assignment contracts.Assignment, policy contracts.Policy) (*TCP, error) {
+	return StartAuthorized(assignment, policy, nil)
+}
+func StartAuthorized(assignment contracts.Assignment, policy contracts.Policy, authorize func() error) (*TCP, error) {
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			return nil, err
+		}
+	}
 	if err := validateTCPAssignment(assignment); err != nil {
 		return nil, err
 	}
@@ -69,8 +78,15 @@ func Start(assignment contracts.Assignment, policy contracts.Policy) (*TCP, erro
 	if err != nil {
 		return nil, err
 	}
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			listener.Close()
+			return nil, err
+		}
+	}
 	slot := &tcpListenerSlot{listener: listener, nodePermits: tcpNodePermits, done: make(chan struct{})}
 	stream := newTCP(slot, assignment, make(chan struct{}, min(policy.MaxTcpConnectionsPerAssignment, 1024)), time.Duration(min(policy.ConnectTimeoutSeconds, 10))*time.Second)
+	stream.authorization.Set(authorize)
 	slot.current = stream
 	go slot.accept()
 	return stream, nil
@@ -80,6 +96,14 @@ func Start(assignment contracts.Assignment, policy contracts.Policy) (*TCP, erro
 // sockets use the successor's config, while this instance retains its streams.
 // The connection budget is shared across generations of the same listener.
 func (stream *TCP) Replace(assignment contracts.Assignment) (*TCP, error) {
+	return stream.ReplaceAuthorized(assignment, nil)
+}
+func (stream *TCP) ReplaceAuthorized(assignment contracts.Assignment, authorize func() error) (*TCP, error) {
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			return nil, err
+		}
+	}
 	if err := validateTCPAssignment(assignment); err != nil {
 		return nil, err
 	}
@@ -91,7 +115,13 @@ func (stream *TCP) Replace(assignment contracts.Assignment) (*TCP, error) {
 	if stream.slot.current != stream || stream.ctx.Err() != nil {
 		return nil, fmt.Errorf("INVALID_CONFIG: TCP listener is no longer owned by this instance")
 	}
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			return nil, err
+		}
+	}
 	next := newTCP(stream.slot, assignment, stream.permits, stream.timeout)
+	next.authorization.Set(authorize)
 	stream.slot.current = next
 	return next, nil
 }
@@ -105,7 +135,7 @@ func (slot *tcpListenerSlot) accept() {
 		}
 		slot.mutex.Lock()
 		stream := slot.current
-		if stream == nil || stream.ctx.Err() != nil {
+		if stream == nil || stream.ctx.Err() != nil || stream.authorization.Allow() != nil {
 			slot.mutex.Unlock()
 			client.Close()
 			continue
@@ -177,7 +207,7 @@ func (stream *TCP) copy(client net.Conn) {
 	}
 	var target net.Conn
 	for _, addr := range addresses {
-		if !Allowed(addr, stream.config) {
+		if !Allowed(addr, stream.config) || stream.authorization.Allow() != nil {
 			continue
 		}
 		target, err = (&net.Dialer{}).DialContext(ctx, "tcp", net.JoinHostPort(addr.Unmap().String(), fmt.Sprint(stream.config.Target.Port)))
@@ -190,7 +220,7 @@ func (stream *TCP) copy(client net.Conn) {
 	}
 	defer target.Close()
 	stream.mutex.Lock()
-	if stream.ctx.Err() != nil {
+	if stream.ctx.Err() != nil || stream.authorization.Allow() != nil {
 		stream.mutex.Unlock()
 		return
 	}
@@ -198,7 +228,7 @@ func (stream *TCP) copy(client net.Conn) {
 	stream.mutex.Unlock()
 	finished := make(chan struct{}, 1)
 	go func() {
-		_, err := io.Copy(target, client)
+		_, err := io.Copy(authorizedWriter{target, &stream.authorization}, authorizedReader{client, &stream.authorization})
 		if tcp, ok := target.(*net.TCPConn); ok {
 			tcp.CloseWrite()
 		}
@@ -207,7 +237,7 @@ func (stream *TCP) copy(client net.Conn) {
 		}
 		finished <- struct{}{}
 	}()
-	_, err = io.Copy(client, target)
+	_, err = io.Copy(authorizedWriter{client, &stream.authorization}, authorizedReader{target, &stream.authorization})
 	if tcp, ok := client.(*net.TCPConn); ok {
 		tcp.CloseWrite()
 	}
@@ -216,6 +246,7 @@ func (stream *TCP) copy(client net.Conn) {
 	}
 	<-finished
 }
+func (stream *TCP) SetAuthorization(check func() error) { stream.authorization.Set(check) }
 
 // Drain retires listener ownership without closing accepted connections. A
 // retired instance cannot close a listener subsequently owned by Replace.

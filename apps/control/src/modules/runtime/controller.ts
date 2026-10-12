@@ -1,5 +1,5 @@
-import { digest, DEFAULT_POLICY } from '@tunex/contracts';
-import type { HelloRequest, HelloResponse, Snapshot, ReportRequest, ReportAck, Observation } from '@tunex/contracts';
+import { digest, DEFAULT_POLICY, parseMessage } from '@tunex/contracts';
+import type { HelloRequest, HelloResponse, Snapshot, ReportRequest, ReportAck, Observation, Policy } from '@tunex/contracts';
 import { MAX_COUNTER, isCounter } from '@tunex/core';
 import type { Forward } from '@tunex/core';
 import { ControlError } from '../../application/errors.ts';
@@ -24,7 +24,9 @@ export class RuntimeController {
     private readonly nodes: Nodes;
     private readonly forwarding: Forwarding;
     private readonly ledger: RuntimeLedger;
-    constructor(db: MySqlUnitOfWork, nodes: Nodes, forwarding: Forwarding, ledger: RuntimeLedger) { this.db = db; this.nodes = nodes; this.forwarding = forwarding; this.ledger = ledger; }
+    private readonly policy: Policy;
+    constructor(db: MySqlUnitOfWork, nodes: Nodes, forwarding: Forwarding, ledger: RuntimeLedger, policy: Policy = { ...DEFAULT_POLICY }) { this.db = db; this.nodes = nodes; this.forwarding = forwarding; this.ledger = ledger; this.policy = { ...parseMessage('HelloResponse', JSON.stringify({ protocolVersion: 2, nodeId: 'policy-validation', bootId: 'policy-validation', sessionEpoch: 1, serverTime: new Date().toISOString(), policy })).policy }; if (this.policy.leaseSeconds > 300 || this.policy.maxClockSkewSeconds > 5)
+        throw new Error('Runtime policy cannot weaken the 300-second/5-second authorization baseline'); }
     private async locked(tx: Transaction, nodeId: string, epoch?: number): Promise<RuntimeNode> {
         const state = (await rows<RuntimeNode>(tx, 'SELECT * FROM runtime_nodes WHERE node_id=? FOR UPDATE', [nodeId]))[0];
         if (!state || (epoch !== undefined && (!isCounter(epoch) || state.session_epoch !== epoch)))
@@ -57,7 +59,7 @@ export class RuntimeController {
                 await write(tx, 'UPDATE runtime_nodes SET session_epoch=?,boot_id=?,last_report_sequence=0,last_report=NULL,received_at=NULL WHERE node_id=?', [epoch, input.bootId, nodeId]);
                 await this.nodes.capabilities(tx, nodeId, input.capabilities);
             }
-            return { protocolVersion: 2, nodeId, bootId: input.bootId, sessionEpoch: epoch, serverTime: new Date().toISOString(), policy: { ...DEFAULT_POLICY } };
+            return { protocolVersion: 2, nodeId, bootId: input.bootId, sessionEpoch: epoch, serverTime: new Date().toISOString(), policy: { ...this.policy } };
         });
     }
     private async publish(tx: Transaction, state: RuntimeNode, claim?: {
@@ -80,8 +82,8 @@ export class RuntimeController {
         // Preserve the last explicit authorization until persisted work is claimed; do not renew it.
         if (!withdrawn && awaitingClaim > 0 && previous?.sessionEpoch === state.session_epoch && Date.parse(previous.validUntil) > now + 5000 && Date.parse(previous.validUntil) <= credentialUntil)
             return previous;
-        const assignments = withdrawn ? [] : await this.ledger.assignments(tx, this.forwarding, facts);
-        if (previous && previous.sessionEpoch === state.session_epoch && digest(previous.assignments) === digest(assignments) && Date.parse(previous.validUntil) <= credentialUntil && Date.parse(previous.validUntil) - now > DEFAULT_POLICY.renewalLeadSeconds * 1000)
+        const assignments = (withdrawn ? [] : await this.ledger.assignments(tx, this.forwarding, facts)).map(a => ({ ...a, drainTimeoutSeconds: this.policy.drainTimeoutSeconds }));
+        if (previous && previous.sessionEpoch === state.session_epoch && digest(previous.assignments) === digest(assignments) && Date.parse(previous.validUntil) <= credentialUntil && Date.parse(previous.validUntil) - now > this.policy.renewalLeadSeconds * 1000)
             return previous;
         if (!state.session_epoch)
             throw new ControlError('SESSION_SUPERSEDED', 409, 'Hello required before snapshot');
@@ -89,8 +91,8 @@ export class RuntimeController {
             throw new ControlError('RESOURCE_LIMIT', 429, 'Snapshot counter exhausted');
         await this.ledger.retireChanged(tx, state.node_id, previous, assignments, state.snapshot_generation + 1);
         const tombstones = await this.ledger.tombstones(tx, state.node_id, state.snapshot_generation + 1);
-        const validUntil = !withdrawn ? Math.min(now + DEFAULT_POLICY.leaseSeconds * 1000, credentialUntil) : now + DEFAULT_POLICY.leaseSeconds * 1000;
-        const snapshot = compileSnapshot({ nodeId: state.node_id, sessionEpoch: state.session_epoch, snapshotGeneration: state.snapshot_generation + 1, issuedAt: new Date(now).toISOString(), validUntil: new Date(validUntil).toISOString(), assignments, tombstones });
+        const validUntil = !withdrawn ? Math.min(now + this.policy.leaseSeconds * 1000, credentialUntil) : now + this.policy.leaseSeconds * 1000;
+        const snapshot = compileSnapshot({ nodeId: state.node_id, sessionEpoch: state.session_epoch, snapshotGeneration: state.snapshot_generation + 1, issuedAt: new Date(now).toISOString(), validUntil: new Date(validUntil).toISOString(), assignments, tombstones, policy: this.policy });
         await this.ledger.verifyPublishable(tx, assignments);
         if (claim) {
             const current = (await rows<Operation>(tx, 'SELECT * FROM operations WHERE id=? FOR UPDATE', [claim.id]))[0];
@@ -108,8 +110,12 @@ export class RuntimeController {
             node_id: string;
         }>(this.db.pool, "SELECT node_id FROM retirements WHERE safe=FALSE UNION SELECT CAST(JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId')) AS CHAR CHARACTER SET ascii) COLLATE ascii_bin node_id FROM operations o JOIN forwards f ON f.id=o.forward_id WHERE o.cleanup_pending=TRUE AND o.status='failed' LIMIT 20");
         for (const item of cleanup)
-            await this.db.transaction(async (tx) => { const state = await this.locked(tx, item.node_id); if (state.session_epoch)
-                await this.publish(tx, state); await this.ledger.complete(tx, item.node_id, this.forwarding); });
+            await this.db.transaction(async (tx) => {
+                const state = await this.locked(tx, item.node_id);
+                if (state.session_epoch)
+                    await this.publish(tx, state);
+                await this.ledger.complete(tx, item.node_id, this.forwarding);
+            });
         const claim = await this.db.transaction(tx => this.ledger.claim(tx));
         if (!claim)
             return;
@@ -159,7 +165,7 @@ export class RuntimeController {
             const now = Date.now();
             await write(tx, 'INSERT INTO reports(node_id,session_epoch,sequence,request_digest) VALUES(?,?,?,?)', [nodeId, epoch, report.reportSequence, requestDigest]);
             await write(tx, 'UPDATE runtime_nodes SET last_report_sequence=?,last_report=?,received_at=? WHERE node_id=?', [report.reportSequence, JSON.stringify(report), now, nodeId]);
-            if (snapshot && snapshot.snapshotGeneration === state.snapshot_generation && Date.parse(snapshot.validUntil) > now + DEFAULT_POLICY.maxClockSkewSeconds * 1000) {
+            if (snapshot && snapshot.snapshotGeneration === state.snapshot_generation && Date.parse(snapshot.validUntil) > now + this.policy.maxClockSkewSeconds * 1000) {
                 for (const a of snapshot.assignments) {
                     const obs = report.observations.find(o => o.assignmentId === a.assignmentId);
                     if (obs?.condition === 'error')
@@ -189,7 +195,7 @@ export class RuntimeController {
         const reported = report ? (await rows<{
             body: unknown;
         }>(tx, 'SELECT body FROM snapshots WHERE node_id=? AND generation=? AND session_epoch=?', [state.node_id, report.acceptedSnapshotGeneration, report.sessionEpoch]))[0] : undefined;
-        const freshUntil = state.received_at !== null && current && reported ? Math.min(state.received_at + DEFAULT_POLICY.observationFreshnessSeconds * 1000, Date.parse(json<Snapshot>(current.body).validUntil) - DEFAULT_POLICY.maxClockSkewSeconds * 1000, Date.parse(json<Snapshot>(reported.body).validUntil) - DEFAULT_POLICY.maxClockSkewSeconds * 1000) : null;
+        const freshUntil = state.received_at !== null && current && reported ? Math.min(state.received_at + this.policy.observationFreshnessSeconds * 1000, Date.parse(json<Snapshot>(current.body).validUntil) - this.policy.maxClockSkewSeconds * 1000, Date.parse(json<Snapshot>(reported.body).validUntil) - this.policy.maxClockSkewSeconds * 1000) : null;
         const fresh = freshUntil !== null && freshUntil > Date.now() && report?.sessionEpoch === state.session_epoch;
         return { applied, health: { condition: !fresh ? 'unknown' : applied.length === forward.spec.protocols.length && applied.every(obs => obs.condition === 'ready') ? 'ready' : 'degraded', receivedAt: state.received_at ? new Date(state.received_at).toISOString() : null, freshUntil: freshUntil ? new Date(freshUntil).toISOString() : null } };
     }

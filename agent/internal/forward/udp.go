@@ -54,24 +54,25 @@ type udpListenerSlot struct {
 // Each client address/port has a distinct connected upstream socket, which
 // rejects datagrams from any address or port other than its checked target.
 type UDP struct {
-	slot      *udpListenerSlot
-	binding   contracts.Listen
-	config    contracts.DirectConfig
-	ctx       context.Context
-	cancel    context.CancelFunc
-	mutex     sync.Mutex
-	sessions  map[netip.AddrPort]*udpAssociation
-	maximum   uint64
-	permits   chan struct{}
-	timeout   time.Duration
-	idle      time.Duration
-	done      sync.WaitGroup
-	closeOnce sync.Once
-	capacity  atomic.Uint64
-	rejected  atomic.Uint64
-	datagrams atomic.Uint64
-	queues    atomic.Uint64
-	amplified atomic.Uint64
+	authorization executionAuthorization
+	slot          *udpListenerSlot
+	binding       contracts.Listen
+	config        contracts.DirectConfig
+	ctx           context.Context
+	cancel        context.CancelFunc
+	mutex         sync.Mutex
+	sessions      map[netip.AddrPort]*udpAssociation
+	maximum       uint64
+	permits       chan struct{}
+	timeout       time.Duration
+	idle          time.Duration
+	done          sync.WaitGroup
+	closeOnce     sync.Once
+	capacity      atomic.Uint64
+	rejected      atomic.Uint64
+	datagrams     atomic.Uint64
+	queues        atomic.Uint64
+	amplified     atomic.Uint64
 }
 
 type udpAssociation struct {
@@ -102,6 +103,14 @@ func newUDP(slot *udpListenerSlot, assignment contracts.Assignment, maximum uint
 }
 
 func StartUDP(assignment contracts.Assignment, policy contracts.Policy) (*UDP, error) {
+	return StartUDPAuthorized(assignment, policy, nil)
+}
+func StartUDPAuthorized(assignment contracts.Assignment, policy contracts.Policy, authorize func() error) (*UDP, error) {
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			return nil, err
+		}
+	}
 	if err := validateUDPAssignment(assignment); err != nil {
 		return nil, err
 	}
@@ -116,8 +125,15 @@ func StartUDP(assignment contracts.Assignment, policy contracts.Policy) (*UDP, e
 	if err != nil {
 		return nil, err
 	}
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			listener.Close()
+			return nil, err
+		}
+	}
 	slot := &udpListenerSlot{listener: listener, done: make(chan struct{})}
 	stream := newUDP(slot, assignment, min(policy.MaxUdpSessionsPerAssignment, MaxUDPSessions), udpNodePermits, time.Duration(min(policy.ConnectTimeoutSeconds, 10))*time.Second, time.Duration(policy.UdpIdleTimeoutSeconds)*time.Second)
+	stream.authorization.Set(authorize)
 	slot.current = stream
 	go slot.receive()
 	return stream, nil
@@ -128,6 +144,14 @@ func StartUDP(assignment contracts.Assignment, policy contracts.Policy) (*UDP, e
 // associations against the successor's config. Old cleanup cannot close the
 // successor's listener or send stale replies through it.
 func (stream *UDP) Replace(assignment contracts.Assignment) (*UDP, error) {
+	return stream.ReplaceAuthorized(assignment, nil)
+}
+func (stream *UDP) ReplaceAuthorized(assignment contracts.Assignment, authorize func() error) (*UDP, error) {
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			return nil, err
+		}
+	}
 	if err := validateUDPAssignment(assignment); err != nil {
 		return nil, err
 	}
@@ -139,7 +163,14 @@ func (stream *UDP) Replace(assignment contracts.Assignment) (*UDP, error) {
 		stream.slot.mutex.Unlock()
 		return nil, fmt.Errorf("INVALID_CONFIG: UDP listener is no longer owned by this instance")
 	}
+	if authorize != nil {
+		if err := authorize(); err != nil {
+			stream.slot.mutex.Unlock()
+			return nil, err
+		}
+	}
 	next := newUDP(stream.slot, assignment, stream.maximum, stream.permits, stream.timeout, stream.idle)
+	next.authorization.Set(authorize)
 	stream.slot.current = next
 	stream.slot.mutex.Unlock()
 	stream.Close()
@@ -157,7 +188,7 @@ func (slot *udpListenerSlot) receive() {
 		client = netip.AddrPortFrom(client.Addr().Unmap(), client.Port())
 		slot.mutex.Lock()
 		stream := slot.current
-		if stream == nil || stream.ctx.Err() != nil {
+		if stream == nil || stream.ctx.Err() != nil || stream.authorization.Allow() != nil {
 			slot.mutex.Unlock()
 			continue
 		}
@@ -209,7 +240,7 @@ func (association *udpAssociation) connect() (*net.UDPConn, error) {
 		return nil, err
 	}
 	for _, addr := range addresses {
-		if !Allowed(addr, stream.config) {
+		if !Allowed(addr, stream.config) || stream.authorization.Allow() != nil {
 			continue
 		}
 		connection, err := (&net.Dialer{}).DialContext(ctx, "udp", net.JoinHostPort(addr.Unmap().String(), fmt.Sprint(stream.config.Target.Port)))
@@ -240,7 +271,7 @@ func (association *udpAssociation) run() {
 		return
 	}
 	stream.mutex.Lock()
-	if association.ctx.Err() != nil {
+	if association.ctx.Err() != nil || stream.authorization.Allow() != nil {
 		stream.mutex.Unlock()
 		target.Close()
 		return
@@ -266,7 +297,7 @@ func (association *udpAssociation) run() {
 			return
 		case packet := <-association.packets:
 			stream.mutex.Lock()
-			if association.ctx.Err() != nil {
+			if association.ctx.Err() != nil || stream.authorization.Allow() != nil {
 				stream.mutex.Unlock()
 				return
 			}
@@ -313,7 +344,7 @@ func (association *udpAssociation) replies() {
 			continue
 		}
 		stream.slot.mutex.Lock()
-		if stream.slot.current != stream || association.ctx.Err() != nil {
+		if stream.slot.current != stream || association.ctx.Err() != nil || stream.authorization.Allow() != nil {
 			stream.slot.mutex.Unlock()
 			return
 		}
@@ -349,6 +380,7 @@ func (stream *UDP) Remaining() uint64 {
 	defer stream.mutex.Unlock()
 	return uint64(len(stream.sessions))
 }
+func (stream *UDP) SetAuthorization(check func() error) { stream.authorization.Set(check) }
 
 func (stream *UDP) Stats() UDPStats {
 	return UDPStats{ActiveSessions: stream.Remaining(), CapacityDropped: stream.capacity.Load(), TargetRejected: stream.rejected.Load(), DatagramDropped: stream.datagrams.Load(), QueueDropped: stream.queues.Load(), AmplificationDropped: stream.amplified.Load()}

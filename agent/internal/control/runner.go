@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tunex/vnext/agent/internal/authorization"
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/forward"
 	"github.com/tunex/vnext/agent/internal/state"
@@ -37,29 +38,31 @@ func (problem httpError) Error() string {
 type running struct {
 	assignment contracts.Assignment
 	stream     execution
+	ticket     *authorization.Ticket
 }
 type execution interface {
 	Close()
 	Drain()
 	Remaining() uint64
+	SetAuthorization(func() error)
 }
 
-func startExecution(a contracts.Assignment, p contracts.Policy) (execution, error) {
+func startExecution(a contracts.Assignment, p contracts.Policy, check func() error) (execution, error) {
 	switch a.Protocol {
 	case "tcp":
-		return forward.Start(a, p)
+		return forward.StartAuthorized(a, p, check)
 	case "udp":
-		return forward.StartUDP(a, p)
+		return forward.StartUDPAuthorized(a, p, check)
 	default:
 		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY")
 	}
 }
-func replaceExecution(old execution, a contracts.Assignment) (execution, error) {
+func replaceExecution(old execution, a contracts.Assignment, check func() error) (execution, error) {
 	switch stream := old.(type) {
 	case *forward.TCP:
-		return stream.Replace(a)
+		return stream.ReplaceAuthorized(a, check)
 	case *forward.UDP:
-		return stream.Replace(a)
+		return stream.ReplaceAuthorized(a, check)
 	default:
 		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY")
 	}
@@ -83,8 +86,9 @@ type Runner struct {
 	observations          []contracts.Observation
 	mutex                 sync.Mutex
 	deadline              time.Time
-	wall                  time.Time
-	monotonic             time.Time
+	guard                 *authorization.Guard
+	ticket                *authorization.Ticket
+	clock                 authorization.Clock
 	certificate           tls.Certificate
 	credentialUntil       time.Time
 	credentialFingerprint [32]byte
@@ -195,12 +199,16 @@ func (runner *Runner) Run(ctx context.Context) error {
 	if runner.hello.NodeId != runner.options.NodeID || runner.hello.BootId != runner.options.BootID {
 		return fmt.Errorf("AUTHORIZATION_DENIED: Hello identity mismatch")
 	}
-	serverTime, err := time.Parse(time.RFC3339Nano, runner.hello.ServerTime)
-	if err != nil || time.Since(serverTime) > 5*time.Second || time.Until(serverTime) > 5*time.Second {
-		return fmt.Errorf("CLOCK_UNCERTAIN: Clock synchronization required")
+	if err := runner.initializeGuard(); err != nil {
+		return err
 	}
-	runner.wall = time.Now()
-	runner.monotonic = runner.wall
+	serverTime, err := time.Parse(time.RFC3339Nano, runner.hello.ServerTime)
+	if err != nil {
+		return err
+	}
+	if err := runner.guard.ValidateServerTime(serverTime); err != nil {
+		return err
+	}
 	// Credential validity and wall/monotonic drift are checked independently of network retry/poll intervals.
 	guardDone := make(chan struct{})
 	go func() {
@@ -213,16 +221,13 @@ func (runner *Runner) Run(ctx context.Context) error {
 				return
 			case <-ticker.C:
 				runner.mutex.Lock()
-				expired := !runner.deadline.IsZero() && time.Now().After(runner.deadline)
-				if !runner.wall.IsZero() {
-					wallElapsed := time.Now().UnixNano() - runner.wall.UnixNano()
-					monoElapsed := time.Since(runner.monotonic).Nanoseconds()
-					if delta := wallElapsed - monoElapsed; delta > 5e9 || delta < -5e9 {
-						expired = true
-					}
+				problem := runner.guard.Check()
+				if problem == nil && runner.ticket != nil {
+					problem = runner.ticket.Allow()
 				}
-				expired = expired || time.Now().After(runner.credentialUntil)
+				expired := problem != nil
 				if expired {
+					fmt.Fprintln(os.Stderr, "Agent authorization ended:", problem)
 					cancel()
 					for key, instance := range runner.instances {
 						instance.stream.Close()
@@ -234,7 +239,7 @@ func (runner *Runner) Run(ctx context.Context) error {
 					}
 				}
 				for key, drain := range runner.drains {
-					if time.Now().After(drain.deadline) {
+					if drain.instance.ticket.Allow() != nil {
 						drain.instance.stream.Close()
 						runner.drains[key] = drain
 					}
@@ -288,6 +293,16 @@ func (runner *Runner) Run(ctx context.Context) error {
 	}
 }
 func (runner *Runner) poll(ctx context.Context) error {
+	if runner.guard == nil {
+		if err := runner.initializeGuard(); err != nil {
+			return err
+		}
+	}
+	if runner.ticket != nil {
+		if err := runner.ticket.Allow(); err != nil {
+			return err
+		}
+	}
 	if len(runner.pending) > 0 {
 		if err := runner.report(ctx); err != nil {
 			return err
@@ -317,11 +332,16 @@ func (runner *Runner) poll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	remaining := time.Until(valid) - 5*time.Second
-	if remaining <= 0 || issued.After(now.Add(5*time.Second)) || valid.Sub(issued) > 300*time.Second {
-		return fmt.Errorf("LEASE_EXPIRED: Invalid authorization window")
-	}
 	changed := snapshot.SnapshotGeneration > runner.journal.Generation
+	ticket := runner.ticket
+	if changed {
+		ticket, err = runner.guard.Accept(issued, valid)
+		if err != nil {
+			return err
+		}
+	} else if ticket == nil {
+		return fmt.Errorf("INTEGRITY_FAILURE: restart requires a new snapshot generation")
+	}
 	next := runner.journal
 	next.Fences = make(map[string]uint64)
 	next.Retired = make(map[string]uint64)
@@ -374,38 +394,36 @@ func (runner *Runner) poll(ctx context.Context) error {
 	runner.journal = next
 	runner.mutex.Lock()
 	defer runner.mutex.Unlock()
-	if ctx.Err() != nil || time.Until(valid) <= 5*time.Second {
+	if ctx.Err() != nil || ticket.Allow() != nil {
 		return fmt.Errorf("LEASE_EXPIRED: Authorization ended before execution")
-	}
-	if changed {
-		// A new snapshot renews current instances only; old drain deadlines are fixed.
 	}
 	oldDeadline := runner.deadline
 	if changed {
-		runner.deadline = now.Add(min(remaining, 300*time.Second))
+		runner.ticket = ticket
+		runner.deadline = ticket.Deadline()
 	}
-	if time.Now().After(runner.deadline) {
+	if ticket.Allow() != nil {
 		return fmt.Errorf("LEASE_EXPIRED: Accepted authorization already ended")
 	}
 	runner.observations = nil
 	for _, assignment := range snapshot.Assignments {
-		if ctx.Err() != nil || time.Now().After(runner.deadline) {
+		if ctx.Err() != nil || ticket.Allow() != nil {
 			return fmt.Errorf("LEASE_EXPIRED: Authorization ended before bind")
 		}
 		key := fmt.Sprintf("%s/%d", assignment.Protocol, assignment.Listener.Port)
 		obs := contracts.Observation{AssignmentId: assignment.AssignmentId, DeploymentGeneration: assignment.DeploymentGeneration, BindingFence: assignment.BindingFence, Phase: "active", Condition: "ready", Retryable: false}
 		if existing, ok := runner.instances[key]; ok && (existing.assignment.Driver.ConfigDigest != assignment.Driver.ConfigDigest || existing.assignment.DeploymentGeneration != assignment.DeploymentGeneration || existing.assignment.BindingFence != assignment.BindingFence) {
-			stream, startErr := replaceExecution(existing.stream, assignment)
+			stream, startErr := replaceExecution(existing.stream, assignment, ticket.Allow)
 			if startErr == nil {
 				runner.beginDrain(existing, now, oldDeadline)
-				runner.instances[key] = running{assignment, stream}
+				runner.instances[key] = running{assignment, stream, ticket}
 			}
 			if startErr != nil {
 				runner.beginDrain(existing, now, oldDeadline)
 				delete(runner.instances, key)
-				stream, startErr = startExecution(assignment, runner.hello.Policy)
+				stream, startErr = startExecution(assignment, runner.hello.Policy, ticket.Allow)
 				if startErr == nil {
-					runner.instances[key] = running{assignment, stream}
+					runner.instances[key] = running{assignment, stream, ticket}
 					runner.observations = append(runner.observations, obs)
 					continue
 				}
@@ -415,15 +433,19 @@ func (runner *Runner) poll(ctx context.Context) error {
 				obs.Retryable = true
 			}
 		} else if !ok {
-			stream, startErr := startExecution(assignment, runner.hello.Policy)
+			stream, startErr := startExecution(assignment, runner.hello.Policy, ticket.Allow)
 			if startErr != nil {
 				code := "PORT_IN_USE"
 				obs.Condition = "error"
 				obs.ErrorCode = &code
 				obs.Retryable = true
 			} else {
-				runner.instances[key] = running{assignment, stream}
+				runner.instances[key] = running{assignment, stream, ticket}
 			}
+		} else {
+			existing.stream.SetAuthorization(ticket.Allow)
+			existing.ticket = ticket
+			runner.instances[key] = existing
 		}
 		runner.observations = append(runner.observations, obs)
 	}
@@ -442,7 +464,7 @@ func (runner *Runner) poll(ctx context.Context) error {
 		a := drain.instance.assignment
 		count := drain.instance.stream.Remaining()
 		condition := "draining"
-		if count == 0 || time.Now().After(drain.deadline) {
+		if count == 0 || drain.instance.ticket.Allow() != nil {
 			drain.instance.stream.Close()
 			count = 0
 			condition = "removed"
@@ -456,7 +478,7 @@ func (runner *Runner) poll(ctx context.Context) error {
 	runner.pending, err = json.Marshal(report)
 	return err
 }
-func (runner *Runner) beginDrain(instance running, now, authorization time.Time) {
+func (runner *Runner) beginDrain(instance running, now, previousCutoff time.Time) {
 	if runner.drains == nil {
 		runner.drains = make(map[string]draining)
 	}
@@ -464,15 +486,29 @@ func (runner *Runner) beginDrain(instance running, now, authorization time.Time)
 	if _, exists := runner.drains[key]; exists {
 		return
 	}
+	instance.ticket = instance.ticket.Drain(time.Duration(instance.assignment.DrainTimeoutSeconds) * time.Second)
+	instance.stream.SetAuthorization(instance.ticket.Allow)
 	instance.stream.Drain()
-	deadline := now.Add(time.Duration(instance.assignment.DrainTimeoutSeconds) * time.Second)
-	if !authorization.IsZero() && authorization.Before(deadline) {
-		deadline = authorization
+	deadline := instance.ticket.Deadline()
+	if !previousCutoff.IsZero() && previousCutoff.Before(deadline) {
+		deadline = previousCutoff
 	}
 	if deadline.Before(now) {
 		deadline = now
 	}
 	runner.drains[key] = draining{instance: instance, started: now, deadline: deadline}
+}
+func (runner *Runner) initializeGuard() error {
+	clock := runner.clock
+	if clock == nil {
+		clock = authorization.SystemClock
+	}
+	guard, err := authorization.New(clock, time.Duration(runner.hello.Policy.MaxClockSkewSeconds)*time.Second, time.Duration(runner.hello.Policy.LeaseSeconds)*time.Second, runner.credentialUntil)
+	if err != nil {
+		return err
+	}
+	runner.guard = guard
+	return nil
 }
 func (runner *Runner) report(ctx context.Context) error {
 	raw, err := runner.request(ctx, "POST", "/agent/v2/report", runner.pending, true)

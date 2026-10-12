@@ -114,7 +114,13 @@ func (runner *Runner) reloadCredential() error {
 	runner.certificate = certificate
 	runner.credentialUntil = leaf.NotAfter
 	runner.credentialFingerprint = hash
+	guard := runner.guard
 	runner.mutex.Unlock()
+	if guard != nil {
+		if err := guard.Credential(leaf.NotAfter); err != nil {
+			return err
+		}
+	}
 	if changed && runner.client != nil {
 		runner.client.CloseIdleConnections()
 	}
