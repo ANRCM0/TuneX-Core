@@ -16,3 +16,7 @@ CAS updates, enable/disable, deletion and explicit failed-Operation retry. Runti
 persists retirement records and per-session execution leases before safe cleanup.
 See [Phase 2 direct slice](../../docs/development/phase2.md). Relay remains a later
 versioned transport milestone.
+
+Node credential rotation, revocation and versioned target-policy withdrawal now
+share the durable runtime authorization boundaries. Setup, routes and verification
+scope: [Node security](../../docs/development/node-security.md).

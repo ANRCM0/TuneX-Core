@@ -64,6 +64,7 @@ jobs:
       - run: node scripts/run-go.mjs build -o ../.artifacts/tunex-agent ./cmd/tunex-agent
       - run: npm run test:phase1
       - run: npm run test:phase2
+      - run: npm run test:security
       - name: Preserve redacted acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -72,3 +73,4 @@ jobs:
           path: |
             .artifacts/phase1/**/evidence.json
             .artifacts/phase2/**/evidence.json
+            .artifacts/security/**/evidence.json

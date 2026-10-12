@@ -17,7 +17,10 @@ export interface RequestIdentity {
     digest: string;
 }
 export class Idempotency {
-    async claim(tx: Transaction, request: RequestIdentity): Promise<Accepted | undefined> {
+    async claim<R extends {
+        status: 200 | 202;
+        body: unknown;
+    } = Accepted>(tx: Transaction, request: RequestIdentity): Promise<R | undefined> {
         const args = [request.scopeId, request.actorId, request.key];
         await write(tx, 'INSERT INTO idempotency(scope_id,actor_id,request_key,request_digest) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE request_key=request_key', [...args, request.digest]);
         const record = (await rows<{
@@ -28,10 +31,13 @@ export class Idempotency {
         if (record.request_digest !== request.digest)
             throw new ControlError('IDEMPOTENCY_CONFLICT', 409, 'Idempotency key was used for another request');
         if (record.http_status !== null)
-            return { status: record.http_status as Accepted['status'], body: json<Accepted['body']>(record.response) };
+            return { status: record.http_status as Accepted['status'], body: json(record.response) } as R;
         return undefined;
     }
-    async respond(tx: Transaction, request: RequestIdentity, response: Accepted): Promise<void> {
+    async respond(tx: Transaction, request: RequestIdentity, response: {
+        status: 200 | 202;
+        body: unknown;
+    }): Promise<void> {
         await write(tx, 'UPDATE idempotency SET http_status=?,response=? WHERE scope_id=? AND actor_id=? AND request_key=?', [response.status, JSON.stringify(response.body), request.scopeId, request.actorId, request.key]);
     }
 }

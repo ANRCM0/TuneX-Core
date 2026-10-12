@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { MAX_COUNTER } from '@tunex/core';
+import { MAX_COUNTER, isCounter } from '@tunex/core';
 import type { Forward } from '@tunex/core';
 import { ControlError, notFound } from '../../application/errors.ts';
 import { rows, write } from '../../infrastructure/mysql.ts';
@@ -11,12 +11,13 @@ import type { AuthorizedNodeFacts } from './planner.ts';
 import type { Assignment, Snapshot, Tombstone, ReportRequest } from '@tunex/contracts';
 import { json } from '../../infrastructure/mysql.ts';
 import type { Forwarding } from '../forwarding.ts';
+import { targetAllowed } from '../target-policy.ts';
 export interface Operation {
     id: string;
     scope_id: string;
     forward_id: string;
     target_revision: number;
-    kind: 'create' | 'update' | 'enable' | 'disable' | 'delete' | 'retry';
+    kind: 'create' | 'update' | 'enable' | 'disable' | 'delete' | 'retry' | 'policy' | 'revoke';
     status: 'accepted' | 'running' | 'succeeded' | 'failed' | 'superseded';
     execution_deadline: number;
     claim_token: string | null;
@@ -60,6 +61,10 @@ export class RuntimeLedger {
                 continue;
             if (!forward.spec.enabled)
                 continue;
+            if (op.kind === 'revoke')
+                continue;
+            if (!facts.allowedListenerAddresses.includes(forward.spec.ingress.listen.address) || !facts.allowedPorts.includes(forward.spec.ingress.listen.port) || !targetAllowed(forward.spec.target.host, facts))
+                continue;
             const reservations: ReservedSlot[] = slots.filter(slot => slot.owner_id === forward.id).map(slot => ({ nodeId: facts.nodeId, forwardId: forward.id, protocol: slot.protocol, port: slot.port, bindingFence: slot.fence, deploymentGeneration: slot.deployment_generation }));
             assignments.push(...compileDirect(forward, facts, reservations.filter(slot => slot.port === forward.spec.ingress.listen.port)));
         }
@@ -85,7 +90,17 @@ export class RuntimeLedger {
                 throw new ControlError('STALE_CLAIM', 409, 'Operation expired during compilation');
         }
     }
-    async lockNode(tx: Transaction, nodeId: string): Promise<void> { await rows(tx, 'SELECT node_id FROM runtime_nodes WHERE node_id=? FOR UPDATE', [nodeId]); }
+    async initializeNode(tx: Transaction, nodeId: string): Promise<void> { await write(tx, 'INSERT INTO runtime_nodes(node_id) VALUES(?)', [nodeId]); }
+    async lockNode(tx: Transaction, nodeId: string, epoch?: number): Promise<void> {
+        const state = (await rows<{
+            session_epoch: number;
+        }>(tx, 'SELECT session_epoch FROM runtime_nodes WHERE node_id=? FOR UPDATE', [nodeId]))[0];
+        if (!state || epoch !== undefined && (!isCounter(epoch) || state.session_epoch !== epoch))
+            throw new ControlError('SESSION_SUPERSEDED', 409, 'Current Node session required');
+    }
+    async maximumAuthorization(tx: Transaction, nodeId: string): Promise<number | null> { return (await rows<{
+        until: number | null;
+    }>(tx, 'SELECT MAX(valid_until) until FROM execution_leases WHERE node_id=?', [nodeId]))[0]!.until; }
     async latest(tx: Transaction, forwardId: string): Promise<Operation | undefined> { return (await rows<Operation>(tx, 'SELECT * FROM operations WHERE forward_id=? ORDER BY target_revision DESC,created_at DESC,id DESC LIMIT 1', [forwardId]))[0]; }
     async reserve(tx: Transaction, forward: Forward): Promise<ReservedSlot[]> {
         const slots: ReservedSlot[] = [];
@@ -202,7 +217,7 @@ export class RuntimeLedger {
             }>(tx, 'SELECT COUNT(*) n FROM retirements WHERE forward_id=? AND safe=FALSE', [op.forward_id]))[0]!.n;
             if (pending !== 0)
                 continue;
-            const stopped = forward.deleting || !forward.spec.enabled;
+            const stopped = forward.deleting || !forward.spec.enabled || op.kind === 'revoke';
             const currentReady = Boolean(report && snapshot && op.execution_deadline > Date.now() && Date.parse(snapshot.validUntil) > Date.now() + 5000 && forward.spec.protocols.every(protocol => { const a = snapshot.assignments.find(a => a.forwardId === forward.id && a.forwardRevision === forward.revision && a.protocol === protocol); return a && report.observations.some(o => o.assignmentId === a.assignmentId && o.deploymentGeneration === a.deploymentGeneration && o.bindingFence === a.bindingFence && o.phase === 'active' && o.condition === 'ready'); }));
             const latest = authoritative ? json<Snapshot>(authoritative.body) : undefined;
             const noCurrentAssignment = Boolean(latest && !latest.assignments.some(a => a.forwardId === forward.id));
@@ -213,7 +228,7 @@ export class RuntimeLedger {
                 if (forward.deleting)
                     await this.releaseForwardSlots(tx, forward.id);
                 await write(tx, "UPDATE operations SET status=IF(status='running','succeeded',status),cleanup_pending=FALSE,updated_at=? WHERE id=?", [Date.now(), op.id]);
-                await write(tx,"UPDATE operations SET cleanup_pending=FALSE WHERE forward_id=? AND status IN ('failed','superseded')",[forward.id]);
+                await write(tx, "UPDATE operations SET cleanup_pending=FALSE WHERE forward_id=? AND status IN ('failed','superseded')", [forward.id]);
             }
             else if (op.status === 'failed' && noCurrentAssignment && unsafe === 0) {
                 await this.releaseObsoleteSlots(tx, forward);
@@ -222,25 +237,32 @@ export class RuntimeLedger {
             else if (!stopped && currentReady) {
                 await this.releaseObsoleteSlots(tx, forward);
                 await write(tx, "UPDATE operations SET status=IF(status='running','succeeded',status),cleanup_pending=FALSE,claim_token=NULL,claim_until=NULL,updated_at=? WHERE id=?", [Date.now(), op.id]);
-                await write(tx,"UPDATE operations SET cleanup_pending=FALSE WHERE forward_id=? AND status IN ('failed','superseded')",[forward.id]);
+                await write(tx, "UPDATE operations SET cleanup_pending=FALSE WHERE forward_id=? AND status IN ('failed','superseded')", [forward.id]);
             }
         }
     }
-    private async releaseObsoleteSlots(tx: Transaction, forward: Forward): Promise<void> { const slots = await rows<{
-        node_id: string;
-        protocol: string;
-        port: number;
-    }>(tx, 'SELECT node_id,protocol,port FROM port_slots WHERE owner_id=?', [forward.id]); for (const slot of slots)
-        if (slot.node_id !== forward.spec.ingress.nodeId || slot.port !== forward.spec.ingress.listen.port || !forward.spec.protocols.includes(slot.protocol as 'tcp' | 'udp'))
-            await write(tx, 'UPDATE port_slots SET owner_id=NULL WHERE node_id=? AND protocol=? AND port=? AND owner_id=?', [slot.node_id, slot.protocol, slot.port, forward.id]); }
+    private async releaseObsoleteSlots(tx: Transaction, forward: Forward): Promise<void> {
+        const slots = await rows<{
+            node_id: string;
+            protocol: string;
+            port: number;
+        }>(tx, 'SELECT node_id,protocol,port FROM port_slots WHERE owner_id=?', [forward.id]);
+        for (const slot of slots)
+            if (slot.node_id !== forward.spec.ingress.nodeId || slot.port !== forward.spec.ingress.listen.port || !forward.spec.protocols.includes(slot.protocol as 'tcp' | 'udp'))
+                await write(tx, 'UPDATE port_slots SET owner_id=NULL WHERE node_id=? AND protocol=? AND port=? AND owner_id=?', [slot.node_id, slot.protocol, slot.port, forward.id]);
+    }
     async get(tx: Transaction, scope: string, id: string): Promise<Operation> {
         const op = (await rows<Operation>(tx, 'SELECT * FROM operations WHERE id=? AND scope_id=? FOR UPDATE', [id, scope]))[0];
         if (!op)
             notFound();
         return op;
     }
-    async read(tx: Transaction, scope: string, id: string): Promise<Operation> { const op = (await rows<Operation>(tx, 'SELECT * FROM operations WHERE id=? AND scope_id=?', [id, scope]))[0]; if (!op)
-        notFound(); return op; }
+    async read(tx: Transaction, scope: string, id: string): Promise<Operation> {
+        const op = (await rows<Operation>(tx, 'SELECT * FROM operations WHERE id=? AND scope_id=?', [id, scope]))[0];
+        if (!op)
+            notFound();
+        return op;
+    }
     async claim(tx: Transaction): Promise<Operation | undefined> {
         const now = Date.now();
         await write(tx, "UPDATE operations SET status='failed',last_error=?,cleanup_pending=TRUE,claim_token=NULL,claim_until=NULL,updated_at=? WHERE status IN ('accepted','running') AND execution_deadline<=?", [JSON.stringify({ code: 'EXECUTION_DEADLINE', retryable: false }), now, now]);

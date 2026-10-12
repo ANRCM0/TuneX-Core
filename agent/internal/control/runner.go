@@ -21,7 +21,10 @@ import (
 	"github.com/tunex/vnext/agent/internal/state"
 )
 
-type Options struct{ URL, NodeID, BootID, Certificate, PrivateKey, CA, Journal, JournalKey string }
+type Options struct {
+	URL, NodeID, BootID, Certificate, PrivateKey, CA, Journal, JournalKey string
+	Rotate                                                                bool
+}
 type httpError struct {
 	status int
 	code   string
@@ -68,20 +71,24 @@ type draining struct {
 	deadline time.Time
 }
 type Runner struct {
-	options      Options
-	client       *http.Client
-	key          []byte
-	journal      state.Journal
-	hello        contracts.HelloResponse
-	sequence     uint64
-	pending      []byte
-	instances    map[string]running
-	drains       map[string]draining
-	observations []contracts.Observation
-	mutex        sync.Mutex
-	deadline     time.Time
-	wall         time.Time
-	monotonic    time.Time
+	options               Options
+	client                *http.Client
+	key                   []byte
+	journal               state.Journal
+	hello                 contracts.HelloResponse
+	sequence              uint64
+	pending               []byte
+	instances             map[string]running
+	drains                map[string]draining
+	observations          []contracts.Observation
+	mutex                 sync.Mutex
+	deadline              time.Time
+	wall                  time.Time
+	monotonic             time.Time
+	certificate           tls.Certificate
+	credentialUntil       time.Time
+	credentialFingerprint [32]byte
+	roots                 *x509.CertPool
 }
 
 func New(options Options) (*Runner, error) {
@@ -96,10 +103,6 @@ func New(options Options) (*Runner, error) {
 	if !roots.AppendCertsFromPEM(ca) {
 		return nil, fmt.Errorf("Invalid Control CA")
 	}
-	certificate, err := tls.LoadX509KeyPair(options.Certificate, options.PrivateKey)
-	if err != nil {
-		return nil, err
-	}
 	key, err := os.ReadFile(options.JournalKey)
 	if err != nil || len(key) != 32 {
 		return nil, fmt.Errorf("INTEGRITY_FAILURE: journal protection key unavailable")
@@ -108,8 +111,18 @@ func New(options Options) (*Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, Certificates: []tls.Certificate{certificate}, MinVersion: tls.VersionTLS13}}
-	return &Runner{options: options, client: &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("Control redirects are forbidden") }}, key: key, journal: journal, instances: make(map[string]running)}, nil
+	runner := &Runner{options: options, key: key, journal: journal, instances: make(map[string]running), roots: roots}
+	if err := runner.reloadCredential(); err != nil {
+		return nil, err
+	}
+	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		runner.mutex.Lock()
+		defer runner.mutex.Unlock()
+		certificate := runner.certificate
+		return &certificate, nil
+	}, MinVersion: tls.VersionTLS13}}
+	runner.client = &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("Control redirects are forbidden") }}
+	return runner, nil
 }
 func (runner *Runner) request(ctx context.Context, method, path string, body []byte, epoch bool) ([]byte, error) {
 	request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(runner.options.URL, "/")+path, bytes.NewReader(body))
@@ -189,14 +202,6 @@ func (runner *Runner) Run(ctx context.Context) error {
 	runner.wall = time.Now()
 	runner.monotonic = runner.wall
 	// Credential validity and wall/monotonic drift are checked independently of network retry/poll intervals.
-	cert, err := tls.LoadX509KeyPair(runner.options.Certificate, runner.options.PrivateKey)
-	if err != nil {
-		return err
-	}
-	leaf, err := x509.ParseCertificate(cert.Certificate[0])
-	if err != nil {
-		return err
-	}
 	guardDone := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
@@ -216,7 +221,7 @@ func (runner *Runner) Run(ctx context.Context) error {
 						expired = true
 					}
 				}
-				expired = expired || time.Now().After(leaf.NotAfter)
+				expired = expired || time.Now().After(runner.credentialUntil)
 				if expired {
 					cancel()
 					for key, instance := range runner.instances {
@@ -241,6 +246,7 @@ func (runner *Runner) Run(ctx context.Context) error {
 	defer func() { cancel(); <-guardDone }()
 	// The guard exits when the derived run context is cancelled, including fatal parser/state errors.
 	retired := false
+	rotateRequested := runner.options.Rotate
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -252,6 +258,16 @@ func (runner *Runner) Run(ctx context.Context) error {
 			case <-time.After(time.Second):
 				continue
 			}
+		}
+		if rotateRequested {
+			if err := runner.rotate(ctx); err != nil {
+				fmt.Fprintln(os.Stderr, "Credential rotation retry pending:", err)
+			} else {
+				rotateRequested = false
+			}
+		}
+		if err := runner.reloadCredential(); err != nil {
+			return err
 		}
 		if err := runner.poll(ctx); err != nil {
 			fmt.Fprintln(os.Stderr, "Agent reconcile failed:", err)

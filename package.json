@@ -19,7 +19,8 @@
     "control:bootstrap": "node apps/control/src/bootstrap.ts",
     "control:cli": "node apps/control/src/client.ts",
     "test:phase1": "node scripts/phase1/acceptance.ts",
-    "test:phase2": "node scripts/phase2/acceptance.ts"
+    "test:phase2": "node scripts/phase2/acceptance.ts",
+    "test:security": "node scripts/phase2/security.ts"
   },
   "devDependencies": { "@types/node": "24.10.1", "typescript": "5.9.3" }
 }

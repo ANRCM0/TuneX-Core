@@ -36,3 +36,7 @@ VNext 允许与旧 API、数据库和 Agent 协议不兼容。现有源码是实
 
 
 VNext direct TCP/UDP now supports CAS updates, enable/disable, safe deletion and explicit failed-Operation retry. See [Phase 2 lifecycle and remaining gates](docs/development/phase2.md). Full project and release verification remain in progress.
+
+Node certificate rotation, revocation and versioned target-policy withdrawal are
+implemented with persistent audit and historical authorization bounds. See
+[Node security development and verification](docs/development/node-security.md).

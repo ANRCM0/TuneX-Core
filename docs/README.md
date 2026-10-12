@@ -43,3 +43,5 @@
 
 
 Current direct TCP/UDP lifecycle development and evidence: [Phase 2](development/phase2.md).
+
+Credential rotation, revocation and target-policy withdrawal: [Node security](development/node-security.md).

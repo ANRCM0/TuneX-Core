@@ -21,3 +21,6 @@ limits. UDP queues have depth 4 and datagrams are capped at 16 KiB.
 Full fault/security and platform release gates remain outstanding.
 
 Setup and network verification: [Phase 1](../docs/development/phase1.md).
+
+Credential rotation and trusted atomic keypair reload: [Node security](../docs/development/node-security.md).
+Use `--rotate` after online Hello; counters and current listener state are preserved.

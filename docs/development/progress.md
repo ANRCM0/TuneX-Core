@@ -59,3 +59,23 @@ capacity on Linux. Phase 3 Relay contracts/security, Phase 4 supported transport
 evolution and Phase 5 Web/release remain outstanding. Full project goal stays active.
 
 Development details: [Phase 2](phase2.md).
+
+## Node security slice
+
+Baseline: `9a704d8`. The current implementation adds enrolled credential records,
+bounded rotation overlap with persistent CSR/request replay, authenticated keypair
+reload, Node revocation and policy CAS/withdrawal Operations. Runtime checks the
+actual certificate again in the transaction and bounds each fetched snapshot by
+its effective expiry. Policy changes advance execution generation/fence while
+preserving Forward intent revision; expired/revoked identities cannot obtain new
+authority. Owner deletion remains available for cleanup after Node revocation.
+
+The MySQL/HTTPS/TCP security suite covers duplicate rotation, old-credential
+expiry, held-stream preservation, policy updates/denial, Agent `--rotate`, revoked
+credential rejection, pending historical cutoff and secret-free audit. Evidence
+is under `.artifacts/security/run-*/evidence.json`; static and existing direct
+network suites are regression gates. Details: [Node security](node-security.md).
+
+Full Phase 2 remains implementing: offline hard-deadline/clock-suspend faults,
+Linux real-node/race/capacity measurement, grant-management and backup/recovery
+evidence are still required. Relay/transport/Web/release work is also outstanding.

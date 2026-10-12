@@ -154,10 +154,11 @@ try{
   check('OPS-01: blocked Worker sees the current failed Operation after the Node lock is released');
   const capacityScope='capacity-scope',capacityActor='capacity-owner',capacityToken=newToken();await server.control.identity.bootstrap(capacityScope,capacityActor,capacityToken);
   const capacityNode='capacity-node',cidrs=Array.from({length:256},(_,i)=>`2001:db8:ffff:ffff:ffff:ffff:ffff:${(0x1000+i).toString(16)}/128`);
+  const capacitySpec={...spec,target:{host:'2001:db8:ffff:ffff:ffff:ffff:ffff:1000',port:443}};
   const capacityFacts:AuthorizedNodeFacts={nodeId:capacityNode,scopeId:capacityScope,capabilities:['tcp','native.direct.v1'],allowedListenerAddresses:['127.0.0.1'],allowedPorts:Array.from({length:1000},(_,i)=>10000+i),egressPolicyRevision:1,allowedDestinationCidrs:cidrs,allowMetadataTargets:false};
   const largeAssignments:Snapshot['assignments']=[];let validCount=0;
   for(let i=0;i<1000;i++){
-    const intent:Forward={id:`capacity-${i}`,scopeId:capacityScope,revision:1,spec:{...spec,ingress:{nodeId:capacityNode,listen:{address:'127.0.0.1',port:10000+i}}}};
+    const intent:Forward={id:`capacity-${i}`,scopeId:capacityScope,revision:1,spec:{...capacitySpec,ingress:{nodeId:capacityNode,listen:{address:'127.0.0.1',port:10000+i}}}};
     largeAssignments.push(...compileDirect(intent,capacityFacts,[{nodeId:capacityNode,forwardId:intent.id,protocol:'tcp',port:10000+i,bindingFence:1,deploymentGeneration:1}]));
     try{compileSnapshot({nodeId:capacityNode,sessionEpoch:Number.MAX_SAFE_INTEGER,snapshotGeneration:Number.MAX_SAFE_INTEGER,issuedAt:'2026-10-12T08:00:00.000Z',validUntil:'2026-10-12T08:05:00.000Z',assignments:largeAssignments,tombstones:[]});validCount++;}
     catch{break;}
@@ -167,13 +168,13 @@ try{
     await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',[capacityNode,capacityScope,'a'.repeat(64),Date.now()+600000,Date.now()+86400000,JSON.stringify(capacityFacts)]);
     await write(tx,'INSERT INTO runtime_nodes(node_id) VALUES(?)',[capacityNode]);await write(tx,'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[capacityNode,capacityActor]);
     for(let i=0;i<validCount;i++){
-      const forward:Forward={id:`capacity-${i}`,scopeId:capacityScope,revision:1,spec:{...spec,ingress:{nodeId:capacityNode,listen:{address:'127.0.0.1',port:10000+i}}}};
+      const forward:Forward={id:`capacity-${i}`,scopeId:capacityScope,revision:1,spec:{...capacitySpec,ingress:{nodeId:capacityNode,listen:{address:'127.0.0.1',port:10000+i}}}};
       await server!.control.forwarding.insert(tx,forward);
       await server!.control.ledger.accept(tx,forward,{scopeId:capacityScope,actorId:capacityActor,key:`seed-${i}`,digest:digest({seed:i})});
       await write(tx,'INSERT INTO port_slots(node_id,protocol,port,owner_id,fence,deployment_generation) VALUES(?,\'tcp\',?,?,1,1)',[capacityNode,10000+i,forward.id]);
     }
   });
-  const tooLarge=await call('POST',`/api/v1/scopes/${capacityScope}/forwards`,{...spec,ingress:{nodeId:capacityNode,listen:{address:'127.0.0.1',port:10000+validCount}}},{authorization:`Bearer ${capacityToken}`,'idempotency-key':'over-capacity'});
+  const tooLarge=await call('POST',`/api/v1/scopes/${capacityScope}/forwards`,{...capacitySpec,ingress:{nodeId:capacityNode,listen:{address:'127.0.0.1',port:10000+validCount}}},{authorization:`Bearer ${capacityToken}`,'idempotency-key':'over-capacity'});
   assert.equal(tooLarge.status,429);assert.equal(tooLarge.body.code,'RESOURCE_LIMIT');assert.equal((await rows<{n:number}>(server.db.pool,'SELECT COUNT(*) n FROM forwards WHERE scope_id=?',[capacityScope]))[0]!.n,validCount);
   check('ADP-15: full prospective snapshot byte capacity is checked before atomic acceptance');
   assert.ok(!agentLog.includes('PERSISTENCE_FAILURE'),agentLog);

@@ -31,13 +31,15 @@ export class RuntimeController {
             throw new ControlError('SESSION_SUPERSEDED', 409, 'Current Node session required');
         return state;
     }
-    async hello(nodeId: string, input: HelloRequest): Promise<HelloResponse> {
+    async hello(nodeId: string, input: HelloRequest, fingerprint?: string): Promise<HelloResponse> {
         if (input.nodeId !== nodeId)
             throw new ControlError('AUTHORIZATION_DENIED', 403, 'Foreign Node identity');
         if ((!input.capabilities.includes('tcp') && !input.capabilities.includes('udp')) || !input.capabilities.includes('native.direct.v1'))
             throw new ControlError('UNSUPPORTED_CAPABILITY', 409, 'Direct protocol capability required');
         return this.db.transaction(async (tx) => {
             const current = await this.locked(tx, nodeId);
+            if (fingerprint)
+                await this.nodes.credential(tx, nodeId, fingerprint);
             await this.nodes.facts(tx, nodeId);
             if (input.lastStoredSnapshotGeneration > current.snapshot_generation)
                 throw new ControlError('INTEGRITY_FAILURE', 409, 'Control history is older than Node state');
@@ -62,18 +64,24 @@ export class RuntimeController {
         id: string;
         token: string;
         until: number;
-    }): Promise<Snapshot> {
-        const { facts, credentialUntil } = await this.nodes.facts(tx, state.node_id);
+    }, fingerprint?: string): Promise<Snapshot> {
+        const node = await this.nodes.state(tx, state.node_id);
+        const { facts } = node;
+        const credentialUntil = fingerprint ? await this.nodes.credential(tx, state.node_id, fingerprint) : node.credentialUntil;
+        const withdrawn = node.revoked || credentialUntil <= Date.now();
         const previousRecord = (await rows<{
             body: unknown;
         }>(tx, 'SELECT body FROM snapshots WHERE node_id=? AND generation=?', [state.node_id, state.snapshot_generation]))[0];
         const previous = previousRecord ? json<Snapshot>(previousRecord.body) : undefined;
         const now = Date.now();
-        const awaitingClaim=(await rows<{n:number}>(tx,"SELECT COUNT(*) n FROM operations o JOIN forwards f ON f.id=o.forward_id AND f.revision=o.target_revision WHERE o.status='accepted' AND JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId'))=?",[state.node_id]))[0]!.n;
+        const awaitingClaim = (await rows<{
+            n: number;
+        }>(tx, "SELECT COUNT(*) n FROM operations o JOIN forwards f ON f.id=o.forward_id AND f.revision=o.target_revision WHERE o.status='accepted' AND JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId'))=?", [state.node_id]))[0]!.n;
         // Preserve the last explicit authorization until persisted work is claimed; do not renew it.
-        if(awaitingClaim>0&&previous?.sessionEpoch===state.session_epoch&&Date.parse(previous.validUntil)>now+5000)return previous;
-        const assignments = await this.ledger.assignments(tx, this.forwarding, facts);
-        if (previous && previous.sessionEpoch === state.session_epoch && digest(previous.assignments) === digest(assignments) && Date.parse(previous.validUntil) - now > DEFAULT_POLICY.renewalLeadSeconds * 1000)
+        if (!withdrawn && awaitingClaim > 0 && previous?.sessionEpoch === state.session_epoch && Date.parse(previous.validUntil) > now + 5000 && Date.parse(previous.validUntil) <= credentialUntil)
+            return previous;
+        const assignments = withdrawn ? [] : await this.ledger.assignments(tx, this.forwarding, facts);
+        if (previous && previous.sessionEpoch === state.session_epoch && digest(previous.assignments) === digest(assignments) && Date.parse(previous.validUntil) <= credentialUntil && Date.parse(previous.validUntil) - now > DEFAULT_POLICY.renewalLeadSeconds * 1000)
             return previous;
         if (!state.session_epoch)
             throw new ControlError('SESSION_SUPERSEDED', 409, 'Hello required before snapshot');
@@ -81,7 +89,8 @@ export class RuntimeController {
             throw new ControlError('RESOURCE_LIMIT', 429, 'Snapshot counter exhausted');
         await this.ledger.retireChanged(tx, state.node_id, previous, assignments, state.snapshot_generation + 1);
         const tombstones = await this.ledger.tombstones(tx, state.node_id, state.snapshot_generation + 1);
-        const snapshot = compileSnapshot({ nodeId: state.node_id, sessionEpoch: state.session_epoch, snapshotGeneration: state.snapshot_generation + 1, issuedAt: new Date(now).toISOString(), validUntil: new Date(Math.min(now + DEFAULT_POLICY.leaseSeconds * 1000, credentialUntil)).toISOString(), assignments, tombstones });
+        const validUntil = !withdrawn ? Math.min(now + DEFAULT_POLICY.leaseSeconds * 1000, credentialUntil) : now + DEFAULT_POLICY.leaseSeconds * 1000;
+        const snapshot = compileSnapshot({ nodeId: state.node_id, sessionEpoch: state.session_epoch, snapshotGeneration: state.snapshot_generation + 1, issuedAt: new Date(now).toISOString(), validUntil: new Date(validUntil).toISOString(), assignments, tombstones });
         await this.ledger.verifyPublishable(tx, assignments);
         if (claim) {
             const current = (await rows<Operation>(tx, 'SELECT * FROM operations WHERE id=? FOR UPDATE', [claim.id]))[0];
@@ -93,13 +102,14 @@ export class RuntimeController {
         await this.ledger.recordLeases(tx, snapshot);
         return snapshot;
     }
-    async snapshot(nodeId: string, epoch: number): Promise<Snapshot> { return this.db.transaction(async (tx) => { const snapshot = await this.publish(tx, await this.locked(tx, nodeId, epoch)); await this.ledger.complete(tx, nodeId, this.forwarding); return snapshot; }); }
+    async snapshot(nodeId: string, epoch: number, fingerprint?: string): Promise<Snapshot> { return this.db.transaction(async (tx) => { const snapshot = await this.publish(tx, await this.locked(tx, nodeId, epoch), undefined, fingerprint); await this.ledger.complete(tx, nodeId, this.forwarding); return snapshot; }); }
     async tick(): Promise<void> {
         const cleanup = await rows<{
             node_id: string;
         }>(this.db.pool, "SELECT node_id FROM retirements WHERE safe=FALSE UNION SELECT CAST(JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId')) AS CHAR CHARACTER SET ascii) COLLATE ascii_bin node_id FROM operations o JOIN forwards f ON f.id=o.forward_id WHERE o.cleanup_pending=TRUE AND o.status='failed' LIMIT 20");
         for (const item of cleanup)
-            await this.db.transaction(async (tx) => { const state=await this.locked(tx,item.node_id);if(state.session_epoch)await this.publish(tx,state);await this.ledger.complete(tx,item.node_id,this.forwarding); });
+            await this.db.transaction(async (tx) => { const state = await this.locked(tx, item.node_id); if (state.session_epoch)
+                await this.publish(tx, state); await this.ledger.complete(tx, item.node_id, this.forwarding); });
         const claim = await this.db.transaction(tx => this.ledger.claim(tx));
         if (!claim)
             return;
@@ -114,11 +124,13 @@ export class RuntimeController {
                 await this.publish(tx, state, { id: claim.id, token: claim.claim_token!, until: claim.claim_until! });
         });
     }
-    async report(nodeId: string, epoch: number, report: ReportRequest): Promise<ReportAck> {
+    async report(nodeId: string, epoch: number, report: ReportRequest, fingerprint?: string): Promise<ReportAck> {
         if (report.nodeId !== nodeId || report.sessionEpoch !== epoch)
             throw new ControlError('AUTHORIZATION_DENIED', 403, 'Report identity mismatch');
         return this.db.transaction(async (tx) => {
             const state = await this.locked(tx, nodeId, epoch);
+            if (fingerprint)
+                await this.nodes.credential(tx, nodeId, fingerprint);
             await this.nodes.facts(tx, nodeId);
             if (report.bootId !== state.boot_id)
                 throw new ControlError('SESSION_SUPERSEDED', 409, 'Boot identity mismatch');

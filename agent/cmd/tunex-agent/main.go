@@ -40,6 +40,7 @@ func run() error {
 	directory := flag.String("state", "", "Protected Agent state directory")
 	journalKey := flag.String("journal-key", "", "Protected journal MAC key path, outside state directory")
 	enroll := flag.Bool("enroll", false, "Exchange TUNEX_ENROLLMENT_TOKEN, then initialize state")
+	rotate := flag.Bool("rotate", false, "Rotate Node key/certificate after online Hello without resetting execution state")
 	flag.Parse()
 	if *url == "" || *node == "" || *ca == "" || *directory == "" || *journalKey == "" || !strings.HasPrefix(*url, "https://") {
 		return fmt.Errorf("control, node, ca, state and journal-key are required")
@@ -70,7 +71,7 @@ func run() error {
 	if _, err := rand.Read(boot); err != nil {
 		return err
 	}
-	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath})
+	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath, Rotate: *rotate})
 	if err != nil {
 		return err
 	}
