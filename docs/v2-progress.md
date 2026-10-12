@@ -212,7 +212,14 @@ O2 第二增量补齐按日真实账本历史：Workspace 与当前 Forward/Link
 Web/后端/Agent/运维/安全作业成功，HTTP/DB 144 项通过；路由回切后的策略保存出现
 `topology_conflict`，整条 CI 失败记录保留。等价周期性报告时间戳不应改变拓扑身份，
 已用确定性测试复现并修复摘要计算；状态/能力/权限与 revision 变化仍拒绝旧意图。
-修复后本地后端 3272 项 / 19834 断言通过，完整 Linux CI 继续复验。
+修复后本地后端 3272 项 / 19834 断言、路由真实 HTTP/DB 12 项（0 skipped）通过。
+固定源码 `27ced3a2f06971257e30c61d8b710c5ee6f8950d` 的
+[完整 Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38216648006) 全部成功：后端
+3272 项 / 19834 断言、HTTP/DB 144 项（0 skipped）、Web 1432 项 / 10033 断言、
+Chromium 34 项及 16 张截图核对、生产构建、Agent/race/fuzz、迁移/升级、运维/安全均通过。
+实际 TST 24、Native both 37、探测 49、路由 30 项均 0 FAIL，三次路径收据均
+confirmed/exact revision，受保护回退和正常删除通过。本轮按日历史增量自动验收收口，
+首轮失败保留；文档提交不替换执行源码 SHA，Agent/perf 内容不变，未测新指标 API 容量。
 实时连接/速率、质量趋势、异常时间线及 O3–O5 尚未完成，真机统一验收继续延后。
 
 ## 实网发现与修复
@@ -227,7 +234,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | `8573a21` 完整主 CI/race 成功，Web 1430、浏览器 25、后端 3266、HTTP/DB 143（0 skipped），真实路由 30、探测 49、TST 24、Native both 37 项均 0 FAIL；相同 Agent/采样器内容在 `046b916` 的固定旧基线性能、108 case 与 300 秒 soak 成功；新指标 API 容量未测 | 逐项保留执行 SHA 和内容 hash；文档提交不替换执行 SHA；历史失败保留 |
+| 当前候选 SHA 的 Linux CI/race | `27ced3a` 完整主 CI/race 成功，Web 1432、浏览器 34、后端 3272、HTTP/DB 144（0 skipped），真实路由 30、探测 49、TST 24、Native both 37 项均 0 FAIL；相同 Agent/采样器内容在 `046b916` 的固定旧基线性能、108 case 与 300 秒 soak 成功；新指标 API 容量未测 | 逐项保留执行 SHA 和内容 hash；文档提交不替换执行 SHA；历史失败保留 |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |
