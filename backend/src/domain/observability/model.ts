@@ -5,7 +5,7 @@ import { TARGET_HEALTH_THRESHOLDS } from "../../services/target-health-threshold
 
 export const OBSERVABILITY_LIMITS = { nodes: 256, links: 512, forwards: 2048, usage_groups: 4096, targets: 4096, targets_per_forward: 32, window_days: 31 } as const;
 export class ObservabilityError extends Error {
-  constructor(public code: string, public status: 400 | 422 | 503) { super(code); }
+  constructor(public code: string, public status: 400 | 404 | 422 | 503) { super(code); }
 }
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => {
   const date = new Date(`${s}T00:00:00Z`);
@@ -98,7 +98,7 @@ function numberMetric(value: unknown, unit: Metric["unit"], kind: Metric["kind"]
     freshness: valid ? freshness : { ...freshness, state: freshness.state === "stale" ? "stale" : "unknown",
       reason: freshness.state === "stale" ? freshness.reason : "missing_or_invalid_value" } };
 }
-function usage(archives: ArchiveFact[], checkpoints: CheckpointFact[], now: Date) {
+export function usage(archives: Pick<ArchiveFact, "_sum" | "_max" | "_count">[], checkpoints: Pick<CheckpointFact, "_sum" | "_max" | "_count">[], now: Date) {
   const lastDay = archives.reduce<Date | null>((max, r) => r._max.date && (!max || r._max.date > max) ? r._max.date : max, null);
   const receipt = checkpoints.reduce<Date | null>((max, r) => r._max.updated_at && (!max || r._max.updated_at > max) ? r._max.updated_at : max, null);
   const archiveFresh: Freshness = { ...emptyFreshness("archived_accounting_not_live"), state: "historical" };

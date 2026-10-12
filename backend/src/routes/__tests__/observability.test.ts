@@ -5,6 +5,7 @@ import { createObservabilityRoutes } from "../observability.ts";
 import { canWorkspaceResourceAction, workspacePermissionDenied, type WorkspaceAccess } from "../../services/workspace.ts";
 import { projectObservability } from "../../domain/observability/model.ts";
 import { observabilityEnabled } from "../../services/observability.ts";
+import { projectHistory } from "../../domain/observability/history.ts";
 
 function setup(patch: Partial<WorkspaceAccess> = {}, enabled = true) {
   const calls: string[] = [], access: WorkspaceAccess = { id: 7, role: "viewer", kind: "personal", personalWorkspaceId: 7, customRoleId: null, ...patch };
@@ -15,6 +16,10 @@ function setup(patch: Partial<WorkspaceAccess> = {}, enabled = true) {
       calls.push(`${resource}:${action}`);
       if (!canWorkspaceResourceAction(access, action, resource)) throw workspacePermissionDenied();
       return access;
+    }, history: async (workspace, window, selection) => {
+      calls.push(`history:${workspace}:${selection.scope}:${selection.id}`);
+      if (fail) throw new Error("private-password-and-sql");
+      return projectHistory(workspace, selection, window, [], []);
     }, load: async (workspace, window) => {
       calls.push(`load:${workspace}:${window.start_date}`);
       if (fail) throw new Error("private-password-and-sql");
@@ -36,6 +41,22 @@ test("default off is exact opt-in; authenticated discovery never reads the metri
   const discovery = await s.app.request("/api/observability/capabilities");
   expect(discovery.status).toBe(200); expect((await discovery.json() as { data: { enabled: boolean } }).data.enabled).toBe(false);
   expect(s.calls).toEqual(["forward:read", "forward:read"]);
+});
+
+test("history has the same flag, effective permissions, strict query and redacted failure gates", async () => {
+  expect((await setup({}, false).app.request("/api/observability/history")).status).toBe(409);
+  expect((await setup({ customRoleId: 1, customPermissions: { "forward:read": true } }).app.request("/api/observability/history")).status).toBe(403);
+  const s = setup();
+  for (const query of ["scope=forward", "scope=workspace&id=1", "scope=node&id=1&id=2", "scope=node&id=-1", "workspace_id=8", "scope=target", "padding=" + "a".repeat(257)])
+    expect((await s.app.request(`/api/observability/history?${query}`)).status).toBe(400);
+  expect(s.calls.some((c) => c.startsWith("history:"))).toBe(false);
+  const response = await s.app.request("/api/observability/history?scope=link&id=3&start_date=2020-01-01&end_date=2020-01-02");
+  expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toBe("no-store");
+  expect((await response.json() as any).data.selection).toEqual({ scope: "link", id: 3 });
+  expect(s.calls.at(-1)).toBe("history:7:link:3");
+  s.fail();
+  const failed = await s.app.request("/api/observability/history");
+  expect(failed.status).toBe(503); expect(await failed.json()).toEqual({ error: "指标暂不可用", code: "metrics_unavailable" });
 });
 test("viewer snapshot uses resolved Workspace and returns no-store", async () => {
   const s = setup();

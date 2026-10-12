@@ -1,14 +1,35 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 import { defaultMetricWindow } from "@/components/observability/metric-display";
-import { metricFixture, metricCapabilities } from "@/components/observability/__tests__/metric-fixture";
+import { metricFixture, metricCapabilities, historyFixture } from "@/components/observability/__tests__/metric-fixture";
 
 process.env.NEXT_PUBLIC_API_MOCK = "0";
 const calls: { url: string; init?: RequestInit }[] = [];
 const originalFetch = globalThis.fetch;
 const window = defaultMetricWindow();
 let result: unknown;
+beforeEach(() => { calls.length = 0; });
 beforeAll(() => {
   globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => { calls.push({ url: String(url), init }); return Response.json({ data: result }); }) as typeof fetch;
+});
+
+test("history captures owned resource scope and rejects incomplete, foreign or fabricated daily data", async () => {
+  const { observabilityApi } = await import("../observability");
+  const selection = { scope: "forward" as const, id: 41 };
+  result = historyFixture(5, window, selection);
+  const history = await observabilityApi(5).history(window, selection);
+  expect(history.totals.tst_ingress.bytes_in.value).toBe("9007199254740993");
+  const query = new URL(calls.at(-1)!.url).searchParams;
+  expect(query.get("scope")).toBe("forward"); expect(query.get("id")).toBe("41");
+  expect(calls.at(-1)!.init?.cache).toBe("no-store");
+  for (const mutate of [(h: any) => { h.workspace_id = 6; }, (h: any) => { h.selection.id = 40; },
+    (h: any) => { h.days.pop(); }, (h: any) => { h.days[0].date = h.days[1].date; },
+    (h: any) => { h.days[1].usage.tst_ingress.bytes_in.value = "0"; },
+    (h: any) => { h.days[0].usage.tst_ingress.bytes_in.source = "workspace_archive"; },
+    (h: any) => { h.days[0].usage.tst_ingress.bytes_in.value = "<script>"; },
+    (h: any) => { h.totals.tst_ingress.rows = 999; }, (h: any) => { h.days[0].usage = null; }]) {
+    const h = historyFixture(5, window, selection); mutate(h); result = h;
+    await expect(observabilityApi(5).history(window, selection)).rejects.toThrow("invalid_metric_response");
+  }
 });
 afterAll(() => { globalThis.fetch = originalFetch; });
 test("metric reads capture explicit scope, dates, cancellation and no-store using only GET", async () => {

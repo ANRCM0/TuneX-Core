@@ -1,8 +1,9 @@
 import { projectObservability, type ObservabilityFacts } from "../../../../../backend/src/domain/observability/model";
 import type { MetricCapabilities, MetricSnapshot, MetricWindow } from "@/lib/api/observability";
+import { projectHistory, type HistorySelection } from "../../../../../backend/src/domain/observability/history";
 
 export const metricCapabilities: MetricCapabilities = { enabled: true, schema_versions: [1], stage: "experimental",
-  features: { workspace_snapshot: true, archived_usage: true, tst_ingress_usage: true, node_telemetry: true, target_tcp_observations: true,
+  features: { workspace_snapshot: true, daily_usage_history: true, archived_usage: true, tst_ingress_usage: true, node_telemetry: true, target_tcp_observations: true,
     active_connections: false, live_throughput: false, end_to_end_latency: false, error_rates: false, alerts: false, repair: false },
   limits: { nodes: 256, links: 512, forwards: 2048, usage_groups: 4096, targets: 4096, targets_per_forward: 32, window_days: 31 } };
 
@@ -22,10 +23,23 @@ export function metricFixture(workspace: number, window: MetricWindow, now = new
     deployments: [{ generation: 2, status: "degraded", version: 1, placements: [1, 2].map((node_id) => ({ node_id, role: node_id === 1 ? "ingress" : "egress",
       runtime_id: "private-runtime-sentinel", config_digest: "private-digest-sentinel", generation: 2, applied_generation: null })) }] }];
   facts.archives = [40, 999].map((tunnel_id) => ({ tunnel_id, _sum: { traffic: tunnel_id === 40 ? 0 : 1234, traffic_cost: 0 },
-    _max: { date: new Date(window.end_date) }, _count: { _all: 1 } }));
+    _max: { date: new Date(window.end_date) }, _count: { _all: tunnel_id === 40 && window.start_date !== window.end_date ? 2 : 1 } }));
   facts.checkpoints = [{ forward_id: 41, link_id: 10, node_id: 1,
-    _sum: { bytes_in: 9007199254740993n, bytes_out: 3n, connections: 12n }, _max: { updated_at: now }, _count: { _all: 1 } }];
+    _sum: { bytes_in: 9007199254740993n, bytes_out: 3n, connections: 12n }, _max: { updated_at: now }, _count: { _all: window.start_date !== window.end_date ? 2 : 1 } }];
   facts.targets = [{ forward_id: 40, target_index: 0, node_id: 1, observation: { reachable: true, latency_ms: 0, observed_at: old, reported_at: old, observation_source: "tcp_connect" } },
     { forward_id: 40, target_index: 1, node_id: 1, observation: null }];
   return projectObservability(workspace, facts, window, now);
+}
+
+export function historyFixture(workspace: number, window: MetricWindow, selection: HistorySelection = { scope: "workspace", id: null }, now = new Date()) {
+  const archived = workspace === 5 && (selection.scope === "workspace" || selection.scope === "forward" && selection.id === 40);
+  const measured = workspace === 5 && (selection.scope === "workspace" || selection.scope === "forward" && selection.id === 41
+    || selection.scope === "link" && selection.id === 10 || selection.scope === "node" && selection.id === 1);
+  const archives = archived ? [{ date: new Date(window.end_date), _sum: { traffic: selection.scope === "workspace" ? 1234 : 0, traffic_cost: 0 }, _count: { _all: selection.scope === "workspace" ? 2 : 1 } }] : [];
+  const checkpoints = measured ? [{ date: new Date(window.end_date), _sum: { bytes_in: 9007199254740993n, bytes_out: 3n, connections: 12n }, _max: { updated_at: now }, _count: { _all: 1 } }] : [];
+  if (window.start_date !== window.end_date) {
+    if (archived) archives.unshift({ date: new Date(window.start_date), _sum: { traffic: 0, traffic_cost: 0 }, _count: { _all: 1 } });
+    if (measured) checkpoints.unshift({ date: new Date(window.start_date), _sum: { bytes_in: 0n, bytes_out: 0n, connections: 0n }, _max: { updated_at: new Date(now.getTime() - 180_000) }, _count: { _all: 1 } });
+  }
+  return projectHistory(workspace, { ...selection }, window, archives, checkpoints, now);
 }

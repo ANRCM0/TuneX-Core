@@ -45,6 +45,7 @@ export function freshnessReason(reason: string, locale: string): string | null {
     missing_timestamp: ["缺少有效样本时间。", "Valid sample timestamp is missing."],
     missing_or_invalid_value: ["缺少有效测量值。", "Valid measurement is missing."],
     no_archive_rows: ["所选日期无归档记录。", "No archive rows in selected dates."],
+    archive_not_attributed: ["归档未记录此维度归属。", "Archive does not attribute this dimension."],
     target_observation_unavailable: ["没有当前授权目标的有效观测。", "No valid observation for the currently authorized target."],
     runtime_report_unavailable: ["缺少可匹配的运行配置报告。", "No matching runtime configuration report."],
   };
@@ -55,7 +56,7 @@ export function metricError(failure: unknown): string {
   if (failure && typeof failure === "object") {
     const error = failure as { status?: number; data?: { code?: string } };
     const code = error.data?.code;
-    if (code && ["observability_disabled", "invalid_metric_window", "invalid_input", "metrics_limit_exceeded", "metrics_scope_invalid", "metrics_unavailable", "permission_denied"].includes(code)) return code;
+    if (code && ["observability_disabled", "invalid_metric_window", "invalid_input", "metrics_limit_exceeded", "metrics_scope_invalid", "metrics_resource_not_found", "metrics_history_invalid", "metrics_unavailable", "permission_denied"].includes(code)) return code;
     if (error.status === 401) return "session_expired";
     if (error.status === 403 || error.status === 404) return "permission_denied";
     if (error.status === 429) return "rate_limited";
@@ -75,6 +76,8 @@ export function errorLabel(code: string, locale: string): string {
     invalid_metric_response: ["指标响应与当前空间、日期或版本不一致，已停止展示。", "Metric response does not match this workspace, date range or version. Display stopped."],
     unsupported_metric_schema: ["当前平台指标版本暂不受支持。", "The platform metric version is not supported."],
     metrics_unavailable: ["指标暂不可用，请重试。", "Metrics are unavailable. Retry."],
+    metrics_resource_not_found: ["此资源不可用或已删除，请刷新资源列表。", "This resource is unavailable or deleted. Refresh the resource list."],
+    metrics_history_invalid: ["历史记录不一致，已停止展示，请联系管理员。", "Historical records are inconsistent. Display stopped. Contact an administrator."],
   };
   return metricText(locale, ...(labels[code] ?? labels.metrics_unavailable));
 }

@@ -5,9 +5,11 @@ import type { AppVariables } from "../middlewares/auth.ts";
 import { resolveWorkspaceAccess, canWorkspaceResourceAction, workspacePermissionDenied } from "../services/workspace.ts";
 import { loadObservability, observabilityEnabled } from "../services/observability.ts";
 import { metricWindow, ObservabilityError, OBSERVABILITY_LIMITS } from "../domain/observability/model.ts";
+import { historyQuery } from "../domain/observability/history.ts";
+import { loadObservabilityHistory } from "../services/observability-history.ts";
 
 export function createObservabilityRoutes(deps: {
-  load?: typeof loadObservability; access?: typeof resolveWorkspaceAccess; enabled?: typeof observabilityEnabled;
+  load?: typeof loadObservability; history?: typeof loadObservabilityHistory; access?: typeof resolveWorkspaceAccess; enabled?: typeof observabilityEnabled;
 } = {}) {
   const routes = new Hono<{ Variables: AppVariables }>();
   const enabled = deps.enabled ?? observabilityEnabled;
@@ -32,7 +34,7 @@ export function createObservabilityRoutes(deps: {
     await next();
   });
   routes.get("/capabilities", (c) => c.json({ data: { enabled: enabled(), schema_versions: [1], stage: "experimental",
-    features: { workspace_snapshot: enabled(), archived_usage: enabled(), tst_ingress_usage: enabled(),
+    features: { workspace_snapshot: enabled(), daily_usage_history: enabled(), archived_usage: enabled(), tst_ingress_usage: enabled(),
       node_telemetry: enabled(), target_tcp_observations: enabled(), active_connections: false, live_throughput: false,
       end_to_end_latency: false, error_rates: false, alerts: false, repair: false }, limits: OBSERVABILITY_LIMITS } }));
   routes.get("/snapshot", async (c) => {
@@ -41,6 +43,13 @@ export function createObservabilityRoutes(deps: {
       throw new ObservabilityError("invalid_metric_window", 400);
     const window = metricWindow(Object.fromEntries(query));
     return c.json({ data: await (deps.load ?? loadObservability)(c.get("workspace")!.id, window) });
+  });
+  routes.get("/history", async (c) => {
+    const query = new URL(c.req.url).searchParams;
+    if (query.toString().length > 256 || [...query.keys()].some((key) => query.getAll(key).length !== 1))
+      throw new ObservabilityError("invalid_metric_window", 400);
+    const { window, selection } = historyQuery(Object.fromEntries(query));
+    return c.json({ data: await (deps.history ?? loadObservabilityHistory)(c.get("workspace")!.id, window, selection) });
   });
   return routes;
 }

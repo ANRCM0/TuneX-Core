@@ -1,4 +1,5 @@
 import { request } from "./core";
+import { assertMetricHistory } from "./observability-history-contract";
 
 export interface MetricWindow { start_date: string; end_date: string; timezone: "Asia/Shanghai" }
 export interface MetricFreshness {
@@ -43,10 +44,16 @@ export interface MetricSnapshot {
 }
 export interface MetricCapabilities {
   enabled: boolean; schema_versions: number[]; stage: string;
-  features: { workspace_snapshot: boolean; archived_usage: boolean; tst_ingress_usage: boolean; node_telemetry: boolean;
+  features: { workspace_snapshot: boolean; daily_usage_history?: boolean; archived_usage: boolean; tst_ingress_usage: boolean; node_telemetry: boolean;
     target_tcp_observations: boolean; active_connections: boolean; live_throughput: boolean; end_to_end_latency: boolean;
     error_rates: boolean; alerts: boolean; repair: boolean };
   limits: { nodes: number; links: number; forwards: number; usage_groups: number; targets: number; targets_per_forward: number; window_days: number };
+}
+export interface HistorySelection { scope: "workspace" | "forward" | "link" | "node"; id: number | null }
+export interface MetricHistory {
+  schema_version: 1; workspace_id: number; selection: HistorySelection; generated_at: string; window: MetricWindow;
+  grain: "day"; archive_scope: "immutable_workspace_ledger" | "immutable_forward_ledger" | "not_attributed";
+  totals: MetricUsage; days: { date: string; usage: MetricUsage }[];
 }
 
 /** Explicit scope is captured once, even if the global workspace changes mid-flight. */
@@ -54,6 +61,15 @@ export function observabilityApi(workspaceId: number, signal?: AbortSignal) {
   if (!Number.isSafeInteger(workspaceId) || workspaceId < 1) throw new Error("invalid_metric_scope");
   const options = { workspaceId, signal, cache: "no-store" as const };
   return {
+    history: async (window: MetricWindow, selection: HistorySelection = { scope: "workspace", id: null }) => {
+      if (selection.scope === "workspace" ? selection.id !== null : !Number.isSafeInteger(selection.id) || selection.id! < 1)
+        throw new Error("invalid_metric_scope");
+      const result = await request<MetricHistory>("/observability/history", { ...options,
+        query: { start_date: window.start_date, end_date: window.end_date, scope: selection.scope,
+          ...(selection.id === null ? {} : { id: selection.id }) } });
+      assertMetricHistory(result, workspaceId, window, selection);
+      return result;
+    },
     capabilities: async () => {
       const result = await request<MetricCapabilities>("/observability/capabilities", options);
       if (typeof result?.enabled !== "boolean" || !Array.isArray(result.schema_versions)

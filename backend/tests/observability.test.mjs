@@ -112,13 +112,54 @@ if (process.env.TUNEX_DB_TEST !== '1') {
     await t.test('authentication and default-off discovery', async () => {
       const anonymous = await request('/snapshot');
       assert.equal(anonymous.status, 401); assert.equal(anonymous.headers.get('cache-control'), 'no-store');
+      assert.equal((await request('/history')).status, 401);
       process.env.TUNEX_OBSERVABILITY_ENABLED = 'false';
       const blocked = await request('/snapshot', owner); assert.equal(blocked.status, 409);
+      assert.equal((await request('/history', owner)).status, 409);
       assert.equal(blocked.headers.get('cache-control'), 'no-store');
       assert.equal((await (await request('/capabilities', owner)).json()).data.enabled, false);
       process.env.TUNEX_OBSERVABILITY_ENABLED = 'true';
     });
     let view;
+    await t.test('daily durable history preserves dates, gaps, zero, exact ingress counters and immutable resource identity', async () => {
+      const start = new Date(date.getTime() - 2 * 86400000).toISOString().slice(0, 10);
+      const period = `start_date=${start}&end_date=${day}`;
+      await db.tunnelTraffic.create({ data: { tunnel_id: native.id, workspace_id: owner.workspace, date: new Date(start), traffic: 0, traffic_cost: 0 } });
+      const read = async (selection = '') => {
+        const response = await request(`/history?${period}${selection}`, viewer, owner.workspace);
+        assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+        return (await response.json()).data;
+      };
+      const history = await read();
+      assert.equal(history.days.length, 3);
+      assert.equal(history.days[0].usage.archive.bytes.value, '0');
+      assert.equal(history.days[1].usage.archive.bytes.value, null);
+      assert.equal(history.days[2].usage.archive.bytes.value, '500');
+      assert.equal(history.days[2].usage.tst_ingress.bytes_in.value, String(big * 2n));
+      assert.equal(history.totals.archive.bytes.value, '500');
+      assert.equal(history.totals.archive.rows, 3);
+      assert.equal((await read(`&scope=forward&id=${native.id}`)).totals.archive.bytes.value, '100');
+      assert.equal((await read(`&scope=forward&id=${tst.id}`)).totals.tst_ingress.bytes_in.value, String(big * 2n));
+      for (const scope of [`&scope=link&id=${link.id}`, `&scope=node&id=${local.nodes[0].id}`]) {
+        const result = await read(scope);
+        assert.equal(result.archive_scope, 'not_attributed');
+        assert.equal(result.days[2].usage.archive.bytes.value, null);
+        assert.equal(result.days[2].usage.archive.bytes.freshness.reason, 'archive_not_attributed');
+        assert.equal(result.totals.tst_ingress.bytes_in.value, String(big * 2n));
+      }
+      assert.equal((await read(`&scope=node&id=${local.nodes[1].id}`)).totals.tst_ingress.bytes_in.value, null);
+      for (const id of [foreignForward.id, historical.id, 2147483647])
+        assert.equal((await request(`/history?${period}&scope=forward&id=${id}`, owner)).status, 404);
+      assert.equal((await request(`/history?${period}&scope=node&id=${outside.nodes[0].id}`, owner)).status, 404);
+      assert.equal((await request(`/history?${period}&scope=link&id=2147483647`, owner)).status, 404);
+      await db.tunnel.update({ where: { id: tst.id }, data: { ingress_node_id: local.nodes[1].id } });
+      try {
+        assert.equal((await read(`&scope=node&id=${local.nodes[0].id}`)).totals.tst_ingress.bytes_in.value, String(big * 2n));
+        assert.equal((await read(`&scope=node&id=${local.nodes[1].id}`)).totals.tst_ingress.bytes_in.value, null);
+      } finally { await db.tunnel.update({ where: { id: tst.id }, data: { ingress_node_id: local.nodes[0].id } }); }
+      assert(!JSON.stringify(history).includes('private-')); assert(!JSON.stringify(history).includes('config_digest'));
+    });
     await t.test('four dimensions, immutable archive attribution, precise ingress-only counts and authorized target latency', async () => {
       const response = await request('/snapshot', viewer, owner.workspace);
       assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
@@ -142,19 +183,24 @@ if (process.env.TUNEX_DB_TEST !== '1') {
     });
     await t.test('foreign Workspace membership and custom role denials', async () => {
       assert.equal((await request('/snapshot', foreign, owner.workspace)).status, 404);
+      assert.equal((await request('/history', foreign, owner.workspace)).status, 404);
       const role = await db.workspaceCustomRole.create({ data: { workspace_id: owner.workspace, created_by_id: owner.id,
         name: `metrics-${nonce}`, permissions: { 'forward:read': true } } }); created.roles.push(role.id);
       await db.workspaceMember.update({ where: { workspace_id_user_id: { workspace_id: owner.workspace, user_id: viewer.id } }, data: { role: 'admin', role_id: role.id } });
       assert.equal((await request('/snapshot', viewer, owner.workspace)).status, 403);
+      assert.equal((await request('/history', viewer, owner.workspace)).status, 403);
       await db.workspaceCustomRole.update({ where: { id: role.id }, data: { permissions: { 'node:read': true } } });
       assert.equal((await request('/capabilities', viewer, owner.workspace)).status, 403);
       await db.workspaceCustomRole.update({ where: { id: role.id }, data: { permissions: { 'node:read': true, 'forward:read': true } } });
       assert.equal((await request('/snapshot', viewer, owner.workspace)).status, 200);
+      assert.equal((await request('/history', viewer, owner.workspace)).status, 200);
     });
     await t.test('invalid query, period boundary and unsupported methods', async () => {
       for (const query of ['workspace_id=999', 'start_date=2026-02-30', 'start_date=2026-01-01&end_date=2026-02-01', 'end_date=2026-01-01&end_date=2026-01-02'])
         assert.equal((await request(`/snapshot?${query}`, owner)).status, 400);
       const empty = await request('/snapshot?start_date=2020-01-02&end_date=2020-01-02', owner);
+      for (const query of ['scope=forward', 'scope=workspace&id=1', 'scope=node&id=1&id=2', 'scope=link&id=0', 'workspace_id=999'])
+        assert.equal((await request(`/history?${query}`, owner)).status, 400);
       assert.equal(empty.status, 200); assert.equal((await empty.json()).data.workspace.usage.archive.bytes.value, null);
       assert.equal((await request('/snapshot', owner, owner.workspace, 'PUT')).status, 403); // Global CSRF blocks cookie writes first.
     });
@@ -178,7 +224,10 @@ if (process.env.TUNEX_DB_TEST !== '1') {
         deployments: await db.linkDeployment.findMany({ where: { link_id: link.id }, select: { id: true, updated_at: true, generation: true, lease_expires_at: true } }),
       });
       const before = await footprint();
-      for (let i = 0; i < 3; i++) assert.equal((await request('/snapshot', owner)).status, 200);
+      for (let i = 0; i < 3; i++) {
+        assert.equal((await request('/snapshot', owner)).status, 200);
+        assert.equal((await request('/history', owner)).status, 200);
+      }
       assert.deepEqual(await footprint(), before);
     });
   });

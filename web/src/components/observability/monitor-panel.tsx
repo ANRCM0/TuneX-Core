@@ -16,7 +16,8 @@ export function MonitorPanel({ workspaceId, canRead, locale }: { workspaceId: nu
   // Mask old results during render, before effect cleanup, including permission revocation.
   const visible = canRead && result?.key === key ? result : null;
   useEffect(() => {
-    if (!canRead) return;
+    // A later permission grant must discover and read anew, never reuse the revoked result.
+    if (!canRead) { setResult(null); return; }
     const controller = new AbortController(), api = observabilityApi(workspaceId, controller.signal);
     setResult({ key, state: "loading" });
     void (async () => {
@@ -49,7 +50,7 @@ export function MonitorPanel({ workspaceId, canRead, locale }: { workspaceId: nu
     {visible?.state === "disabled" ? <p role="status">{errorLabel("observability_disabled", locale)}</p> : null}
     {visible?.snapshot ? <>
       <p className="text-sm">{t("当前快照日期：", "Snapshot dates: ")}{visible.snapshot.window.start_date} → {visible.snapshot.window.end_date} (Asia/Shanghai)</p>
-      <SnapshotView snapshot={visible.snapshot} locale={locale} />
+      <SnapshotView key={key} snapshot={visible.snapshot} locale={locale} historyEnabled={visible.caps?.features.daily_usage_history === true} />
     </> : null}
   </section>;
 }

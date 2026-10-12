@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { defaultMetricWindow, errorLabel, metricError, metricValue, validMetricWindow } from "../metric-display";
 import { ForwardDetail, MetricCard, SnapshotView } from "../snapshot-view";
 import { MonitorPanel } from "../monitor-panel";
-import { metricFixture } from "./metric-fixture";
+import { metricFixture, historyFixture } from "./metric-fixture";
+import { HistoryChart } from "../history-panel";
+import { historyHeights } from "../history-scale";
 
 const now = new Date("2026-10-12T00:00:00Z"), window = defaultMetricWindow(now), snapshot = metricFixture(5, window, now);
 test("Shanghai window is inclusive, date-valid and limited without treating UTC today as Shanghai today", () => {
@@ -11,6 +13,20 @@ test("Shanghai window is inclusive, date-valid and limited without treating UTC 
   expect(validMetricWindow({ ...window, start_date: "2026-09-12" }, now)).toBe(true);
   for (const start_date of ["2026-09-11", "2026-10-13", "2026-02-30", "0999-10-01", ""]) expect(validMetricWindow({ ...window, start_date }, now)).toBe(false);
   expect(validMetricWindow({ ...window, end_date: "2026-10-13" }, now)).toBe(false);
+});
+
+test("daily bars use bounded exact ratios while preserving decimal, zero and missing measurements", () => {
+  expect(historyHeights([null, "0", "9007199254740993", "18014398509481986"])).toEqual([null, 0, 50, 100]);
+  expect(historyHeights(["0.5", "1.25", "1e1"])).toEqual([5, 12.5, 100]);
+  expect(historyHeights(["1e-100", "2e-100"])).toEqual([50, 100]);
+  expect(historyHeights(["0", "0"])).toEqual([0, 0]);
+  for (const locale of ["en", "zh"]) {
+    const html = renderToStaticMarkup(<HistoryChart history={historyFixture(5, window)} locale={locale} />);
+    expect(html).toContain('data-history-value="missing"'); expect(html).toContain('data-history-value="0"');
+    expect(html).toContain("<table"); expect(html).toContain("scope=\"row\"");
+    expect(html).toContain(locale === "en" ? "not filled or interpolated" : "不补零、不插值");
+    expect(html).not.toContain("private-");
+  }
 });
 test("exact large decimal counters, reported zero and missing metrics remain distinct", () => {
   expect(metricValue(snapshot.workspace.usage.tst_ingress.bytes_in, "en")).toBe("9,007,199,254,740,993 B");

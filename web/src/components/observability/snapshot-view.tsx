@@ -6,6 +6,7 @@ import { Card, Badge } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { MetricForward, MetricFreshness, MetricLink, MetricNode, MetricSnapshot, MetricUsage, UnifiedMetric } from "@/lib/api/observability";
 import { freshnessLabel, freshnessReason, metricText, metricValue, sourceLabel } from "./metric-display";
+import { HistoryPanel } from "./history-panel";
 
 const muted = "text-sm text-[var(--muted-foreground)]";
 export function MetricTime({ value, locale }: { value: string | null; locale: string }) {
@@ -48,26 +49,27 @@ export function UsageView({ usage, locale }: { usage: MetricUsage; locale: strin
   </section>;
 }
 
-export function SnapshotView({ snapshot, locale }: { snapshot: MetricSnapshot; locale: string }) {
+export function SnapshotView({ snapshot, locale, historyEnabled = false }: { snapshot: MetricSnapshot; locale: string; historyEnabled?: boolean }) {
   const t = (zh: string, en: string) => metricText(locale, zh, en);
   return <div className="space-y-6" data-testid="metric-snapshot">
     <p className={muted}>{t("工作空间", "Workspace")} #{snapshot.workspace_id} · {t("生成时间：", "Generated: ")}<MetricTime value={snapshot.generated_at} locale={locale} /></p>
     <p className={muted}>{t("新鲜度与状态均以快照生成时间为准；刷新后查看最新事实。归档包含本空间已删除资源及其他归档业务。", "Freshness and status refer to snapshot time. Refresh for the latest facts. The workspace archive includes deleted resources and other archived business.")}</p>
     <div className="grid grid-cols-3 gap-3">{(["forwards", "links", "nodes"] as const).map((kind) => <Card key={kind} className="p-3"><p className={muted}>{kind === "forwards" ? "Forward" : kind === "links" ? "Link" : "Node"}</p><p className="text-2xl font-semibold tabular-nums">{snapshot.workspace.resources[kind]}</p></Card>)}</div>
     <UsageView usage={snapshot.workspace.usage} locale={locale} />
+    {historyEnabled ? <HistoryPanel workspaceId={snapshot.workspace_id} window={snapshot.window} locale={locale} /> : null}
     <section className="space-y-3"><h3 className="font-medium">{t("采集待补充", "Collection pending")}</h3>
       <div className="grid gap-3 sm:grid-cols-3"><MetricCard title={t("活跃连接", "Active connections")} metric={snapshot.workspace.active_connections} locale={locale} />
         <MetricCard title={t("端到端延迟", "End-to-end latency")} metric={snapshot.workspace.latency_ms} locale={locale} />
         <MetricCard title={t("业务错误", "Business errors")} metric={snapshot.workspace.error_count} locale={locale} /></div>
       <p className={muted}>{t("实时速率、质量趋势和异常时间线尚无统一采集数据。", "Unified live throughput, quality trends and an anomaly timeline are not collected yet.")}</p>
     </section>
-    <ResourceExplorer snapshot={snapshot} locale={locale} />
+    <ResourceExplorer snapshot={snapshot} locale={locale} historyEnabled={historyEnabled} />
   </div>;
 }
 
 type ResourceKind = "forwards" | "links" | "nodes";
 const pageSize = 20;
-function ResourceExplorer({ snapshot, locale }: { snapshot: MetricSnapshot; locale: string }) {
+function ResourceExplorer({ snapshot, locale, historyEnabled }: { snapshot: MetricSnapshot; locale: string; historyEnabled: boolean }) {
   const [kind, setKind] = useState<ResourceKind>("forwards"), [search, setSearch] = useState(""), [page, setPage] = useState(0), [selected, setSelected] = useState<number | null>(null);
   const detailRef = useRef<HTMLDivElement>(null), listRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -99,6 +101,8 @@ function ResourceExplorer({ snapshot, locale }: { snapshot: MetricSnapshot; loca
       {kind === "forwards" ? <ForwardDetail forward={current as MetricForward} snapshot={snapshot} locale={locale} />
         : kind === "links" ? <LinkDetail link={current as MetricLink} locale={locale} /> : <NodeDetail node={current as MetricNode} locale={locale} />}
       <UsageView usage={current.usage} locale={locale} />
+      {historyEnabled ? <HistoryPanel key={`${kind}:${current.id}`} workspaceId={snapshot.workspace_id} window={snapshot.window}
+        scope={kind === "forwards" ? "forward" : kind === "links" ? "link" : "node"} resourceId={current.id} locale={locale} /> : null}
     </Card> : null}</div>
   </section>;
 }
