@@ -195,7 +195,12 @@ O2 第一增量新增用户侧 `/monitor`，显示四维来源、历史窗口用
 关闭时只发现能力，不读取指标；缺失值、大整数、陈旧成功样本与业务健康保持独立。
 本地 Web 1430 项 / 10004 断言、生产构建通过；25 项中英文六宽度真实 Chromium、
 异常分流、晚到请求与实际 Next.js 页面入口验收通过。同一浏览器回归加入 Linux CI，
-固定源码 CI 结果待登记。历史序列、实时连接/速率、质量趋势、异常时间线及 O3–O5
+固定源码 `8573a21` 的 [Linux CI](https://github.com/PaiMonCai/TuneX/actions/runs/38208909931)
+全部成功：Web/浏览器 25 项、后端 3266 项 / 19747 断言、HTTP/DB 143 项（0 skipped）、
+Agent/race/fuzz、迁移/升级、运维与密钥/依赖检查通过；实际 TST 24、Native both 37、
+探测 49、路由 30 项均 0 FAIL，三次路径 receipt confirmed/exact revision，受保护补偿
+payload 与正常删除通过。首轮 `90d82e7` 的 Web 依赖安装失败及整条 CI 后续取消记录保留。
+历史序列、实时连接/速率、质量趋势、异常时间线及 O3–O5
 仍需后续开发；本轮未修改数据库、Agent、执行或计费链路，真机部署继续延后。
 
 ## 实网发现与修复
@@ -210,7 +215,7 @@ TST 实网已验证 TCP/UDP/both、普通成员权限、并发幂等/冲突、�
 
 | 门槛 | 状态 | 所需条件 |
 | --- | --- | --- |
-| 当前候选 SHA 的 Linux CI/race | `baa3475` 完整主 CI/race 成功，后端 3266、HTTP/DB 143（0 skipped），真实路由 30、探测 49、TST 24、Native both 37 项均 0 FAIL；相同 Agent/采样器内容在 `046b916` 的固定旧基线性能、108 case 与 300 秒 soak 成功；新指标 API 容量未测 | 逐项保留执行 SHA 和内容 hash；文档提交不替换执行 SHA；历史失败保留 |
+| 当前候选 SHA 的 Linux CI/race | `8573a21` 完整主 CI/race 成功，Web 1430、浏览器 25、后端 3266、HTTP/DB 143（0 skipped），真实路由 30、探测 49、TST 24、Native both 37 项均 0 FAIL；相同 Agent/采样器内容在 `046b916` 的固定旧基线性能、108 case 与 300 秒 soak 成功；新指标 API 容量未测 | 逐项保留执行 SHA 和内容 hash；文档提交不替换执行 SHA；历史失败保留 |
 | Linux Compose 全新安装、升级、恢复/回退与实网 | 待执行 | 隔离 Linux + Docker；执行安装与 integration gates |
 | 外部独立协议/密码学/许可审查 | 待执行 | 独立审查者；内部评阅不能代替 |
 | 长期故障、真实跨日、WAN 与生产发布后验证 | 待执行 | 授权环境、运行周期与固定候选版本 |
