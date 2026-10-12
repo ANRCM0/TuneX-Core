@@ -2,7 +2,7 @@
 
 **基线：v1.1 · 决策状态：Accepted for implementation · 2026-10-12**
 
-当前机器协议为 **ADP/2**；ADP/1 仅保留历史记录。基线版本、Core/Forward v1、Control API v1 与 ADP 协议版本分别管理，不混用。所有文档描述目标行为，不宣称已完成实现。
+当前机器协议为 **ADP/2**；ADP/1 仅保留历史记录。基线版本、Core/Forward v1、Control API v1 与 ADP 协议版本分别管理，不混用。规范文档描述目标行为；开发入口与实施进度单独记录当前实现和证据，不代表完整目标已完成。
 
 “定稿”在本仓库意指：作为后续开发的**设计基线**，修改必须通过 ADR、契约同步和测试；**不**表示已编写或已验证实现。
 
@@ -20,6 +20,8 @@
 | [节点安全与恢复](operations/node-security-and-recovery-v1.md) | 注册、撤销、重装、备份恢复及 Relay 安全门槛 |
 | [ADP/2 direct Schema](protocol/schemas/adp-v2-direct.schema.json) / [fixture](protocol/fixtures/adp-v2-direct.json) | Phase 2 机器可校验契约；不宣称 Relay 支持 |
 | [开发路线](development/roadmap.md) | 从空白 Core 到实网转发的交付门槛 |
+| [开发入口](development/getting-started.md) | 工具版本、构建/测试、离线编译和开发 MySQL |
+| [实施进度](development/progress.md) | 当前工作树证据与后续实施范围；不是目标规范 |
 | [验收规范](testing/acceptance-v1.md) | 安全、可靠性、实网测试矩阵 |
 
 ## 规范约定

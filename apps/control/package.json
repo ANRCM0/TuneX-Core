@@ -1,0 +1,4 @@
+{
+  "name": "@tunex/control", "version": "0.1.0", "private": true, "type": "module",
+  "dependencies": { "@tunex/core": "0.1.0", "@tunex/contracts": "0.1.0" }
+}

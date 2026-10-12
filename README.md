@@ -1,6 +1,6 @@
 # TuneX VNext
 
-> **Architecture baseline / 目标规范，尚未实现。** 本仓库现有程序仍属于历史 V2 实现；以下 VNext 规范不代表当前 API、Agent 或数据库已经符合它。不要将现有部署脚本当作 VNext 的生产安装方式。
+> **VNext 破坏性重构进行中。** 当前新工作区已实现纯 Core、ADP/2 direct 契约解析和离线部署编译。HTTP API、持久 Runtime 和在线 Agent 尚未实现，不能作为生产转发系统部署。历史 V2 已归档到 `legacy/v2/`。
 
 **Forward First · Tiny Core · Modular Runtime · Independent Go Agent**
 
@@ -27,7 +27,9 @@ VNext 允许与旧 API、数据库和 Agent 协议不兼容。现有源码是实
 
 ## 关于现有实现
 
-`backend/`、`web/`、`agent/` 和原 Docker 文件暂不因此次**文档重建**而修改；它们不能证明 VNext 已实施。开发新实现时，以规范与验收测试为准。旧文档已从当前工作树清退（历史仍可在 Git 提交记录查阅）；依法需要保存的来源与许可证材料见 [legal/NOTICE.md](legal/NOTICE.md)。
+新实现位于 `packages/core/`、`packages/contracts/`、`apps/control/` 与独立 Go 模块 `agent/`。旧 `backend/`、`web/`、`agent/`、部署脚本与工作流已移到 [legacy/v2](legacy/README.md)，作为只读参考，不兼容旧 API、数据库或 Agent。
+
+开发命令、锁定版本和本地 MySQL 入口见 [开发指南](docs/development/getting-started.md)；实际完成项与待验证范围见 [实施进度](docs/development/progress.md)。当前先提供离线 CLI，未创建占位 Web。许可证材料见 [legal/NOTICE.md](legal/NOTICE.md)。
 
 > **禁止在缺少端到端网络验收、安全验证及部署审查时对外宣称 VNext 已生产就绪。**
 

@@ -1,4 +1,9 @@
 # Local configuration and credentials
+.cache/
+.artifacts/
+agent/bin/
+agent/adp-validate.exe
+agent/adp-validate
 .env
 .env.*
 !.env.example

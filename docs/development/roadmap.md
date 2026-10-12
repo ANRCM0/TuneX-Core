@@ -1,6 +1,6 @@
 # TuneX VNext Implementation Roadmap
 
-**状态：实施计划，尚未实现。** 现有代码仍是历史 V2。当前目标是 Core/Forward v1、Control API v1 与 **ADP/2**；[ADR-0002](../decisions/0002-runtime-contract-closure.md) 记录契约修订。下面各出口需要真实证据，文档存在不算完成。
+**状态：实施进行中，各阶段出口尚未完成。** 历史 V2 已隔离到 `legacy/v2/`；新工作区首先实现 Core、契约解析与离线 Planner，详情见 [实施进度](progress.md)。当前目标是 Core/Forward v1、Control API v1 与 **ADP/2**；[ADR-0002](../decisions/0002-runtime-contract-closure.md) 记录契约修订。下面各出口需要真实证据，文档存在不算完成。
 
 ## Phase 0 — 契约与开发入口
 

@@ -1,0 +1,250 @@
+{
+  "description": "Shared TS/Go stateless conformance vectors. No runtime authorization, session or network evidence.",
+  "cases": [
+    {
+      "name": "duplicate-key",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2,\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"agentBuild\":\"vnext-dev\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":0}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "escaped-duplicate-key",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2,\"\\u0070rotocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"agentBuild\":\"vnext-dev\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":0}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "rounding-unsafe-integer",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"agentBuild\":\"vnext-dev\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":9007199254740991.1}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "unsafe-exponent-integer",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"agentBuild\":\"vnext-dev\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":9007199254740992e0}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "rounded-tiny-noninteger",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"agentBuild\":\"vnext-dev\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":1e-999}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "lone-surrogate",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"agentBuild\":\"\\ud800\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":0}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "trailing-data",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"agentBuild\":\"vnext-dev\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":0}{}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "exact-integer-exponent",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2e0,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"agentBuild\":\"vnext-dev\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":0}",
+      "structural": true,
+      "semantic": true
+    },
+    {
+      "name": "exact-integer-decimal",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2.0,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"agentBuild\":\"vnext-dev\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":0}",
+      "structural": true,
+      "semantic": true
+    },
+    {
+      "name": "id-trailing-newline",
+      "schema": "HelloRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\\n\",\"bootId\":\"boot-01\",\"agentBuild\":\"vnext-dev\",\"capabilities\":[\"native.direct.v1\",\"tcp\",\"udp\"],\"lastStoredSnapshotGeneration\":0}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "unknown-nested-field",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"],\"arbitraryCommand\":\"denied\"}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:9c8889d012779bbe61322757663e566e24ca829f03f6358286635a0570ed7a20\"}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "logical-slot-duplicate",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30},{\"assignmentId\":\"asg-forward-1001-tcp-hk-2\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25566},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:3b58f300b8648afeef354d65a817eef496c21c9cf1a0b028b41cc17c18582015\"}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "physical-slot-duplicate",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30},{\"assignmentId\":\"asg-forward-1001-tcp-hk-2\",\"forwardId\":\"forward-1001-2\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:d209a059ddb2abd6749390f05eb7b0df5817d44823bd2eba92ae663c559d31e6\"}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "config-digest-mismatch",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25566},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:b770714376b7ce0c97385c74dd3492b49ba1a76664ddf22e104bfcea881b2304\"}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "noncanonical-host",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:943aeab7aa5c2850d7cd348319fad4e1e23383aed2e9c75f0f50f7659be0ce61\",\"config\":{\"target\":{\"host\":\"TARGET.example.\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:ebfc4084b0ef1dd1d26ee4aa6c1b87cca65b22c39b66ab0f72a88ef7d8d30197\"}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "host-trailing-newline",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:88c7fc0fe7f36f8f76d8c2884b8566697efa010364588e9eb80b77063a3430fe\",\"config\":{\"target\":{\"host\":\"target.example\\n\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:a22a6ec44515d554cd149e9207e9a43ba7adc060835da3a850f86d17a0c0ea41\"}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "cidr-host-bits",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:e4e32203dbe77673037d2bf9e004be3ec6f3d1e2fe90916f47bcf96849c839e1\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.1/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:85b27723aa70df897586772bcb90fc82fd337e0db21262869f8f6482246de94c\"}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "cidr-empty",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:a4d414cc43e3ea4d4e208e0af5ee48d7a264ce645e771fd13781b7b226ad2331\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:4ea582349bd25a3f028a1a355f3269c0b198ab5e1043807a2670dff29a1164b3\"}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "leap-second-issued",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2025-12-31T23:59:60Z\",\"validUntil\":\"2026-01-01T00:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:4eec939a75b797d1c3c86f296b23c3bd672546dfb7069d9fcf07359f6cb69921\"}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "fractional-valid-window",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00.000000001Z\",\"validUntil\":\"2026-10-12T08:00:00.000000002Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:a2e97c4a2c0f9f67400c35f00656ccf6f0b1dcd56d239f344f6c72b85f55ff0c\"}",
+      "structural": true,
+      "semantic": true
+    },
+    {
+      "name": "fractional-reversed-window",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00.000000002Z\",\"validUntil\":\"2026-10-12T08:00:00.000000001Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:e35ce2afad6eff6813715dd0085958d72468da8ecec77700cc87a8b0637b4588\"}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "unsupported-null",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":null,\"tombstones\":[],\"snapshotDigest\":\"sha256:5e57d8d8726d0dded361a6d3f3dbbfa45b4f240893c85f99f6d37d9089892661\"}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "generation-overflow",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":9007199254740992,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:d5a5eec33a3285a721ad412bc3d01100408b490a18e157cf9f8c2d39dc7900cc\"}",
+      "structural": false,
+      "semantic": false
+    },
+    {
+      "name": "future-retirement",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"protocol\":\"tcp\",\"port\":25566,\"bindingFence\":1,\"retirementGeneration\":2}],\"snapshotDigest\":\"sha256:40127054409e8388e9b2750d64325788c1f02bc7ff031e60f4297258076018c3\"}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "retired-fence-resurrection",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"protocol\":\"tcp\",\"port\":25565,\"bindingFence\":1,\"retirementGeneration\":1}],\"snapshotDigest\":\"sha256:4677ad889dce5e790ea5c1cc87780d81c493d53e0356582af2dc843f84272f7e\"}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "successor-over-retired-fence",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":2,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"forward-1001\",\"protocol\":\"tcp\",\"port\":25565,\"bindingFence\":1,\"retirementGeneration\":1}],\"snapshotDigest\":\"sha256:2206ad1334bc01900171c6deb138fd0179b677a241cbbab6b78e91f6d8127640\"}",
+      "structural": true,
+      "semantic": true
+    },
+    {
+      "name": "max-forward-id",
+      "schema": "Snapshot",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"sessionEpoch\":1,\"snapshotGeneration\":1,\"complete\":true,\"issuedAt\":\"2026-10-12T08:00:00Z\",\"validUntil\":\"2026-10-12T08:05:00Z\",\"assignments\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"forwardId\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"bindingFence\":1,\"role\":\"direct\",\"protocol\":\"tcp\",\"phase\":\"active\",\"listener\":{\"address\":\"0.0.0.0\",\"port\":25565},\"driver\":{\"id\":\"native.direct.v1\",\"schemaVersion\":1,\"configDigest\":\"sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a\",\"config\":{\"target\":{\"host\":\"10.0.0.20\",\"port\":25565},\"egressPolicyRevision\":1,\"allowMetadataTargets\":false,\"allowedDestinationCidrs\":[\"10.0.0.0/24\"]}},\"drainTimeoutSeconds\":30}],\"tombstones\":[],\"snapshotDigest\":\"sha256:270abd756538a3374e182dc57c3c04cff2922e5358f4f3b89c52e87eac867e3f\"}",
+      "structural": true,
+      "semantic": true
+    },
+    {
+      "name": "invalid-ready-phase",
+      "schema": "ReportRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"sessionEpoch\":1,\"reportSequence\":1,\"observedAt\":\"2026-10-12T08:00:10Z\",\"acceptedSnapshotGeneration\":1,\"observations\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"phase\":\"prepared\",\"condition\":\"ready\",\"errorCode\":null,\"retryable\":false}],\"drains\":[]}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "observation-without-accepted-snapshot",
+      "schema": "ReportRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"sessionEpoch\":1,\"reportSequence\":1,\"observedAt\":\"2026-10-12T08:00:10Z\",\"acceptedSnapshotGeneration\":0,\"observations\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"phase\":\"active\",\"condition\":\"ready\",\"errorCode\":null,\"retryable\":false}],\"drains\":[]}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "duplicate-observation",
+      "schema": "ReportRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"sessionEpoch\":1,\"reportSequence\":1,\"observedAt\":\"2026-10-12T08:00:10Z\",\"acceptedSnapshotGeneration\":1,\"observations\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"phase\":\"active\",\"condition\":\"ready\",\"errorCode\":null,\"retryable\":false},{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"phase\":\"active\",\"condition\":\"ready\",\"errorCode\":null,\"retryable\":false}],\"drains\":[]}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "report-leap-second",
+      "schema": "ReportRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"sessionEpoch\":1,\"reportSequence\":1,\"observedAt\":\"2025-12-31T23:59:60Z\",\"acceptedSnapshotGeneration\":1,\"observations\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"phase\":\"active\",\"condition\":\"ready\",\"errorCode\":null,\"retryable\":false}],\"drains\":[]}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "duplicate-drain",
+      "schema": "ReportRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"sessionEpoch\":1,\"reportSequence\":1,\"observedAt\":\"2026-10-12T08:00:10Z\",\"acceptedSnapshotGeneration\":1,\"observations\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"phase\":\"active\",\"condition\":\"ready\",\"errorCode\":null,\"retryable\":false}],\"drains\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"startedAt\":\"2026-10-12T08:00:00Z\",\"deadline\":\"2026-10-12T08:00:30Z\",\"remainingConnections\":1,\"condition\":\"draining\"},{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"startedAt\":\"2026-10-12T08:00:00Z\",\"deadline\":\"2026-10-12T08:00:30Z\",\"remainingConnections\":0,\"condition\":\"removed\"}]}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "removed-drain-has-connections",
+      "schema": "ReportRequest",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"sessionEpoch\":1,\"reportSequence\":1,\"observedAt\":\"2026-10-12T08:00:10Z\",\"acceptedSnapshotGeneration\":1,\"observations\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"phase\":\"active\",\"condition\":\"ready\",\"errorCode\":null,\"retryable\":false}],\"drains\":[{\"assignmentId\":\"asg-forward-1001-tcp-hk\",\"deploymentGeneration\":1,\"bindingFence\":1,\"startedAt\":\"2026-10-12T08:00:00Z\",\"deadline\":\"2026-10-12T08:00:30Z\",\"remainingConnections\":1,\"condition\":\"removed\"}]}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "invalid-renewal-policy",
+      "schema": "HelloResponse",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"sessionEpoch\":1,\"serverTime\":\"2026-10-12T08:00:00Z\",\"policy\":{\"pollIntervalSeconds\":10,\"leaseSeconds\":300,\"renewalLeadSeconds\":300,\"maxClockSkewSeconds\":5,\"observationFreshnessSeconds\":30,\"drainTimeoutSeconds\":30,\"connectTimeoutSeconds\":10,\"udpIdleTimeoutSeconds\":60,\"maxTcpConnectionsPerAssignment\":1024,\"maxUdpSessionsPerAssignment\":4096,\"maxSnapshotBytes\":4194304,\"maxReportBytes\":1048576,\"maxAssignmentsPerNode\":1000}}",
+      "structural": true,
+      "semantic": false
+    },
+    {
+      "name": "leap-second-server-time",
+      "schema": "HelloResponse",
+      "raw": "{\"protocolVersion\":2,\"nodeId\":\"node-hk\",\"bootId\":\"boot-01\",\"sessionEpoch\":1,\"serverTime\":\"2025-12-31T23:59:60Z\",\"policy\":{\"pollIntervalSeconds\":10,\"leaseSeconds\":300,\"renewalLeadSeconds\":120,\"maxClockSkewSeconds\":5,\"observationFreshnessSeconds\":30,\"drainTimeoutSeconds\":30,\"connectTimeoutSeconds\":10,\"udpIdleTimeoutSeconds\":60,\"maxTcpConnectionsPerAssignment\":1024,\"maxUdpSessionsPerAssignment\":4096,\"maxSnapshotBytes\":4194304,\"maxReportBytes\":1048576,\"maxAssignmentsPerNode\":1000}}",
+      "structural": true,
+      "semantic": false
+    }
+  ]
+}

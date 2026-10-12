@@ -1,0 +1,7 @@
+{
+  "name": "@tunex/contracts", "version": "0.1.0", "private": true, "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@tunex/core": "0.1.0", "ajv": "8.17.1", "ajv-formats": "3.0.1", "canonicalize": "2.1.0"
+  }
+}

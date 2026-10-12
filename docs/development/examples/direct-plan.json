@@ -1,0 +1,19 @@
+{
+  "forward": {
+    "id": "forward-1001", "scopeId": "scope-dev", "revision": 1,
+    "spec": {
+      "enabled": true, "protocols": ["tcp"],
+      "ingress": { "nodeId": "node-hk", "listen": { "address": "0.0.0.0", "port": 25565 } },
+      "target": { "host": "10.0.0.20", "port": 25565 }
+    }
+  },
+  "nodeFacts": {
+    "nodeId": "node-hk", "scopeId": "scope-dev", "capabilities": ["native.direct.v1", "tcp"],
+    "allowedListenerAddresses": ["0.0.0.0"], "allowedPorts": [25565],
+    "egressPolicyRevision": 1, "allowedDestinationCidrs": ["10.0.0.0/24"], "allowMetadataTargets": false
+  },
+  "reservations": [
+    { "nodeId": "node-hk", "forwardId": "forward-1001", "protocol": "tcp", "port": 25565, "bindingFence": 1, "deploymentGeneration": 1 }
+  ],
+  "snapshot": { "nodeId": "node-hk", "sessionEpoch": 1, "snapshotGeneration": 1, "issuedAt": "2026-10-12T08:00:00Z", "validUntil": "2026-10-12T08:05:00Z" }
+}

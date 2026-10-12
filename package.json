@@ -1,0 +1,20 @@
+{
+  "name": "tunex-vnext",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.14.1 <25", "npm": ">=11 <12" },
+  "packageManager": "npm@11.11.0",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test packages/core/test/*.test.ts packages/contracts/test/*.test.ts apps/control/test/*.test.ts",
+    "test:go": "node scripts/run-go.mjs test ./...",
+    "build:go": "node scripts/run-go.mjs build ./...",
+    "check": "npm run typecheck && npm test && npm run test:go && npm run build:go && npm run contracts:check && node scripts/check-boundaries.mjs && node scripts/verify-offline-plan.mjs",
+    "contracts:generate": "node scripts/generate-go-contracts.mjs",
+    "contracts:check": "node scripts/generate-go-contracts.mjs --check && node scripts/build-conformance-fixtures.mjs --check",
+    "plan": "node apps/control/src/cli.ts"
+  },
+  "devDependencies": { "@types/node": "24.10.1", "typescript": "5.9.3" }
+}
