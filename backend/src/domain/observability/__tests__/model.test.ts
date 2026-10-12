@@ -99,6 +99,20 @@ test("old placement generation cannot establish Ready for the Link's current gen
     state: "ready", ready: true, lease_expires_at: new Date(now.getTime() + 60000).toISOString(), ports: [], runtime_ids: [] }];
   expect(project(f).links[0]!.placements[0]).toMatchObject({ state: "mismatch", ready: false });
 });
+test("Link degradation and deployment blocking remain distinct from missing runtime observations", () => {
+  const f = facts();
+  f.links.push({ id: 10, workspace_id: 7, carrier: "tst_v1", status: "degraded", generation: 2,
+    deployments: [{ generation: 2, status: "policy_blocked", version: 1, placements: [] }] });
+  expect(project(f).links[0]).toMatchObject({ desired_status: "degraded", deployment: { status: "policy_blocked" }, placements: [] });
+  for (const status of ["draft", "deploying", "active", "degraded", "retiring", "retired"]) {
+    f.links[0]!.status = status; expect(project(f).links[0]!.desired_status).toBe(status);
+  }
+  for (const status of ["preparing", "pending", "active", "degraded", "blocked", "policy_blocked", "retiring", "retired"]) {
+    f.links[0]!.deployments[0]!.status = status; expect(project(f).links[0]!.deployment!.status).toBe(status);
+  }
+  f.links[0]!.status = "private-secret"; f.links[0]!.deployments[0]!.status = "private-secret";
+  expect(project(f).links[0]).toMatchObject({ desired_status: "unknown", deployment: { status: "unknown" } });
+});
 test("scope-corrupt resource associations and exceeded populations fail instead of returning a partial success", () => {
   for (const mutate of [(f: ObservabilityFacts) => { f.nodes[0]!.node_group.workspace_id = 8; },
     (f: ObservabilityFacts) => { f.forwards[0]!.workspace_id = 8; },

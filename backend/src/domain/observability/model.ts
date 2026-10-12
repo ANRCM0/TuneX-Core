@@ -168,9 +168,9 @@ export function projectObservability(workspace: number, facts: ObservabilityFact
     });
     if (placements.length > 2) throw new ObservabilityError("metrics_limit_exceeded", 422);
     return { id: link.id, carrier: link.carrier === "tst_v1" ? "tst_v1" : "unsupported",
-      desired_status: ["draft", "pending", "active", "suspended", "error", "retired"].includes(link.status) ? link.status : "unknown", generation: link.generation,
+      desired_status: ["draft", "deploying", "active", "degraded", "retiring", "retired"].includes(link.status) ? link.status : "unknown", generation: link.generation,
       deployment: deployment ? { generation: deployment.generation, version: deployment.version ?? null,
-        status: ["pending", "applying", "active", "suspended", "error", "retired"].includes(deployment.status ?? "") ? deployment.status : "unknown" } : null,
+        status: ["preparing", "pending", "active", "degraded", "blocked", "policy_blocked", "retiring", "retired"].includes(deployment.status ?? "") ? deployment.status : "unknown" } : null,
       placements, usage: usage([], facts.checkpoints.filter((r) => r.link_id === link.id), now),
       active_connections: unavailableMetric("connections"), latency_ms: unavailableMetric("milliseconds"), error_count: unavailableMetric("errors") };
   }).sort((a, b) => a.id - b.id);

@@ -1,7 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { ObservabilityError, OBSERVABILITY_LIMITS, projectObservability, metricWindow,
   type MetricWindow, type ObservabilitySnapshot, type TargetFact } from "../domain/observability/model.ts";
-import { targetKeyOf } from "./node-state.ts";
 
 export function observabilityEnabled(): boolean { return process.env.TUNEX_OBSERVABILITY_ENABLED === "true"; }
 
@@ -45,6 +44,8 @@ export async function loadObservability(workspace: number, window: MetricWindow,
   // Validate limits and resource ownership BEFORE consulting any target observation.
   const facts = { nodes, links, forwards, archives, checkpoints, targets: [] as TargetFact[] };
   projectObservability(workspace, facts, window, now);
+  // Reuse the writer's canonical identity, loading its DB/Redis dependencies only on the real read path.
+  const { targetKeyOf } = await import("./node-state.ts");
   const targets: { forward_id: number; target_index: number; node_id: number; key: string }[] = [];
   for (const forward of forwards) {
     // No claim about UDP/TLS application health or unimplemented TST target pool attribution.
