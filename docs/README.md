@@ -48,3 +48,6 @@ Credential rotation, revocation and target-policy withdrawal: [Node security](de
 
 Suspend-aware tickets, data-plane expiry checks and fault evidence:
 [Authorization faults](development/authorization-faults.md).
+
+OS synchronization providers, protected proof and native Linux Agent acceptance:
+[System time](development/system-time.md).

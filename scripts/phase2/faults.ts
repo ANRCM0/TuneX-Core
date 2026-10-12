@@ -12,6 +12,7 @@ import { resolve, join } from 'node:path';
 import { platform, release } from 'node:os';
 import { createConnection } from 'mysql2/promise';
 import { startControl } from '../../apps/control/src/server.ts';
+import { timeProofArguments } from '../time-proof.ts';
 import { newToken } from '../../apps/control/src/modules/identity.ts';
 import { DEFAULT_POLICY } from '@tunex/contracts';
 const run = promisify(execFile), databaseUrl = process.env.TUNEX_TEST_DATABASE_URL;
@@ -81,7 +82,7 @@ try {
     assert.equal(provision.status, 201);
     const nodeId = provision.body.nodeId as string;
     const state = join(directory, 'agent'), key = join(directory, 'secrets', 'journal.key'), journal = join(state, 'journal.json');
-    const args = ['--control', `https://127.0.0.1:${control.port}`, '--node', nodeId, '--ca', caCert, '--state', state, '--journal-key', key];
+    const args = ['--control', `https://127.0.0.1:${control.port}`, '--node', nodeId, '--ca', caCert, '--state', state, '--journal-key', key,...timeProofArguments()];
     await run(binary, [...args, '--enroll'], { env: { ...process.env, TUNEX_ENROLLMENT_TOKEN: provision.body.enrollmentToken } });
     agent = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let errors = '';

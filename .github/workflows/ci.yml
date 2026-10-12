@@ -62,6 +62,8 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: mkdir -p .artifacts
       - run: node scripts/run-go.mjs build -o ../.artifacts/tunex-agent ./cmd/tunex-agent
+      - name: Verify actual OS time synchronization before granting Agent leases
+        run: node scripts/run-go.mjs run ./cmd/time-proof --check
       - run: npm run test:phase1
       - run: npm run test:phase2
       - run: npm run test:security

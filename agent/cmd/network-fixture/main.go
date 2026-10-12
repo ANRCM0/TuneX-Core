@@ -1,0 +1,162 @@
+// network-fixture supplies isolated Linux loopback peers for acceptance; it is not an Agent driver.
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
+	"time"
+)
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+func run() error {
+	mode := flag.String("mode", "", "target or probe")
+	port := flag.Int("port", 0, "Loopback Agent port for probe")
+	runID := flag.String("run-id", "", "Acceptance run identity for target cleanup")
+	udpOnly := flag.Bool("udp-only", false, "Probe only UDP")
+	flag.Parse()
+	if *mode == "target" {
+		return target(*runID)
+	}
+	if *mode == "port" {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return err
+		}
+		defer listener.Close()
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"port": listener.Addr().(*net.TCPAddr).Port, "platform": runtime.GOOS})
+	}
+	if *mode == "probe" && *port > 0 && *port <= 65535 {
+		return probe(*port, *udpOnly)
+	}
+	if *mode == "monitor" && *port > 0 && *port <= 65535 {
+		return monitor(*port)
+	}
+	return fmt.Errorf("target or probe with valid port required")
+}
+func target(runID string) error {
+	tcp, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	defer tcp.Close()
+	port := tcp.Addr().(*net.TCPAddr).Port
+	udp, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: port})
+	if err != nil {
+		return err
+	}
+	defer udp.Close()
+	context, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	go func() {
+		for {
+			socket, err := tcp.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer socket.Close()
+				socket.SetDeadline(time.Now().Add(30 * time.Second))
+				io.Copy(socket, socket)
+			}()
+		}
+	}()
+	go func() {
+		payload := make([]byte, 16384)
+		for {
+			n, client, err := udp.ReadFromUDP(payload)
+			if err != nil {
+				return
+			}
+			udp.WriteToUDP(payload[:n], client)
+		}
+	}()
+	json.NewEncoder(os.Stdout).Encode(map[string]any{"port": port, "platform": runtime.GOOS, "pid": os.Getpid(), "runId": runID})
+	<-context.Done()
+	return nil
+}
+func probe(port int, udpOnly bool) error {
+	payload := make([]byte, 256)
+	if _, err := rand.Read(payload); err != nil {
+		return err
+	}
+	if !udpOnly {
+		socket, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 5*time.Second)
+		if err != nil {
+			return err
+		}
+		defer socket.Close()
+		socket.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err := socket.Write(payload); err != nil {
+			return err
+		}
+		if tcp, ok := socket.(*net.TCPConn); ok {
+			tcp.CloseWrite()
+		}
+		reply, err := io.ReadAll(socket)
+		if err != nil {
+			return err
+		}
+		if string(reply) != string(payload) {
+			return fmt.Errorf("TCP payload mismatch")
+		}
+	}
+	udp, err := net.DialTimeout("udp", fmt.Sprintf("127.0.0.1:%d", port), 5*time.Second)
+	if err != nil {
+		return err
+	}
+	defer udp.Close()
+	udp.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := udp.Write(payload); err != nil {
+		return err
+	}
+	data := make([]byte, 1024)
+	n, err := udp.Read(data)
+	if err != nil {
+		return err
+	}
+	if string(data[:n]) != string(payload) {
+		return fmt.Errorf("UDP payload mismatch")
+	}
+	checksum := sha256.Sum256(payload)
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"tcp": !udpOnly, "udp": true, "payloadSHA": hex.EncodeToString(checksum[:])})
+}
+func monitor(port int) error {
+	socket, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 5*time.Second)
+	if err != nil {
+		return err
+	}
+	defer socket.Close()
+	started := time.Now()
+	json.NewEncoder(os.Stdout).Encode(map[string]any{"connected": true, "pid": os.Getpid()})
+	for {
+		socket.SetDeadline(time.Now().Add(2 * time.Second))
+		if _, err := socket.Write([]byte("held")); err != nil {
+			break
+		}
+		reply := make([]byte, 4)
+		if _, err := io.ReadFull(socket, reply); err != nil {
+			break
+		}
+		if string(reply) != "held" {
+			return fmt.Errorf("held stream payload mismatch")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"ended": true, "elapsedMs": time.Since(started).Milliseconds()})
+}

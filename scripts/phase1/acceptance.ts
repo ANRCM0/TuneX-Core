@@ -10,6 +10,7 @@ import { mkdir, readFile, writeFile, mkdtemp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createConnection } from 'mysql2/promise';
 import { startControl } from '../../apps/control/src/server.ts';
+import { timeProofArguments } from '../time-proof.ts';
 import { compileDirect,compileSnapshot } from '../../apps/control/src/modules/runtime/planner.ts';
 import type { AuthorizedNodeFacts } from '../../apps/control/src/modules/runtime/planner.ts';
 import type { Forward,ForwardSpec } from '@tunex/core';
@@ -61,7 +62,7 @@ try{
   const provision=await call('POST',`/api/v1/scopes/${scope}/nodes`,policy);assert.equal(provision.status,201);
   const {nodeId,enrollmentToken}=provision.body;
   const state=join(directory,'agent'),protection=join(directory,'secrets','journal.key');
-  const args=['--control',`https://127.0.0.1:${server.port}`,'--node',nodeId,'--ca',caCert,'--state',state,'--journal-key',protection];
+  const args=['--control',`https://127.0.0.1:${server.port}`,'--node',nodeId,'--ca',caCert,'--state',state,'--journal-key',protection,...timeProofArguments()];
   await exec(agentPath,[...args,'--enroll'],{env:{...process.env,TUNEX_ENROLLMENT_TOKEN:enrollmentToken}});
   check('SEC-05: trusted enrollment binds one Node certificate');
   agent=spawn(agentPath,args,{stdio:['ignore','pipe','pipe']});let agentLog='';agent.stderr!.on('data',chunk=>{agentLog+=chunk.toString();});

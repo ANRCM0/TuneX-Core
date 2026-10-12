@@ -16,6 +16,10 @@ server timestamp is checked against the configured skew, with no dynamic relaxat
 Verifiable OS time-sync status remains an outstanding operational gate; server
 timestamp comparison and synthetic clock tests are not a replacement for it.
 
+Update: the OS provider and protected proof implementation now exists. See
+[System time](system-time.md) for current verified Linux evidence, Windows refusal
+behavior and remaining platform/release scope.
+
 Each accepted snapshot obtains an immutable ticket containing wall and uptime
 cutoffs. Validity is conservatively shortened by the allowed skew and certificate
 expiry. Repeated equal-generation snapshots reuse the ticket. New generations can

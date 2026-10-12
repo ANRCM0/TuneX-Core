@@ -113,3 +113,22 @@ gap, not a passing integration result. Details: [Authorization faults](authoriza
 
 Full goal remains active: OS time-sync status, Linux integration/capacity/recovery,
 remaining direct matrix, Relay, Web and release gates are still outstanding.
+
+## OS synchronization and native Linux Agent
+
+Baseline: `44ee3b8`. Linux now reads synchronized kernel state/error bounds directly;
+Windows parses service state plus root/phase/holdover bounds and rejects stale or
+failed synchronization. A real OS collector can provide atomic MAC-protected,
+short-lived evidence to an unprivileged Agent; host/platform/age/error bounds are
+checked and there is no ?assume synchronized? runtime flag.
+
+Current Windows status fails the new policy and is recorded as a rejection, not
+a passing OS clock. Existing positive Windows suites need a genuinely healthy
+time source or the real supervisor proof; earlier evidence does not automatically
+prove this stricter version. No OS configuration was weakened for testing.
+
+Real native Linux Agent/client/target acceptance now runs against locked-version
+Windows Control/MySQL over the private WSL interface, including actual kernel time
+proof, mTLS/ACK, both payloads, lifecycle and outage/restart. This is explicitly a
+mixed-platform topology, not a wholly Linux stack. Native Linux race tests also pass.
+Details and remaining gates: [System time](system-time.md).

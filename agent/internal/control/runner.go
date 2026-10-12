@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ import (
 type Options struct {
 	URL, NodeID, BootID, Certificate, PrivateKey, CA, Journal, JournalKey string
 	Rotate                                                                bool
+	TimeProof, TimeProofKey                                               string
 }
 type httpError struct {
 	status int
@@ -98,6 +100,9 @@ type Runner struct {
 func New(options Options) (*Runner, error) {
 	if !strings.HasPrefix(options.URL, "https://") {
 		return nil, fmt.Errorf("HTTPS Control URL required")
+	}
+	if err := authorization.ValidateProofBoundary(options.TimeProof, options.TimeProofKey, filepath.Dir(options.Journal)); err != nil {
+		return nil, err
 	}
 	ca, err := os.ReadFile(options.CA)
 	if err != nil {
@@ -501,7 +506,7 @@ func (runner *Runner) beginDrain(instance running, now, previousCutoff time.Time
 func (runner *Runner) initializeGuard() error {
 	clock := runner.clock
 	if clock == nil {
-		clock = authorization.SystemClock
+		clock = authorization.SynchronizedClock(time.Duration(runner.hello.Policy.MaxClockSkewSeconds)*time.Second, authorization.ProofOptions{Path: runner.options.TimeProof, KeyPath: runner.options.TimeProofKey})
 	}
 	guard, err := authorization.New(clock, time.Duration(runner.hello.Policy.MaxClockSkewSeconds)*time.Second, time.Duration(runner.hello.Policy.LeaseSeconds)*time.Second, runner.credentialUntil)
 	if err != nil {

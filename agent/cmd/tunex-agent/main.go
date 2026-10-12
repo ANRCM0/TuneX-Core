@@ -20,8 +20,10 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/tunex/vnext/agent/internal/authorization"
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/control"
 	"github.com/tunex/vnext/agent/internal/state"
@@ -41,12 +43,20 @@ func run() error {
 	journalKey := flag.String("journal-key", "", "Protected journal MAC key path, outside state directory")
 	enroll := flag.Bool("enroll", false, "Exchange TUNEX_ENROLLMENT_TOKEN, then initialize state")
 	rotate := flag.Bool("rotate", false, "Rotate Node key/certificate after online Hello without resetting execution state")
+	timeProof := flag.String("time-proof", "", "Optional supervisor OS synchronization proof")
+	timeProofKey := flag.String("time-proof-key", "", "Protected MAC key for the supervisor proof")
 	flag.Parse()
+	if (*timeProof == "") != (*timeProofKey == "") {
+		return fmt.Errorf("time-proof and time-proof-key must be provided together")
+	}
 	if *url == "" || *node == "" || *ca == "" || *directory == "" || *journalKey == "" || !strings.HasPrefix(*url, "https://") {
 		return fmt.Errorf("control, node, ca, state and journal-key are required")
 	}
 	root, err := filepath.Abs(*directory)
 	if err != nil {
+		return err
+	}
+	if err := authorization.ValidateProofBoundary(*timeProof, *timeProofKey, root); err != nil {
 		return err
 	}
 	keyPath, err := filepath.Abs(*journalKey)
@@ -71,11 +81,11 @@ func run() error {
 	if _, err := rand.Read(boot); err != nil {
 		return err
 	}
-	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath, Rotate: *rotate})
+	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath, Rotate: *rotate, TimeProof: *timeProof, TimeProofKey: *timeProofKey})
 	if err != nil {
 		return err
 	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	return runner.Run(ctx)
 }

@@ -27,3 +27,8 @@ Use `--rotate` after online Hello; counters and current listener state are prese
 
 Suspend-aware immutable execution tickets now guard TCP/UDP data-plane IO as well
 as periodic cleanup. Fault and platform scope: [Authorization faults](../docs/development/authorization-faults.md).
+
+Agent startup and every execution check now require fresh bounded OS synchronization
+evidence. Linux queries kernel state; Windows queries W32Time or consumes a protected
+supervisor proof. A running service or matching Control timestamp alone is insufficient.
+Operational setup and current refusal/acceptance evidence: [System time](../docs/development/system-time.md).
