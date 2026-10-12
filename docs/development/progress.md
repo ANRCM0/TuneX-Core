@@ -79,3 +79,16 @@ network suites are regression gates. Details: [Node security](node-security.md).
 Full Phase 2 remains implementing: offline hard-deadline/clock-suspend faults,
 Linux real-node/race/capacity measurement, grant-management and backup/recovery
 evidence are still required. Relay/transport/Web/release work is also outstanding.
+
+## Linux race evidence
+
+Commit `5203c15` passed `go test -race ./...` with Go 1.26.3 on the existing
+`TXBoard-Baseline` WSL2 Linux/amd64 environment (kernel
+`6.6.87.2-microsoft-standard-WSL2`). All four tested packages passed: contracts,
+control, forward and state. Both command packages compiled with no package tests.
+The locked toolchain and module/build caches stay inside the ignored project cache;
+no existing system toolchain, Redis or database service was changed.
+
+Redacted local evidence: `.artifacts/linux-race.json`. This closes the Go Linux
+race-detector gap described above. It does not close Linux MySQL/HTTPS/independent
+Agent acceptance, namespace fault tests, capacity measurement or release rehearsal.

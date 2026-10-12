@@ -94,3 +94,7 @@ Policy denial and revocation tests prove durable withdrawal and no new authority
 They do not substitute for a full offline lease-duration/clock-suspend rehearsal,
 capacity measurement, PKI security audit or database rollback recovery. These,
 Relay transport contracts, Web and release operations remain active project work.
+
+Go package race tests passed for commit `5203c15` on WSL2 Linux/amd64 with the
+locked Go 1.26.3 toolchain. Evidence is `.artifacts/linux-race.json`; Linux database
+and independent-process network acceptance remain separate uncompleted gates.
