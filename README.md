@@ -1,6 +1,6 @@
 # TuneX VNext
 
-> **VNext 破坏性重构进行中。** 已实现 Core、ADP/2 direct 契约、MySQL/Hono Control、节点注册与在线 Go Agent 的最小 TCP 创建闭环。更新、启停、删除、UDP、Linux 实节点及生产发布门槛尚未完成。历史 V2 已归档到 `legacy/v2/`。
+> **VNext 破坏性重构进行中。** 已实现 Core、ADP/2 direct 契约、MySQL/Hono Control、节点注册与在线 Go Agent 的最小 TCP 创建闭环。现已扩展到单节点 TCP/UDP 更新、启停、删除与失败重试；凭据管理、完整故障测试、Linux 实节点及生产发布门槛仍在推进。历史 V2 已归档到 `legacy/v2/`。
 
 **Forward First · Tiny Core · Modular Runtime · Independent Go Agent**
 
@@ -34,3 +34,5 @@ VNext 允许与旧 API、数据库和 Agent 协议不兼容。现有源码是实
 > **禁止在缺少端到端网络验收、安全验证及部署审查时对外宣称 VNext 已生产就绪。**
 
 
+
+VNext direct TCP/UDP now supports CAS updates, enable/disable, safe deletion and explicit failed-Operation retry. See [Phase 2 lifecycle and remaining gates](docs/development/phase2.md). Full project and release verification remain in progress.

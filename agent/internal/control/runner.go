@@ -33,7 +33,39 @@ func (problem httpError) Error() string {
 
 type running struct {
 	assignment contracts.Assignment
-	stream     *forward.TCP
+	stream     execution
+}
+type execution interface {
+	Close()
+	Drain()
+	Remaining() uint64
+}
+
+func startExecution(a contracts.Assignment, p contracts.Policy) (execution, error) {
+	switch a.Protocol {
+	case "tcp":
+		return forward.Start(a, p)
+	case "udp":
+		return forward.StartUDP(a, p)
+	default:
+		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY")
+	}
+}
+func replaceExecution(old execution, a contracts.Assignment) (execution, error) {
+	switch stream := old.(type) {
+	case *forward.TCP:
+		return stream.Replace(a)
+	case *forward.UDP:
+		return stream.Replace(a)
+	default:
+		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY")
+	}
+}
+
+type draining struct {
+	instance running
+	started  time.Time
+	deadline time.Time
 }
 type Runner struct {
 	options      Options
@@ -44,6 +76,7 @@ type Runner struct {
 	sequence     uint64
 	pending      []byte
 	instances    map[string]running
+	drains       map[string]draining
 	observations []contracts.Observation
 	mutex        sync.Mutex
 	deadline     time.Time
@@ -112,13 +145,17 @@ func (runner *Runner) stop() {
 		instance.stream.Close()
 		delete(runner.instances, key)
 	}
+	for key, drain := range runner.drains {
+		drain.instance.stream.Close()
+		delete(runner.drains, key)
+	}
 }
 func (runner *Runner) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer runner.stop()
 	defer runner.client.CloseIdleConnections()
-	hello := contracts.HelloRequest{ProtocolVersion: 2, NodeId: runner.options.NodeID, BootId: runner.options.BootID, AgentBuild: "vnext-phase1", Capabilities: []string{"native.direct.v1", "tcp"}, LastStoredSnapshotGeneration: runner.journal.Generation}
+	hello := contracts.HelloRequest{ProtocolVersion: 2, NodeId: runner.options.NodeID, BootId: runner.options.BootID, AgentBuild: "vnext-phase2", Capabilities: []string{"native.direct.v1", "tcp", "udp"}, LastStoredSnapshotGeneration: runner.journal.Generation}
 	body, _ := json.Marshal(hello)
 	var raw []byte
 	var err error
@@ -185,6 +222,16 @@ func (runner *Runner) Run(ctx context.Context) error {
 					for key, instance := range runner.instances {
 						instance.stream.Close()
 						delete(runner.instances, key)
+					}
+					for key, drain := range runner.drains {
+						drain.instance.stream.Close()
+						delete(runner.drains, key)
+					}
+				}
+				for key, drain := range runner.drains {
+					if time.Now().After(drain.deadline) {
+						drain.instance.stream.Close()
+						runner.drains[key] = drain
 					}
 				}
 				runner.mutex.Unlock()
@@ -269,11 +316,22 @@ func (runner *Runner) poll(ctx context.Context) error {
 		next.Retired[key] = value
 	}
 	incoming := make(map[string]bool)
+	var prior contracts.Snapshot
+	if len(runner.journal.Snapshot) > 0 {
+		if err := json.Unmarshal(runner.journal.Snapshot, &prior); err != nil {
+			return fmt.Errorf("INTEGRITY_FAILURE: persisted snapshot corrupted")
+		}
+	}
 	for _, assignment := range snapshot.Assignments {
-		if assignment.Protocol != "tcp" || assignment.Phase != "active" || assignment.Driver.Id != "native.direct.v1" {
+		if (assignment.Protocol != "tcp" && assignment.Protocol != "udp") || assignment.Phase != "active" || assignment.Driver.Id != "native.direct.v1" {
 			return fmt.Errorf("UNSUPPORTED_CAPABILITY")
 		}
 		key := fmt.Sprintf("%s/%d", assignment.Protocol, assignment.Listener.Port)
+		for _, old := range prior.Assignments {
+			if old.AssignmentId == assignment.AssignmentId && old.DeploymentGeneration == assignment.DeploymentGeneration && old.BindingFence == assignment.BindingFence && (old.Driver.ConfigDigest != assignment.Driver.ConfigDigest || old.Listener != assignment.Listener || old.Protocol != assignment.Protocol) {
+				return fmt.Errorf("INTEGRITY_FAILURE: execution configuration changed without a new generation/fence")
+			}
+		}
 		incoming[key] = true
 		if assignment.BindingFence < next.Fences[key] || assignment.BindingFence <= next.Retired[key] {
 			return fmt.Errorf("FENCING_REJECTED")
@@ -304,16 +362,14 @@ func (runner *Runner) poll(ctx context.Context) error {
 		return fmt.Errorf("LEASE_EXPIRED: Authorization ended before execution")
 	}
 	if changed {
+		// A new snapshot renews current instances only; old drain deadlines are fixed.
+	}
+	oldDeadline := runner.deadline
+	if changed {
 		runner.deadline = now.Add(min(remaining, 300*time.Second))
 	}
 	if time.Now().After(runner.deadline) {
 		return fmt.Errorf("LEASE_EXPIRED: Accepted authorization already ended")
-	}
-	for key, instance := range runner.instances {
-		if !incoming[key] {
-			instance.stream.Close()
-			delete(runner.instances, key)
-		}
 	}
 	runner.observations = nil
 	for _, assignment := range snapshot.Assignments {
@@ -323,11 +379,27 @@ func (runner *Runner) poll(ctx context.Context) error {
 		key := fmt.Sprintf("%s/%d", assignment.Protocol, assignment.Listener.Port)
 		obs := contracts.Observation{AssignmentId: assignment.AssignmentId, DeploymentGeneration: assignment.DeploymentGeneration, BindingFence: assignment.BindingFence, Phase: "active", Condition: "ready", Retryable: false}
 		if existing, ok := runner.instances[key]; ok && (existing.assignment.Driver.ConfigDigest != assignment.Driver.ConfigDigest || existing.assignment.DeploymentGeneration != assignment.DeploymentGeneration || existing.assignment.BindingFence != assignment.BindingFence) {
-			code := "UNSUPPORTED_CAPABILITY"
-			obs.Condition = "error"
-			obs.ErrorCode = &code
+			stream, startErr := replaceExecution(existing.stream, assignment)
+			if startErr == nil {
+				runner.beginDrain(existing, now, oldDeadline)
+				runner.instances[key] = running{assignment, stream}
+			}
+			if startErr != nil {
+				runner.beginDrain(existing, now, oldDeadline)
+				delete(runner.instances, key)
+				stream, startErr = startExecution(assignment, runner.hello.Policy)
+				if startErr == nil {
+					runner.instances[key] = running{assignment, stream}
+					runner.observations = append(runner.observations, obs)
+					continue
+				}
+				code := "PORT_IN_USE"
+				obs.Condition = "error"
+				obs.ErrorCode = &code
+				obs.Retryable = true
+			}
 		} else if !ok {
-			stream, startErr := forward.Start(assignment, runner.hello.Policy)
+			stream, startErr := startExecution(assignment, runner.hello.Policy)
 			if startErr != nil {
 				code := "PORT_IN_USE"
 				obs.Condition = "error"
@@ -339,16 +411,52 @@ func (runner *Runner) poll(ctx context.Context) error {
 		}
 		runner.observations = append(runner.observations, obs)
 	}
+	for key, instance := range runner.instances {
+		if !incoming[key] {
+			runner.beginDrain(instance, now, oldDeadline)
+			delete(runner.instances, key)
+		}
+	}
 	if runner.sequence >= contracts.MaxCounter {
 		return fmt.Errorf("RESOURCE_LIMIT: Report sequence exhausted")
 	}
 	runner.sequence++
-	report := contracts.ReportRequest{ProtocolVersion: 2, NodeId: runner.options.NodeID, BootId: runner.options.BootID, SessionEpoch: runner.hello.SessionEpoch, ReportSequence: runner.sequence, ObservedAt: now.UTC().Format(time.RFC3339Nano), AcceptedSnapshotGeneration: runner.journal.Generation, Observations: runner.observations, Drains: []contracts.Drain{}}
+	drains := []contracts.Drain{}
+	for _, drain := range runner.drains {
+		a := drain.instance.assignment
+		count := drain.instance.stream.Remaining()
+		condition := "draining"
+		if count == 0 || time.Now().After(drain.deadline) {
+			drain.instance.stream.Close()
+			count = 0
+			condition = "removed"
+		}
+		drains = append(drains, contracts.Drain{AssignmentId: a.AssignmentId, DeploymentGeneration: a.DeploymentGeneration, BindingFence: a.BindingFence, StartedAt: drain.started.UTC().Format(time.RFC3339Nano), Deadline: drain.deadline.UTC().Format(time.RFC3339Nano), RemainingConnections: count, Condition: condition})
+	}
+	report := contracts.ReportRequest{ProtocolVersion: 2, NodeId: runner.options.NodeID, BootId: runner.options.BootID, SessionEpoch: runner.hello.SessionEpoch, ReportSequence: runner.sequence, ObservedAt: now.UTC().Format(time.RFC3339Nano), AcceptedSnapshotGeneration: runner.journal.Generation, Observations: runner.observations, Drains: drains}
 	if report.Observations == nil {
 		report.Observations = []contracts.Observation{}
 	}
 	runner.pending, err = json.Marshal(report)
 	return err
+}
+func (runner *Runner) beginDrain(instance running, now, authorization time.Time) {
+	if runner.drains == nil {
+		runner.drains = make(map[string]draining)
+	}
+	key := fmt.Sprintf("%s/%d/%d", instance.assignment.AssignmentId, instance.assignment.DeploymentGeneration, instance.assignment.BindingFence)
+	if _, exists := runner.drains[key]; exists {
+		return
+	}
+	instance.stream.Drain()
+	deadline := now.Add(time.Duration(instance.assignment.DrainTimeoutSeconds) * time.Second)
+	if !authorization.IsZero() && authorization.Before(deadline) {
+		deadline = authorization
+	}
+	if deadline.Before(now) {
+		deadline = now
+	}
+	runner.drains[key] = draining{instance: instance, started: now, deadline: deadline}
 }
 func (runner *Runner) report(ctx context.Context) error {
 	raw, err := runner.request(ctx, "POST", "/agent/v2/report", runner.pending, true)
@@ -363,6 +471,15 @@ func (runner *Runner) report(ctx context.Context) error {
 	if ack.NodeId != runner.options.NodeID || ack.BootId != runner.options.BootID || ack.SessionEpoch != runner.hello.SessionEpoch || ack.ReportSequence != runner.sequence {
 		return fmt.Errorf("INTEGRITY_FAILURE: ACK mismatch")
 	}
+	var sent contracts.ReportRequest
+	json.Unmarshal(runner.pending, &sent)
+	runner.mutex.Lock()
+	for _, drain := range sent.Drains {
+		if drain.Condition == "removed" {
+			delete(runner.drains, fmt.Sprintf("%s/%d/%d", drain.AssignmentId, drain.DeploymentGeneration, drain.BindingFence))
+		}
+	}
+	runner.mutex.Unlock()
 	runner.pending = nil
 	return nil
 }

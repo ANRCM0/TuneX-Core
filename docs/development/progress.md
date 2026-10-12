@@ -1,7 +1,7 @@
 # VNext 实施进度
 
 日期：2026-10-12（Asia/Shanghai）。记录当前实现与证据，不取代目标规范。
-Phase 0 基线提交 `2b679f5`；Phase 1 新实现随本次提交收录。证据 JSON 的
+Phase 0 基线提交 `2b679f5`；Phase 1 提交为 `b7e5f5b`。证据 JSON 的
 commit 字段是测试时 HEAD；另记录 Agent SHA 和测试命令，明确未提交工作树。
 
 | 工作项 | 状态 | 实现及验证范围 |
@@ -30,5 +30,32 @@ commit 字段是测试时 HEAD；另记录 Agent SHA 和测试命令，明确未
 Worker 读视图/执行期限、永久错误码、旧授权借用新租约等边界问题。
 
 Phase 1 的 TCP 创建实现与本地内部出口已完成，Linux 平台出口仍待 CI/实节点
-证据，不标完整阶段 verified。更新、删除、UDP、Relay 和发布安全审计尚未完成。
+证据，不标完整阶段 verified。单节点更新、删除、UDP 的实现进展见下方 Phase 2 记录；Relay 和发布安全审计尚未完成。
 不得把本地创建切片或 CI 配置当作生产就绪声明。
+
+
+## Phase 2 direct lifecycle update
+
+Baseline: `b7e5f5b`. Current changes implement direct TCP/UDP creation, target/port
+updates with CAS/no-op, enable/disable, deletion and explicit failed-Operation retry.
+They supersede the earlier table's planned status for these lifecycle functions,
+while full Phase 2 remains `implementing`.
+
+TCP sockets transfer listener ownership independently of old execution records;
+old streams retain their configuration and bounded drain. UDP associates each client
+with a distinct checked target socket, bounds queues/replies and expires idle state.
+TCP/UDP process-wide limits are 4096 streams and 4096 associations respectively.
+Runtime retains retirements, tombstones and per-session maximum authorization
+expiries; current reports cannot release unexpired historical holders.
+
+Validation: `npm run check`, Go vet, `npm run test:phase1` (20 checks) and
+`npm run test:phase2` (direct lifecycle and historical-lease/scanner regressions).
+Evidence includes actual payloads, socket/slot reclamation, commit and Agent SHA.
+Current worktree evidence is not a committed or Linux production acceptance claim.
+
+Outstanding: Node credential rotation/revocation, target-policy withdrawal,
+clock/suspend and restart faults, remaining direct acceptance matrix and measured
+capacity on Linux. Phase 3 Relay contracts/security, Phase 4 supported transport
+evolution and Phase 5 Web/release remain outstanding. Full project goal stays active.
+
+Development details: [Phase 2](phase2.md).

@@ -84,6 +84,17 @@ func TestSnapshotRenewalAndPersistenceBeforeBind(t *testing.T) {
 		t.Fatal("high-water not persisted", err)
 	}
 	generation = 4
+	assignment.Driver.Config.Target.Port++
+	assignment.Driver.ConfigDigest, _ = contracts.ComputeDigest(assignment.Driver.Config)
+	if err := runner.poll(ctx); err == nil {
+		t.Fatal("changed execution config reused generation/fence")
+	}
+	if runner.journal.Generation != 3 || runner.instances[key].stream != original {
+		t.Fatal("execution integrity failure changed state")
+	}
+	assignment.Driver.Config.Target.Port--
+	assignment.Driver.ConfigDigest, _ = contracts.ComputeDigest(assignment.Driver.Config)
+	generation = 5
 	runner.options.Journal = filepath.Join(t.TempDir(), "missing", "journal.json")
 	if err := runner.poll(ctx); err == nil {
 		t.Fatal("failed persistence accepted")

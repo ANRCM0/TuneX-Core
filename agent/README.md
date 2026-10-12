@@ -14,6 +14,10 @@ Snapshot/Report/ACK, protected persistent high-water state and direct TCP. It do
 not restore listeners offline. Renewal keeps the same socket; authorization and
 certificate expiry stop tracked connections. DNS results are checked before
 numeric-IP dialing. This is an internal direct-TCP milestone, not a production
-release. Lifecycle replacement, UDP and full fault/security gates remain Phase 2.
+release. The Phase 2 direct slice adds UDP client associations, TCP listener ownership
+transfer, bounded old-stream drain and per-instance cleanup reports. TCP is capped
+at 4096 streams per process, UDP at 4096 associations; each also obeys assignment
+limits. UDP queues have depth 4 and datagrams are capped at 16 KiB.
+Full fault/security and platform release gates remain outstanding.
 
 Setup and network verification: [Phase 1](../docs/development/phase1.md).

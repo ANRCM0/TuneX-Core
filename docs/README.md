@@ -41,3 +41,5 @@
 历史源码与许可证档案在 `legal/` 中保留；它们不是新的业务文档。
 
 
+
+Current direct TCP/UDP lifecycle development and evidence: [Phase 2](development/phase2.md).
