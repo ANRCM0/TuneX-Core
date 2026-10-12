@@ -14,7 +14,11 @@
     "check": "npm run typecheck && npm test && npm run test:go && npm run build:go && npm run contracts:check && node scripts/check-boundaries.mjs && node scripts/verify-offline-plan.mjs",
     "contracts:generate": "node scripts/generate-go-contracts.mjs",
     "contracts:check": "node scripts/generate-go-contracts.mjs --check && node scripts/build-conformance-fixtures.mjs --check",
-    "plan": "node apps/control/src/cli.ts"
+    "plan": "node apps/control/src/cli.ts",
+    "control": "node apps/control/src/main.ts",
+    "control:bootstrap": "node apps/control/src/bootstrap.ts",
+    "control:cli": "node apps/control/src/client.ts",
+    "test:phase1": "node scripts/phase1/acceptance.ts"
   },
   "devDependencies": { "@types/node": "24.10.1", "typescript": "5.9.3" }
 }

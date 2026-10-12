@@ -1,10 +1,15 @@
-# Control: deterministic direct planner
+# Control: Phase 1 Direct TCP
 
-`src/modules/runtime/planner.ts` compiles already-authorized, already-reserved
-Forward intent into ADP/2 direct Assignments and complete node Snapshots. The
-offline CLI is a contract inspection tool; it does not authorize, persist, serve
-an API or deploy. It rejects unsupported Relay and missing reservations.
+Hono HTTPS API, MySQL acceptance and persistent Runtime scanner publish ADP/2
+direct TCP snapshots to enrolled Go Agents. Public APIs create Nodes/Forwards and
+query desired/applied/health and Operation. Machine routes use verified Node mTLS
+credentials, online sessions and persisted report ACKs.
 
-Runtime must supply the whole node set, not a single Forward delta. MySQL-backed
-acceptance, enrollment, API and Worker are the next vertical slice. No temporary
-in-memory database is presented as durable acceptance.
+Owner modules share a MySQL UnitOfWork. Idempotency response, intent/history,
+exclusive port and Operation commit together; complete prospective node snapshot
+capacity is checked before acceptance. Full snapshots are immutable and retained.
+The deterministic planner and offline inspection CLI remain available.
+
+See [Phase 1 development](../../docs/development/phase1.md) for setup, commands and
+actual verification boundaries. Direct TCP creation is implemented; UDP, resource
+updates/deletion, explicit retry and Relay are intentionally rejected/deferred.

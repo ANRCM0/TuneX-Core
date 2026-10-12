@@ -1,6 +1,6 @@
 # TuneX VNext
 
-> **VNext 破坏性重构进行中。** 当前新工作区已实现纯 Core、ADP/2 direct 契约解析和离线部署编译。HTTP API、持久 Runtime 和在线 Agent 尚未实现，不能作为生产转发系统部署。历史 V2 已归档到 `legacy/v2/`。
+> **VNext 破坏性重构进行中。** 已实现 Core、ADP/2 direct 契约、MySQL/Hono Control、节点注册与在线 Go Agent 的最小 TCP 创建闭环。更新、启停、删除、UDP、Linux 实节点及生产发布门槛尚未完成。历史 V2 已归档到 `legacy/v2/`。
 
 **Forward First · Tiny Core · Modular Runtime · Independent Go Agent**
 
@@ -29,7 +29,7 @@ VNext 允许与旧 API、数据库和 Agent 协议不兼容。现有源码是实
 
 新实现位于 `packages/core/`、`packages/contracts/`、`apps/control/` 与独立 Go 模块 `agent/`。旧 `backend/`、`web/`、`agent/`、部署脚本与工作流已移到 [legacy/v2](legacy/README.md)，作为只读参考，不兼容旧 API、数据库或 Agent。
 
-开发命令、锁定版本和本地 MySQL 入口见 [开发指南](docs/development/getting-started.md)；实际完成项与待验证范围见 [实施进度](docs/development/progress.md)。当前先提供离线 CLI，未创建占位 Web。许可证材料见 [legal/NOTICE.md](legal/NOTICE.md)。
+开发命令、锁定版本和本地 MySQL 入口见 [开发指南](docs/development/getting-started.md)与 [Phase 1 启动/验收](docs/development/phase1.md)；实际完成项与待验证范围见 [实施进度](docs/development/progress.md)。当前提供真实 HTTPS CLI，未创建占位 Web。许可证材料见 [legal/NOTICE.md](legal/NOTICE.md)。
 
 > **禁止在缺少端到端网络验收、安全验证及部署审查时对外宣称 VNext 已生产就绪。**
 

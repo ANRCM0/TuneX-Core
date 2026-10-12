@@ -33,3 +33,39 @@ jobs:
       - run: npm run check
       - run: node scripts/run-go.mjs vet ./...
       - run: node scripts/run-go.mjs test -race ./...
+  phase1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4.9
+        env:
+          MYSQL_ROOT_PASSWORD: ci-disposable-only
+          MYSQL_DATABASE: tunex_phase1
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -pci-disposable-only"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      TUNEX_TEST_DATABASE_URL: mysql://root:ci-disposable-only@127.0.0.1:3306/tunex_phase1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: mkdir -p .artifacts
+      - run: node scripts/run-go.mjs build -o ../.artifacts/tunex-agent ./cmd/tunex-agent
+      - run: npm run test:phase1
+      - name: Preserve redacted acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-acceptance
+          path: .artifacts/phase1/**/evidence.json

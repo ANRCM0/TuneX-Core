@@ -9,5 +9,11 @@ Schema. Run `npm run contracts:generate` at repository root after contract chang
 
 `go run ./cmd/adp-validate Snapshot < snapshot.json` inspects an offline message.
 It does not authenticate, grant execution, load cached leases or forward traffic.
-Online Control Engine, durable high-water journal and the network Forward Engine
-are subsequent work; this validator is not a deployable Agent daemon.
+The online `cmd/tunex-agent` now implements Phase 1 enrollment, mTLS Hello,
+Snapshot/Report/ACK, protected persistent high-water state and direct TCP. It does
+not restore listeners offline. Renewal keeps the same socket; authorization and
+certificate expiry stop tracked connections. DNS results are checked before
+numeric-IP dialing. This is an internal direct-TCP milestone, not a production
+release. Lifecycle replacement, UDP and full fault/security gates remain Phase 2.
+
+Setup and network verification: [Phase 1](../docs/development/phase1.md).

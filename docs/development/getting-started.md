@@ -1,8 +1,8 @@
 # VNext 开发入口
 
-当前新工作区只实现 Core、ADP/2 direct 契约解析和离线 Runtime Planner。
+当前新工作区已实现 Core、ADP/2 direct 契约、离线 Planner 和最小在线 TCP 创建切片。
 旧源码、安装脚本及工作流已隔离到 `legacy/v2/`，不参与当前构建。
-不存在可运行的 VNext HTTP API 或在线 Agent daemon。
+HTTP API 与在线 Agent 的启动和验收见 [Phase 1](phase1.md)。
 
 ## 工具与安装
 
@@ -50,7 +50,7 @@ go run ./cmd/adp-validate Snapshot < ../snapshot.json
 
 ## MySQL 与实网验收入口
 
-下一个实施切片使用全新的 MySQL 8.4.6 数据库，不重用或迁移旧 V2 表。
+当前实施切片使用全新的 MySQL 8.4.9 数据库，不重用或迁移旧 V2 表。
 本地数据库配置见 [compose.dev.yaml](../../deploy/compose.dev.yaml)。
 设置 `TUNEX_MYSQL_ROOT_PASSWORD` 后启动：
 
@@ -59,7 +59,7 @@ docker compose -f deploy/compose.dev.yaml up -d --wait
 ```
 
 该 Compose 只提供开发 MySQL，绑定本机回环地址；不部署 Control/Agent。
-Phase 1 将建立真实 MySQL 事务/Operation 与 mTLS Agent 的网络测试。
+Phase 1 已建立真实 MySQL 事务/Operation 与 mTLS Agent 的网络测试。
 Phase 2 的 Linux namespace/容器测试须使用独立 client、Agent、target，
 实际断言 TCP payload、UDP 回包和资源回收；当前没有此验收的通过证据。
 

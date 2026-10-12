@@ -1,4 +1,13 @@
 {
-  "name": "@tunex/control", "version": "0.1.0", "private": true, "type": "module",
-  "dependencies": { "@tunex/core": "0.1.0", "@tunex/contracts": "0.1.0" }
+  "name": "@tunex/control",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hono/node-server": "1.19.1",
+    "@tunex/contracts": "0.1.0",
+    "@tunex/core": "0.1.0",
+    "hono": "4.9.2",
+    "mysql2": "3.14.5"
+  }
 }
