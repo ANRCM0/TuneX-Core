@@ -15,7 +15,7 @@
 2. `PathSpec`：可选固定中间节点序列；空/缺省表示没有指定中间节点。
 3. `TransportRef`：可选、不可歧义的传输配置引用。配置的解析、密钥和驱动不在 Core。
 
-**公共原语**：`NodeId`、`ForwardId`、`ScopeId`、`Revision`、`NetworkProtocol`、`CapabilityId`。逻辑类型独立，持久化序列化可使用字符串；必须校验规范化 ID、非空、合法版本。
+**公共原语**：`NodeId`、`ForwardId`、`ScopeId`、`Revision`、`NetworkProtocol`、`CapabilityId`。逻辑类型独立，持久化序列化可使用字符串；必须校验规范化 ID、非空、合法版本。ID 使用 1..128 字符的 ASCII `[A-Za-z0-9][A-Za-z0-9._:-]*`；所有版本数限定在 1..9007199254740991 的安全整数范围，耗尽拒绝递增，禁止回绕。
 
 ## 2. 参考 TypeScript 形状
 
@@ -67,7 +67,7 @@ interface TransportRef {
 - Forward 必须有非空 ID/Scope、合法正整数 Revision；成功变更 Revision 单调递增，ID 不复用由持久层负责。
 - `protocols` 在规范化后只能是 `tcp`、`udp` 的非空无重复集合，序列化顺序固定（tcp、udp）。
 - 监听、目标端口是 1..65535 整数；默认**不**支持端口范围、多端口复合规则。
-- Listen 地址必须符合监听语义（IP 字面量，支持 0.0.0.0/::；地址族与绑定规则由 Runtime 最终确认）。Target 可为 IP 字面量或合规主机名；未指定地址 0.0.0.0/:: 不得作为目标；不强制阻止私网/回环地址，访问策略在 Application/Agent。
+- Listen 地址必须符合监听语义（IP 字面量，支持 0.0.0.0/::；地址族与绑定规则由 Runtime 最终确认）。Target 可为 IP 字面量或合规主机名（主机名以 ASCII A-label 形式输入、转小写并去掉末尾根点；非 ASCII 域名须由调用方先转换，Core 不隐式选择 IDNA 映射；IPv6 输入不带 URI 方括号）；未指定地址 0.0.0.0/:: 不得作为目标；不强制阻止私网/回环地址，访问策略在 Application/Agent。
 - 入口 `nodeId` 不得出现在 `path.via`；`via` 不得有重复 ID。Core 仅检查固定路径的结构，节点是否存在/可达由外层判断。
 - `path.via` 非空时，v1 要求显式、版本锁定的 `transport`；没有中间节点时 `transport` 缺省表示 `direct/native`。有 profile 但无中间节点的特殊能力由后续 ADR 另行定义，v1 禁止。
 - `enabled` 是**期望**，不等于已应用与健康。
@@ -101,4 +101,5 @@ Prisma、数据库连接、HTTP Client、Hono 路由、Redis、BullMQ、TCP/UDP 
 ## 7. 反膨胀门槛
 
 新功能若只改变“怎样转发”，应进入 Module/Driver；只有改变“转发是什么”的最小语义、且无法通过组合表达，才允许修改 Core。不得用多层类继承建构不同 Forward 子类。Core 的所有规则必须在无 MySQL/Redis/Agent 的单元测试中可验证。
+
 

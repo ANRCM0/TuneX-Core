@@ -59,13 +59,13 @@ Forward 的 `revision` 仅代表**用户期望配置**版本：创建为 1，每
 ## 5. 启停和删除语义
 
 - `enabled=true`：希望激活，允许暂时处于等待 Agent 的待部署状态。
-- `enabled=false`：停止新接入、存量连接按明确 `drain` 策略处理，Forward 记录与端口预留保持不变。
+- `enabled=false`：停止新接入、存量连接按明确 `drain` 策略处理，Forward 记录与端口预留保持不变。默认 drain 30 秒，但任何连接不得越过授权/凭据硬截止。
 - `delete`：持久化删除意图、发布墓碑、使旧执行世代失效、清理 Agent 后在满足安全条件时释放资源；非立即硬删除。
 - “用户期望”“部署是否成功”“当前健康”三种状态必须分开展示。
 
 ## 6. 更新原子性边界
 
-一次数据库事务必须原子提交用户期望版本、Operation 及必要的端口资源变更；跨节点 Agent 执行没有全局原子事务，依靠 Prepare/Activate/Drain、幂等、补偿、重试和对账。更新端口时先获取新端口资源并规划切换，再满足安全撤销条件后释放旧端口。失败时不得产生一个无法追踪的部分完成状态。
+一次数据库事务必须原子提交用户期望版本、Operation 及必要的端口资源变更；跨节点 Agent 执行没有全局原子事务，依靠 Prepare/Activate/Drain、幂等、补偿、重试和对账。更新端口时先获取新端口资源并规划切换，再满足安全撤销条件后释放旧端口。失败时不得产生一个无法追踪的部分完成状态。具体规则见 [ADP/2 执行与更新](../protocol/agent-deployment-v2.md#7-执行更新与多节点顺序) 和 [Operation 契约](control-api-v1.md)。TCP+UDP 预留原子不表示两个 socket 激活原子：实际单协议失败时保留可工作的协议、整体 degraded，Operation 不得成功，协议集合不得静默缩减。
 
 ## 7. 未来扩展
 
@@ -73,5 +73,6 @@ Routing Module 计算 `ResolvedPath`，不会反复覆盖 `ForwardSpec`。Transp
 
 ## 8. 极简验收
 
-撤掉监控、联邦、计费、智能路由、加密中继插件后：单节点 `tcp`、`udp` 及 `both` 的真实创建、数据流量、更新、启停、删除和重启恢复仍必须有效。协议 v1 细则见 [Deployment Protocol](../protocol/agent-deployment-v1.md)。
+撤掉监控、联邦、计费、智能路由、加密中继插件后：单节点 `tcp`、`udp` 及 `both` 的真实创建、数据流量、更新、启停、删除和重启恢复仍必须有效。机器协议 ADP/2 细则见 [Deployment Protocol](../protocol/agent-deployment-v2.md)。
+
 

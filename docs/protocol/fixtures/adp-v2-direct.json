@@ -1,0 +1,639 @@
+{
+  "description": "Fixed-time vectors, not live authorization. valid/invalid refer to structural validation; semantic assertions remain separate.",
+  "valid": [
+    {
+      "name": "hello",
+      "schema": "HelloRequest",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "bootId": "boot-01",
+        "agentBuild": "vnext-dev",
+        "capabilities": [
+          "native.direct.v1",
+          "tcp",
+          "udp"
+        ],
+        "lastStoredSnapshotGeneration": 0
+      }
+    },
+    {
+      "name": "hello-response",
+      "schema": "HelloResponse",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "bootId": "boot-01",
+        "sessionEpoch": 1,
+        "serverTime": "2026-10-12T08:00:00Z",
+        "policy": {
+          "pollIntervalSeconds": 10,
+          "leaseSeconds": 300,
+          "renewalLeadSeconds": 120,
+          "maxClockSkewSeconds": 5,
+          "observationFreshnessSeconds": 30,
+          "drainTimeoutSeconds": 30,
+          "connectTimeoutSeconds": 10,
+          "udpIdleTimeoutSeconds": 60,
+          "maxTcpConnectionsPerAssignment": 1024,
+          "maxUdpSessionsPerAssignment": 4096,
+          "maxSnapshotBytes": 4194304,
+          "maxReportBytes": 1048576,
+          "maxAssignmentsPerNode": 1000
+        }
+      }
+    },
+    {
+      "name": "direct-snapshot",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 1,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507"
+      }
+    },
+    {
+      "name": "renewal-same-execution",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 2,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:03:00Z",
+        "validUntil": "2026-10-12T08:08:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:380f2f7aa23d498a61e007cfb287ed30f6b1930e7fed649af7609a70d06a9b44"
+      }
+    },
+    {
+      "name": "report",
+      "schema": "ReportRequest",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "bootId": "boot-01",
+        "sessionEpoch": 1,
+        "reportSequence": 1,
+        "observedAt": "2026-10-12T08:00:10Z",
+        "acceptedSnapshotGeneration": 1,
+        "observations": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "phase": "active",
+            "condition": "ready",
+            "errorCode": null,
+            "retryable": false
+          }
+        ],
+        "drains": []
+      }
+    },
+    {
+      "name": "ack",
+      "schema": "ReportAck",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "bootId": "boot-01",
+        "sessionEpoch": 1,
+        "reportSequence": 1,
+        "status": "accepted"
+      }
+    },
+    {
+      "name": "error",
+      "schema": "ErrorResponse",
+      "payload": {
+        "code": "SESSION_SUPERSEDED",
+        "message": "Session retired",
+        "retryable": false,
+        "requestId": "req-01"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "wrong-version",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 1,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 1,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507"
+      }
+    },
+    {
+      "name": "unknown-field",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 1,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507",
+        "extra": true
+      }
+    },
+    {
+      "name": "unsafe-integer",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 9007199254740992,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507"
+      }
+    },
+    {
+      "name": "incomplete",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 1,
+        "complete": false,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507"
+      }
+    },
+    {
+      "name": "missing-session",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "snapshotGeneration": 1,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507"
+      }
+    },
+    {
+      "name": "relay-not-supported-by-direct-schema",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 1,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "egress",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507"
+      }
+    },
+    {
+      "name": "port-zero",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 1,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 0
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507"
+      }
+    },
+    {
+      "name": "negative-drain",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 1,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a",
+              "config": {
+                "target": {
+                  "host": "10.0.0.20",
+                  "port": 25565
+                },
+                "egressPolicyRevision": 1,
+                "allowMetadataTargets": false,
+                "allowedDestinationCidrs": [
+                  "10.0.0.0/24"
+                ]
+              }
+            },
+            "drainTimeoutSeconds": -1
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507"
+      }
+    },
+    {
+      "name": "missing-config",
+      "schema": "Snapshot",
+      "payload": {
+        "protocolVersion": 2,
+        "nodeId": "node-hk",
+        "sessionEpoch": 1,
+        "snapshotGeneration": 1,
+        "complete": true,
+        "issuedAt": "2026-10-12T08:00:00Z",
+        "validUntil": "2026-10-12T08:05:00Z",
+        "assignments": [
+          {
+            "assignmentId": "asg-forward-1001-tcp-hk",
+            "forwardId": "forward-1001",
+            "forwardRevision": 1,
+            "deploymentGeneration": 1,
+            "bindingFence": 1,
+            "role": "direct",
+            "protocol": "tcp",
+            "phase": "active",
+            "listener": {
+              "address": "0.0.0.0",
+              "port": 25565
+            },
+            "driver": {
+              "id": "native.direct.v1",
+              "schemaVersion": 1,
+              "configDigest": "sha256:7ce541eaf8fc84043d2d1ec1132ac785964b1463f7068476954b3e2efb9a7a3a"
+            },
+            "drainTimeoutSeconds": 30
+          }
+        ],
+        "tombstones": [],
+        "snapshotDigest": "sha256:c8ca0858fb1baf2decda5447ab1e67869d7722d3111d1df03ebd97eb72f6f507"
+      }
+    }
+  ],
+  "semanticCases": [
+    {
+      "name": "renewal-preserves-execution",
+      "snapshots": [
+        "direct-snapshot",
+        "renewal-same-execution"
+      ],
+      "expected": "generation increases; driver config and deployment/fence stay identical; no listener/stream restart"
+    },
+    {
+      "name": "alter-target-without-updating-digest",
+      "base": "direct-snapshot",
+      "expected": "INTEGRITY_FAILURE despite structural validity"
+    },
+    {
+      "name": "old-session-report",
+      "base": "report",
+      "currentSessionEpoch": 2,
+      "expected": "SESSION_SUPERSEDED; cannot advance operation"
+    },
+    {
+      "name": "duplicate-key",
+      "raw": "{\"protocolVersion\":2,\"protocolVersion\":1}",
+      "expected": "reject before Schema validation"
+    }
+  ]
+}

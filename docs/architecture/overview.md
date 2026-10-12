@@ -28,11 +28,11 @@ TuneX 的唯一必选业务是 **Forward**。没有计费、智能路由、联�
 
 MySQL 是用户配置、版本、操作、快照序号、端口独占预留、资源租约及墓碑的权威来源。Redis 是通知、缓存与可丢失的执行加速器；Redis 丢失不能永久丢失已确认操作。Agent 的实时监听和连接状态由 Agent 产生，Control 只保存带 bootId/序号/时间/新鲜度的观测；不能以历史观测冒充现时事实。
 
-对单个 Forward 的重要写操作需要一个持久化、可恢复、可幂等的 Operation。接受请求返回资源 ID、操作 ID；`202 Accepted` 不等于部署完成。
+对单个 Forward 的重要写操作需要一个持久化、可恢复、可幂等的 Operation。Runtime 拥有 Operation，Application 通过 owner-owned 的共享事务接口组织 Forward、预留与 Operation 同时提交；参见 [Control API / Operation](../spec/control-api-v1.md)。接受请求返回资源 ID、操作 ID；`202 Accepted` 不等于部署完成。
 
 ## 5. 逻辑部署
 
-最小逻辑拓扑：`web`、`control api`、`control worker`、`mysql`、`redis`、`agent (N)`。不要求独立 Core 服务、服务网格、Kafka、插件守护进程或内置数据库容器。Compose 适合开发；生产可使用外部 MySQL/Redis、已有反代。Agent 只需要对 Control 发起受认证的出站控制连接，业务端口需按场景开放。
+最小必需运行拓扑：`control api/worker`（可同进程）、`mysql`、`agent (N)`，通过 CLI 或最小 Web 操作；`web` 与 `redis` 是可选进程。不要求独立 Core 服务、服务网格、Kafka、插件守护进程或内置数据库容器。Compose 适合开发；生产可使用外部 MySQL/Redis、已有反代。Agent 只需要对 Control 发起受认证的出站控制连接，业务端口需按场景开放。
 
 ## 6. 演进边界
 
@@ -44,11 +44,12 @@ MySQL 是用户配置、版本、操作、快照序号、端口独占预留、�
 
 ## 7. 安全与不可用性
 
-Node 的拥有者不等于 Forward 的访问授权。Control 校验用户权限、节点授权和端口租约；Agent 对配置来源、版本、执行权和真实 bind 做二次保护。Control 失联时已有转发最多在租约有效期内继续运行；离线无法做到即时撤销，应作为明确的威胁/可用性取舍。高可用、加密强度、生产就绪只能以对应验收与审计证明。
+Node 的拥有者不等于 Forward 的访问授权。Control 校验用户权限、节点授权和端口租约；Agent 对配置来源、版本、执行权和真实 bind 做二次保护。Control 失联时已有转发最多在租约有效期内继续运行；离线无法做到即时撤销，应作为明确的威胁/可用性取舍。高可用、加密强度、生产就绪只能以对应验收与审计证明。普通 drain 不得越过授权硬截止；进程重启必须在线重新建立会话后恢复执行。注册、撤销与旧备份恢复遵循 [节点安全与恢复](../operations/node-security-and-recovery-v1.md)。
 
 ## 8. 设计目标与非目标
 
 **目标**：最小 Core、Forward First、版本化协议、可恢复控制循环、独立数据面、可控模块扩展、真实实网验证。
 
 **非目标**：兼容旧 V2、一次性移植历史功能、让 Core 成为中央远程服务、初期引入微服务或动态加载未经审查的 Agent 插件。
+
 

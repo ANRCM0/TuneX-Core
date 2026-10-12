@@ -38,7 +38,7 @@ Core imports only other Core primitives or dependency-free validation helpers. M
 | Billing (optional) | plans, invoice, financial rules | billing status and constraints |
 | Observability (optional) | metrics aggregation, alerts, drill-down | health/diagnostic read model |
 
-Application API orchestrates a use case and is not a database super-user. Cross-module reads are through public query interfaces or deliberate projections; no direct arbitrary table access. Cross-module writes are through owner-owned commands with explicit authorization. Domain events may drive notifications and analytics but never replace the necessary transactional write for resource safety.
+Application API orchestrates a use case and is not a database super-user. Runtime alone owns the Operation ledger; Forwarding invokes its transaction-aware acceptance command and does not own a second ledger. Owner-owned commands may share one UnitOfWork/transaction handle in the same MySQL database. The coordinator never bypasses those interfaces to write another module's tables. See [Control API / Operation](../spec/control-api-v1.md) for ordering and constraints. Cross-module reads are through public query interfaces or deliberate projections; no direct arbitrary table access. Cross-module writes are through owner-owned commands with explicit authorization. Domain events may drive notifications and analytics but never replace the necessary transactional write for resource safety.
 
 ## 3. Synchronous vs asynchronous
 
@@ -66,4 +66,5 @@ Forwarding owns `desired.enabled` and `revision`. Runtime owns `deployment.statu
 ## 6. Scope and isolation
 
 Every resource and query explicitly carries scope; cross-tenant authorization is checked at module public interfaces and database write boundaries. Do not rely on frontend filtering or Redis key prefixes as the only isolation mechanism. Operational machine endpoints use independent Node credentials, never user session cookies by accident.
+
 

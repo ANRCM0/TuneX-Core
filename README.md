@@ -15,9 +15,12 @@ VNext 允许与旧 API、数据库和 Agent 协议不兼容。现有源码是实
 - [总体架构](docs/architecture/overview.md)
 - [Core Specification v1](docs/spec/core-v1.md)
 - [Forward Specification v1](docs/spec/forward-v1.md)
-- [Agent Deployment Protocol v1](docs/protocol/agent-deployment-v1.md)
+- [Agent Deployment Protocol v2](docs/protocol/agent-deployment-v2.md)
 - [Agent / Runtime 运行模型](docs/spec/runtime-agent-v1.md)
 - [模块所有权与依赖](docs/architecture/module-boundaries.md)
+- [Control API / Operation](docs/spec/control-api-v1.md)
+- [节点安全与恢复](docs/operations/node-security-and-recovery-v1.md)
+- [ADR-0002：运行契约收口](docs/decisions/0002-runtime-contract-closure.md)
 - [实施路线](docs/development/roadmap.md)
 - [验收规范](docs/testing/acceptance-v1.md)
 - [ADR-0001：破坏性重构](docs/decisions/0001-vnext-clean-slate.md)
@@ -27,4 +30,5 @@ VNext 允许与旧 API、数据库和 Agent 协议不兼容。现有源码是实
 `backend/`、`web/`、`agent/` 和原 Docker 文件暂不因此次**文档重建**而修改；它们不能证明 VNext 已实施。开发新实现时，以规范与验收测试为准。旧文档已从当前工作树清退（历史仍可在 Git 提交记录查阅）；依法需要保存的来源与许可证材料见 [legal/NOTICE.md](legal/NOTICE.md)。
 
 > **禁止在缺少端到端网络验收、安全验证及部署审查时对外宣称 VNext 已生产就绪。**
+
 

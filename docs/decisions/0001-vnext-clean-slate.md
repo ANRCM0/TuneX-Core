@@ -1,6 +1,6 @@
 # ADR-0001: VNext 破坏性重构与规范重建
 
-- **状态**：Accepted
+- **状态**：Accepted；实施协议目标由 [ADR-0002](0002-runtime-contract-closure.md) 更新为 ADP/2，以下 ADP/1 引用保留历史上下文。
 - **日期**：2026-10-12
 - **范围**：TuneX VNext 源码和正式架构文档
 
@@ -22,4 +22,5 @@ TuneX VNext 不需要向旧 V2 的 API、Prisma Schema、Tunnel/Link 业务模�
 - Core 不持有 IO；Application 负责业务所有权；Runtime 负责部署；Agent 负责数据面。
 - 从 VNext v1 开始，变更跨组件协议必须版本化且有兼容/拒绝策略。
 - 无法通过真实集成/实网验收之前不得发布“VNext 可生产运行”声明。
+
 
