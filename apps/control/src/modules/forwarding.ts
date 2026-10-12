@@ -13,10 +13,20 @@ export class Forwarding {
         }>(tx, "SELECT * FROM forwards WHERE deleting=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? ORDER BY id", [nodeId]);
         return records.map(record => ({ id: record.id, scopeId: record.scope_id, revision: record.revision, spec: json(record.spec) }));
     }
-    async insert(tx: Transaction, forward: Forward): Promise<void> {
-        await write(tx, 'INSERT INTO forwards(id,scope_id,revision,spec) VALUES(?,?,?,?)', [forward.id, forward.scopeId, forward.revision, JSON.stringify(forward.spec)]);
+    async insert(tx: Transaction, forward: Forward, actorId: string): Promise<void> {
+        await write(tx, 'INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES(?,?,?,?,?)', [forward.id, forward.scopeId, forward.revision, JSON.stringify(forward.spec), actorId]);
         await write(tx, 'INSERT INTO forward_revisions(forward_id,revision,spec) VALUES(?,?,?)', [forward.id, forward.revision, JSON.stringify(forward.spec)]);
     }
+    async authorizer(tx: Transaction, forwardId: string): Promise<string | null> { return (await rows<{
+        authorization_actor: string | null;
+    }>(tx, 'SELECT authorization_actor FROM forwards WHERE id=?', [forwardId]))[0]?.authorization_actor ?? null; }
+    async setAuthorizer(tx: Transaction, forwardId: string, actorId: string): Promise<void> { await write(tx, 'UPDATE forwards SET authorization_actor=? WHERE id=?', [actorId, forwardId]); }
+    async forActor(tx: Transaction, scopeId: string, actorId: string): Promise<Forward[]> { const records = await rows<{
+        id: string;
+        scope_id: string;
+        revision: number;
+        spec: unknown;
+    }>(tx, 'SELECT * FROM forwards WHERE scope_id=? AND authorization_actor=? AND deleting=FALSE ORDER BY id', [scopeId, actorId]); return records.map(row => ({ id: row.id, scopeId: row.scope_id, revision: row.revision, spec: json(row.spec) })); }
     async get(tx: Transaction, scopeId: string, id: string): Promise<Forward> {
         const record = (await rows<{
             id: string;

@@ -85,6 +85,22 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         return Number(value);
     }
     app.get('/health', c => c.json({ status: 'ok', protocolVersion: 2 }));
+    app.get('/api/v1/scopes/:scope/members', async (c) => c.json(await control.identity.listMembers(c.get('actor'), scope(c.req.param('scope')))));
+    app.put('/api/v1/scopes/:scope/members/:actor', async (c) => {
+        const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;
+        if (!input || Array.isArray(input) || Object.keys(input).some(name => !['expectedRevision', 'role', 'token'].includes(name)) || typeof input.expectedRevision !== 'number' || !['manager', 'viewer', 'removed'].includes(input.role as string) || input.token !== undefined && typeof input.token !== 'string')
+            invalid('Valid member expectedRevision, role and optional token required');
+        const response = await control.changeMember(c.get('actor'), scope(c.req.param('scope')), c.req.param('actor'), c.req.header('idempotency-key'), { expectedRevision: input.expectedRevision, role: input.role as 'manager' | 'viewer' | 'removed', ...(input.token !== undefined ? { token: input.token as string } : {}) });
+        return c.json(response.body, response.status);
+    });
+    app.get('/api/v1/scopes/:scope/nodes/:id/grants', async (c) => c.json(await control.nodes.listGrants(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'))));
+    app.put('/api/v1/scopes/:scope/nodes/:id/grants/:actor', async (c) => {
+        const input = parseJson(await body(c.req.raw)) as Record<string, unknown>;
+        if (!input || Array.isArray(input) || Object.keys(input).sort().join(',') !== 'allowed,expectedRevision' || typeof input.expectedRevision !== 'number' || typeof input.allowed !== 'boolean')
+            invalid('Node grant expectedRevision and allowed required');
+        const response = await control.changeNodeGrant(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.param('actor'), c.req.header('idempotency-key'), input.expectedRevision, input.allowed);
+        return c.json(response.body, response.status);
+    });
     app.post('/api/v1/scopes/:scope/nodes', async (c) => c.json(await control.nodes.provision(c.get('actor'), scope(c.req.param('scope')), parseJson(await body(c.req.raw)) as NodePolicy), 201));
     app.post('/enrollment/v1', async (c) => {
         const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;
@@ -113,13 +129,13 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         const forward = await control.forwarding.get(tx, scopeId, c.req.param('id'));
         const state = await runtime.status(tx, forward);
         const operation = await control.ledger.latest(tx, forward.id);
-        return { desired: { revision: forward.revision, spec: forward.spec, deleting: false }, ...state, lastOperation: operation ? { id: operation.id, status: operation.status, cleanupPending: Boolean(operation.cleanup_pending) } : null };
+        return { desired: { revision: forward.revision, spec: forward.spec, deleting: false }, ...state, lastOperation: operation ? { id: operation.id, kind: operation.kind, status: operation.status, cleanupPending: Boolean(operation.cleanup_pending) } : null };
     })));
     app.get('/api/v1/scopes/:scope/operations/:id', async (c) => c.json(await control.db.transaction(async (tx) => {
         const scopeId = scope(c.req.param('scope'));
         await control.identity.scope(tx, c.get('actor'), scopeId);
         const op = await control.ledger.get(tx, scopeId, c.req.param('id'));
-        return { id: op.id, status: op.status, targetRevision: op.target_revision, cleanupPending: Boolean(op.cleanup_pending), lastError: op.last_error };
+        return { id: op.id, kind: op.kind, requestedBy: op.requested_by, sourceOperationId: op.source_operation_id, status: op.status, targetRevision: op.target_revision, cleanupPending: Boolean(op.cleanup_pending), lastError: op.last_error };
     })));
     app.post('/api/v1/scopes/:scope/operations/:id/retry', async (c) => {
         const input = parseJson(await body(c.req.raw)) as Record<string, unknown>;
@@ -129,12 +145,26 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         return c.json(result.body, result.status);
     });
     app.get('/api/v1/scopes/:scope/nodes/:id', async (c) => c.json(await control.nodes.view(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'))));
-    app.put('/api/v1/scopes/:scope/nodes/:id/policy', async (c) => { const input = parseJson(await body(c.req.raw)) as Record<string, unknown>; if (!input || Object.keys(input).sort().join(',') !== 'expectedRevision,policy' || typeof input.expectedRevision !== 'number')
-        invalid('expectedRevision and policy required'); const response = await control.changeNode(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.header('idempotency-key'), { kind: 'policy', expectedRevision: input.expectedRevision, policy: input.policy as NodePolicy }); return c.json(response.body, response.status); });
-    app.post('/api/v1/scopes/:scope/nodes/:id/revoke', async (c) => { const input = parseJson(await body(c.req.raw)); if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length)
-        invalid('Empty revocation object required'); const response = await control.changeNode(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.header('idempotency-key'), { kind: 'revoke' }); return c.json(response.body, response.status); });
-    app.post('/agent/v2/credentials/rotate', async (c) => { const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>; if (!input || Object.keys(input).sort().join(',') !== 'csr,requestId' || typeof input.csr !== 'string' || typeof input.requestId !== 'string')
-        invalid('requestId and CSR required'); return c.json(await control.nodes.rotate(c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')), input.requestId, input.csr)); });
+    app.put('/api/v1/scopes/:scope/nodes/:id/policy', async (c) => {
+        const input = parseJson(await body(c.req.raw)) as Record<string, unknown>;
+        if (!input || Object.keys(input).sort().join(',') !== 'expectedRevision,policy' || typeof input.expectedRevision !== 'number')
+            invalid('expectedRevision and policy required');
+        const response = await control.changeNode(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.header('idempotency-key'), { kind: 'policy', expectedRevision: input.expectedRevision, policy: input.policy as NodePolicy });
+        return c.json(response.body, response.status);
+    });
+    app.post('/api/v1/scopes/:scope/nodes/:id/revoke', async (c) => {
+        const input = parseJson(await body(c.req.raw));
+        if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length)
+            invalid('Empty revocation object required');
+        const response = await control.changeNode(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.header('idempotency-key'), { kind: 'revoke' });
+        return c.json(response.body, response.status);
+    });
+    app.post('/agent/v2/credentials/rotate', async (c) => {
+        const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;
+        if (!input || Object.keys(input).sort().join(',') !== 'csr,requestId' || typeof input.csr !== 'string' || typeof input.requestId !== 'string')
+            invalid('requestId and CSR required');
+        return c.json(await control.nodes.rotate(c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')), input.requestId, input.csr));
+    });
     app.post('/agent/v2/hello', async (c) => c.json(await runtime.hello(c.get('node'), parseMessage('HelloRequest', await body(c.req.raw)), c.get('fingerprint'))));
     app.get('/agent/v2/snapshot', async (c) => c.json(await runtime.snapshot(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), c.get('fingerprint'))));
     app.post('/agent/v2/report', async (c) => c.json(await runtime.report(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), parseMessage('ReportRequest', await body(c.req.raw)), c.get('fingerprint'))));

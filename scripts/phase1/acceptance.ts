@@ -170,7 +170,7 @@ try{
     await write(tx,'INSERT INTO runtime_nodes(node_id) VALUES(?)',[capacityNode]);await write(tx,'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[capacityNode,capacityActor]);
     for(let i=0;i<validCount;i++){
       const forward:Forward={id:`capacity-${i}`,scopeId:capacityScope,revision:1,spec:{...capacitySpec,ingress:{nodeId:capacityNode,listen:{address:'127.0.0.1',port:10000+i}}}};
-      await server!.control.forwarding.insert(tx,forward);
+      await server!.control.forwarding.insert(tx,forward,capacityActor);
       await server!.control.ledger.accept(tx,forward,{scopeId:capacityScope,actorId:capacityActor,key:`seed-${i}`,digest:digest({seed:i})});
       await write(tx,'INSERT INTO port_slots(node_id,protocol,port,owner_id,fence,deployment_generation) VALUES(?,\'tcp\',?,?,1,1)',[capacityNode,10000+i,forward.id]);
     }

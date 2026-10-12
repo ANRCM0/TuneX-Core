@@ -51,3 +51,6 @@ Suspend-aware tickets, data-plane expiry checks and fault evidence:
 
 OS synchronization providers, protected proof and native Linux Agent acceptance:
 [System time](development/system-time.md).
+
+Owner-managed members, explicit Node grants and persistent execution authority:
+[Access management](development/access-management.md).

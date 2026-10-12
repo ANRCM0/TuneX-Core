@@ -6,7 +6,29 @@ const base = process.env.TUNEX_CONTROL_URL, caPath = process.env.TUNEX_CA_CERT, 
 if (!base?.startsWith('https://') || !caPath || !token || !scope)
     throw new Error('Trusted Control URL/CA, owner token and scope required');
 let method = 'GET', path = '', body: string | undefined;
-if (command === 'create' || command === 'node') {
+if (command === 'members') {
+    path = 'members';
+}
+else if (command === 'member') {
+    if (!idOrFile || !key || !expectedOrFile)
+        throw new Error('Usage: member <scope> <actorId> <input.json> <stable-key>');
+    method = 'PUT';
+    path = `members/${encodeURIComponent(idOrFile)}`;
+    body = JSON.stringify(parseJson(await readFile(key, 'utf8')));
+}
+else if (command === 'node-grants') {
+    if (!idOrFile)
+        throw new Error('Node ID required');
+    path = `nodes/${encodeURIComponent(idOrFile)}/grants`;
+}
+else if (command === 'node-grant') {
+    if (!idOrFile || !key || !expectedOrFile || !mutationKey)
+        throw new Error('Usage: node-grant <scope> <nodeId> <actorId> <input.json> <stable-key>');
+    method = 'PUT';
+    path = `nodes/${encodeURIComponent(idOrFile)}/grants/${encodeURIComponent(key)}`;
+    body = JSON.stringify(parseJson(await readFile(expectedOrFile, 'utf8')));
+}
+else if (command === 'create' || command === 'node') {
     if (!idOrFile)
         throw new Error('JSON input file required');
     method = 'POST';
@@ -41,8 +63,8 @@ else if (command === 'node-revoke') {
     body = '{}';
 }
 else
-    throw new Error('Usage: create|node|get|operation|update|delete|retry|node-get|node-policy|node-revoke');
-const requestKey = command === 'update' || command === 'node-policy' ? mutationKey : command === 'delete' || command === 'retry' ? expectedOrFile : key;
+    throw new Error('Usage: create|node|get|operation|update|delete|retry|node-get|node-policy|node-revoke|members|member|node-grants|node-grant');
+const requestKey = command === 'update' || command === 'node-policy' || command === 'node-grant' ? mutationKey : command === 'delete' || command === 'retry' || command === 'member' ? expectedOrFile : key;
 if (command === 'create' && !key)
     throw new Error('Provide a persistent Idempotency-Key for create and reuse it on retry');
 const url = new URL(`/api/v1/scopes/${encodeURIComponent(scope)}/${path}`, base);

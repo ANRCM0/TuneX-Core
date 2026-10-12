@@ -44,10 +44,12 @@ export class MySqlUnitOfWork {
         if (legacy[0]!.n !== 0)
             throw new Error('VNext requires a fresh database');
         const connection = await this.pool.getConnection();
+        let migrationLocked=false;
         try {
-            const [locked] = await connection.query<RowDataPacket[]>("SELECT GET_LOCK(CONCAT('tunex:migrate:',DATABASE()),30) acquired");
+            const [locked] = await connection.query<RowDataPacket[]>("SELECT GET_LOCK(CONCAT('tunex:migrate:',LEFT(SHA2(DATABASE(),256),48)),30) acquired");
             if (locked[0]?.acquired !== 1)
                 throw new Error('Migration lock unavailable');
+            migrationLocked=true;
             await connection.query('CREATE TABLE IF NOT EXISTS vnext_migrations(name VARCHAR(128) PRIMARY KEY,applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)');
             const directory = new URL('../../migrations/', import.meta.url);
             for (const name of (await readdir(directory)).filter(name => name.endsWith('.sql')).sort()) {
@@ -81,8 +83,7 @@ export class MySqlUnitOfWork {
             }
         }
         finally {
-            await connection.query("SELECT RELEASE_LOCK(CONCAT('tunex:migrate:',DATABASE()))");
-            connection.release();
+            try{if(migrationLocked)await connection.query("SELECT RELEASE_LOCK(CONCAT('tunex:migrate:',LEFT(SHA2(DATABASE(),256),48)))");}finally{connection.release();}
         }
     }
     async close(): Promise<void> { await this.pool.end(); }

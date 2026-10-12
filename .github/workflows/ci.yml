@@ -64,10 +64,13 @@ jobs:
       - run: node scripts/run-go.mjs build -o ../.artifacts/tunex-agent ./cmd/tunex-agent
       - name: Verify actual OS time synchronization before granting Agent leases
         run: node scripts/run-go.mjs run ./cmd/time-proof --check
+      - run: node scripts/run-go.mjs build -o ../.artifacts/time-proof ./cmd/time-proof
+      - run: node scripts/run-go.mjs build -o ../.artifacts/network-fixture ./cmd/network-fixture
       - run: npm run test:phase1
       - run: npm run test:phase2
       - run: npm run test:security
       - run: npm run test:faults
+      - run: npm run test:access
       - name: Preserve redacted acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -78,3 +81,4 @@ jobs:
             .artifacts/phase2/**/evidence.json
             .artifacts/security/**/evidence.json
             .artifacts/faults/**/evidence.json
+            .artifacts/access/**/evidence.json

@@ -20,3 +20,7 @@ versioned transport milestone.
 Node credential rotation, revocation and versioned target-policy withdrawal now
 share the durable runtime authorization boundaries. Setup, routes and verification
 scope: [Node security](../../docs/development/node-security.md).
+
+Scope-owner member management and Node-use grants have transactional CAS/replay,
+audit, withdrawal/redeployment and independent per-Forward execution authorizers.
+Routes, CLI and verified boundaries: [Access management](../../docs/development/access-management.md).

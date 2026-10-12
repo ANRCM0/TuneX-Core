@@ -13,7 +13,8 @@ import type { Accepted, RequestIdentity } from '../modules/idempotency.ts';
 import { RuntimeLedger } from '../modules/runtime/ledger.ts';
 import { compileDirect } from '../modules/runtime/planner.ts';
 import type { NodePolicy } from '../modules/nodes.ts';
-import { json, write } from '../infrastructure/mysql.ts';
+import { json } from '../infrastructure/mysql.ts';
+import { tokenHash } from '../modules/identity.ts';
 function requestIdentity(actorId: string, scopeId: string, key: string | undefined, method: string, path: string, input: unknown): RequestIdentity {
     if (!isId(actorId) || !isId(scopeId) || !key || !/^[\x21-\x7e]{1,128}$/.test(key))
         invalid('Valid identity, scope and Idempotency-Key required');
@@ -35,12 +36,12 @@ function revision(value: number): void {
 /** Coordinates owner-owned commands inside one durable acceptance transaction. */
 export class ControlApplication {
     readonly forwarding = new Forwarding();
-    readonly ledger:RuntimeLedger;
+    readonly ledger: RuntimeLedger;
     readonly idempotency = new Idempotency();
     readonly db: MySqlUnitOfWork;
     readonly identity: Identity;
     readonly nodes: Nodes;
-    constructor(db: MySqlUnitOfWork, identity: Identity, nodes: Nodes, policy?:Policy) { this.db = db; this.identity = identity; this.nodes = nodes;this.ledger=new RuntimeLedger(policy); }
+    constructor(db: MySqlUnitOfWork, identity: Identity, nodes: Nodes, policy?: Policy) { this.db = db; this.identity = identity; this.nodes = nodes; this.ledger = new RuntimeLedger(policy, nodes); }
     async create(actorId: string, scopeId: string, key: string | undefined, input: unknown): Promise<Accepted> {
         const spec = directSpec(input);
         const request = requestIdentity(actorId, scopeId, key, 'POST', `/api/v1/scopes/${scopeId}/forwards`, spec);
@@ -58,7 +59,7 @@ export class ControlApplication {
             compileDirect({ ...forward, spec: { ...spec, enabled: true } }, facts, spec.protocols.map(protocol => ({ nodeId: facts.nodeId, forwardId: forward.id, protocol, port: spec.ingress.listen.port, bindingFence: 1, deploymentGeneration: 1 })));
             const slots = await this.ledger.reserve(tx, forward);
             compileDirect({ ...forward, spec: { ...spec, enabled: true } }, facts, slots);
-            await this.forwarding.insert(tx, forward);
+            await this.forwarding.insert(tx, forward, actorId);
             const operationId = await this.ledger.accept(tx, forward, request);
             await this.ledger.assertCapacity(tx, this.forwarding, facts);
             const response: Accepted = { status: 202, body: { forwardId: forward.id, revision: 1, operationId } };
@@ -97,6 +98,7 @@ export class ControlApplication {
             const slots = await this.ledger.transition(tx, current, next);
             compileDirect({ ...next, spec: { ...next.spec, enabled: true } }, facts, slots);
             await this.forwarding.replace(tx, current, next);
+            await this.forwarding.setAuthorizer(tx, next.id, actorId);
             const kind = !next.spec.enabled ? 'disable' : !current.spec.enabled ? 'enable' : 'update';
             const operationId = await this.ledger.accept(tx, next, request, kind, current.spec);
             await this.ledger.assertCapacity(tx, this.forwarding, facts);
@@ -155,6 +157,7 @@ export class ControlApplication {
             await this.ledger.lockNode(tx, facts.nodeId);
             if (forward.spec.enabled)
                 await this.ledger.transition(tx, forward, forward);
+            await this.forwarding.setAuthorizer(tx, forward.id, actorId);
             const operationId = await this.ledger.accept(tx, forward, request, 'retry', source.previous_spec, source.id);
             await this.ledger.assertCapacity(tx, this.forwarding, facts);
             const response: Accepted = { status: 202, body: { forwardId: forward.id, revision: forward.revision, operationId, sourceOperationId: source.id } };
@@ -201,13 +204,14 @@ export class ControlApplication {
                 await this.nodes.markRevoked(tx, nodeId);
             const operationIds: string[] = [];
             for (const forward of await this.forwarding.forNode(tx, nodeId)) {
-                const canRun = command.kind === 'policy' && this.nodes.intentAllowed(facts, forward);
+                const sourceActor = await this.forwarding.authorizer(tx, forward.id);
+                const canRun = command.kind === 'policy' && Boolean(sourceActor && await this.nodes.canExecute(tx, sourceActor, forward));
                 if (canRun && forward.spec.enabled)
                     await this.ledger.transition(tx, forward, forward);
                 const operationId = await this.ledger.accept(tx, forward, request, canRun ? 'policy' : 'revoke');
                 operationIds.push(operationId);
                 if (command.kind === 'policy' && !canRun)
-                    await write(tx, "UPDATE operations SET status='failed',last_error=?,cleanup_pending=TRUE WHERE id=?", [JSON.stringify({ code: 'AUTHORIZATION_DENIED', retryable: false }), operationId]);
+                    await this.ledger.denyIntent(tx, operationId);
             }
             // Revocation must still persist if tombstone capacity prevents a removal snapshot.
             // Rejecting all credentials stops new authority; historical leases retain their cutoff.
@@ -216,6 +220,110 @@ export class ControlApplication {
             const maxLease = await this.ledger.maximumAuthorization(tx, nodeId);
             await this.nodes.audit(tx, nodeId, actorId, command.kind === 'policy' ? 'policy_update' : 'node_revocation', { policyRevision: facts.egressPolicyRevision, operationIds, latestAuthorizationUntil: maxLease });
             const response = { status: 202 as const, body: { nodeId, policyRevision: facts.egressPolicyRevision, operationIds, latestAuthorizationUntil: maxLease ? new Date(maxLease + 5000).toISOString() : null } };
+            await this.idempotency.respond(tx, request, response);
+            return response;
+        });
+    }
+    async changeMember(actorId: string, scopeId: string, subject: string, key: string | undefined, input: {
+        expectedRevision: number;
+        role: 'manager' | 'viewer' | 'removed';
+        token?: string;
+    }): Promise<{
+        status: 200 | 202;
+        body: {
+            actorId: string;
+            revision: number;
+            role: string;
+            active: boolean;
+            operationIds: string[];
+            latestAuthorizationUntil: string | null;
+        };
+    }> {
+        const request = requestIdentity(actorId, scopeId, key, 'PUT', `/api/v1/scopes/${scopeId}/members/${subject}`, { expectedRevision: input.expectedRevision, role: input.role, tokenHash: input.token ? tokenHash(input.token) : null });
+        return this.db.transaction(async (tx) => {
+            await this.identity.owner(tx, actorId, scopeId);
+            const replay = await this.idempotency.claim<{
+                status: 200 | 202;
+                body: {
+                    actorId: string;
+                    revision: number;
+                    role: string;
+                    active: boolean;
+                    operationIds: string[];
+                    latestAuthorizationUntil: string | null;
+                };
+            }>(tx, request);
+            if (replay)
+                return replay;
+            const member = await this.identity.changeMember(tx, actorId, scopeId, subject, input.expectedRevision, input.role, input.token);
+            const operationIds: string[] = [];
+            let cutoff: number | null = null;
+            if (member.changed)
+                for (const candidate of await this.forwarding.forActor(tx, scopeId, subject)) {
+                    await this.ledger.lockNode(tx, candidate.spec.ingress.nodeId);
+                    const forward = await this.forwarding.record(tx, scopeId, candidate.id);
+                    if (forward.deleting || await this.forwarding.authorizer(tx, forward.id) !== subject)
+                        continue;
+                    const allowed = input.role === 'manager' && await this.nodes.canExecute(tx, subject, forward);
+                    if (allowed && forward.spec.enabled)
+                        await this.ledger.transition(tx, forward, forward);
+                    const operationId = await this.ledger.accept(tx, forward, request, allowed ? 'policy' : 'revoke');
+                    operationIds.push(operationId);
+                    if (allowed) {
+                        const facts = await this.nodes.cleanupFacts(tx, forward.spec.ingress.nodeId, scopeId);
+                        await this.ledger.assertCapacity(tx, this.forwarding, facts);
+                    }
+                    const until = await this.ledger.maximumAuthorization(tx, forward.spec.ingress.nodeId);
+                    if (until !== null)
+                        cutoff = Math.max(cutoff ?? 0, until);
+                }
+            const response = { status: member.changed ? 202 as const : 200 as const, body: { actorId: member.actorId, revision: member.revision, role: member.role, active: member.active, operationIds, latestAuthorizationUntil: cutoff ? new Date(cutoff + 5000).toISOString() : null } };
+            await this.idempotency.respond(tx, request, response);
+            return response;
+        });
+    }
+    async changeNodeGrant(actorId: string, scopeId: string, nodeId: string, subject: string, key: string | undefined, expectedRevision: number, allowed: boolean): Promise<{
+        status: 200 | 202;
+        body: {
+            nodeId: string;
+            actorId: string;
+            revision: number;
+            allowed: boolean;
+            operationIds: string[];
+            latestAuthorizationUntil: string | null;
+        };
+    }> {
+        const request = requestIdentity(actorId, scopeId, key, 'PUT', `/api/v1/scopes/${scopeId}/nodes/${nodeId}/grants/${subject}`, { expectedRevision, allowed });
+        return this.db.transaction(async (tx) => {
+            await this.identity.owner(tx, actorId, scopeId);
+            const replay = await this.idempotency.claim<{
+                status: 200 | 202;
+                body: {
+                    nodeId: string;
+                    actorId: string;
+                    revision: number;
+                    allowed: boolean;
+                    operationIds: string[];
+                    latestAuthorizationUntil: string | null;
+                };
+            }>(tx, request);
+            if (replay)
+                return replay;
+            const grant = await this.nodes.changeGrant(tx, actorId, scopeId, nodeId, subject, expectedRevision, allowed);
+            const operationIds: string[] = [];
+            if (grant.changed)
+                for (const forward of await this.forwarding.forActor(tx, scopeId, subject))
+                    if (forward.spec.ingress.nodeId === nodeId) {
+                        if (allowed && forward.spec.enabled)
+                            await this.ledger.transition(tx, forward, forward);
+                        const operationId = await this.ledger.accept(tx, forward, request, allowed ? 'policy' : 'revoke');
+                        operationIds.push(operationId);
+                    }
+            const facts = await this.nodes.cleanupFacts(tx, nodeId, scopeId);
+            if (allowed)
+                await this.ledger.assertCapacity(tx, this.forwarding, facts);
+            const cutoff = await this.ledger.maximumAuthorization(tx, nodeId);
+            const response = { status: grant.changed ? 202 as const : 200 as const, body: { nodeId, actorId: subject, revision: grant.revision, allowed, operationIds, latestAuthorizationUntil: cutoff ? new Date(cutoff + 5000).toISOString() : null } };
             await this.idempotency.respond(tx, request, response);
             return response;
         });

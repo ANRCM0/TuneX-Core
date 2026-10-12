@@ -28,6 +28,7 @@ export interface Operation {
     source_operation_id: string | null;
     previous_spec: unknown;
     created_at: number;
+    requested_by: string;
 }
 interface Retirement {
     node_id: string;
@@ -42,8 +43,13 @@ interface Retirement {
     safe: number;
 }
 export class RuntimeLedger {
-    private readonly policy:Policy;
-    constructor(policy:Policy={...DEFAULT_POLICY}){this.policy={...policy};}
+    private readonly policy: Policy;
+    private readonly authorization: {
+        canExecute(tx: Transaction, actor: string, forward: Forward): Promise<boolean>;
+    } | undefined;
+    constructor(policy: Policy = { ...DEFAULT_POLICY }, authorization?: {
+        canExecute(tx: Transaction, actor: string, forward: Forward): Promise<boolean>;
+    }) { this.policy = { ...policy }; this.authorization = authorization; }
     async assignments(tx: Transaction, forwarding: Forwarding, facts: AuthorizedNodeFacts, includeAccepted = false): Promise<Assignment[]> {
         const forwards = await forwarding.forNode(tx, facts.nodeId);
         if (!forwards.length)
@@ -66,6 +72,9 @@ export class RuntimeLedger {
                 continue;
             if (op.kind === 'revoke')
                 continue;
+            const sourceActor = await forwarding.authorizer(tx, forward.id);
+            if (!sourceActor || !this.authorization || !await this.authorization.canExecute(tx, sourceActor, forward))
+                continue;
             if (!facts.allowedListenerAddresses.includes(forward.spec.ingress.listen.address) || !facts.allowedPorts.includes(forward.spec.ingress.listen.port) || !targetAllowed(forward.spec.target.host, facts))
                 continue;
             const reservations: ReservedSlot[] = slots.filter(slot => slot.owner_id === forward.id).map(slot => ({ nodeId: facts.nodeId, forwardId: forward.id, protocol: slot.protocol, port: slot.port, bindingFence: slot.fence, deploymentGeneration: slot.deployment_generation }));
@@ -84,7 +93,7 @@ export class RuntimeLedger {
             if (!assignments.some(a => a.assignmentId === old.assignmentId && a.deploymentGeneration === old.deploymentGeneration && a.bindingFence === old.bindingFence) && !tombstones.some(t => t.assignmentId === old.assignmentId && t.bindingFence === old.bindingFence && t.port === old.listener.port && t.protocol === old.protocol))
                 tombstones.push({ assignmentId: old.assignmentId, forwardId: old.forwardId, protocol: old.protocol, port: old.listener.port, bindingFence: old.bindingFence, retirementGeneration: MAX_COUNTER });
         }
-        compileSnapshot({ nodeId: facts.nodeId, sessionEpoch: MAX_COUNTER, snapshotGeneration: MAX_COUNTER, issuedAt: new Date(now).toISOString(), validUntil: new Date(now + this.policy.leaseSeconds*1000).toISOString(), assignments, tombstones,policy:this.policy });
+        compileSnapshot({ nodeId: facts.nodeId, sessionEpoch: MAX_COUNTER, snapshotGeneration: MAX_COUNTER, issuedAt: new Date(now).toISOString(), validUntil: new Date(now + this.policy.leaseSeconds * 1000).toISOString(), assignments, tombstones, policy: this.policy });
     }
     async verifyPublishable(tx: Transaction, assignments: readonly Assignment[]): Promise<void> {
         for (const assignment of assignments) {
@@ -101,9 +110,11 @@ export class RuntimeLedger {
         if (!state || epoch !== undefined && (!isCounter(epoch) || state.session_epoch !== epoch))
             throw new ControlError('SESSION_SUPERSEDED', 409, 'Current Node session required');
     }
-    async maximumAuthorization(tx: Transaction, nodeId: string): Promise<number | null> { return (await rows<{
-        until: number | null;
-    }>(tx, 'SELECT MAX(valid_until) until FROM execution_leases WHERE node_id=?', [nodeId]))[0]!.until; }
+    async maximumAuthorization(tx: Transaction, nodeId: string): Promise<number | null> {
+        return (await rows<{
+            until: number | null;
+        }>(tx, 'SELECT MAX(valid_until) until FROM execution_leases WHERE node_id=?', [nodeId]))[0]!.until;
+    }
     async latest(tx: Transaction, forwardId: string): Promise<Operation | undefined> { return (await rows<Operation>(tx, 'SELECT * FROM operations WHERE forward_id=? ORDER BY target_revision DESC,created_at DESC,id DESC LIMIT 1', [forwardId]))[0]; }
     async reserve(tx: Transaction, forward: Forward): Promise<ReservedSlot[]> {
         const slots: ReservedSlot[] = [];
@@ -159,6 +170,7 @@ export class RuntimeLedger {
         return result;
     }
     async releaseForwardSlots(tx: Transaction, forwardId: string): Promise<void> { await write(tx, 'UPDATE port_slots SET owner_id=NULL WHERE owner_id=?', [forwardId]); }
+    async denyIntent(tx: Transaction, operationId: string): Promise<void> { await write(tx, "UPDATE operations SET status='failed',last_error=?,cleanup_pending=TRUE,updated_at=? WHERE id=? AND status='accepted'", [JSON.stringify({ code: 'AUTHORIZATION_DENIED', retryable: false }), Date.now(), operationId]); }
     async accept(tx: Transaction, forward: Forward, request: RequestIdentity, kind: Operation['kind'] = 'create', previousSpec: unknown = null, sourceOperationId: string | null = null): Promise<string> {
         const operationId = randomUUID(), prior = await this.latest(tx, forward.id), now = Math.max(Date.now(), (prior?.created_at ?? 0) + 1);
         await write(tx, "INSERT INTO operations(id,scope_id,forward_id,target_revision,kind,status,requested_by,idempotency_key,request_digest,created_at,updated_at,execution_deadline,source_operation_id,previous_spec) VALUES(?,?,?,? ,?,'accepted',?,?,?,?,?,?,?,?)", [operationId, forward.scopeId, forward.id, forward.revision, kind, request.actorId, request.key, request.digest, now, now, now + 600000, sourceOperationId, previousSpec === null ? null : JSON.stringify(previousSpec)]);
@@ -230,6 +242,8 @@ export class RuntimeLedger {
             if (stopped && noCurrentAssignment && unsafe === 0) {
                 if (forward.deleting)
                     await this.releaseForwardSlots(tx, forward.id);
+                else
+                    await this.releaseObsoleteSlots(tx, forward);
                 await write(tx, "UPDATE operations SET status=IF(status='running','succeeded',status),cleanup_pending=FALSE,updated_at=? WHERE id=?", [Date.now(), op.id]);
                 await write(tx, "UPDATE operations SET cleanup_pending=FALSE WHERE forward_id=? AND status IN ('failed','superseded')", [forward.id]);
             }

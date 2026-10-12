@@ -132,3 +132,23 @@ Windows Control/MySQL over the private WSL interface, including actual kernel ti
 proof, mTLS/ACK, both payloads, lifecycle and outage/restart. This is explicitly a
 mixed-platform topology, not a wholly Linux stack. Native Linux race tests also pass.
 Details and remaining gates: [System time](system-time.md).
+
+## Access management slice
+
+Baseline: `151e9b2`. Owner-only member role and Node-use grant commands now use
+CAS, persistent idempotency and shared-transaction access audit. Existing account
+credentials cannot be overwritten; the scope owner cannot be demoted or removed.
+Forwarding records the actual execution authorizer separately from Operation audit
+requesters. Runtime rechecks current active manager membership, explicit Node use
+and policy before signing another snapshot.
+
+Real MySQL/HTTPS/native Linux Agent acceptance passed membership/concurrency,
+rollback, grant withdrawal/restoration, owner-policy authorizer preservation,
+same-Node actor isolation, removed-actor replay refusal, cleanup and CLI cases.
+Evidence is `.artifacts/access/run-*/evidence.json`; current local topology is
+Windows locked Control/MySQL plus native Linux Agent/client/target. CI's native
+Linux/MySQL access gate is configured but is not counted as remotely verified.
+
+Details: [Access management](access-management.md). Remaining work includes full
+capacity/recovery/release evidence, Relay/transport contracts and implementation,
+the product Web surface and identity/recovery ergonomics. Full project goal stays active.

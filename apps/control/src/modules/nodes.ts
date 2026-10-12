@@ -25,8 +25,14 @@ export class Nodes {
     private readonly ca: NodeCertificateAuthority;
     private readonly overlapSeconds: number;
     private readonly runtime = new RuntimeLedger();
-    constructor(db: MySqlUnitOfWork, identity: Identity, ca: NodeCertificateAuthority, overlapSeconds = 120) { if (!Number.isInteger(overlapSeconds) || overlapSeconds < 1 || overlapSeconds > 300)
-        throw new Error('Credential overlap must be 1..300 seconds'); this.db = db; this.identity = identity; this.ca = ca; this.overlapSeconds = overlapSeconds; }
+    constructor(db: MySqlUnitOfWork, identity: Identity, ca: NodeCertificateAuthority, overlapSeconds = 120) {
+        if (!Number.isInteger(overlapSeconds) || overlapSeconds < 1 || overlapSeconds > 300)
+            throw new Error('Credential overlap must be 1..300 seconds');
+        this.db = db;
+        this.identity = identity;
+        this.ca = ca;
+        this.overlapSeconds = overlapSeconds;
+    }
     async provision(actor: string, scope: string, policy: NodePolicy): Promise<{
         nodeId: string;
         enrollmentToken: string;
@@ -65,7 +71,8 @@ export class Nodes {
             }
             const signed = await this.ca.sign(nodeId, csr);
             const response = { certificate: signed.certificate, ca: signed.ca };
-            if(node.enrollment_until<=Date.now())throw new ControlError('AUTHORIZATION_DENIED',403,'Enrollment token expired before acceptance');
+            if (node.enrollment_until <= Date.now())
+                throw new ControlError('AUTHORIZATION_DENIED', 403, 'Enrollment token expired before acceptance');
             await write(tx, 'UPDATE nodes SET csr_digest=?,credential_fingerprint=?,credential_until=?,enrollment_response=? WHERE id=?', [csrDigest, signed.fingerprint, signed.until, JSON.stringify(response), nodeId]);
             await write(tx, 'INSERT INTO node_credentials(fingerprint,node_id,issued_at,valid_until) VALUES(?,?,?,?)', [signed.fingerprint, nodeId, Date.now(), signed.until]);
             return response;
@@ -108,9 +115,14 @@ export class Nodes {
             throw new ControlError('AUTHORIZATION_DENIED', 403, 'Node authorization expired');
         return state;
     }
-    async cleanupFacts(tx: Transaction, nodeId: string, scopeId: string): Promise<AuthorizedNodeFacts> { const state = await this.state(tx, nodeId); if (state.facts.scopeId !== scopeId)
-        notFound(); return state.facts; }
+    async cleanupFacts(tx: Transaction, nodeId: string, scopeId: string): Promise<AuthorizedNodeFacts> {
+        const state = await this.state(tx, nodeId);
+        if (state.facts.scopeId !== scopeId)
+            notFound();
+        return state.facts;
+    }
     async authorized(tx: Transaction, actor: string, forward: Forward): Promise<AuthorizedNodeFacts> {
+        await this.identity.scope(tx, actor, forward.scopeId, true);
         const grant = (await rows(tx, 'SELECT g.node_id FROM node_grants g JOIN nodes n ON n.id=g.node_id WHERE g.node_id=? AND g.actor_id=? AND n.scope_id=? FOR SHARE', [forward.spec.ingress.nodeId, actor, forward.scopeId]))[0];
         if (!grant)
             notFound();
@@ -119,6 +131,55 @@ export class Nodes {
             throw new ControlError('AUTHORIZATION_DENIED', 403, 'Forward violates Node network policy');
         return facts;
     }
+    async hasGrant(tx: Transaction, nodeId: string, actorId: string): Promise<boolean> { return (await rows(tx, 'SELECT node_id FROM node_grants WHERE node_id=? AND actor_id=? FOR SHARE', [nodeId, actorId])).length === 1; }
+    async canExecute(tx: Transaction, actorId: string, forward: Forward): Promise<boolean> {
+        if (!await this.identity.executing(tx, actorId, forward.scopeId) || !await this.hasGrant(tx, forward.spec.ingress.nodeId, actorId))
+            return false;
+        const node = await this.state(tx, forward.spec.ingress.nodeId);
+        return !node.revoked && node.credentialUntil > Date.now() && this.intentAllowed(node.facts, forward);
+    }
+    async changeGrant(tx: Transaction, owner: string, scopeId: string, nodeId: string, subject: string, expectedRevision: number, allowed: boolean): Promise<{
+        nodeId: string;
+        actorId: string;
+        revision: number;
+        allowed: boolean;
+        changed: boolean;
+    }> {
+        if (!isId(subject) || !isCounter(expectedRevision) || typeof allowed !== 'boolean')
+            invalid('Valid grant subject, revision and allowed flag required');
+        await this.identity.owner(tx, owner, scopeId);
+        const node = await this.management(tx, owner, scopeId, nodeId);
+        const current = (await rows<{
+            grant_revision: number;
+        }>(tx, 'SELECT grant_revision FROM nodes WHERE id=? FOR UPDATE', [nodeId]))[0]!;
+        if (current.grant_revision !== expectedRevision)
+            throw new ControlError('REVISION_CONFLICT', 409, 'Node grants revision conflict');
+        if (allowed) {
+            if (node.revoked)
+                throw new ControlError('AUTHORIZATION_DENIED', 403, 'Cannot grant a revoked Node');
+            await this.identity.scope(tx, subject, scopeId, true);
+        }
+        const previous = await this.hasGrant(tx, nodeId, subject);
+        const changed = previous !== allowed;
+        const revision = current.grant_revision + (changed ? 1 : 0);
+        if (revision > Number.MAX_SAFE_INTEGER)
+            throw new ControlError('REVISION_EXHAUSTED', 409, 'Node grant revision exhausted');
+        if (changed) {
+            if (allowed)
+                await write(tx, 'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)', [nodeId, subject]);
+            else
+                await write(tx, 'DELETE FROM node_grants WHERE node_id=? AND actor_id=?', [nodeId, subject]);
+            await write(tx, 'UPDATE nodes SET grant_revision=? WHERE id=?', [revision, nodeId]);
+            await this.identity.audit(tx, scopeId, owner, subject, 'node_grant_change', revision, { nodeId, allowed });
+        }
+        return { nodeId, actorId: subject, revision, allowed, changed };
+    }
+    async listGrants(actor: string, scopeId: string, nodeId: string) { return this.db.transaction(async (tx) => { await this.identity.owner(tx, actor, scopeId); const node = (await rows<{
+        grant_revision: number;
+    }>(tx, 'SELECT grant_revision FROM nodes WHERE id=? AND scope_id=?', [nodeId, scopeId]))[0]; if (!node)
+        notFound(); const grants = await rows<{
+        actor_id: string;
+    }>(tx, 'SELECT actor_id FROM node_grants WHERE node_id=? ORDER BY actor_id', [nodeId]); return { nodeId, revision: node.grant_revision, actorIds: grants.map(g => g.actor_id) }; }); }
     intentAllowed(facts: AuthorizedNodeFacts, forward: Forward): boolean {
         return facts.nodeId === forward.spec.ingress.nodeId && facts.scopeId === forward.scopeId && facts.allowedListenerAddresses.includes(forward.spec.ingress.listen.address) && facts.allowedPorts.includes(forward.spec.ingress.listen.port) && facts.capabilities.includes('native.direct.v1') && forward.spec.protocols.every(protocol => facts.capabilities.includes(protocol)) && targetAllowed(forward.spec.target.host, facts);
     }
@@ -193,7 +254,7 @@ export class Nodes {
             if (current.credential_fingerprint !== fingerprint)
                 throw new ControlError('CREDENTIAL_SUPERSEDED', 409, 'Only current credential may initiate another rotation');
             const signed = await this.ca.sign(nodeId, csr);
-            await this.credential(tx,nodeId,fingerprint);
+            await this.credential(tx, nodeId, fingerprint);
             const now = Date.now();
             const overlap = Math.min(current.credential_until ?? now, now + this.overlapSeconds * 1000);
             await write(tx, 'INSERT INTO node_credentials(fingerprint,node_id,issued_at,valid_until) VALUES(?,?,?,?)', [signed.fingerprint, nodeId, now, signed.until]);
