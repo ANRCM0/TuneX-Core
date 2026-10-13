@@ -175,6 +175,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
             invalid('requestId and CSR required');
         return c.json(await control.nodes.rotate(c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')), input.requestId, input.csr));
     });
+    app.post('/agent/v2/relay-credential',async c=>{const input=parseJson(await body(c.req.raw,32768)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='csr,requestId'||!isId(input.requestId)||typeof input.csr!=='string')invalid('Relay credential request ID and CSR required');return c.json(await control.nodes.relayCredential(c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),input.requestId,input.csr));});
     app.post('/agent/v2/hello', async (c) => c.json(await runtime.hello(c.get('node'), parseMessage('HelloRequest', await body(c.req.raw)), c.get('fingerprint'))));
     app.get('/agent/v2/snapshot', async (c) => c.json(await runtime.snapshot(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), c.get('fingerprint'))));
     app.post('/agent/v2/report', async (c) => c.json(await runtime.report(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), parseMessage('ReportRequest', await body(c.req.raw)), c.get('fingerprint'))));

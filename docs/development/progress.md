@@ -282,3 +282,18 @@ components do not restore cached authority or automatically reset ADP/2 counters
 Current online Control/Agent still use ADP/2; dedicated peer credential management,
 ADP/3 database/runtime cutover, multi-process activation/flow/faults and release gates
 remain open. Full project is not completed by this protocol slice.
+
+
+## Dedicated Relay peer credential issuance
+
+Baseline: `b12c298`. Current enrolled machine mTLS/session may now request a separate
+P-256 Relay leaf with exact Node URI and clientAuth/serverAuth purpose. Persistent
+request/CSR response replay, current-machine checks and two-leaf bounded overlap
+prevent repeated issuance from silently expanding trust. Peer leaves are not machine
+API credentials; valid execution cutoff is bounded by DB/Node state independently
+of certificate NotAfter. Node retirement and old-backup recovery revoke all peer rows.
+
+Real MySQL/HTTPS suite passes 12 checks including URI/EKU, replay/conflict, purpose
+separation, overlap capacity and retirement. Agent peer key loading/renewal and
+ADP/3 runtime pin publication are not yet connected; complete two-Agent lifecycle
+and release gates remain outstanding.

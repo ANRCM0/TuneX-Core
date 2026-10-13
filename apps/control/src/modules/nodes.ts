@@ -20,7 +20,7 @@ export interface NodeRecord {
     revoked: number;
 }
 export class Nodes {
-    static async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE nodes SET revoked=TRUE');await write(tx,'UPDATE node_credentials SET revoked=TRUE');}
+    static async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE nodes SET revoked=TRUE');await write(tx,'UPDATE node_credentials SET revoked=TRUE');await write(tx,'UPDATE node_relay_credentials SET revoked=TRUE');}
     private readonly db: MySqlUnitOfWork;
     private readonly identity: Identity;
     private readonly ca: NodeCertificateAuthority;
@@ -210,8 +210,8 @@ export class Nodes {
         await write(tx, 'UPDATE nodes SET facts=? WHERE id=?', [JSON.stringify(facts), nodeId]);
         return facts;
     }
-    async markRevoked(tx: Transaction, nodeId: string): Promise<void> { await write(tx, 'UPDATE nodes SET revoked=TRUE WHERE id=?', [nodeId]); await write(tx, 'UPDATE node_credentials SET revoked=TRUE WHERE node_id=?', [nodeId]); }
-    async audit(tx: Transaction, nodeId: string, actor: string | null, kind: 'credential_rotation' | 'policy_update' | 'node_revocation' | 'relay_endpoint_update', details: unknown): Promise<void> { await write(tx, 'INSERT INTO node_security_events(id,node_id,actor_id,kind,created_at,details) VALUES(?,?,?,?,?,?)', [randomUUID(), nodeId, actor, kind, Date.now(), JSON.stringify(details)]); }
+    async markRevoked(tx: Transaction, nodeId: string): Promise<void> { await write(tx, 'UPDATE nodes SET revoked=TRUE WHERE id=?', [nodeId]); await write(tx, 'UPDATE node_credentials SET revoked=TRUE WHERE node_id=?', [nodeId]);await write(tx,'UPDATE node_relay_credentials SET revoked=TRUE WHERE node_id=?',[nodeId]); }
+    async audit(tx: Transaction, nodeId: string, actor: string | null, kind: 'credential_rotation' | 'policy_update' | 'node_revocation' | 'relay_endpoint_update' | 'relay_credential_issue', details: unknown): Promise<void> { await write(tx, 'INSERT INTO node_security_events(id,node_id,actor_id,kind,created_at,details) VALUES(?,?,?,?,?,?)', [randomUUID(), nodeId, actor, kind, Date.now(), JSON.stringify(details)]); }
     async view(actor: string, scope: string, nodeId: string) {
         return this.db.transaction(async (tx) => {
             await this.identity.scope(tx, actor, scope);
@@ -227,6 +227,19 @@ export class Nodes {
             }>(tx, 'SELECT fingerprint,valid_until,retire_after,revoked FROM node_credentials WHERE node_id=? ORDER BY issued_at', [nodeId]);
             return { nodeId, scopeId: scope, policy: json(record.facts), revoked: Boolean(record.revoked), pendingRevocation: Boolean(record.revoked && until && until + 5000 > Date.now()), latestAuthorizationUntil: until ? new Date(until + 5000).toISOString() : null, credentials: credentials.map(c => ({ fingerprint: c.fingerprint, validUntil: new Date(c.valid_until).toISOString(), retireAfter: c.retire_after ? new Date(c.retire_after).toISOString() : null, revoked: Boolean(c.revoked) })) };
         });
+    }
+    async relayCredential(nodeId:string,fingerprint:string,epoch:number,requestId:string,csr:string):Promise<{nodeId:string;certificate:string;ca:string;fingerprint:string;validUntil:string;certificateNotAfter:string;overlapUntil:string|null}>{
+        if(!isId(requestId)||typeof csr!=='string'||csr.length>16384||!csr.startsWith('-----BEGIN CERTIFICATE REQUEST-----'))invalid('Valid Relay request ID and CSR required');const requestDigest=digest({csr});
+        return this.db.transaction(async tx=>{await this.runtime.lockNode(tx,nodeId,epoch);const node=(await rows<NodeRecord&{credential_fingerprint:string|null}>(tx,'SELECT * FROM nodes WHERE id=? FOR UPDATE',[nodeId]))[0];if(!node||node.revoked)throw new ControlError('AUTHORIZATION_DENIED',403,'Node is revoked');const machineUntil=await this.credential(tx,nodeId,fingerprint);
+            const previous=(await rows<{request_digest:string;response:unknown}>(tx,'SELECT request_digest,response FROM relay_credential_requests WHERE node_id=? AND request_id=?',[nodeId,requestId]))[0];if(previous){if(previous.request_digest!==requestDigest)throw new ControlError('IDEMPOTENCY_CONFLICT',409,'Relay CSR request differs');return json(previous.response);}
+            if(node.credential_fingerprint!==fingerprint)throw new ControlError('CREDENTIAL_SUPERSEDED',409,'Current machine credential required for Relay issuance');
+            const active=await rows<{fingerprint:string;valid_until:number}>(tx,'SELECT fingerprint,valid_until FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE AND valid_until>? AND (retire_after IS NULL OR retire_after>?) ORDER BY issued_at FOR UPDATE',[nodeId,Date.now(),Date.now()]);if(active.length>=2)throw new ControlError('RESOURCE_LIMIT',429,'At most two Relay credentials may overlap');
+            const signed=await this.ca.sign(nodeId,csr,'relay');await this.credential(tx,nodeId,fingerprint);const now=Date.now(),until=Math.min(signed.until,machineUntil);if(until<=now)throw new ControlError('AUTHORIZATION_DENIED',403,'Relay credential has no remaining authority');
+            const overlap=Math.min(until,now+this.overlapSeconds*1000);await write(tx,'UPDATE node_relay_credentials SET retire_after=LEAST(valid_until,?) WHERE node_id=? AND revoked=FALSE AND retire_after IS NULL',[overlap,nodeId]);await write(tx,'INSERT INTO node_relay_credentials(fingerprint,node_id,issued_at,valid_until,certificate) VALUES(?,?,?,?,?)',[signed.fingerprint,nodeId,now,until,signed.certificate]);const response={nodeId,certificate:signed.certificate,ca:signed.ca,fingerprint:signed.fingerprint,validUntil:new Date(until).toISOString(),certificateNotAfter:new Date(signed.until).toISOString(),overlapUntil:active.length?new Date(overlap).toISOString():null};await write(tx,'INSERT INTO relay_credential_requests(node_id,request_id,request_digest,source_fingerprint,response) VALUES(?,?,?,?,?)',[nodeId,requestId,requestDigest,fingerprint,JSON.stringify(response)]);await this.audit(tx,nodeId,null,'relay_credential_issue',{fingerprint:signed.fingerprint,validUntil:until,overlapUntil:active.length?overlap:null});return response;
+        });
+    }
+    async relayCredentialFacts(tx:Transaction,nodeId:string):Promise<{fingerprint:string;certificate:string;validUntil:number}[]>{
+        const node=await this.state(tx,nodeId);if(node.revoked||node.credentialUntil<=Date.now())throw new ControlError('AUTHORIZATION_DENIED',403,'Node authorization expired');const credentials=await rows<{fingerprint:string;certificate:string;valid_until:number;retire_after:number|null}>(tx,'SELECT fingerprint,certificate,valid_until,retire_after FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE AND valid_until>? AND (retire_after IS NULL OR retire_after>?) ORDER BY fingerprint FOR SHARE',[nodeId,Date.now(),Date.now()]);if(credentials.length<1||credentials.length>2)throw new ControlError('AUTHORIZATION_DENIED',403,'Bounded Relay credentials required');return credentials.map(c=>({fingerprint:`sha256:${c.fingerprint}`,certificate:c.certificate,validUntil:Math.min(c.valid_until,c.retire_after??c.valid_until,node.credentialUntil)}));
     }
     async rotate(nodeId: string, fingerprint: string, epoch: number, requestId: string, csr: string): Promise<{
         certificate: string;

@@ -89,6 +89,7 @@ try {
     passed('Linux Agent: real mTLS Control/MySQL acceptance produces exact native TCP/UDP payloads');
 
     const recoveryProfile=await call('PUT',`/api/v1/scopes/${scope}/transport-profiles/recovery-profile`,{expectedRevision:0,config:{driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:60,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:4096}});assert.equal(recoveryProfile.status,202);
+    await control.db.pool.query('INSERT INTO node_relay_credentials(fingerprint,node_id,issued_at,valid_until,certificate) VALUES(?,?,?,?,?)',['a'.repeat(64),nodeId,Date.now(),Date.now()+60000,'recovery-fixture-public-certificate']);
     const manifest=await backupDatabase({databaseUrl:dbUrl.toString(),authority:control.authority,directory:join(directory,'backups'),mysqldump:mysqlClient('mysqldump')});
     const backupEnvelope=JSON.parse(await readFile(manifest,'utf8'));assert.equal(backupEnvelope.payload.forwardCount,1);const originalJournal=JSON.parse((await linux('/bin/cat',[`${nativeRoot}/state/journal.json`])).stdout);const originalGeneration=originalJournal.payload.generation;
     passed('Backup: actual single-transaction MySQL dump and protected MAC manifest capture the running intent');
@@ -112,7 +113,7 @@ try {
     await assert.rejects(()=>startControl({...serverOptions,initializeAuthority:false}),/binding differs/);
     const restoredAdmin=await createConnection(restored.databaseUrl);try{
         const [oldState]=await restoredAdmin.query<any[]>('SELECT snapshot_generation FROM runtime_nodes WHERE node_id=?',[nodeId]);assert.equal(oldState[0].snapshot_generation,originalGeneration);assert.ok(oldState[0].snapshot_generation<newerGeneration);
-        const [profileHistory]=await restoredAdmin.query<any[]>("SELECT COUNT(*) n FROM transport_profile_revisions WHERE profile_id='recovery-profile'");assert.equal(profileHistory[0].n,1);const [profileGrants]=await restoredAdmin.query<any[]>('SELECT COUNT(*) n FROM transport_profile_grants');assert.equal(profileGrants[0].n,0);
+        const [profileHistory]=await restoredAdmin.query<any[]>("SELECT COUNT(*) n FROM transport_profile_revisions WHERE profile_id='recovery-profile'");assert.equal(profileHistory[0].n,1);const [profileGrants]=await restoredAdmin.query<any[]>('SELECT COUNT(*) n FROM transport_profile_grants');assert.equal(profileGrants[0].n,0);const [retiredPeerCredentials]=await restoredAdmin.query<any[]>('SELECT COUNT(*) n FROM node_relay_credentials WHERE revoked=FALSE');assert.equal(retiredPeerCredentials[0].n,0);
         const [quarantine]=await restoredAdmin.query<any[]>('SELECT revoked FROM nodes WHERE id=?',[nodeId]);assert.equal(quarantine[0].revoked,1);const [intents]=await restoredAdmin.query<any[]>('SELECT revision,spec,recovery_suspended FROM forwards WHERE id=?',[created.body.forwardId]);assert.equal(intents[0].revision,1);assert.equal(intents[0].spec.target.port,targetStatus.port);assert.equal(intents[0].recovery_suspended,1);
     }finally{await restoredAdmin.end();}
     passed('Old backup recovery: actual lower-generation data is restored without clearing Agent high-water; all old trust/history is quarantined');

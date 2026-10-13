@@ -161,3 +161,31 @@ tracked peer certificate cutoff。测试是同进程双引擎的真实 TLS socke
 本切片只提供严格消息/持久状态组件，未把 Control/Agent 在线版本切到 3。
 现有在线 direct 回归继续通过；下一步连接专用 peer identity、Runtime 发布、
 Agent reconcile 和两个独立进程的实际流量/失败补偿。
+
+
+## 独立 Relay peer 证书签发与持久重试
+
+基线 `b12c298` 的切片增加 `/agent/v2/relay-credential`，只由当前有效 machine
+mTLS 身份和当前 sessionEpoch 提交 `{requestId,csr}`。这是现有注册信任上的
+专用身份准备入口，不声明 ADP/2 可执行 Relay。CSR 仅 ECDSA P-256，Control
+忽略自报 subject/SAN，以真实 Node ID 签发唯一 `urn:tunex:node:<id>` URI、
+非 CA leaf、digitalSignature 和 clientAuth/serverAuth；私钥仍由 Node 生成。
+peer cert 保存在独立 credential 表，不在 machine allowlist，不能访问机器 API。
+
+请求/CSR digest/响应同事务保留；同请求换 CSR 返回冲突，响应丢失可重放同一
+证书。新请求必须来自 current machine fingerprint；退役、失效或旧 session
+拒绝。最多两份活动 leaf overlap，旧 leaf retire_after 不超过配置 1–300 秒和
+现有有效期；下一次解析取有效截止/pins，不能仅证书链可验证就延长授权。
+`validUntil` 是数据库执行上界，可能早于 certificateNotAfter，后续 Runtime
+必须以此和 Node machine 有效期共同限制快照。证书本身 24 小时的 NotAfter
+不能被读成拥有 24 小时无限执行租约。
+
+Node 撤销/旧备份恢复同时撤销全部 Relay leaf，停止发行与事实解析；请求重放
+仍先验证当前 Node 授权。审计只存 fingerprint、有效截止和 overlap，不存 CSR/
+私钥或 certificate 正文。实际 peer 身份加载、在线自动续签、ADP/3 快照双端 pin
+更新及凭据切换补偿仍待接入。
+
+集成 suite 扩展为 12 项，包含真实 enrolled machine/CSR 签发、persisted replay、
+冲突、精确 URI/EKU、新旧用途拒绝、两份 overlap/第三份容量拒绝、旧 session
+拒绝、重启持久化及 Node 退役。恢复 suite 验证旧 Relay credential 行全部隔离；
+其行隔离 fixture 不是实际 peer 流量或证书到期演练。
