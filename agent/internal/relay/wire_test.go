@@ -5,11 +5,35 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/tunex/vnext/agent/internal/relaycontracts"
+	"strings"
 	"testing"
 )
 
 func testBinding() relaycontracts.Binding {
 	return relaycontracts.Binding{ScopeId: "scope-a", ForwardId: "forward-a", ForwardRevision: 1, DeploymentGeneration: 1, IngressNodeId: "node-a", EgressNodeId: "node-b", IngressAssignmentId: "assignment-a", EgressAssignmentId: "assignment-b", IngressSessionEpoch: 2, EgressSessionEpoch: 3, IngressFence: 4, EgressFence: 5, ProfileId: "profile-a", ProfileRevision: 1, ProfileDigest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"}
+}
+
+func TestReplyKeepsPreparedFailureRetryableAndBindsAcceptance(t *testing.T) {
+	var wire bytes.Buffer
+	hash := "sha256:" + strings.Repeat("1", 64)
+	if err := WriteControl(&wire, "Accept", relaycontracts.Accept{WireVersion: 1, Type: "accepted", RequestId: "request-a", BindingDigest: hash}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReadReply(&wire, "request-a", hash); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteControl(&wire, "Accept", relaycontracts.Accept{WireVersion: 1, Type: "accepted", RequestId: "request-b", BindingDigest: hash}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReadReply(&wire, "request-a", hash); err == nil {
+		t.Fatal("foreign acceptance consumed")
+	}
+	if err := WriteControl(&wire, "Reject", relaycontracts.Reject{WireVersion: 1, Type: "rejected", RequestId: "request-a", Code: "DOWNSTREAM_NOT_ACTIVE", Retryable: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ReadReply(&wire, "request-a", hash); err == nil || err.Error() != "DOWNSTREAM_NOT_ACTIVE" {
+		t.Fatal("prepared reply became a permanent parsing error", err)
+	}
 }
 func TestOpenAndFrameBoundsAndPreparedGate(t *testing.T) {
 	binding := testBinding()

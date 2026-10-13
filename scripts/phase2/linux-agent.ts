@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { randomUUID, createHash } from 'node:crypto';
-import { execFile, spawn } from 'node:child_process';
+import { randomUUID, createHash, X509Certificate } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { request } from 'node:https';
@@ -10,17 +10,12 @@ import { createConnection } from 'mysql2/promise';
 import { startControl } from '../../apps/control/src/server.ts';
 import { newToken } from '../../apps/control/src/modules/identity.ts';
 import { DEFAULT_POLICY } from '@tunex/contracts';
-const execute = promisify(execFile), distro = process.env.TUNEX_WSL_DISTRO ?? 'TXBoard-Baseline', host = process.env.TUNEX_WSL_HOST;
-if (!host || !/^172\.(?:[0-9]{1,3}\.){2}[0-9]{1,3}$/.test(host))
-    throw new Error('TUNEX_WSL_HOST must identify the inspected private WSL host interface');
+import { host, linuxPath, linux, linuxBinary, spawnLinux, topology, viaWSL } from './native-linux.ts';
+const execute = promisify(execFile), relayEnabled = process.argv.includes('--relay');
 const databaseUrl = process.env.TUNEX_TEST_DATABASE_URL;
 if (!databaseUrl)
     throw new Error('Disposable MySQL URL required');
 const openssl = process.env.TUNEX_OPENSSL ?? 'openssl';
-function linuxPath(value: string) { const absolute = resolve(value); if (!/^[A-Za-z]:\\/.test(absolute))
-    throw new Error('Windows mounted workspace required'); return `/mnt/${absolute[0]!.toLowerCase()}${absolute.slice(2).replaceAll('\\', '/')}`; }
-const wslArguments = ['--distribution', distro, '--exec'];
-async function linux(command: string, args: string[] = [], environment?: NodeJS.ProcessEnv) { return execute('wsl.exe', [...wslArguments, command, ...args], { ...(environment ? { env: environment } : {}) }); }
 await mkdir('.artifacts/linux-agent', { recursive: true });
 const directory = await mkdtemp(resolve('.artifacts/linux-agent/run-'));
 const caKey = join(directory, 'ca.key'), caCert = join(directory, 'ca.pem'), serverKey = join(directory, 'server.key'), serverCert = join(directory, 'server.pem');
@@ -34,7 +29,7 @@ const dbUrl = new URL(databaseUrl);
 dbUrl.pathname = `/${database}`;
 let control: Awaited<ReturnType<typeof startControl>> | undefined, agent: ChildProcess | undefined, target: ChildProcess | undefined, monitor: ChildProcess | undefined, targetPID: number | undefined;
 const token = newToken(), scope = 'linux-scope', owner = 'linux-owner', ca = await readFile(caCert), checks: string[] = [];
-const binary = linuxPath('.artifacts/tunex-agent-linux'), fixture = linuxPath('.artifacts/network-fixture-linux'), collector = linuxPath('.artifacts/time-proof-linux');
+const binary = linuxBinary('tunex-agent'), fixture = linuxBinary('network-fixture'), collector = linuxBinary('time-proof');
 const nativeRoot = `/tmp/tunex-linux-${randomUUID()}`;
 const runtimePolicy = { ...DEFAULT_POLICY, pollIntervalSeconds: 1, leaseSeconds: 18, renewalLeadSeconds: 8 };
 const serverOptions = { databaseUrl: dbUrl.toString(), caCert, caKey, serverKey, serverCert, openssl, stateDirectory: join(directory, 'control'), initializeAuthority:true, port: 0, host, policy: runtimePolicy };
@@ -61,7 +56,7 @@ try {
     passed('Linux OS time: synchronized kernel state and bounded error obtained without changing time');
     control = await startControl(serverOptions);
     await control.control.identity.bootstrap(scope, owner, token);
-    target = spawn('wsl.exe', [...wslArguments, fixture, '--mode', 'target', '--run-id', nativeRoot], { stdio: ['ignore', 'pipe', 'pipe'] });
+    target = spawnLinux(fixture, ['--mode', 'target', '--run-id', nativeRoot]);
     const targetStatus = JSON.parse(await new Promise<string>((resolve, reject) => { target!.stdout!.once('data', data => resolve(data.toString())); target!.once('error', reject); }));
     assert.equal(targetStatus.platform, 'linux');
     targetPID = targetStatus.pid;
@@ -72,13 +67,14 @@ try {
     assert.equal(provision.status, 201);
     const nodeId = provision.body.nodeId as string;
     const args = ['--control', `https://${host}:${control.port}`, '--node', nodeId, '--ca', linuxPath(caCert), '--state', `${nativeRoot}/state`, '--journal-key', `${nativeRoot}/secrets/journal.key`];
+    if (relayEnabled) args.push('--relay');
     try {
-        await execute('wsl.exe', [...wslArguments, 'env', `TUNEX_ENROLLMENT_TOKEN=${provision.body.enrollmentToken}`, binary, ...args, '--enroll']);
+        await linux('env', [`TUNEX_ENROLLMENT_TOKEN=${provision.body.enrollmentToken}`, binary, ...args, '--enroll']);
     }
     catch {
         throw new Error('Linux enrollment rejected or Control interface unreachable; token is redacted');
     }
-    agent = spawn('wsl.exe', [...wslArguments, binary, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    agent = spawnLinux(binary, args);
     let errors = '';
     agent.stderr!.on('data', data => { errors += data.toString(); });
     await until(async () => { const [records] = await control!.db.pool.query<any[]>('SELECT session_epoch FROM runtime_nodes WHERE node_id=?', [nodeId]); return records[0].session_epoch > 0; });
@@ -90,7 +86,19 @@ try {
     assert.equal(probe.tcp, true);
     assert.equal(probe.udp, true);
     passed('Linux Agent: real mTLS Control/MySQL acceptance produces exact native TCP/UDP payloads');
-    monitor = spawn('wsl.exe', [...wslArguments, fixture, '--mode', 'monitor', '--port', String(portStatus.port)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let peerFingerprint: string | undefined;
+    if (relayEnabled) {
+        const protectedPeer = JSON.parse((await linux('/bin/cat', [`${nativeRoot}/state/relay-credential.json`])).stdout);
+        const peer = protectedPeer.payload.snapshot;
+        assert.equal(peer.nodeId, nodeId); assert.ok(typeof protectedPeer.mac === 'string' && protectedPeer.mac.length === 64);
+        const leaf = new X509Certificate(peer.certificate); assert.equal(leaf.subjectAltName, `URI:urn:tunex:node:${nodeId}`);
+        assert.ok(leaf.keyUsage.includes('1.3.6.1.5.5.7.3.1') && leaf.keyUsage.includes('1.3.6.1.5.5.7.3.2'));
+        assert.ok(Date.parse(peer.validUntil) <= Date.parse(peer.certificateNotAfter)); peerFingerprint = peer.fingerprint;
+        const facts = await control.db.transaction(tx => control!.control.nodes.facts(tx, nodeId));
+        assert.ok(facts.facts.capabilities.includes('native.relay.v1') && facts.facts.capabilities.includes('relay.wire.1'));
+        passed('Relay Agent identity: real machine-session issuance produces protected dedicated peer identity and explicit capabilities');
+    }
+    monitor = spawnLinux(fixture, ['--mode', 'monitor', '--port', String(portStatus.port)]);
     let buffered = '', connected = false, ended = false;
     monitor.stdout!.on('data', data => { buffered += data.toString(); const lines = buffered.split('\n'); buffered = lines.pop()!; for (const line of lines) {
         if (!line.trim())
@@ -123,7 +131,7 @@ try {
     assert.equal(udpExpired, true);
     passed('Linux ADP-12: Control loss ends a held TCP stream and active UDP at the real ticket cutoff');
     await until(async () => agent!.exitCode !== null);
-    agent = spawn('wsl.exe', [...wslArguments, binary, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    agent = spawnLinux(binary, args);
     agent.stderr!.on('data', data => { errors += data.toString(); });
     await new Promise(resolve => setTimeout(resolve, 1000));
     let offlineClosed = false;
@@ -144,6 +152,12 @@ try {
     assert.equal(recovery.tcp, true);
     assert.equal(recovery.udp, true);
     passed('Linux ADP-13: online new session restores both protocols with preserved high-water');
+    if (relayEnabled) {
+        const peer = JSON.parse((await linux('/bin/cat', [`${nativeRoot}/state/relay-credential.json`])).stdout).payload.snapshot;
+        assert.equal(peer.fingerprint, peerFingerprint);
+        const [issued] = await control.db.pool.query<any[]>('SELECT COUNT(*) n FROM node_relay_credentials WHERE node_id=?', [nodeId]); assert.equal(issued[0].n, 1);
+        passed('Relay restart identity: offline boot opens no sockets; online restart reuses durable peer key without additional issuance');
+    }
     const disabled = await call('PUT', `/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`, { expectedRevision: 1, spec: { ...spec, enabled: false } });
     assert.equal(disabled.status, 202);
     await until(async () => (await call('GET', `/api/v1/scopes/${scope}/operations/${disabled.body.operationId}`)).body.status === 'succeeded');
@@ -155,7 +169,7 @@ try {
     passed('Linux lifecycle: tombstoned Forward reaches deletion terminal state');
     assert.ok(!errors.includes('CLOCK_UNCERTAIN') && !errors.includes('PERSISTENCE_FAILURE'), errors);
     const commit = (await execute('git', ['rev-parse', 'HEAD'])).stdout.trim();
-    await writeFile(join(directory, 'evidence.json'), JSON.stringify({ commit, workingTreeDirty: Boolean((await execute('git', ['status', '--porcelain'])).stdout.trim()), command: 'npm run test:linux-agent', checks, synchronization: observed, policy: runtimePolicy, oldGeneration, restoredGeneration: restoredJournal.payload.generation, agentSHA: createHash('sha256').update(await readFile('.artifacts/tunex-agent-linux')).digest('hex'), kernel: (await linux('/bin/uname', ['-a'])).stdout.trim(), topology: 'Windows Node 24/MySQL 8.4 Control; WSL native Linux Agent, client and target; no MariaDB substitution' }, null, 2));
+    await writeFile(join(directory, 'evidence.json'), JSON.stringify({ commit, workingTreeDirty: Boolean((await execute('git', ['status', '--porcelain'])).stdout.trim()), command: relayEnabled ? 'npm run test:relay-agent' : 'npm run test:linux-agent', checks, synchronization: observed, policy: runtimePolicy, oldGeneration, restoredGeneration: restoredJournal.payload.generation, relayEnabled, agentSHA: createHash('sha256').update(await readFile(viaWSL ? '.artifacts/tunex-agent-linux' : binary)).digest('hex'), kernel: (await linux('/bin/uname', ['-a'])).stdout.trim(), topology }, null, 2));
     console.log(`Native Linux Agent passed: ${checks.length} checks. Evidence ${directory}`);
 }
 finally {

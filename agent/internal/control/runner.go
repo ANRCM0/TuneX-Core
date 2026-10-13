@@ -18,15 +18,18 @@ import (
 	"time"
 
 	"github.com/tunex/vnext/agent/internal/adp3"
+	"github.com/tunex/vnext/agent/internal/adp3relay"
 	"github.com/tunex/vnext/agent/internal/authorization"
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/forward"
+	"github.com/tunex/vnext/agent/internal/relay"
 	"github.com/tunex/vnext/agent/internal/state"
 )
 
 type Options struct {
 	URL, NodeID, BootID, Certificate, PrivateKey, CA, Journal, JournalKey string
 	Rotate                                                                bool
+	Relay                                                                 bool
 	TimeProof, TimeProofKey                                               string
 	Diagnostics                                                           string
 }
@@ -103,6 +106,100 @@ func replaceExecution(old execution, a adp3.Assignment, check func() error) (exe
 	}
 }
 
+func (runner *Runner) assignmentCheck(a adp3.Assignment, ticket *authorization.Ticket) (func() error, error) {
+	if a.Role == "direct" {
+		return ticket.Allow, nil
+	}
+	_, until, err := runner.relayIdentity()
+	if err != nil {
+		return nil, err
+	}
+	return func() error {
+		if err := ticket.Allow(); err != nil {
+			return err
+		}
+		if !time.Now().Before(until) {
+			return fmt.Errorf("LEASE_EXPIRED: Relay credential authorization ended")
+		}
+		return nil
+	}, nil
+}
+
+func relayPhase(engine *relay.Engine, phase string) error {
+	switch phase {
+	case "prepared":
+		return nil
+	case "active":
+		return engine.Activate()
+	case "draining":
+		engine.Drain()
+		return nil
+	default:
+		return fmt.Errorf("UNSUPPORTED_CAPABILITY")
+	}
+}
+
+func executionError(a adp3.Assignment, err error) (string, bool) {
+	if a.Role == "direct" {
+		return "PORT_IN_USE", true
+	}
+	code := strings.SplitN(err.Error(), ":", 2)[0]
+	switch code {
+	case "AUTHENTICATION_FAILED", "AUTHORIZATION_DENIED", "INVALID_CONFIG", "INTEGRITY_FAILURE", "UNSUPPORTED_CAPABILITY", "TARGET_REJECTED", "LEASE_EXPIRED":
+		return code, false
+	case "RESOURCE_LIMIT", "DOWNSTREAM_NOT_ACTIVE", "TARGET_UNAVAILABLE":
+		return code, true
+	default:
+		if strings.Contains(err.Error(), "bind:") {
+			return "PORT_IN_USE", true
+		}
+		return "DOWNSTREAM_UNAVAILABLE", true
+	}
+}
+
+func (runner *Runner) startAssignment(a adp3.Assignment, check func() error) (execution, error) {
+	if a.Role == "direct" {
+		return startExecution(a, runner.hello.Policy, check)
+	}
+	identity, _, err := runner.relayIdentity()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(a)
+	if err != nil {
+		return nil, err
+	}
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return nil, err
+	}
+	body["protocolVersion"] = json.RawMessage("3")
+	body["nodeId"], _ = json.Marshal(runner.options.NodeID)
+	body["sessionEpoch"], _ = json.Marshal(runner.hello.SessionEpoch)
+	raw, err = json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	var assignment adp3relay.Assignment
+	if err := adp3relay.Parse("Assignment", raw, &assignment); err != nil {
+		return nil, err
+	}
+	assignment.Phase = "prepared"
+	maximum := runner.hello.Policy.MaxTcpConnectionsPerAssignment
+	if a.Protocol == "udp" {
+		maximum = runner.hello.Policy.MaxUdpSessionsPerAssignment
+	}
+	engine, err := relay.Prepare(assignment, identity, int(min(maximum, 4096)), check)
+	if err != nil {
+		return nil, err
+	}
+	if err := relayPhase(engine, a.Phase); err != nil {
+		engine.Close()
+		return nil, err
+	}
+	return engine, nil
+}
+
 type draining struct {
 	instance running
 	started  time.Time
@@ -128,6 +225,8 @@ type Runner struct {
 	credentialUntil       time.Time
 	credentialFingerprint [32]byte
 	roots                 *x509.CertPool
+	relayCertificate      tls.Certificate
+	relayUntil            time.Time
 }
 
 func New(options Options) (*Runner, error) {
@@ -211,6 +310,9 @@ func (runner *Runner) Run(ctx context.Context) error {
 	defer runner.stop()
 	defer runner.client.CloseIdleConnections()
 	hello := adp3.HelloRequest{ProtocolVersion: 3, NodeId: runner.options.NodeID, BootId: runner.options.BootID, AgentBuild: "vnext-adp3-direct", Capabilities: []string{"adp.3", "native.direct.v1", "tcp", "udp"}, LastStoredSnapshotGeneration: runner.journal.Generation}
+	if runner.options.Relay {
+		hello.Capabilities = append(hello.Capabilities, "native.relay.v1", "relay.wire.1")
+	}
 	body, _ := json.Marshal(hello)
 	var raw []byte
 	var err error
@@ -265,6 +367,11 @@ func (runner *Runner) Run(ctx context.Context) error {
 	}
 	if err := runner.guard.ValidateServerTime(serverTime); err != nil {
 		return err
+	}
+	if runner.options.Relay {
+		if err := runner.ensureRelayCredential(ctx); err != nil {
+			return err
+		}
 	}
 	// Credential validity and wall/monotonic drift are checked independently of network retry/poll intervals.
 	guardDone := make(chan struct{})
@@ -416,13 +523,24 @@ func (runner *Runner) poll(ctx context.Context) error {
 		}
 	}
 	for _, assignment := range snapshot.Assignments {
-		if (assignment.Protocol != "tcp" && assignment.Protocol != "udp") || assignment.Phase != "active" || assignment.Driver.Id != "native.direct.v1" {
+		if assignment.Role == "direct" && (assignment.Phase != "active" || assignment.Driver.Id != "native.direct.v1") {
 			return fmt.Errorf("UNSUPPORTED_CAPABILITY")
+		}
+		if assignment.Role != "direct" {
+			if !runner.options.Relay || assignment.Driver.Id != "native.relay.v1" {
+				return fmt.Errorf("UNSUPPORTED_CAPABILITY")
+			}
+			if _, _, err := runner.relayIdentity(); err != nil {
+				return err
+			}
 		}
 		key := fmt.Sprintf("%s/%d", assignment.Resource.Protocol, assignment.Resource.Port)
 		for _, old := range prior.Assignments {
 			if old.AssignmentId == assignment.AssignmentId && old.DeploymentGeneration == assignment.DeploymentGeneration && old.BindingFence == assignment.BindingFence && (old.Driver.ConfigDigest != assignment.Driver.ConfigDigest || old.Resource != assignment.Resource || old.Protocol != assignment.Protocol) {
 				return fmt.Errorf("INTEGRITY_FAILURE: execution configuration changed without a new generation/fence")
+			}
+			if old.AssignmentId == assignment.AssignmentId && old.DeploymentGeneration == assignment.DeploymentGeneration && old.BindingFence == assignment.BindingFence && (old.Phase == "draining" && assignment.Phase != "draining" || old.Phase == "active" && assignment.Phase == "prepared") {
+				return fmt.Errorf("FENCING_REJECTED: Relay instance phase regressed")
 			}
 		}
 		incoming[key] = true
@@ -470,9 +588,20 @@ func (runner *Runner) poll(ctx context.Context) error {
 			return fmt.Errorf("LEASE_EXPIRED: Authorization ended before bind")
 		}
 		key := fmt.Sprintf("%s/%d", assignment.Resource.Protocol, assignment.Resource.Port)
-		obs := adp3.Observation{AssignmentId: assignment.AssignmentId, DeploymentGeneration: assignment.DeploymentGeneration, BindingFence: assignment.BindingFence, Phase: "active", Condition: "ready", Retryable: false}
+		check, err := runner.assignmentCheck(assignment, ticket)
+		if err != nil {
+			return err
+		}
+		condition := "ready"
+		if assignment.Phase == "prepared" {
+			condition = "prepared"
+		}
+		if assignment.Phase == "draining" {
+			condition = "draining"
+		}
+		obs := adp3.Observation{AssignmentId: assignment.AssignmentId, DeploymentGeneration: assignment.DeploymentGeneration, BindingFence: assignment.BindingFence, Phase: assignment.Phase, Condition: condition, Retryable: false}
 		if existing, ok := runner.instances[key]; ok && (existing.assignment.Driver.ConfigDigest != assignment.Driver.ConfigDigest || existing.assignment.DeploymentGeneration != assignment.DeploymentGeneration || existing.assignment.BindingFence != assignment.BindingFence) {
-			stream, startErr := replaceExecution(existing.stream, assignment, ticket.Allow)
+			stream, startErr := replaceExecution(existing.stream, assignment, check)
 			if startErr == nil {
 				runner.beginDrain(existing, now, oldDeadline)
 				runner.instances[key] = running{assignment, stream, ticket}
@@ -480,29 +609,36 @@ func (runner *Runner) poll(ctx context.Context) error {
 			if startErr != nil {
 				runner.beginDrain(existing, now, oldDeadline)
 				delete(runner.instances, key)
-				stream, startErr = startExecution(assignment, runner.hello.Policy, ticket.Allow)
+				stream, startErr = runner.startAssignment(assignment, check)
 				if startErr == nil {
 					runner.instances[key] = running{assignment, stream, ticket}
 					runner.observations = append(runner.observations, obs)
 					continue
 				}
-				code := "PORT_IN_USE"
+				code, retryable := executionError(assignment, startErr)
 				obs.Condition = "error"
 				obs.ErrorCode = &code
-				obs.Retryable = true
+				obs.Retryable = retryable
 			}
 		} else if !ok {
-			stream, startErr := startExecution(assignment, runner.hello.Policy, ticket.Allow)
+			stream, startErr := runner.startAssignment(assignment, check)
 			if startErr != nil {
-				code := "PORT_IN_USE"
+				code, retryable := executionError(assignment, startErr)
 				obs.Condition = "error"
 				obs.ErrorCode = &code
-				obs.Retryable = true
+				obs.Retryable = retryable
 			} else {
 				runner.instances[key] = running{assignment, stream, ticket}
 			}
 		} else {
-			existing.stream.SetAuthorization(ticket.Allow)
+			existing.stream.SetAuthorization(check)
+			if engine, ok := existing.stream.(*relay.Engine); ok {
+				if err := relayPhase(engine, assignment.Phase); err != nil {
+					code, retryable := executionError(assignment, err)
+					obs.Condition, obs.ErrorCode, obs.Retryable = "error", &code, retryable
+				}
+			}
+			existing.assignment = assignment
 			existing.ticket = ticket
 			runner.instances[key] = existing
 		}

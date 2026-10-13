@@ -46,19 +46,62 @@ func WriteControl(out io.Writer, name string, value any) error {
 	return writeAll(out, raw)
 }
 func ReadControl(in io.Reader, name string, destination any) error {
-	var header [4]byte
-	if _, err := io.ReadFull(in, header[:]); err != nil {
-		return err
-	}
-	size := binary.BigEndian.Uint32(header[:])
-	if size < 2 || size > MaxControlBytes {
-		return fmt.Errorf("RESOURCE_LIMIT: Relay control message size")
-	}
-	raw := make([]byte, size)
-	if _, err := io.ReadFull(in, raw); err != nil {
+	raw, err := readControlPayload(in)
+	if err != nil {
 		return err
 	}
 	return relaycontracts.Parse(name, raw, destination)
+}
+func readControlPayload(in io.Reader) ([]byte, error) {
+	var header [4]byte
+	if _, err := io.ReadFull(in, header[:]); err != nil {
+		return nil, err
+	}
+	size := binary.BigEndian.Uint32(header[:])
+	if size < 2 || size > MaxControlBytes {
+		return nil, fmt.Errorf("RESOURCE_LIMIT: Relay control message size")
+	}
+	raw := make([]byte, size)
+	if _, err := io.ReadFull(in, raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+func ReadReply(in io.Reader, requestID, bindingDigest string) error {
+	raw, err := readControlPayload(in)
+	if err != nil {
+		return err
+	}
+	value, err := contracts.ParseJSON(raw, MaxControlBytes)
+	if err != nil {
+		return err
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("INVALID_CONFIG: Relay reply must be an object")
+	}
+	switch object["type"] {
+	case "accepted":
+		var reply relaycontracts.Accept
+		if err := relaycontracts.Parse("Accept", raw, &reply); err != nil {
+			return err
+		}
+		if reply.RequestId != requestID || reply.BindingDigest != bindingDigest {
+			return fmt.Errorf("AUTHORIZATION_DENIED: Relay reply binding differs")
+		}
+		return nil
+	case "rejected":
+		var reply relaycontracts.Reject
+		if err := relaycontracts.Parse("Reject", raw, &reply); err != nil {
+			return err
+		}
+		if reply.RequestId != requestID {
+			return fmt.Errorf("AUTHORIZATION_DENIED: Relay rejection request differs")
+		}
+		return fmt.Errorf("%s", reply.Code)
+	default:
+		return fmt.Errorf("INVALID_CONFIG: Unknown Relay reply")
+	}
 }
 func frameValid(kind byte, size int, protocol string, maximum int) bool {
 	if maximum < 64 || maximum > 65536 || size < 0 || size > maximum {

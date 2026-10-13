@@ -313,3 +313,21 @@ remain required. Details: [ADP/3 cutover](adp3-cutover.md).
 
 This completes the direct protocol cutover slice, not Relay or full project delivery.
 Peer identity loading and two-Agent runtime activation/traffic are next.
+
+## Relay Agent Execution And Prepared Plan
+
+Baseline: `f05d187`. Explicit Relay capability now loads a dedicated Node/session-issued
+peer identity, persists a MAC-protected bundle and refuses corrupt/altered expiry.
+Agent reconciles strict prepared/active/draining Relay assignments after journal writes,
+probes before ingress activation and again for downstream health, preserves execution
+during renewal and retires physical fences on removal. Failures retain actionable
+retry classification; machine credentials cannot replace Relay peer leaves.
+
+Control's deterministic compiler binds both Node sessions/credentials and all physical
+reservations into immutable validated prepared assignments. It neither publishes nor
+allocates. The persistent multi-Node acceptance/readiness coordinator is still pending.
+
+Real Linux `--relay` identity/direct regression passes 9 checks. Two Runner tests use
+simulated Control plus real TLS sockets for encrypted TCP/UDP/phase/renewal/failure
+behavior; they are not independent two-Agent Control acceptance. Details:
+[Relay Agent](relay-agent.md). Full Phase 3 and release gates remain open.

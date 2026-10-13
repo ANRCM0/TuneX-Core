@@ -203,7 +203,15 @@ func (e *Engine) Activate() error {
 	e.mutex.Lock()
 	if e.active {
 		e.mutex.Unlock()
-		return nil
+		if e.assignment.Role == "relay-ingress" {
+			peer, err := e.dialPeer("probe")
+			if err != nil {
+				return err
+			}
+			closeSocket(peer)
+			e.untrackPeer(peer)
+		}
+		return e.check()
 	}
 	if e.ctx.Err() != nil || e.draining {
 		e.mutex.Unlock()
@@ -442,10 +450,12 @@ func (e *Engine) dialTarget(protocol string, target adp3relay.Target) (net.Conn,
 	}
 	config := e.assignment.Driver.Config
 	policy := contracts.DirectConfig{AllowedDestinationCidrs: config.AllowedDestinationCidrs, AllowMetadataTargets: config.AllowMetadataTargets}
+	authorized := false
 	for _, address := range addresses {
 		if !forward.Allowed(address, policy) || e.check() != nil {
 			continue
 		}
+		authorized = true
 		client, err := (&net.Dialer{}).DialContext(ctx, protocol, net.JoinHostPort(address.Unmap().String(), fmt.Sprint(target.Port)))
 		if err == nil {
 			if e.check() != nil {
@@ -454,6 +464,12 @@ func (e *Engine) dialTarget(protocol string, target adp3relay.Target) (net.Conn,
 			}
 			return client, nil
 		}
+	}
+	if err := e.check(); err != nil {
+		return nil, err
+	}
+	if authorized {
+		return nil, fmt.Errorf("TARGET_UNAVAILABLE")
 	}
 	return nil, fmt.Errorf("TARGET_REJECTED")
 }
@@ -490,15 +506,14 @@ func (e *Engine) dialPeer(action string) (*tls.Conn, error) {
 	if err := WriteControl(client, "Open", open); err != nil {
 		return nil, err
 	}
-	var accepted relaycontracts.Accept
-	if err := ReadControl(client, "Accept", &accepted); err != nil {
-		return nil, err
-	}
 	hash, err := contracts.ComputeDigest(binding)
 	if err != nil {
 		return nil, err
 	}
-	if accepted.RequestId != open.RequestId || accepted.BindingDigest != hash || e.check() != nil {
+	if err := ReadReply(client, open.RequestId, hash); err != nil {
+		return nil, err
+	}
+	if e.check() != nil {
 		return nil, fmt.Errorf("AUTHORIZATION_DENIED")
 	}
 	e.trackPeer(client)

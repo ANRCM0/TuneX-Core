@@ -66,3 +66,6 @@ Complete direct/Relay runtime contract preparation and protected physical high-w
 
 Current online machine protocol and explicit old-state refusal:
 [ADP/3 cutover](development/adp3-cutover.md).
+
+Explicit Relay Agent capability, protected peer identity and prepared assignment compiler:
+[Relay Agent](development/relay-agent.md).

@@ -72,6 +72,7 @@ jobs:
       - run: npm run test:faults
       - run: npm run test:access
       - run: npm run test:transport
+      - run: npm run test:relay-agent
       - name: Use backup clients inside the locked MySQL service image
         run: |
           mkdir -p .artifacts/mysql-clients
@@ -103,5 +104,6 @@ jobs:
             .artifacts/faults/**/evidence.json
             .artifacts/access/**/evidence.json
             .artifacts/transport/**/evidence.json
+            .artifacts/linux-agent/**/evidence.json
             .artifacts/recovery/**/evidence.json
             .artifacts/capacity/**/evidence.json
