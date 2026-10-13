@@ -264,3 +264,21 @@ budget return, drain and tracked peer expiry. This is an engine test, not two-Ag
 Control acceptance. Whole ADP/3 snapshots, state/journal migration, peer certificate
 issuance/rotation, coordinator/replacement and real multi-process acceptance remain
 open. Current Agent stays direct-only and project goal remains active.
+
+
+## Complete ADP/3 runtime schema and protected physical journal
+
+Baseline: `a839ca4`. Whole-node direct/Relay Snapshot, Hello and Report/ACK shapes
+now use strict protocol 3 parsing in TS/Go with 26 shared vectors. Physical resource
+ownership is independent of customer protocol, and mixed direct/Relay snapshots
+reject collisions, wrong role/session/digest and old TLS resource resurrection.
+
+Protected RuntimeJournal binds protocol/Node and persistent Snapshot/fences/retired.
+Exclusive initialization refuses existing/corrupt files; snapshot acceptance locks
+and reloads durable high-water, refuses stale callers, and persists before any socket
+mutation. Corrupt/missing/foreign state and write failure remain closed. Parser/state
+components do not restore cached authority or automatically reset ADP/2 counters.
+
+Current online Control/Agent still use ADP/2; dedicated peer credential management,
+ADP/3 database/runtime cutover, multi-process activation/flow/faults and release gates
+remain open. Full project is not completed by this protocol slice.

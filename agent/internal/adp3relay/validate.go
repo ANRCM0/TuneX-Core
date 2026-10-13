@@ -120,7 +120,7 @@ func validateSemantic(name string, raw []byte) error {
 		return fmt.Errorf("AUTHORIZATION_DENIED: Relay deployment binding differs")
 	}
 	address, err := netip.ParseAddr(a.Resource.Address)
-	if err != nil || address.Unmap().String() != a.Resource.Address || a.Resource.Protocol != physical {
+	if err != nil || address.String() != a.Resource.Address || a.Resource.Protocol != physical {
 		return fmt.Errorf("RESOURCE_CONFLICT: Relay physical resource differs")
 	}
 	if ingress && (c.Target != nil || c.PeerEndpoint == nil) || !ingress && (c.Target == nil || c.PeerEndpoint != nil) {
@@ -154,9 +154,18 @@ func validateSemantic(name string, raw []byte) error {
 }
 func canonicalHost(host string) bool {
 	if address, err := netip.ParseAddr(host); err == nil {
-		return address.Unmap().String() == host
+		return address.Zone() == "" && !address.Unmap().IsUnspecified() && address.String() == host
 	}
 	if host != strings.ToLower(host) || strings.HasSuffix(host, ".") {
+		return false
+	}
+	numeric := true
+	for _, ch := range host {
+		if !(ch >= '0' && ch <= '9' || ch == '.') {
+			numeric = false
+		}
+	}
+	if numeric || len(host) > 253 {
 		return false
 	}
 	for _, label := range strings.Split(host, ".") {

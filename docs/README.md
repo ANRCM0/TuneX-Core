@@ -60,3 +60,6 @@ Independent authority, old-backup recovery, operator commands and bounded Linux 
 
 Relay contract preparation, immutable Transport Profiles and explicit capability gate:
 [Phase 3 preparation](development/relay-preparation.md).
+
+Complete direct/Relay runtime contract preparation and protected physical high-water:
+[ADP/3](protocol/agent-deployment-v3.md).

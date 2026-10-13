@@ -148,3 +148,16 @@ session Open 拒绝、目标 CIDR 拒绝、Node total budget 回收、drain 存�
 tracked peer certificate cutoff。测试是同进程双引擎的真实 TLS socket；
 不等于双独立 Agent/Control/MySQL 全链路验收，尚未验证换路径 listener ownership
 接管、whole-node high-water 和 Control 故障补偿。
+
+
+## 完整 ADP/3 消息与持久 high-water
+
+基线 `a839ca4` 的切片实现 [完整 ADP/3 契约](../protocol/agent-deployment-v3.md) 与
+26 组 TS/Go 向量；direct/Relay 共享同一完整 Snapshot 和 physical resource/fence。
+新的 MAC RuntimeJournal 保留 Node/协议绑定、完整快照、代次/摘要和退役状态，
+初始化不能覆盖旧文件，写盘失败不推进，stale caller 加锁重读后拒绝。损坏/
+缺失/foreign Node 不以第一次启动重建；磁盘记录不直接恢复 socket。
+
+本切片只提供严格消息/持久状态组件，未把 Control/Agent 在线版本切到 3。
+现有在线 direct 回归继续通过；下一步连接专用 peer identity、Runtime 发布、
+Agent reconcile 和两个独立进程的实际流量/失败补偿。

@@ -6,3 +6,5 @@ export { compareTimes, validateTime, withinLease } from './time.ts';
 export { parseMessage, validateStructure, validatePolicy, validateSnapshot, validCidr } from './validate.ts';
 export type * from './relay.ts';
 export { parseRelayMessage,parseRelayAssignment } from './relay.ts';
+export type {RuntimeAssignment,RuntimeTombstone,RuntimeSnapshot,RuntimeMessages} from './adp3.ts';
+export {parseRuntimeMessage,validateRuntimeSnapshot} from './adp3.ts';

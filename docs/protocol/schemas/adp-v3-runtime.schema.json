@@ -1,0 +1,1028 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:adp:3:runtime",
+  "title": "ADP/3 complete runtime contract",
+  "description": "Strict complete per-Node direct/Relay runtime contract; execution and state cutover are additional gates.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/HelloRequest"
+    },
+    {
+      "$ref": "#/$defs/HelloResponse"
+    },
+    {
+      "$ref": "#/$defs/Snapshot"
+    },
+    {
+      "$ref": "#/$defs/ReportRequest"
+    },
+    {
+      "$ref": "#/$defs/ReportAck"
+    },
+    {
+      "$ref": "#/$defs/ErrorResponse"
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "counterOrZero": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "protocol": {
+      "enum": [
+        "tcp",
+        "udp"
+      ]
+    },
+    "phase": {
+      "enum": [
+        "prepared",
+        "active",
+        "draining"
+      ]
+    },
+    "condition": {
+      "enum": [
+        "pending",
+        "prepared",
+        "ready",
+        "degraded",
+        "error",
+        "draining",
+        "removed"
+      ]
+    },
+    "listen": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "ipv4"
+            },
+            {
+              "type": "string",
+              "format": "ipv6"
+            }
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "required": [
+        "address",
+        "port"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9.:-]+$"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "required": [
+        "host",
+        "port"
+      ]
+    },
+    "directConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "egressPolicyRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "allowMetadataTargets": {
+          "type": "boolean"
+        },
+        "allowedDestinationCidrs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64
+          }
+        }
+      },
+      "required": [
+        "target",
+        "egressPolicyRevision",
+        "allowMetadataTargets",
+        "allowedDestinationCidrs"
+      ]
+    },
+    "driver": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "enum": [
+            "native.direct.v1",
+            "native.relay.v1"
+          ]
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "configDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "config": {
+          "$ref": "#/$defs/runtimeConfig"
+        }
+      },
+      "required": [
+        "id",
+        "schemaVersion",
+        "configDigest",
+        "config"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "id": {
+              "const": "native.direct.v1"
+            },
+            "config": {
+              "$ref": "#/$defs/directConfig"
+            }
+          },
+          "required": [
+            "id",
+            "config"
+          ]
+        },
+        {
+          "properties": {
+            "id": {
+              "const": "native.relay.v1"
+            },
+            "config": {
+              "$ref": "#/$defs/relayConfig"
+            }
+          },
+          "required": [
+            "id",
+            "config"
+          ]
+        }
+      ]
+    },
+    "assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "role": {
+          "enum": [
+            "direct",
+            "relay-ingress",
+            "relay-egress"
+          ]
+        },
+        "protocol": {
+          "$ref": "#/$defs/protocol"
+        },
+        "phase": {
+          "$ref": "#/$defs/phase"
+        },
+        "driver": {
+          "$ref": "#/$defs/driver"
+        },
+        "drainTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        },
+        "resource": {
+          "$ref": "#/$defs/resource"
+        }
+      },
+      "required": [
+        "assignmentId",
+        "forwardId",
+        "forwardRevision",
+        "deploymentGeneration",
+        "bindingFence",
+        "role",
+        "protocol",
+        "phase",
+        "driver",
+        "drainTimeoutSeconds",
+        "resource"
+      ]
+    },
+    "tombstone": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol": {
+          "$ref": "#/$defs/protocol"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "retirementGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "physicalProtocol": {
+          "$ref": "#/$defs/protocol"
+        },
+        "role": {
+          "enum": [
+            "direct",
+            "relay-ingress",
+            "relay-egress"
+          ]
+        }
+      },
+      "required": [
+        "assignmentId",
+        "forwardId",
+        "protocol",
+        "port",
+        "bindingFence",
+        "retirementGeneration",
+        "physicalProtocol",
+        "role"
+      ]
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "phase": {
+          "enum": [
+            "prepared",
+            "active",
+            "draining",
+            "absent"
+          ]
+        },
+        "condition": {
+          "$ref": "#/$defs/condition"
+        },
+        "errorCode": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            }
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "assignmentId",
+        "deploymentGeneration",
+        "bindingFence",
+        "phase",
+        "condition",
+        "errorCode",
+        "retryable"
+      ]
+    },
+    "drain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "startedAt": {
+          "$ref": "#/$defs/time"
+        },
+        "deadline": {
+          "$ref": "#/$defs/time"
+        },
+        "remainingConnections": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "condition": {
+          "enum": [
+            "draining",
+            "removed"
+          ]
+        }
+      },
+      "required": [
+        "assignmentId",
+        "deploymentGeneration",
+        "bindingFence",
+        "startedAt",
+        "deadline",
+        "remainingConnections",
+        "condition"
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pollIntervalSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "leaseSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "renewalLeadSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxClockSkewSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "observationFreshnessSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "drainTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        },
+        "connectTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "udpIdleTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxTcpConnectionsPerAssignment": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxUdpSessionsPerAssignment": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxSnapshotBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4194304
+        },
+        "maxReportBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "maxAssignmentsPerNode": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "pollIntervalSeconds",
+        "leaseSeconds",
+        "renewalLeadSeconds",
+        "maxClockSkewSeconds",
+        "observationFreshnessSeconds",
+        "drainTimeoutSeconds",
+        "connectTimeoutSeconds",
+        "udpIdleTimeoutSeconds",
+        "maxTcpConnectionsPerAssignment",
+        "maxUdpSessionsPerAssignment",
+        "maxSnapshotBytes",
+        "maxReportBytes",
+        "maxAssignmentsPerNode"
+      ]
+    },
+    "HelloRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "agentBuild": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "lastStoredSnapshotGeneration": {
+          "$ref": "#/$defs/counterOrZero"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "nodeId",
+        "bootId",
+        "agentBuild",
+        "capabilities",
+        "lastStoredSnapshotGeneration"
+      ]
+    },
+    "HelloResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "serverTime": {
+          "$ref": "#/$defs/time"
+        },
+        "policy": {
+          "$ref": "#/$defs/policy"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "serverTime",
+        "policy"
+      ]
+    },
+    "Snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "snapshotGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "complete": {
+          "const": true
+        },
+        "issuedAt": {
+          "$ref": "#/$defs/time"
+        },
+        "validUntil": {
+          "$ref": "#/$defs/time"
+        },
+        "snapshotDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "assignments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assignment"
+          },
+          "maxItems": 1000
+        },
+        "tombstones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tombstone"
+          },
+          "maxItems": 100000
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "nodeId",
+        "sessionEpoch",
+        "snapshotGeneration",
+        "complete",
+        "issuedAt",
+        "validUntil",
+        "snapshotDigest",
+        "assignments",
+        "tombstones"
+      ]
+    },
+    "ReportRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "reportSequence": {
+          "$ref": "#/$defs/counter"
+        },
+        "observedAt": {
+          "$ref": "#/$defs/time"
+        },
+        "acceptedSnapshotGeneration": {
+          "$ref": "#/$defs/counterOrZero"
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/observation"
+          },
+          "maxItems": 1000
+        },
+        "drains": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/drain"
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "reportSequence",
+        "observedAt",
+        "acceptedSnapshotGeneration",
+        "observations",
+        "drains"
+      ]
+    },
+    "ReportAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "reportSequence": {
+          "$ref": "#/$defs/counter"
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "duplicate"
+          ]
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "reportSequence",
+        "status"
+      ]
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "retryAfterSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        },
+        "requestId": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "requestId"
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scopeId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "ingressNodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "egressNodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "ingressAssignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "egressAssignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "profileId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "ingressSessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "egressSessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "ingressFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "egressFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "profileRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "profileDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "scopeId",
+        "forwardId",
+        "ingressNodeId",
+        "egressNodeId",
+        "ingressAssignmentId",
+        "egressAssignmentId",
+        "profileId",
+        "forwardRevision",
+        "deploymentGeneration",
+        "ingressSessionEpoch",
+        "egressSessionEpoch",
+        "ingressFence",
+        "egressFence",
+        "profileRevision",
+        "profileDigest"
+      ]
+    },
+    "ProfileConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "driver": {
+          "const": "native.relay.v1"
+        },
+        "wireVersion": {
+          "const": 1
+        },
+        "security": {
+          "const": "mutual-tls13"
+        },
+        "protocols": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "tcp",
+              "udp"
+            ]
+          }
+        },
+        "handshakeTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "idleTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "maxFrameBytes": {
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 65536
+        },
+        "maxUdpDatagramBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "maxConnectionsPerNode": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        }
+      },
+      "required": [
+        "driver",
+        "wireVersion",
+        "security",
+        "protocols",
+        "handshakeTimeoutSeconds",
+        "idleTimeoutSeconds",
+        "maxFrameBytes",
+        "maxUdpDatagramBytes",
+        "maxConnectionsPerNode"
+      ]
+    },
+    "relayConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "relay-ingress",
+            "relay-egress"
+          ]
+        },
+        "binding": {
+          "$ref": "#/$defs/binding"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileConfig"
+        },
+        "peerFingerprints": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "peerEndpoint": {
+          "$ref": "#/$defs/target"
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "egressPolicyRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "allowMetadataTargets": {
+          "type": "boolean"
+        },
+        "allowedDestinationCidrs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64
+          }
+        }
+      },
+      "required": [
+        "role",
+        "binding",
+        "profile",
+        "peerFingerprints",
+        "egressPolicyRevision",
+        "allowMetadataTargets",
+        "allowedDestinationCidrs"
+      ]
+    },
+    "runtimeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "relay-ingress",
+            "relay-egress"
+          ]
+        },
+        "binding": {
+          "$ref": "#/$defs/binding"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileConfig"
+        },
+        "peerFingerprints": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "peerEndpoint": {
+          "$ref": "#/$defs/target"
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "egressPolicyRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "allowMetadataTargets": {
+          "type": "boolean"
+        },
+        "allowedDestinationCidrs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64
+          }
+        }
+      },
+      "required": [],
+      "oneOf": [
+        {
+          "$ref": "#/$defs/directConfig"
+        },
+        {
+          "$ref": "#/$defs/relayConfig"
+        }
+      ]
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "ipv4"
+            },
+            {
+              "type": "string",
+              "format": "ipv6"
+            }
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "protocol": {
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        }
+      },
+      "required": [
+        "address",
+        "port",
+        "protocol"
+      ]
+    }
+  }
+}
