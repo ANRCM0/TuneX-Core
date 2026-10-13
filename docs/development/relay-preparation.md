@@ -90,3 +90,36 @@ npm run control:cli -- relay-plan scope-dev forward.json
 扩展集成 suite 现为 10 项检查；新增单元用例覆盖四个物理资源、精确 capability、
 locked revision/摘要、双端目标策略和端口冲突。实际 Relay 认证、ADP/3 wire/state、
 prepare/activate、流量与故障出口仍待完成。
+
+
+## ADP/3 角色资源与 TLS peer 原语
+
+基线 `b65097b` 的切片实现 [ADP/3 单项资源 Schema](../protocol/schemas/adp-v3-relay.schema.json)、
+TS/Go parser 与 [18 组共享向量](../protocol/fixtures/adp-v3-relay.json)。Assignment
+包含自己的 Node/session、角色和显式 physical resource，config 绑定 scope/
+Forward/revision/deployment、两端 Assignment/session/fence、不可变 Profile 与
+最多两个叶证书指纹。ingress 的 physical protocol 等于公开协议；egress 无
+公开 listener，TCP/UDP 都占内部 TCP TLS resource。Tombstone 保留 role、
+用户协议和 physicalProtocol，不能把旧 UDP 关联错误地作为 UDP bind 释放。
+
+两种语言严格检查正文/未知字段、完整 binding、role-specific endpoint、Profile/
+config 摘要、规范 IP/hostname/CIDR/指纹及 frame/UDP 边界。prepared/active phase
+在单项结构中定义，完整 Snapshot/Hello/Report 和持久状态切换尚未实现；当前
+Control/Agent 继续使用 ADP/2，不发送/执行这些 Assignment。
+
+`agent/internal/relay` 新增标准 TLS/wire 原语，有真实 TCP socket 握手测试。
+TLS 限定 1.3、ALPN `tunex-relay/1`、禁用 session tickets；双端精确检查 CA 链、
+证书有效期、独立双用途 clientAuth/serverAuth、唯一 Node URI SAN 和叶指纹。
+客户端的 Node 身份是 URI，完整链/用途/URI/pin 验证由 VerifyConnection 完成；
+代码中的 InsecureSkipVerify 只替换 DNS 名验证，不关闭这些验证。Control 的
+clientAuth-only enrollment cert 被明确拒绝为 Relay peer。TLS 设置复制 roots 和
+pins，不能借共享调用参数偷偷改变身份。当前证书签发/自动轮换尚未接入。
+
+控制握手限 4096 bytes，帧长在读取分配前校验，TCP DATA/FIN、UDP 完整 datagram
+及 CLOSE 按协议区分；空 UDP 合法，错误类型/长度拒绝。Open 必须匹配当前绑定
+且授权有效，prepared 下游拒绝 probe。测试覆盖正确双端、错误 Node/CA/叶指纹/
+用途/到期/TLS 降级，以及旧 session、过期授权、超大消息和非法帧。
+
+这些原语尚未提供客户 TCP/UDP Relay，不能替代双 Agent 流量验收或安全签署。
+下一步完成 ADP/3 whole-node Snapshot、持久 fence/journal、独立 Relay 身份签发、
+两端 prepare/activate 与真实数据面，保持旧实例/drain 和总资源预算约束。

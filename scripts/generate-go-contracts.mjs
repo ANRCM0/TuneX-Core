@@ -39,4 +39,5 @@ for (const [name, contents] of [['schema.json', raw], ['types_generated.go', for
 }
 generate('docs/protocol/schemas/adp-v2-direct.schema.json', 'agent/internal/contracts/', 'contracts');
 generate('docs/protocol/schemas/native-relay-v1.schema.json', 'agent/internal/relaycontracts/', 'relaycontracts');
-console.log('Go schemas and types match authoritative ADP/2 and Relay v1 contracts.');
+generate('docs/protocol/schemas/adp-v3-relay.schema.json', 'agent/internal/adp3relay/', 'adp3relay');
+console.log('Go schemas and types match authoritative ADP/2, ADP/3 Relay resources and Relay v1 contracts.');

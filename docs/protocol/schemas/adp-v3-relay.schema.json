@@ -1,0 +1,587 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:adp:3:relay",
+  "title": "ADP/3 Relay assignment and retirement preparation",
+  "description": "Strict resource/config contract preparation; full Snapshot and runtime cutover are separate gates.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Assignment"
+    },
+    {
+      "$ref": "#/$defs/Tombstone"
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scopeId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "ingressNodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "egressNodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "ingressAssignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "egressAssignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "profileId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "ingressSessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "egressSessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "ingressFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "egressFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "profileRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "profileDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "scopeId",
+        "forwardId",
+        "ingressNodeId",
+        "egressNodeId",
+        "ingressAssignmentId",
+        "egressAssignmentId",
+        "profileId",
+        "forwardRevision",
+        "deploymentGeneration",
+        "ingressSessionEpoch",
+        "egressSessionEpoch",
+        "ingressFence",
+        "egressFence",
+        "profileRevision",
+        "profileDigest"
+      ]
+    },
+    "ProfileConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "driver": {
+          "const": "native.relay.v1"
+        },
+        "wireVersion": {
+          "const": 1
+        },
+        "security": {
+          "const": "mutual-tls13"
+        },
+        "protocols": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "tcp",
+              "udp"
+            ]
+          }
+        },
+        "handshakeTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "idleTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "maxFrameBytes": {
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 65536
+        },
+        "maxUdpDatagramBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "maxConnectionsPerNode": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        }
+      },
+      "required": [
+        "driver",
+        "wireVersion",
+        "security",
+        "protocols",
+        "handshakeTimeoutSeconds",
+        "idleTimeoutSeconds",
+        "maxFrameBytes",
+        "maxUdpDatagramBytes",
+        "maxConnectionsPerNode"
+      ]
+    },
+    "Open": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wireVersion": {
+          "const": 1
+        },
+        "type": {
+          "const": "open"
+        },
+        "action": {
+          "enum": [
+            "probe",
+            "tcp",
+            "udp"
+          ]
+        },
+        "requestId": {
+          "$ref": "#/$defs/id"
+        },
+        "binding": {
+          "$ref": "#/$defs/binding"
+        }
+      },
+      "required": [
+        "wireVersion",
+        "type",
+        "action",
+        "requestId",
+        "binding"
+      ]
+    },
+    "Accept": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wireVersion": {
+          "const": 1
+        },
+        "type": {
+          "const": "accepted"
+        },
+        "requestId": {
+          "$ref": "#/$defs/id"
+        },
+        "bindingDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "wireVersion",
+        "type",
+        "requestId",
+        "bindingDigest"
+      ]
+    },
+    "Reject": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wireVersion": {
+          "const": 1
+        },
+        "type": {
+          "const": "rejected"
+        },
+        "requestId": {
+          "$ref": "#/$defs/id"
+        },
+        "code": {
+          "enum": [
+            "AUTHENTICATION_FAILED",
+            "AUTHORIZATION_DENIED",
+            "STALE_DEPLOYMENT",
+            "DOWNSTREAM_NOT_ACTIVE",
+            "UNSUPPORTED_CAPABILITY",
+            "RESOURCE_LIMIT",
+            "TARGET_REJECTED",
+            "TARGET_UNAVAILABLE"
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "wireVersion",
+        "type",
+        "requestId",
+        "code",
+        "retryable"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9.:-]+$"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "required": [
+        "host",
+        "port"
+      ]
+    },
+    "listen": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "ipv4"
+            },
+            {
+              "type": "string",
+              "format": "ipv6"
+            }
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "required": [
+        "address",
+        "port"
+      ]
+    },
+    "directConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "egressPolicyRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "allowMetadataTargets": {
+          "type": "boolean"
+        },
+        "allowedDestinationCidrs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64
+          }
+        }
+      },
+      "required": [
+        "target",
+        "egressPolicyRevision",
+        "allowMetadataTargets",
+        "allowedDestinationCidrs"
+      ]
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "ipv4"
+            },
+            {
+              "type": "string",
+              "format": "ipv6"
+            }
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "protocol": {
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        }
+      },
+      "required": [
+        "address",
+        "port",
+        "protocol"
+      ]
+    },
+    "relayConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "relay-ingress",
+            "relay-egress"
+          ]
+        },
+        "binding": {
+          "$ref": "#/$defs/binding"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileConfig"
+        },
+        "peerFingerprints": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "peerEndpoint": {
+          "$ref": "#/$defs/target"
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "egressPolicyRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "allowMetadataTargets": {
+          "type": "boolean"
+        },
+        "allowedDestinationCidrs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64
+          }
+        }
+      },
+      "required": [
+        "role",
+        "binding",
+        "profile",
+        "peerFingerprints",
+        "egressPolicyRevision",
+        "allowMetadataTargets",
+        "allowedDestinationCidrs"
+      ]
+    },
+    "relayDriver": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "const": "native.relay.v1"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "configDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "config": {
+          "$ref": "#/$defs/relayConfig"
+        }
+      },
+      "required": [
+        "id",
+        "schemaVersion",
+        "configDigest",
+        "config"
+      ]
+    },
+    "Assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "role": {
+          "enum": [
+            "relay-ingress",
+            "relay-egress"
+          ]
+        },
+        "protocol": {
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "phase": {
+          "enum": [
+            "prepared",
+            "active",
+            "draining"
+          ]
+        },
+        "resource": {
+          "$ref": "#/$defs/resource"
+        },
+        "driver": {
+          "$ref": "#/$defs/relayDriver"
+        },
+        "drainTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "nodeId",
+        "sessionEpoch",
+        "assignmentId",
+        "forwardId",
+        "forwardRevision",
+        "deploymentGeneration",
+        "bindingFence",
+        "role",
+        "protocol",
+        "phase",
+        "resource",
+        "driver",
+        "drainTimeoutSeconds"
+      ]
+    },
+    "Tombstone": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol": {
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "physicalProtocol": {
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "retirementGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "role": {
+          "enum": [
+            "relay-ingress",
+            "relay-egress"
+          ]
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "nodeId",
+        "assignmentId",
+        "forwardId",
+        "protocol",
+        "physicalProtocol",
+        "port",
+        "bindingFence",
+        "retirementGeneration",
+        "role"
+      ]
+    }
+  }
+}

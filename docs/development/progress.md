@@ -228,3 +228,22 @@ The expanded real MySQL/HTTPS suite passes 10 checks; direct regressions, strict
 contracts and Go verification remain gates. ADP/3 assignment/state cutover, peer
 credentials, prepare/activate and actual encrypted two-Agent flow are next. All
 unverified Phase 2 and release requirements remain open.
+
+
+## ADP/3 Relay resource contracts and authenticated TLS primitives
+
+Baseline: `b65097b`. Single Relay Assignment/Tombstone schema, generated Go types
+and 18 shared TS/Go vectors now bind physical sockets, both Node sessions/fences,
+locked Profile/config digests and role-specific endpoint/policy. They are preparation
+contracts; whole-node ADP/3 messages and Agent state cutover are not yet supported.
+
+Real socket TLS primitives enforce TLS 1.3/ALPN, complete mutual chain/purpose/expiry
+verification, exact Node URI and leaf pins, with session tickets disabled. Dedicated
+clientAuth+serverAuth leaves are mandatory, so current machine certificates cannot
+silently become Relay server identities. Control/frame bounds and exact active
+Open binding reject prepared downstream, stale session and expired authority.
+Unit socket negatives cover wrong Node/CA/pin/purpose/expiry and TLS 1.2 downgrade.
+
+Current Agent still advertises direct only. Two-Agent encrypted TCP/UDP traffic,
+peer credential management, prepare/activate/lifecycle and release safety review
+remain required; no whole Phase 3 or project completion is claimed.
