@@ -37,6 +37,10 @@ func run() error {
 	tcpClients := flag.Int("tcp-clients", 64, "Bounded TCP clients for load")
 	udpClients := flag.Int("udp-clients", 32, "Bounded UDP clients for load")
 	seconds := flag.Int("seconds", 3, "Bounded load duration")
+	loadProgress := flag.Bool("load-progress", false, "Emit bounded load progress for acceptance monitors")
+	loadInterval := flag.Int("interval-ms", 0, "Optional bounded interval between verified load replies")
+	expectCutoff := flag.Bool("expect-cutoff", false, "Record an expected early authorization cutoff as load evidence")
+	targetSeconds := flag.Int("target-connection-seconds", 30, "Bounded target connection lifetime")
 	payload := flag.Int("payload-bytes", 1024, "Bounded verified payload size")
 	relayCA := flag.String("relay-ca", "", "Trusted Relay CA for a negative probe")
 	relayCert := flag.String("relay-cert", "", "Machine-only credential used by the negative probe")
@@ -61,10 +65,10 @@ func run() error {
 		return relayNegative(*host, *port, *relayCA, *relayCert, *relayKey, *relayNode, *relayPin, *relayOpen, *oldTLS)
 	}
 	if *mode == "load" && *port > 0 && *port <= 65535 {
-		return load(*port, *tcpClients, *udpClients, *seconds, *payload)
+		return load(*port, *tcpClients, *udpClients, *seconds, *payload, *runID, *loadProgress, *loadInterval, *expectCutoff)
 	}
 	if *mode == "target" {
-		return target(*runID, *tag, *host)
+		return target(*runID, *tag, *host, *targetSeconds)
 	}
 	if *mode == "port" {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -94,7 +98,10 @@ func run() error {
 func sortLatency(values []int64) {
 	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
 }
-func target(runID, tag, host string) error {
+func target(runID, tag, host string, seconds int) error {
+	if seconds < 1 || seconds > 300 {
+		return fmt.Errorf("Bounded target connection lifetime required")
+	}
 	tcp, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
 	if err != nil {
 		return err
@@ -116,7 +123,7 @@ func target(runID, tag, host string) error {
 			}
 			go func() {
 				defer socket.Close()
-				socket.SetDeadline(time.Now().Add(30 * time.Second))
+				socket.SetDeadline(time.Now().Add(time.Duration(seconds) * time.Second))
 				if len(tag) > 0 {
 					if _, err := socket.Write([]byte(tag)); err != nil {
 						return

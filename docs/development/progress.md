@@ -417,3 +417,42 @@ Local verification passed 20 Relay switch checks
 (`.artifacts/relay-isolation/run-wu7g5O/evidence.json`), 7 direct Linux Agent checks
 and the 165-test shared check. These artifacts record baseline `132642e` plus
 dirty=true; committed validation must use the artifact's own recorded SHA/status.
+
+Clean-commit validation subsequently passed on `a079e96`: 20 Relay switch/fault
+checks (`.artifacts/relay/run-yibvsj/evidence.json`) and 13 namespace/lock checks
+(`.artifacts/relay-isolation/run-RKrD9a/evidence.json`), both dirty=false. The latter
+also verifies actual network teardown.
+
+## Sustained Relay Load And Non-Root Deployment
+
+October 14, 2026 (Asia/Shanghai). Baseline: `a079e96`. Two actual isolated Relay
+Agents now run under independent non-root UIDs/GIDs, zero Linux capabilities,
+NoNewPrivs and a 256 soft/hard FD limit. Actual process status, secret/state file
+ownership, namespace identity and unprivileged kernel time synchronization are
+asserted rather than inferred from the launch command.
+
+The eight-check harness verifies sixty seconds of exact payloads on 16 TCP streams
+and 8 UDP associations, multiple real renewals without an execution-generation
+change, counter/FD reclamation, an immutable cap-12 Profile revision, rejection of
+extra TCP/UDP and continued existing traffic. Actual Control outage tests every
+client through the real signed-lease safety deadline, with no clock or DB deadline
+injection. Agents then restart with protected existing journals and higher sessions;
+Control restores its protected authority and exact TCP/UDP forwarding. Safe deletion
+and executable/run/namespace-checked cleanup are required before successful evidence
+is written. Details: [Relay capacity](relay-capacity.md).
+
+Development evidence `.artifacts/relay-capacity/run-UTf8VP/evidence.json` records
+`a079e96` plus dirty=true and verified process/network cleanup. Its bounded sample
+verified 1.44 GB of bidirectional payload in sixty seconds (about 24.1 MB/s), with
+p95 round-trip latency about 4.1 ms and peaks of 50/58 FD on the two Agents. Both
+Nodes published four active snapshots and recovery sessions reached epoch 2.
+These are local measurements, not a maximum supported capacity claim. Shared
+165-test TS/Go/build/contract checks, Go vet and native Linux Go race also passed.
+
+At exact saturation, readiness probes share the peer budget and health may degrade
+while admitted traffic stays live; the completed Operation remains terminal. Local
+Control/MySQL are still Windows processes with WSL Linux Agents on one physical
+host. Sustained recovery beyond peer-credential overlap, complete direct/Relay
+matrix closure, automatic peer rotation/pin transitions, transport evolution,
+product Web, external deployment and release gates remain open. CI is configured,
+not counted as a remotely verified run. The full project goal remains active.

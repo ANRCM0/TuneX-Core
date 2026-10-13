@@ -20,6 +20,7 @@ export class NetworkLab {
  private sudo=false;
 
  private admin(command:string,args:string[]=[]){const tool=this.libraryPath?'/usr/bin/env':command,argumentsIn=this.libraryPath?[`LD_LIBRARY_PATH=${this.libraryPath}`,command,...args]:args;return this.sudo?linux('/usr/bin/sudo',['-n',tool,...argumentsIn]):linux(tool,argumentsIn);}
+ host(command:string,args:string[]=[]){return this.admin(command,args);}
  run(namespace:string,command:string,args:string[]=[]){assert.ok(this.inodes.has(namespace));return this.admin(this.ip,['netns','exec',namespace,command,...args]);}
  spawn(namespace:string,command:string,args:string[]=[]){assert.ok(this.inodes.has(namespace));const argsIn=['netns','exec',namespace,command,...args],tool=this.libraryPath?'/usr/bin/env':this.ip,argumentsIn=this.libraryPath?[`LD_LIBRARY_PATH=${this.libraryPath}`,this.ip,...argsIn]:argsIn;return this.sudo?spawnLinux('/usr/bin/sudo',['-n',tool,...argumentsIn]):spawnLinux(tool,argumentsIn);}
  async open(){
