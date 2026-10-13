@@ -123,3 +123,28 @@ pins，不能借共享调用参数偷偷改变身份。当前证书签发/自动
 这些原语尚未提供客户 TCP/UDP Relay，不能替代双 Agent 流量验收或安全签署。
 下一步完成 ADP/3 whole-node Snapshot、持久 fence/journal、独立 Relay 身份签发、
 两端 prepare/activate 与真实数据面，保持旧实例/drain 和总资源预算约束。
+
+
+## Relay 执行引擎 socket 切片
+
+基线 `f83995b` 的切片增加 Go `relay.Prepare/Activate/Drain/Close`，接收已严格解析的
+单项 ADP/3 Assignment、专用双用途 peer identity 和必填执行授权检查。egress
+prepared 只绑定受认证内部 TLS socket；拒绝用户 Open/probe。只有 egress active
+并实际验证成功后，ingress 才绑定外部 TCP/UDP。该 API 尚未接入 CLI/Control
+发布，当前标准 Agent 不广告 Relay，用户 Relay Forward 仍拒绝。
+
+每个 TCP stream/UDP association 使用独立 TLS 通道和精确绑定的单次 Open；
+最终目标只来自 egress config 并经过解析 IP 策略。TCP framing 保留双向半关闭，
+有界 buffer/permit；UDP 每客户端独立映射，空 datagram、idle expiry、有界
+16-packet queue 和双端回包 credit。Relay TLS 连接与 direct 共用进程 TCP
+budget，UDP 还占 UDP budget；Profile Node total budget 不因多监听绕过。
+全部打开/拨号/IO 前后检查执行授权，25 ms watcher 关闭截止流量；本机与对端
+叶证书到期也关闭存量连接，不能靠握手成功无限执行。TCP drain 关闭 listener、
+保留有限存量流，禁止旧实例续期；UDP drain 立即关闭 association。
+
+真实 socket 测试包含 prepared 下游拒绝/public 入口关闭、尾到头激活、约 90 KB
+TCP payload/FIN、两 UDP 客户端/空数据报/idle 后新关联、TCP/UDP 硬截止、旧
+session Open 拒绝、目标 CIDR 拒绝、Node total budget 回收、drain 存量流和
+tracked peer certificate cutoff。测试是同进程双引擎的真实 TLS socket；
+不等于双独立 Agent/Control/MySQL 全链路验收，尚未验证换路径 listener ownership
+接管、whole-node high-water 和 Control 故障补偿。

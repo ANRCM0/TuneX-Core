@@ -247,3 +247,20 @@ Unit socket negatives cover wrong Node/CA/pin/purpose/expiry and TLS 1.2 downgra
 Current Agent still advertises direct only. Two-Agent encrypted TCP/UDP traffic,
 peer credential management, prepare/activate/lifecycle and release safety review
 remain required; no whole Phase 3 or project completion is claimed.
+
+
+## Relay execution engine socket slice
+
+Baseline: `f83995b`. An isolated Go engine now prepares/activates authenticated
+Relay TCP/UDP from strict assignments, opens ingress only after a real active-egress
+probe, preserves TCP FIN and separates UDP client associations. Direct/Relay share
+process TCP/UDP permits; Profile totals, queue/credit/idle and authorization checks
+remain bounded. Hard execution/credential cutoff closes held traffic. TCP drain
+retires listener acceptance and keeps bounded old streams; UDP drain closes sessions.
+
+Real TLS socket tests exercise encrypted payload, half-close, prepared refusal,
+UDP mapping/empty payload/idle, offline-style hard cutoff, old binding, CIDR denial,
+budget return, drain and tracked peer expiry. This is an engine test, not two-Agent
+Control acceptance. Whole ADP/3 snapshots, state/journal migration, peer certificate
+issuance/rotation, coordinator/replacement and real multi-process acceptance remain
+open. Current Agent stays direct-only and project goal remains active.
