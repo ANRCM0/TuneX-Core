@@ -49,5 +49,7 @@ physical resource。Agent 在变更 socket 前持久接受快照，续期保持�
 报告/ACK、drain、重启和截止沿用既有严格语义。direct 执行器的内部配置转换
 不是 wire 兼容层，它只接收已经通过 ADP/3 解析的 direct Assignment。
 
-剩余：Relay peer key 加载/自动更新、双端 prepare→activate 协调、同槽接管与
-历史路径清理、多进程双 Agent 的网络/故障验收。用户 Relay 创建仍拒绝。
+显式 `--relay` Agent 已加载受保护 peer key，并在完整快照下执行 prepare/active。
+Control 已接入双端持久计划与按当前 ready 报告推进的协调，实际 Forward API 到
+两个独立 Agent 的加密 TCP/UDP 已有本地证据，见 [Relay Control](../development/relay-control.md)。
+剩余包括自动 peer 更新、完整路径/同槽切换故障矩阵、网络隔离与发布安全门槛。

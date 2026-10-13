@@ -69,3 +69,6 @@ Current online machine protocol and explicit old-state refusal:
 
 Explicit Relay Agent capability, protected peer identity and prepared assignment compiler:
 [Relay Agent](development/relay-agent.md).
+
+Durable two-Node Relay acceptance, readiness coordination and real multiprocess flow:
+[Relay Control](development/relay-control.md).

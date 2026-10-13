@@ -3,11 +3,11 @@ import { RelayEndpoints } from '../modules/relay-endpoints.ts';
 import { Transport } from '../modules/transport.ts';
 import { randomUUID } from 'node:crypto';
 import { decideForwardChange, isCounter, isId, MAX_COUNTER, parseForwardSpec } from '@tunex/core';
-import type { Forward, ForwardSpec } from '@tunex/core';
+import type { Forward } from '@tunex/core';
 import { digest } from '@tunex/contracts';
 import type { Policy } from '@tunex/contracts';
 import { ControlError, invalid } from './errors.ts';
-import type { MySqlUnitOfWork } from '../infrastructure/mysql.ts';
+import type { MySqlUnitOfWork, Transaction } from '../infrastructure/mysql.ts';
 import type { Identity } from '../modules/identity.ts';
 import type { Nodes } from '../modules/nodes.ts';
 import { Forwarding } from '../modules/forwarding.ts';
@@ -15,22 +15,15 @@ import { Idempotency } from '../modules/idempotency.ts';
 import type { Accepted, RequestIdentity } from '../modules/idempotency.ts';
 import { RuntimeLedger } from '../modules/runtime/ledger.ts';
 import { compileDirect } from '../modules/runtime/planner.ts';
+import { RelayCoordinator } from '../modules/runtime/relay-coordinator.ts';
 import type { NodePolicy } from '../modules/nodes.ts';
+import type { AuthorizedNodeFacts } from '../modules/runtime/planner.ts';
 import { json } from '../infrastructure/mysql.ts';
 import { tokenHash } from '../modules/identity.ts';
 function requestIdentity(actorId: string, scopeId: string, key: string | undefined, method: string, path: string, input: unknown): RequestIdentity {
     if (!isId(actorId) || !isId(scopeId) || !key || !/^[\x21-\x7e]{1,128}$/.test(key))
         invalid('Valid identity, scope and Idempotency-Key required');
     return { actorId, scopeId, key, digest: digest({ method, path, input }) };
-}
-function directSpec(input: unknown): ForwardSpec {
-    const parsed = parseForwardSpec(input);
-    if (!parsed.ok)
-        invalid('Invalid Forward spec');
-    const spec = parsed.value;
-    if (spec.path || spec.transport)
-        throw new ControlError('UNSUPPORTED_CAPABILITY', 422, 'Direct TCP/UDP supported; Relay requires its versioned transport');
-    return spec;
 }
 function revision(value: number): void {
     if (!isCounter(value))
@@ -46,13 +39,34 @@ export class ControlApplication {
     readonly db: MySqlUnitOfWork;
     readonly identity: Identity;
     readonly nodes: Nodes;
-    constructor(db: MySqlUnitOfWork, identity: Identity, nodes: Nodes, policy?: Policy) { this.db = db; this.identity = identity; this.nodes = nodes; this.ledger = new RuntimeLedger(policy, nodes);this.transport=new Transport(db,identity,this.idempotency,this.forwarding);this.relayEndpoints=new RelayEndpoints(db,identity,nodes,this.idempotency,this.forwarding); }
+    readonly relay: RelayCoordinator;
+    constructor(db: MySqlUnitOfWork, identity: Identity, nodes: Nodes, policy?: Policy) {
+        this.db=db;this.identity=identity;this.nodes=nodes;
+        this.ledger=new RuntimeLedger(policy,nodes);
+        this.transport=new Transport(db,identity,this.idempotency,this.forwarding);
+        this.relayEndpoints=new RelayEndpoints(db,identity,nodes,this.idempotency,this.forwarding);
+        this.relay=new RelayCoordinator(nodes,this.forwarding,this.transport,this.relayEndpoints,this.ledger,policy);
+        this.ledger.additionalAssignments=(tx,nodeId,includeAccepted)=>this.relay.assignments(tx,nodeId,includeAccepted);
+        this.transport.onGrantChange=async(tx,request,profileId,subject,allowed)=>{
+            const operations:string[]=[];
+            for(const forward of await this.forwarding.forProfileActor(tx,profileId,subject)){
+                await this.lockExecution(tx,forward);
+                const canRun=allowed&&await this.executionAllowed(tx,subject,forward);
+                if(canRun&&forward.spec.enabled)await this.transitionExecution(tx,subject,forward);
+                operations.push(await this.ledger.accept(tx,forward,request,canRun?'policy':'revoke'));
+            }
+            return operations;
+        };
+    }
     async planRelay(actorId:string,scopeId:string,input:unknown){
         const parsed=parseForwardSpec(input);if(!parsed.ok)invalid('Valid Forward spec required');const spec=parsed.value;if(spec.path?.via.length!==1||!spec.transport)throw new ControlError('UNSUPPORTED_CAPABILITY',422,'Relay preview requires one egress and locked Transport Profile');
         return this.db.transaction(async tx=>{await this.identity.scope(tx,actorId,scopeId,true);const nodes=[];for(const nodeId of [spec.ingress.nodeId,spec.path!.via[0]!].sort())nodes.push(await this.nodes.authorizedRelayNode(tx,actorId,scopeId,nodeId));const profile=await this.transport.resolve(tx,actorId,scopeId,spec.transport!.profileId,spec.transport!.configRevision),endpoint=await this.relayEndpoints.resolve(tx,spec.path!.via[0]!);const ports=endpoint.config.allowedTcpPorts;const resources=compileRelayResources({id:'preview',scopeId,revision:1,spec},nodes,profile,endpoint,{tcp:ports[0]!,udp:ports[spec.protocols.length===2?1:0]!});return {profile:{profileId:profile.profileId,revision:profile.revision,configDigest:profile.configDigest},endpointRevision:endpoint.revision,resources,executionSupported:false,reserved:false};});
     }
+    private async executionAllowed(tx:Transaction,actor:string,forward:Forward):Promise<boolean>{return forward.spec.path?this.relay.canExecute(tx,actor,forward):this.nodes.canExecute(tx,actor,forward);}
+    private async transitionExecution(tx:Transaction,actor:string,forward:Forward):Promise<void>{if(forward.spec.path)await this.relay.acceptPlan(tx,actor,forward);else await this.ledger.transition(tx,forward,forward);}
+    private async lockExecution(tx:Transaction,forward:Forward):Promise<void>{if(forward.spec.path)await this.relay.lockNodes(tx,forward);else await this.ledger.lockNode(tx,forward.spec.ingress.nodeId);}
     async create(actorId: string, scopeId: string, key: string | undefined, input: unknown): Promise<Accepted> {
-        const spec = directSpec(input);
+        const parsed=parseForwardSpec(input);if(!parsed.ok)invalid('Invalid Forward spec');const spec=parsed.value;
         const request = requestIdentity(actorId, scopeId, key, 'POST', `/api/v1/scopes/${scopeId}/forwards`, spec);
         return this.db.transaction(async (tx) => {
             await this.identity.scope(tx, actorId, scopeId);
@@ -63,14 +77,16 @@ export class ControlApplication {
             }
             await this.identity.scope(tx, actorId, scopeId, true);
             const forward: Forward = { id: randomUUID(), scopeId, revision: 1, spec };
-            const facts = await this.nodes.authorized(tx, actorId, forward);
-            await this.ledger.lockNode(tx, facts.nodeId);
-            compileDirect({ ...forward, spec: { ...spec, enabled: true } }, facts, spec.protocols.map(protocol => ({ nodeId: facts.nodeId, forwardId: forward.id, protocol, port: spec.ingress.listen.port, bindingFence: 1, deploymentGeneration: 1 })));
-            const slots = await this.ledger.reserve(tx, forward);
-            compileDirect({ ...forward, spec: { ...spec, enabled: true } }, facts, slots);
+            let facts:AuthorizedNodeFacts|undefined;
+            if(spec.path||spec.transport){if(!spec.path||!spec.transport)throw new ControlError('UNSUPPORTED_CAPABILITY',422,'Relay path and Transport Profile are both required');await this.nodes.authorizedRelayNode(tx,actorId,scopeId,spec.ingress.nodeId);await this.nodes.authorizedRelayNode(tx,actorId,scopeId,spec.path.via[0]!);for(const nodeId of [spec.ingress.nodeId,spec.path.via[0]!].sort())await this.ledger.lockNode(tx,nodeId);}
+            else {const authorized=await this.nodes.authorized(tx,actorId,forward);facts=authorized;await this.ledger.lockNode(tx,authorized.nodeId);compileDirect({...forward,spec:{...spec,enabled:true}},authorized,spec.protocols.map(protocol=>({nodeId:authorized.nodeId,forwardId:forward.id,protocol,port:spec.ingress.listen.port,bindingFence:1,deploymentGeneration:1})));}
+            const slots = (spec.path||spec.transport)?[]:await this.ledger.reserve(tx, forward);
+            if(facts)compileDirect({ ...forward, spec: { ...spec, enabled: true } }, facts, slots);
             await this.forwarding.insert(tx, forward, actorId);
+            if(spec.path||spec.transport)await this.relay.acceptPlan(tx,actorId,forward);
             const operationId = await this.ledger.accept(tx, forward, request);
-            await this.ledger.assertCapacity(tx, this.forwarding, facts);
+            if(facts)await this.ledger.assertCapacity(tx, this.forwarding, facts);
+            else for(const nodeId of await this.relay.nodeIDs(tx,forward))await this.ledger.assertCapacity(tx,this.forwarding,await this.nodes.cleanupFacts(tx,nodeId,scopeId));
             const response: Accepted = { status: 202, body: { forwardId: forward.id, revision: 1, operationId } };
             await this.idempotency.respond(tx, request, response);
             return response;
@@ -80,7 +96,7 @@ export class ControlApplication {
         revision(expectedRevision);
         if (!isId(id))
             invalid('Valid Forward ID required');
-        const spec = directSpec(input);
+        const parsed=parseForwardSpec(input);if(!parsed.ok)invalid('Invalid Forward spec');const spec=parsed.value;
         const request = requestIdentity(actorId, scopeId, key, 'PUT', `/api/v1/scopes/${scopeId}/forwards/${id}`, { expectedRevision, spec });
         return this.db.transaction(async (tx) => {
             await this.identity.scope(tx, actorId, scopeId);
@@ -94,22 +110,24 @@ export class ControlApplication {
                 throw new ControlError(decision.errors[0]!.code, 409, decision.errors[0]!.message);
             const next = decision.value;
             if (next.spec.ingress.nodeId !== current.spec.ingress.nodeId){const restored=await this.forwarding.record(tx,scopeId,id);const oldNode=await this.nodes.state(tx,current.spec.ingress.nodeId);if(!restored.recoverySuspended||!oldNode.revoked)throw new ControlError('UNSUPPORTED_CAPABILITY',422,'Live Node moves require the later multi-node coordinator');for(const nodeId of [current.spec.ingress.nodeId,next.spec.ingress.nodeId].sort())await this.ledger.lockNode(tx,nodeId);}
-            const facts = await this.nodes.authorized(tx, actorId, next);
-            await this.ledger.lockNode(tx, facts.nodeId);
-            compileDirect({ ...next, spec: { ...next.spec, enabled: true } }, facts, next.spec.protocols.map(protocol => ({ nodeId: facts.nodeId, forwardId: next.id, protocol, port: next.spec.ingress.listen.port, bindingFence: 1, deploymentGeneration: 1 })));
+            let facts:AuthorizedNodeFacts|undefined;
+            if(next.spec.path||next.spec.transport){await this.relay.lockNodes(tx,next);if(next.spec.enabled&&!await this.relay.canExecute(tx,actorId,next))throw new ControlError('AUTHORIZATION_DENIED',403,'Relay execution is not authorized');}
+            else {const authorized=await this.nodes.authorized(tx,actorId,next);facts=authorized;await this.ledger.lockNode(tx,authorized.nodeId);compileDirect({...next,spec:{...next.spec,enabled:true}},authorized,next.spec.protocols.map(protocol=>({nodeId:authorized.nodeId,forwardId:next.id,protocol,port:next.spec.ingress.listen.port,bindingFence:1,deploymentGeneration:1})));}
             if (next.revision === current.revision) {
                 const response: Accepted = { status: 200, body: { forwardId: id, revision: current.revision, operationId: null } };
                 await this.idempotency.respond(tx, request, response);
                 return response;
             }
             // Every changed execution gets a fresh generation/fence, even when currently disabled.
-            const slots = await this.ledger.transition(tx, current, next);
-            compileDirect({ ...next, spec: { ...next.spec, enabled: true } }, facts, slots);
+            const slots = (next.spec.path||next.spec.transport)?[]:await this.ledger.transition(tx, current, next);
+            if(facts)compileDirect({ ...next, spec: { ...next.spec, enabled: true } }, facts, slots);
             await this.forwarding.replace(tx, current, next);
             await this.forwarding.setAuthorizer(tx, next.id, actorId);
+            if((next.spec.path||next.spec.transport)&&next.spec.enabled)await this.relay.acceptPlan(tx,actorId,next);
             const kind = !next.spec.enabled ? 'disable' : !current.spec.enabled ? 'enable' : 'update';
             const operationId = await this.ledger.accept(tx, next, request, kind, current.spec);
-            await this.ledger.assertCapacity(tx, this.forwarding, facts);
+            if(facts)await this.ledger.assertCapacity(tx, this.forwarding, facts);
+            else for(const nodeId of await this.relay.nodeIDs(tx,next))await this.ledger.assertCapacity(tx,this.forwarding,await this.nodes.cleanupFacts(tx,nodeId,scopeId));
             const response: Accepted = { status: 202, body: { forwardId: id, revision: next.revision, operationId } };
             await this.idempotency.respond(tx, request, response);
             return response;
@@ -127,7 +145,7 @@ export class ControlApplication {
                 return replay;
             await this.identity.scope(tx, actorId, scopeId, true);
             const current = await this.forwarding.currentForUpdate(tx, scopeId, id);
-            await this.ledger.lockNode(tx, current.spec.ingress.nodeId);
+            if(current.spec.path)await this.relay.lockNodes(tx,current);else await this.ledger.lockNode(tx, current.spec.ingress.nodeId);
             if (current.revision !== expectedRevision)
                 throw new ControlError('REVISION_CONFLICT', 409, 'Expected revision does not match');
             if (current.revision >= MAX_COUNTER)
@@ -137,6 +155,7 @@ export class ControlApplication {
             const operationId = await this.ledger.accept(tx, next, request, 'delete', current.spec);
             const facts = await this.nodes.cleanupFacts(tx, next.spec.ingress.nodeId, next.scopeId);
             await this.ledger.assertCapacity(tx, this.forwarding, facts);
+            if(next.spec.path)for(const nodeId of (await this.relay.nodeIDs(tx,next)).filter(nodeId=>nodeId!==facts.nodeId))await this.ledger.assertCapacity(tx,this.forwarding,await this.nodes.cleanupFacts(tx,nodeId,scopeId));
             const response: Accepted = { status: 202, body: { forwardId: id, revision: next.revision, operationId } };
             await this.idempotency.respond(tx, request, response);
             return response;
@@ -155,17 +174,17 @@ export class ControlApplication {
             await this.identity.scope(tx, actorId, scopeId, true);
             const sourceReference = await this.ledger.read(tx, scopeId, sourceOperationId);
             const forward = await this.forwarding.currentForUpdate(tx, scopeId, sourceReference.forward_id);
-            await this.ledger.lockNode(tx, forward.spec.ingress.nodeId);
+            await this.lockExecution(tx,forward);
             const source = await this.ledger.get(tx, scopeId, sourceOperationId);
             if(source.recovery_invalidated)throw new ControlError('OPERATION_SUPERSEDED',409,'Restored operation is not an authoritative deployment attempt');
             if (forward.revision !== expectedRevision || source.target_revision !== forward.revision)
                 throw new ControlError('OPERATION_SUPERSEDED', 409, 'Operation no longer targets an editable desired revision');
             if (source.status !== 'failed')
                 throw new ControlError('OPERATION_NOT_RETRYABLE', 409, 'Only failed Operations can be retried');
-            const facts = await this.nodes.authorized(tx, actorId, forward);
-            await this.ledger.lockNode(tx, facts.nodeId);
+            const facts = forward.spec.path?await this.nodes.authorizedRelayNode(tx,actorId,scopeId,forward.spec.ingress.nodeId):await this.nodes.authorized(tx, actorId, forward);
+            await this.lockExecution(tx,forward);
             if (forward.spec.enabled)
-                await this.ledger.transition(tx, forward, forward);
+                await this.transitionExecution(tx,actorId,forward);
             await this.forwarding.setAuthorizer(tx, forward.id, actorId);
             const operationId = await this.ledger.accept(tx, forward, request, 'retry', source.previous_spec, source.id);
             await this.ledger.assertCapacity(tx, this.forwarding, facts);
@@ -212,11 +231,14 @@ export class ControlApplication {
             else
                 await this.nodes.markRevoked(tx, nodeId);
             const operationIds: string[] = [];
-            for (const forward of await this.forwarding.forNode(tx, nodeId)) {
+            const affectedNodes=new Set([nodeId]);
+            for (const forward of await this.forwarding.forReferencedNode(tx, nodeId)) {
+                await this.lockExecution(tx,forward);
+                if(forward.spec.path)for(const id of await this.relay.nodeIDs(tx,forward))affectedNodes.add(id);
                 const sourceActor = await this.forwarding.authorizer(tx, forward.id);
-                const canRun = command.kind === 'policy' && Boolean(sourceActor && await this.nodes.canExecute(tx, sourceActor, forward));
+                const canRun = command.kind === 'policy' && Boolean(sourceActor && await this.executionAllowed(tx, sourceActor, forward));
                 if (canRun && forward.spec.enabled)
-                    await this.ledger.transition(tx, forward, forward);
+                    await this.transitionExecution(tx,sourceActor!,forward);
                 const operationId = await this.ledger.accept(tx, forward, request, canRun ? 'policy' : 'revoke');
                 operationIds.push(operationId);
                 if (command.kind === 'policy' && !canRun)
@@ -226,7 +248,7 @@ export class ControlApplication {
             // Rejecting all credentials stops new authority; historical leases retain their cutoff.
             if (command.kind === 'policy')
                 await this.ledger.assertCapacity(tx, this.forwarding, facts);
-            const maxLease = await this.ledger.maximumAuthorization(tx, nodeId);
+            let maxLease:number|null=null;for(const id of affectedNodes){const until=await this.ledger.maximumAuthorization(tx,id);if(until!==null)maxLease=Math.max(maxLease??0,until);}
             await this.nodes.audit(tx, nodeId, actorId, command.kind === 'policy' ? 'policy_update' : 'node_revocation', { policyRevision: facts.egressPolicyRevision, operationIds, latestAuthorizationUntil: maxLease });
             const response = { status: 202 as const, body: { nodeId, policyRevision: facts.egressPolicyRevision, operationIds, latestAuthorizationUntil: maxLease ? new Date(maxLease + 5000).toISOString() : null } };
             await this.idempotency.respond(tx, request, response);
@@ -269,22 +291,20 @@ export class ControlApplication {
             let cutoff: number | null = null;
             if (member.changed)
                 for (const candidate of await this.forwarding.forActor(tx, scopeId, subject)) {
-                    await this.ledger.lockNode(tx, candidate.spec.ingress.nodeId);
+                    await this.lockExecution(tx,candidate);
                     const forward = await this.forwarding.record(tx, scopeId, candidate.id);
                     if (forward.deleting || await this.forwarding.authorizer(tx, forward.id) !== subject)
                         continue;
-                    const allowed = input.role === 'manager' && await this.nodes.canExecute(tx, subject, forward);
+                    const allowed = input.role === 'manager' && await this.executionAllowed(tx, subject, forward);
                     if (allowed && forward.spec.enabled)
-                        await this.ledger.transition(tx, forward, forward);
+                        await this.transitionExecution(tx,subject,forward);
                     const operationId = await this.ledger.accept(tx, forward, request, allowed ? 'policy' : 'revoke');
                     operationIds.push(operationId);
                     if (allowed) {
                         const facts = await this.nodes.cleanupFacts(tx, forward.spec.ingress.nodeId, scopeId);
                         await this.ledger.assertCapacity(tx, this.forwarding, facts);
                     }
-                    const until = await this.ledger.maximumAuthorization(tx, forward.spec.ingress.nodeId);
-                    if (until !== null)
-                        cutoff = Math.max(cutoff ?? 0, until);
+                    for(const nodeId of forward.spec.path?await this.relay.nodeIDs(tx,forward):[forward.spec.ingress.nodeId]){const until=await this.ledger.maximumAuthorization(tx,nodeId);if(until!==null)cutoff=Math.max(cutoff??0,until);}
                 }
             const response = { status: member.changed ? 202 as const : 200 as const, body: { actorId: member.actorId, revision: member.revision, role: member.role, active: member.active, operationIds, latestAuthorizationUntil: cutoff ? new Date(cutoff + 5000).toISOString() : null } };
             await this.idempotency.respond(tx, request, response);
@@ -320,18 +340,21 @@ export class ControlApplication {
                 return replay;
             const grant = await this.nodes.changeGrant(tx, actorId, scopeId, nodeId, subject, expectedRevision, allowed);
             const operationIds: string[] = [];
+            const affectedNodes=new Set([nodeId]);
             if (grant.changed)
                 for (const forward of await this.forwarding.forActor(tx, scopeId, subject))
-                    if (forward.spec.ingress.nodeId === nodeId) {
+                    if (forward.spec.ingress.nodeId === nodeId || forward.spec.path?.via.includes(nodeId)) {
+                        await this.lockExecution(tx,forward);
+                        if(forward.spec.path)for(const id of await this.relay.nodeIDs(tx,forward))affectedNodes.add(id);
                         if (allowed && forward.spec.enabled)
-                            await this.ledger.transition(tx, forward, forward);
+                            await this.transitionExecution(tx,subject,forward);
                         const operationId = await this.ledger.accept(tx, forward, request, allowed ? 'policy' : 'revoke');
                         operationIds.push(operationId);
                     }
             const facts = await this.nodes.cleanupFacts(tx, nodeId, scopeId);
             if (allowed)
                 await this.ledger.assertCapacity(tx, this.forwarding, facts);
-            const cutoff = await this.ledger.maximumAuthorization(tx, nodeId);
+            let cutoff:number|null=null;for(const id of affectedNodes){const until=await this.ledger.maximumAuthorization(tx,id);if(until!==null)cutoff=Math.max(cutoff??0,until);}
             const response = { status: grant.changed ? 202 as const : 200 as const, body: { nodeId, actorId: subject, revision: grant.revision, allowed, operationIds, latestAuthorizationUntil: cutoff ? new Date(cutoff + 5000).toISOString() : null } };
             await this.idempotency.respond(tx, request, response);
             return response;

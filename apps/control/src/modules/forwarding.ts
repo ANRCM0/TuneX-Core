@@ -19,6 +19,14 @@ export class Forwarding {
         }>(tx, "SELECT * FROM forwards WHERE deleting=FALSE AND recovery_suspended=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? ORDER BY id", [nodeId]);
         return records.map(record => ({ id: record.id, scopeId: record.scope_id, revision: record.revision, spec: json(record.spec) }));
     }
+    async forReferencedNode(tx: Transaction, nodeId: string): Promise<Forward[]> {
+        const records = await rows<{id:string;scope_id:string;revision:number;spec:unknown}>(tx,"SELECT * FROM forwards WHERE deleting=FALSE AND recovery_suspended=FALSE AND (JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? OR JSON_CONTAINS(JSON_EXTRACT(spec,'$.path.via'),JSON_QUOTE(?))) ORDER BY id",[nodeId,nodeId]);
+        return records.map(record=>({id:record.id,scopeId:record.scope_id,revision:record.revision,spec:json(record.spec)}));
+    }
+    async forProfileActor(tx:Transaction,profileId:string,actor:string):Promise<Forward[]>{
+        const records=await rows<{id:string;scope_id:string;revision:number;spec:unknown}>(tx,"SELECT * FROM forwards WHERE authorization_actor=? AND deleting=FALSE AND recovery_suspended=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.transport.profileId'))=? ORDER BY id",[actor,profileId]);
+        return records.map(record=>({id:record.id,scopeId:record.scope_id,revision:record.revision,spec:json(record.spec)}));
+    }
     async insert(tx: Transaction, forward: Forward, actorId: string): Promise<void> {
         await write(tx, 'INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES(?,?,?,?,?)', [forward.id, forward.scopeId, forward.revision, JSON.stringify(forward.spec), actorId]);
         await write(tx, 'INSERT INTO forward_revisions(forward_id,revision,spec) VALUES(?,?,?)', [forward.id, forward.revision, JSON.stringify(forward.spec)]);

@@ -1,5 +1,10 @@
 # Phase 3：Relay 前置契约与不可变 Transport Profile
 
+下文记录各前置切片的历史状态。当前在线接入及实网证据见
+[Relay Control](relay-control.md)；用户 API 已能接受已授权的双 Node Relay。
+Profile `executionSupported=true` 表示驱动已接入，不代替每条 Forward 的能力、
+权限、资源与 ready 验证。预览仍不预留资源。
+
 状态：implementing。基线 `7c4037b`。本切片实现契约和 Profile 管理，Relay 数据面
 尚未开放；ADP/2 Agent 继续只声明 direct，创建跨节点 Forward 明确拒绝。
 

@@ -1,5 +1,9 @@
 # Relay Agent And Prepared Plan
 
+Current Control acceptance and real two-Agent flow supersede the prerequisite-only
+status below; see [Relay Control](relay-control.md). This document retains the scope
+of the Agent/compiler slice and its original evidence.
+
 Baseline: `f05d187`. Standard Agent has an explicit `--relay` option that advertises
 `native.relay.v1` and `relay.wire.1` together with `adp.3`. Without it, a Relay
 assignment is rejected before persistent acceptance or socket changes. User-facing

@@ -34,7 +34,17 @@ func run() error {
 	udpClients := flag.Int("udp-clients", 32, "Bounded UDP clients for load")
 	seconds := flag.Int("seconds", 3, "Bounded load duration")
 	payload := flag.Int("payload-bytes", 1024, "Bounded verified payload size")
+	relayCA := flag.String("relay-ca", "", "Trusted Relay CA for a negative probe")
+	relayCert := flag.String("relay-cert", "", "Machine-only credential used by the negative probe")
+	relayKey := flag.String("relay-key", "", "Protected fixture key path")
+	relayNode := flag.String("relay-node", "", "Expected peer Node")
+	relayPin := flag.String("relay-pin", "", "Expected peer fingerprint")
+	relayOpen := flag.String("relay-open", "", "Strict current deployment Open fixture")
+	oldTLS := flag.Bool("tls12", false, "Attempt unsupported TLS 1.2 on Relay listener")
 	flag.Parse()
+	if *mode == "relay-negative" && *port > 0 && *port <= 65535 {
+		return relayNegative(*port, *relayCA, *relayCert, *relayKey, *relayNode, *relayPin, *relayOpen, *oldTLS)
+	}
 	if *mode == "load" && *port > 0 && *port <= 65535 {
 		return load(*port, *tcpClients, *udpClients, *seconds, *payload)
 	}

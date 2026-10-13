@@ -13,6 +13,8 @@ import { DEFAULT_POLICY } from '@tunex/contracts';
 import { json } from '../../infrastructure/mysql.ts';
 import type { Forwarding } from '../forwarding.ts';
 import { targetAllowed } from '../target-policy.ts';
+import type { RelayResource } from './relay-planner.ts';
+import type { ReservedRelayResource } from './relay-plan.ts';
 type ReportRequest=RuntimeMessages['ReportRequest'];
 export interface Operation {
     id: string;
@@ -45,6 +47,7 @@ interface Retirement {
     safe: number;
 }
 export class RuntimeLedger {
+    additionalAssignments: ((tx:Transaction,nodeId:string,includeAccepted:boolean)=>Promise<Assignment[]>)|undefined;
     async quarantineRecovery(tx:Transaction):Promise<void>{
         await write(tx,'UPDATE operations SET recovery_invalidated=TRUE,claim_token=NULL,claim_until=NULL');
         await write(tx,'UPDATE retirements SET safe=TRUE');
@@ -60,9 +63,9 @@ export class RuntimeLedger {
         canExecute(tx: Transaction, actor: string, forward: Forward): Promise<boolean>;
     }) { this.policy = { ...policy }; this.authorization = authorization; }
     async assignments(tx: Transaction, forwarding: Forwarding, facts: AuthorizedNodeFacts, includeAccepted = false): Promise<Assignment[]> {
-        const forwards = await forwarding.forNode(tx, facts.nodeId);
+        const forwards = (await forwarding.forNode(tx, facts.nodeId)).filter(forward=>!forward.spec.path);
         if (!forwards.length)
-            return [];
+            return this.additionalAssignments?this.additionalAssignments(tx,facts.nodeId,includeAccepted):[];
         const placeholders = forwards.map(() => '?').join(',');
         const operations = await rows<Operation>(tx, `SELECT * FROM operations WHERE forward_id IN (${placeholders}) ORDER BY created_at DESC,id DESC FOR UPDATE`, forwards.map(forward => forward.id));
         const slots = await rows<{
@@ -89,6 +92,7 @@ export class RuntimeLedger {
             const reservations: ReservedSlot[] = slots.filter(slot => slot.owner_id === forward.id).map(slot => ({ nodeId: facts.nodeId, forwardId: forward.id, protocol: slot.protocol, port: slot.port, bindingFence: slot.fence, deploymentGeneration: slot.deployment_generation }));
             assignments.push(...compileDirect(forward, facts, reservations.filter(slot => slot.port === forward.spec.ingress.listen.port)));
         }
+        if(this.additionalAssignments)assignments.push(...await this.additionalAssignments(tx,facts.nodeId,includeAccepted));
         return assignments.sort((a, b) => a.assignmentId < b.assignmentId ? -1 : 1);
     }
     async assertCapacity(tx: Transaction, forwarding: Forwarding, facts: AuthorizedNodeFacts): Promise<void> {
@@ -102,7 +106,8 @@ export class RuntimeLedger {
             if (!assignments.some(a => a.assignmentId === old.assignmentId && a.deploymentGeneration === old.deploymentGeneration && a.bindingFence === old.bindingFence) && !tombstones.some(t => t.assignmentId === old.assignmentId && t.bindingFence === old.bindingFence && t.port === old.resource.port && t.protocol === old.protocol))
                 tombstones.push({ assignmentId: old.assignmentId, forwardId: old.forwardId, role:old.role,protocol: old.protocol,physicalProtocol:old.resource.protocol, port: old.resource.port, bindingFence: old.bindingFence, retirementGeneration: MAX_COUNTER });
         }
-        compileSnapshot({ nodeId: facts.nodeId, sessionEpoch: MAX_COUNTER, snapshotGeneration: MAX_COUNTER, issuedAt: new Date(now).toISOString(), validUntil: new Date(now + this.policy.leaseSeconds * 1000).toISOString(), assignments, tombstones, policy: this.policy });
+        const runtime=(await rows<{session_epoch:number}>(tx,'SELECT session_epoch FROM runtime_nodes WHERE node_id=?',[facts.nodeId]))[0];
+        compileSnapshot({ nodeId: facts.nodeId, sessionEpoch: runtime?.session_epoch||MAX_COUNTER, snapshotGeneration: MAX_COUNTER, issuedAt: new Date(now).toISOString(), validUntil: new Date(now + this.policy.leaseSeconds * 1000).toISOString(), assignments, tombstones, policy: this.policy });
     }
     async verifyPublishable(tx: Transaction, assignments: readonly Assignment[]): Promise<void> {
         for (const assignment of assignments) {
@@ -147,6 +152,21 @@ export class RuntimeLedger {
         if (count > this.policy.maxAssignmentsPerNode)
             throw new ControlError('RESOURCE_LIMIT', 429, 'Node assignment capacity exceeded');
         return slots;
+    }
+    async reserveRelay(tx:Transaction,forward:Forward,resources:readonly RelayResource[],generation:number):Promise<ReservedRelayResource[]>{
+        if(!isCounter(generation))throw new ControlError('RESOURCE_LIMIT',429,'Relay generation exhausted');
+        const reserved:ReservedRelayResource[]=[];
+        for(const resource of [...resources].sort((a,b)=>a.nodeId.localeCompare(b.nodeId)||a.physicalProtocol.localeCompare(b.physicalProtocol)||a.port-b.port)){
+            const args=[resource.nodeId,resource.physicalProtocol,resource.port];
+            await write(tx,'INSERT INTO port_slots(node_id,protocol,port) VALUES(?,?,?) ON DUPLICATE KEY UPDATE port=port',args);
+            const slot=(await rows<{owner_id:string|null;fence:number}>(tx,'SELECT owner_id,fence FROM port_slots WHERE node_id=? AND protocol=? AND port=? FOR UPDATE',args))[0]!;
+            if(slot.owner_id!==null&&slot.owner_id!==forward.id)throw new ControlError('PORT_RESERVED',409,'Relay physical resource is reserved');
+            if(slot.fence>=MAX_COUNTER)throw new ControlError('RESOURCE_LIMIT',429,'Relay fence exhausted');
+            await write(tx,'UPDATE port_slots SET owner_id=?,fence=fence+1,deployment_generation=? WHERE node_id=? AND protocol=? AND port=?',[forward.id,generation,...args]);
+            reserved.push({...resource,forwardId:forward.id,deploymentGeneration:generation,bindingFence:slot.fence+1});
+        }
+        for(const nodeId of new Set(resources.map(resource=>resource.nodeId))){const count=(await rows<{n:number}>(tx,'SELECT COUNT(*) n FROM port_slots WHERE node_id=? AND owner_id IS NOT NULL',[nodeId]))[0]!.n;if(count>this.policy.maxAssignmentsPerNode)throw new ControlError('RESOURCE_LIMIT',429,'Relay Node capacity exceeded');}
+        return reserved;
     }
     async transition(tx: Transaction, current: Forward, next: Forward): Promise<ReservedSlot[]> {
         const currentRows = await rows<{
@@ -236,6 +256,7 @@ export class RuntimeLedger {
         const operations = await rows<Operation>(tx, "SELECT o.* FROM operations o JOIN forwards f ON f.id=o.forward_id AND f.revision=o.target_revision WHERE o.recovery_invalidated=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId'))=? AND (o.status='running' OR o.cleanup_pending=TRUE) ORDER BY o.id FOR UPDATE", [nodeId]);
         for (const op of operations) {
             const forward = await forwarding.record(tx, op.scope_id, op.forward_id);
+            if(forward.spec.path)continue;
             const pending = (await rows<{
                 n: number;
             }>(tx, 'SELECT COUNT(*) n FROM retirements WHERE forward_id=? AND safe=FALSE', [op.forward_id]))[0]!.n;

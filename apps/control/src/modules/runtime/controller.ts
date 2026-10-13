@@ -28,10 +28,12 @@ export class RuntimeController {
     private readonly ledger: RuntimeLedger;
     private readonly policy: Policy;
     private readonly authority:AuthorityStore|undefined;
-    constructor(db: MySqlUnitOfWork, nodes: Nodes, forwarding: Forwarding, ledger: RuntimeLedger, policy: Policy = { ...DEFAULT_POLICY },authority?:AuthorityStore) { this.db = db; this.nodes = nodes; this.forwarding = forwarding; this.ledger = ledger;this.authority=authority; this.policy = { ...parseRuntimeMessage('HelloResponse', JSON.stringify({ protocolVersion: 3, nodeId: 'policy-validation', bootId: 'policy-validation', sessionEpoch: 1, serverTime: new Date().toISOString(), policy })).policy }; if (this.policy.leaseSeconds > 300 || this.policy.maxClockSkewSeconds > 5)
+    private readonly relay:import('./relay-coordinator.ts').RelayCoordinator|undefined;
+    constructor(db: MySqlUnitOfWork, nodes: Nodes, forwarding: Forwarding, ledger: RuntimeLedger, policy: Policy = { ...DEFAULT_POLICY },authority?:AuthorityStore,relay?:import('./relay-coordinator.ts').RelayCoordinator) { this.db = db; this.nodes = nodes; this.forwarding = forwarding; this.ledger = ledger;this.authority=authority;this.relay=relay; this.policy = { ...parseRuntimeMessage('HelloResponse', JSON.stringify({ protocolVersion: 3, nodeId: 'policy-validation', bootId: 'policy-validation', sessionEpoch: 1, serverTime: new Date().toISOString(), policy })).policy }; if (this.policy.leaseSeconds > 300 || this.policy.maxClockSkewSeconds > 5)
         throw new Error('Runtime policy cannot weaken the 300-second/5-second authorization baseline'); }
     private async locked(tx: Transaction, nodeId: string, epoch?: number): Promise<RuntimeNode> {
-        const state = (await rows<RuntimeNode>(tx, 'SELECT * FROM runtime_nodes WHERE node_id=? FOR UPDATE', [nodeId]))[0];
+        const related=this.relay?await this.relay.relatedNodeIDs(tx,nodeId):[nodeId];let state:RuntimeNode|undefined;
+        for(const id of related){const current=(await rows<RuntimeNode>(tx,'SELECT * FROM runtime_nodes WHERE node_id=? FOR UPDATE',[id]))[0];if(id===nodeId)state=current;}
         if (!state || (epoch !== undefined && (!isCounter(epoch) || state.session_epoch !== epoch)))
             throw new ControlError('SESSION_SUPERSEDED', 409, 'Current Node session required');
         return state;
@@ -85,10 +87,12 @@ export class RuntimeController {
             n: number;
         }>(tx, "SELECT COUNT(*) n FROM operations o JOIN forwards f ON f.id=o.forward_id AND f.revision=o.target_revision WHERE o.status='accepted' AND JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId'))=?", [state.node_id]))[0]!.n;
         // Preserve the last explicit authorization until persisted work is claimed; do not renew it.
+        if (this.relay) await this.relay.advanceForNode(tx,state.node_id);
         if (!withdrawn && awaitingClaim > 0 && previous?.sessionEpoch === state.session_epoch && Date.parse(previous.validUntil) > now + 5000 && Date.parse(previous.validUntil) <= credentialUntil)
             return previous;
         const assignments = (withdrawn ? [] : await this.ledger.assignments(tx, this.forwarding, facts)).map(a => ({ ...a, drainTimeoutSeconds: this.policy.drainTimeoutSeconds }));
-        if (previous && previous.sessionEpoch === state.session_epoch && digest(previous.assignments) === digest(assignments) && Date.parse(previous.validUntil) <= credentialUntil && Date.parse(previous.validUntil) - now > this.policy.renewalLeadSeconds * 1000)
+        const relayBound=this.relay?await this.relay.authorizationBound(tx,assignments):Number.MAX_SAFE_INTEGER;
+        if (previous && previous.sessionEpoch === state.session_epoch && digest(previous.assignments) === digest(assignments) && Date.parse(previous.validUntil) <= Math.min(credentialUntil,relayBound) && Date.parse(previous.validUntil) - now > this.policy.renewalLeadSeconds * 1000)
             return previous;
         if (!state.session_epoch)
             throw new ControlError('SESSION_SUPERSEDED', 409, 'Hello required before snapshot');
@@ -96,7 +100,7 @@ export class RuntimeController {
             throw new ControlError('RESOURCE_LIMIT', 429, 'Snapshot counter exhausted');
         await this.ledger.retireChanged(tx, state.node_id, previous, assignments, state.snapshot_generation + 1);
         const tombstones = await this.ledger.tombstones(tx, state.node_id, state.snapshot_generation + 1);
-        const validUntil = !withdrawn ? Math.min(now + this.policy.leaseSeconds * 1000, credentialUntil) : now + this.policy.leaseSeconds * 1000;
+        const validUntil = !withdrawn ? Math.min(now + this.policy.leaseSeconds * 1000, credentialUntil,relayBound) : now + this.policy.leaseSeconds * 1000;
         const snapshot = compileSnapshot({ nodeId: state.node_id, sessionEpoch: state.session_epoch, snapshotGeneration: state.snapshot_generation + 1, issuedAt: new Date(now).toISOString(), validUntil: new Date(validUntil).toISOString(), assignments, tombstones, policy: this.policy });
         await this.ledger.verifyPublishable(tx, assignments);
         if (claim) {
@@ -123,6 +127,7 @@ export class RuntimeController {
                     await this.publish(tx, state);
                 await this.ledger.complete(tx, item.node_id, this.forwarding);
             });
+        if(this.relay){const nodes=await this.db.transaction(tx=>this.relay!.pendingNodeIDs(tx));for(const nodeId of nodes)await this.db.transaction(async tx=>{const state=await this.locked(tx,nodeId);if(state.session_epoch)await this.publish(tx,state);await this.ledger.complete(tx,nodeId,this.forwarding);await this.relay!.advanceForNode(tx,nodeId);});}
         const claim = await this.db.transaction(tx => this.ledger.claim(tx));
         if (!claim)
             return;
@@ -181,6 +186,7 @@ export class RuntimeController {
             }
             if (snapshot && snapshot.snapshotGeneration === state.snapshot_generation)
                 await this.ledger.complete(tx, nodeId, this.forwarding, report, snapshot);
+            if(this.relay)await this.relay.advanceForNode(tx,nodeId);
             return ack;
         });
     }
@@ -192,6 +198,13 @@ export class RuntimeController {
             freshUntil: string | null;
         };
     }> {
+        if(forward.spec.path){
+            const {path,...spec}=forward.spec;const states=[];
+            for(const nodeId of [forward.spec.ingress.nodeId,...path.via]){const state=await this.status(tx,{id:forward.id,scopeId:forward.scopeId,revision:forward.revision,spec:{...spec,ingress:{...spec.ingress,nodeId}}});states.push({nodeId,...state});}
+            const applied=states.flatMap(state=>state.applied.map(observation=>({...observation,nodeId:state.nodeId})));
+            const freshTimes=states.map(state=>state.health.freshUntil===null?null:Date.parse(state.health.freshUntil)),receivedTimes=states.map(state=>state.health.receivedAt===null?null:Date.parse(state.health.receivedAt));
+            return {applied,health:{condition:states.some(state=>state.health.condition==='unknown')?'unknown':states.every(state=>state.health.condition==='ready')?'ready':'degraded',receivedAt:receivedTimes.some(value=>value===null)?null:new Date(Math.min(...receivedTimes as number[])).toISOString(),freshUntil:freshTimes.some(value=>value===null)?null:new Date(Math.min(...freshTimes as number[])).toISOString()}};
+        }
         const state = (await rows<RuntimeNode>(tx, 'SELECT * FROM runtime_nodes WHERE node_id=?', [forward.spec.ingress.nodeId]))[0]!;
         const report = state.last_report ? json<ReportRequest>(state.last_report) : undefined;
         const current = state.snapshot_generation ? (await rows<{

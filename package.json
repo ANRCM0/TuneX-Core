@@ -24,6 +24,7 @@
     "test:faults": "node scripts/phase2/faults.ts",
     "test:linux-agent": "node scripts/phase2/linux-agent.ts",
     "test:relay-agent": "node scripts/phase2/linux-agent.ts --relay",
+    "test:relay": "node scripts/phase2/relay.ts",
     "test:access": "node scripts/phase2/access.ts",
     "ops": "node scripts/ops/cli.ts",
     "test:recovery": "node scripts/phase2/recovery.ts",

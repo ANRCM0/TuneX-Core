@@ -331,3 +331,28 @@ Real Linux `--relay` identity/direct regression passes 9 checks. Two Runner test
 simulated Control plus real TLS sockets for encrypted TCP/UDP/phase/renewal/failure
 behavior; they are not independent two-Agent Control acceptance. Details:
 [Relay Agent](relay-agent.md). Full Phase 3 and release gates remain open.
+
+## Relay Control And Real Two-Agent Flow
+
+Baseline: `56895c3`. Runtime owns durable two-Node Relay plans/stages and uses the
+shared physical resource/fence/lease/retirement ledger. Forward acceptance reserves
+all ingress/egress protocol resources with intent/Operation/replay in one transaction.
+Current prepared and active/ready reports drive tail-to-head publication; Agent
+independently probes before ingress opens. New sessions rebuild internal generations
+and both Node/peer credentials bound Snapshot authority.
+
+Profile and downstream Node grants withdraw through persistent Operations; direct
+authorization/lifecycle gates remain in force. Updates, disable/enable, new boot and
+delete preserve historical holders and wait for safe reclamation. Forward health
+aggregates both Node reports. Recovery quarantines Relay deployments as well as trust,
+intent, operations and replay. Details: [Relay Control](relay-control.md).
+
+Actual MySQL/HTTPS/two independent native Linux Agent acceptance now verifies encrypted
+TCP/UDP, activation safety, identity/no-downgrade, transaction rollback, renewal,
+coordinator restart, lifecycle, authority withdrawal/restoration and offline cleanup.
+The topology is mixed Windows Control/MySQL plus WSL same-host Linux processes;
+namespace/two-host and complete Phase 3/release gates remain unverified.
+
+Local verification on October 13, 2026: 14 Relay acceptance checks, 13 Transport,
+14 direct access, 9 same-protocol recovery, 165 TS tests and Go build/vet/Linux race.
+Each evidence artifact records the tested commit and whether its tree was dirty.

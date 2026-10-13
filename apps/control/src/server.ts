@@ -19,7 +19,7 @@ export async function startControl(options:ServerOptions):Promise<{ port:number;
   try{await authority.initialize(records[0].name,trustDigest(await readFile(options.caCert)),options.initializeAuthority===true&&records[0].nodes===0);}catch(error){await db.close();throw error;}db.guard=()=>authority.allow();
   const identity=new Identity(db), ca=new NodeCertificateAuthority(options.openssl,options.caCert,options.caKey,options.stateDirectory);
   const nodes=new Nodes(db,identity,ca,options.credentialOverlapSeconds??120), control=new ControlApplication(db,identity,nodes,options.policy);
-  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy,authority), app=createApp(control,runtime,authority);
+  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy,authority,control.relay), app=createApp(control,runtime,authority);
   const server=createServer({ key:await readFile(options.serverKey),cert:await readFile(options.serverCert),ca:await readFile(options.caCert),requestCert:true,rejectUnauthorized:false,minVersion:'TLSv1.3' },getRequestListener(app.fetch));
   await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(options.port,options.host??'127.0.0.1',resolve);});
   let busy=false, active:Promise<void>=Promise.resolve();
