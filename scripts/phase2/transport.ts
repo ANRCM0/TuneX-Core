@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { randomUUID } from 'node:crypto';
+import { mkdir,mkdtemp,readFile,writeFile } from 'node:fs/promises';
+import { join,resolve } from 'node:path';
+import { request } from 'node:https';
+import { createConnection } from 'mysql2/promise';
+import { startControl } from '../../apps/control/src/server.ts';
+import { newToken } from '../../apps/control/src/modules/identity.ts';
+const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
+if(!databaseUrl)throw new Error('Disposable MySQL URL required');
+await mkdir('.artifacts/transport',{recursive:true});const directory=await mkdtemp(resolve('.artifacts/transport/run-'));
+const caKey=join(directory,'ca.key'),caCert=join(directory,'ca.pem'),serverKey=join(directory,'server.key'),serverCert=join(directory,'server.pem');
+await execute(openssl,['req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-keyout',caKey,'-out',caCert,'-days','2','-subj','/CN=Transport Test CA']);
+await execute(openssl,['req','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256','-nodes','-keyout',serverKey,'-out',join(directory,'server.csr'),'-subj','/CN=localhost']);
+await writeFile(join(directory,'server.ext'),'subjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\n');
+await execute(openssl,['x509','-req','-in',join(directory,'server.csr'),'-CA',caCert,'-CAkey',caKey,'-set_serial','1','-out',serverCert,'-days','1','-extfile',join(directory,'server.ext')]);
+const database=`tunex_transport_${randomUUID().replaceAll('-','')}`,admin=await createConnection(databaseUrl);await admin.query(`CREATE DATABASE \`${database}\``);
+const url=new URL(databaseUrl);url.pathname=`/${database}`;const token=newToken(),memberToken=newToken(),foreignToken=newToken(),scope='scope-a',owner='owner-a',member='member-a';
+const options={databaseUrl:url.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),port:0,initializeAuthority:true};
+let control:Awaited<ReturnType<typeof startControl>>|undefined;const ca=await readFile(caCert),checks:string[]=[];
+const config={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:60,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:4096};
+function pass(text:string){checks.push(text);console.log(`PASS ${text}`);}
+async function call(method:string,path:string,input?:unknown,bearer=token,key=randomUUID()):Promise<{status:number;body:any}>{const body=input===undefined?undefined:JSON.stringify(input);return new Promise((resolve,reject)=>{const req=request({host:'127.0.0.1',port:control!.port,path,method,ca,agent:false,timeout:10000,headers:{authorization:`Bearer ${bearer}`,'content-type':'application/json','idempotency-key':key,...(body?{'content-length':String(Buffer.byteLength(body))}:{})}},res=>{const parts:Buffer[]=[];res.on('data',chunk=>parts.push(chunk));res.on('end',()=>{try{resolve({status:res.statusCode!,body:JSON.parse(Buffer.concat(parts).toString())});}catch(err){reject(err)}})});req.on('error',reject);req.on('timeout',()=>req.destroy(new Error('Control timeout')));req.end(body)});}
+const path=`/api/v1/scopes/${scope}/transport-profiles/profile-a`;
+try{
+ control=await startControl(options);await control.control.identity.bootstrap(scope,owner,token);await control.control.identity.bootstrap('scope-b','owner-b',foreignToken);
+ const membership=await call('PUT',`/api/v1/scopes/${scope}/members/${member}`,{expectedRevision:0,role:'manager',token:memberToken});assert.equal(membership.status,202);
+ const key=randomUUID(),input={expectedRevision:0,config};const first=await call('PUT',path,input,token,key);assert.equal(first.status,202);assert.equal(first.body.revision,1);const replay=await call('PUT',path,input,token,key);assert.deepEqual(replay,first);const conflict=await call('PUT',path,{...input,config:{...config,idleTimeoutSeconds:30}},token,key);assert.equal(conflict.status,409);
+ pass('Profile acceptance: immutable revision and replay response commit together; changed input conflicts');
+ const noOp=await call('PUT',path,{expectedRevision:1,config});assert.equal(noOp.status,200);assert.equal(noOp.body.revision,1);
+ const races=await Promise.all([call('PUT',path,{expectedRevision:1,config:{...config,idleTimeoutSeconds:30}}),call('PUT',path,{expectedRevision:1,config:{...config,idleTimeoutSeconds:40}})]);assert.deepEqual(races.map(r=>r.status).sort(),[202,409]);const history=await call('GET',path+'?revision=1');assert.equal(history.body.config.idleTimeoutSeconds,60);assert.equal(history.body.currentRevision,2);assert.equal(history.body.executionSupported,false);
+ pass('Profile CAS: one concurrent winner, canonical no-op and locked old revision remain unchanged');
+ assert.equal((await call('PUT',path,{expectedRevision:2,config},memberToken)).status,403);assert.equal((await call('GET',path,undefined,memberToken)).status,200);assert.equal((await call('GET',path,undefined,foreignToken)).status,404);assert.equal((await call('GET',path+'?revision=0')).status,422);
+ for(const invalidConfig of [{...config,security:'plaintext'},{...config,cipher:'custom'},{...config,maxConnectionsPerNode:4097}])assert.equal((await call('PUT',path,{expectedRevision:2,config:invalidConfig})).status,422);
+ pass('Profile isolation: only owner writes; scope read and strict secure bounded config are enforced');
+ const respond=control.control.idempotency.respond.bind(control.control.idempotency);control.control.idempotency.respond=async()=>{throw new Error('Injected post-revision failure')};assert.equal((await call('PUT',path.replace('profile-a','rollback-profile'),input)).status,503);control.control.idempotency.respond=respond;
+ const [rolled]=await control.db.pool.query<any[]>("SELECT COUNT(*) n FROM transport_profiles WHERE id='rollback-profile'");assert.equal(rolled[0].n,0);assert.equal((await call('PUT',path.replace('profile-a','rollback-profile'),input)).status,202);
+ pass('Profile rollback: failure after revision creation leaves no Profile or response; fresh retry succeeds');
+ const cliEnv={...process.env,TUNEX_CONTROL_URL:`https://127.0.0.1:${control.port}`,TUNEX_CA_CERT:caCert,TUNEX_OWNER_TOKEN:token};const cli=JSON.parse((await execute(process.execPath,['apps/control/src/client.ts','profile-get',scope,'profile-a','1'],{env:cliEnv})).stdout);assert.equal(cli.revision,1);assert.equal(cli.config.idleTimeoutSeconds,60);const currentProfile=(await call('GET',path)).body;const cliInput=join(directory,'profile-input.json');await writeFile(cliInput,JSON.stringify({expectedRevision:2,config:currentProfile.config}));const cliNoOp=JSON.parse((await execute(process.execPath,['apps/control/src/client.ts','profile',scope,'profile-a',cliInput,randomUUID()],{env:cliEnv})).stdout);assert.equal(cliNoOp.changed,false);assert.equal(cliNoOp.revision,2);
+ const node=await call('POST',`/api/v1/scopes/${scope}/nodes`,{allowedListenerAddresses:['127.0.0.1'],allowedPorts:[32001],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false});assert.equal(node.status,201);const relay=await call('POST',`/api/v1/scopes/${scope}/forwards`,{enabled:true,protocols:['tcp'],ingress:{nodeId:node.body.nodeId,listen:{address:'127.0.0.1',port:32001}},target:{host:'127.0.0.1',port:32002},path:{via:['node-egress']},transport:{profileId:'profile-a',configRevision:1}});assert.equal(relay.status,422);assert.equal(relay.body.code,'UNSUPPORTED_CAPABILITY');
+ pass('Capability gate: CLI reads locked revision and ADP/2 refuses Relay instead of advertising a prepared contract');
+ await control.close();control=await startControl({...options,initializeAuthority:false});const persistent=await call('GET',path+'?revision=1');assert.equal(persistent.body.configDigest,first.body.configDigest);
+ pass('Restart durability: original revision and digest survive real Control restart');
+ await control.db.pool.query('UPDATE transport_profile_revisions SET config_digest=? WHERE profile_id=? AND revision=1',['sha256:'+'f'.repeat(64),'profile-a']);const corrupt=await call('GET',path+'?revision=1');assert.equal(corrupt.status,409);assert.equal(corrupt.body.code,'INTEGRITY_FAILURE');pass('Stored Profile integrity: altered digest is refused before a revision can be resolved');
+ const commit=(await execute('git',['rev-parse','HEAD'])).stdout.trim(),[version]=await control.db.pool.query<any[]>('SELECT VERSION() version');await writeFile(join(directory,'evidence.json'),JSON.stringify({commit,workingTreeDirty:Boolean((await execute('git',['status','--porcelain'])).stdout.trim()),command:'npm run test:transport',checks,environment:{node:process.version,mysql:version[0].version,platform:process.platform},topology:'Real MySQL and TLS Control API; contract/Profile prerequisite, no Relay data-plane claim'},null,2));console.log(`Transport preparation passed: ${checks.length} checks. Evidence ${directory}`);
+}finally{await control?.close();await admin.query(`DROP DATABASE \`${database}\``);await admin.end();}

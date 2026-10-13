@@ -86,6 +86,9 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         return Number(value);
     }
     app.get('/health',async c=>c.json({status:(await authority.read()).maintenance?'maintenance':'ok',protocolVersion:2}));
+    app.get('/api/v1/scopes/:scope/transport-profiles',async c=>c.json(await control.transport.list(c.get('actor'),scope(c.req.param('scope')))));
+    app.get('/api/v1/scopes/:scope/transport-profiles/:profile',async c=>{const revision=c.req.query('revision');if(revision!==undefined&&!/^[1-9][0-9]*$/.test(revision))invalid('Canonical Profile revision required');return c.json(await control.transport.get(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),revision===undefined?undefined:Number(revision)));});
+    app.put('/api/v1/scopes/:scope/transport-profiles/:profile',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='config,expectedRevision'||!isCounter(input.expectedRevision,true))invalid('Profile config and expectedRevision required');const result=await control.transport.publish(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),c.req.header('idempotency-key'),input.expectedRevision,input.config);return c.json(result.body,result.status);});
     app.get('/api/v1/scopes/:scope/members', async (c) => c.json(await control.identity.listMembers(c.get('actor'), scope(c.req.param('scope')))));
     app.put('/api/v1/scopes/:scope/members/:actor', async (c) => {
         const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;

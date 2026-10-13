@@ -182,3 +182,31 @@ Details and operator procedure: [Recovery and capacity](recovery-and-capacity.md
 Evidence remains in ignored `.artifacts/recovery/` and `.artifacts/capacity/`, with
 commit/dirty state and platform data. Full Phase 2 stays implementing pending matrix,
 budget and environment gates; Relay, product Web and release work remain outstanding.
+
+
+## Phase 3 prerequisite: Relay v1 contract and immutable Transport Profiles
+
+Baseline: `7c4037b`. ADR-0003 fixes the initial two-Node TLS 1.3 data-plane design,
+independent peer certificate purpose, exact deployment binding, bounded TCP/UDP
+framing and internal physical resource ownership. Those role/fence changes require
+ADP/3; current ADP/2 stays direct-only and rejects Relay requests.
+
+Transport now owns immutable Profile revisions with owner-only publication, CAS,
+no-op, shared-transaction replay responses and scoped historical queries. The strict
+Relay wire/Profile schema has generated Go types and 18 shared TS/Go vectors.
+Real MySQL/HTTPS acceptance passes 7 checks including concurrency, rollback,
+authorization, old-revision durability, CLI and explicit unsupported execution.
+Details: [Relay preparation](relay-preparation.md).
+
+This prerequisite is not Phase 3 completion: use-grant withdrawal, Node endpoints,
+ADP/3 assignment/state migration, authenticated encrypted peer execution and real
+two-Agent failure/lifecycle evidence are still required. Full project stays active.
+
+
+Clean-commit evidence for the preceding recovery/capacity slice: `7c4037b` passed
+9 recovery checks (`.artifacts/recovery/run-JYtN7H/evidence.json`) and 6 capacity
+checks (`.artifacts/capacity/run-Zc93Nk/evidence.json`), both with dirty=false.
+Measured 64 TCP/32 UDP, 170 FD, 201 goroutines, about 9.3 MB heap/33.6 MB runtime
+and four-Agent reconnect about 1.4 seconds. Two bounded load samples verified
+51.2/54.5 MB/s bidirectional payload; p95 about 4.9/12.7 ms. These are mixed-platform
+local samples, not a maximum supported or release capacity claim.

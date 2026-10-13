@@ -26,7 +26,8 @@
     "test:access": "node scripts/phase2/access.ts",
     "ops": "node scripts/ops/cli.ts",
     "test:recovery": "node scripts/phase2/recovery.ts",
-    "test:capacity": "node scripts/phase2/capacity.ts"
+    "test:capacity": "node scripts/phase2/capacity.ts",
+    "test:transport": "node scripts/phase2/transport.ts"
   },
   "devDependencies": { "@types/node": "24.10.1", "typescript": "5.9.3" }
 }

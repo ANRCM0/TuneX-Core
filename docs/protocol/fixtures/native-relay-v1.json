@@ -1,0 +1,113 @@
+{
+  "description": "Shared strict Relay preparation contract vectors; no runtime deployment authority.",
+  "cases": [
+    {
+      "name": "profile",
+      "schema": "ProfileConfig",
+      "raw": "{\"driver\":\"native.relay.v1\",\"wireVersion\":1,\"security\":\"mutual-tls13\",\"protocols\":[\"tcp\",\"udp\"],\"handshakeTimeoutSeconds\":5,\"idleTimeoutSeconds\":60,\"maxFrameBytes\":65536,\"maxUdpDatagramBytes\":16384,\"maxConnectionsPerNode\":4096}",
+      "valid": true
+    },
+    {
+      "name": "open-probe",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":1,\"type\":\"open\",\"action\":\"probe\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-b\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-b\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":4,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": true
+    },
+    {
+      "name": "accept",
+      "schema": "Accept",
+      "raw": "{\"wireVersion\":1,\"type\":\"accepted\",\"requestId\":\"request-a\",\"bindingDigest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\"}",
+      "valid": true
+    },
+    {
+      "name": "reject",
+      "schema": "Reject",
+      "raw": "{\"wireVersion\":1,\"type\":\"rejected\",\"requestId\":\"request-a\",\"code\":\"DOWNSTREAM_NOT_ACTIVE\",\"retryable\":true}",
+      "valid": true
+    },
+    {
+      "name": "plaintext",
+      "schema": "ProfileConfig",
+      "raw": "{\"driver\":\"native.relay.v1\",\"wireVersion\":1,\"security\":\"plaintext\",\"protocols\":[\"tcp\",\"udp\"],\"handshakeTimeoutSeconds\":5,\"idleTimeoutSeconds\":60,\"maxFrameBytes\":65536,\"maxUdpDatagramBytes\":16384,\"maxConnectionsPerNode\":4096}",
+      "valid": false
+    },
+    {
+      "name": "unknown-field",
+      "schema": "ProfileConfig",
+      "raw": "{\"driver\":\"native.relay.v1\",\"wireVersion\":1,\"security\":\"mutual-tls13\",\"protocols\":[\"tcp\",\"udp\"],\"handshakeTimeoutSeconds\":5,\"idleTimeoutSeconds\":60,\"maxFrameBytes\":65536,\"maxUdpDatagramBytes\":16384,\"maxConnectionsPerNode\":4096,\"cipher\":\"custom\"}",
+      "valid": false
+    },
+    {
+      "name": "wrong-wire-version",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":2,\"type\":\"open\",\"action\":\"probe\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-b\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-b\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":4,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": false
+    },
+    {
+      "name": "invalid-action",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":1,\"type\":\"open\",\"action\":\"shell\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-b\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-b\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":4,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": false
+    },
+    {
+      "name": "bounded-node-budget",
+      "schema": "ProfileConfig",
+      "raw": "{\"driver\":\"native.relay.v1\",\"wireVersion\":1,\"security\":\"mutual-tls13\",\"protocols\":[\"tcp\",\"udp\"],\"handshakeTimeoutSeconds\":5,\"idleTimeoutSeconds\":60,\"maxFrameBytes\":65536,\"maxUdpDatagramBytes\":16384,\"maxConnectionsPerNode\":4097}",
+      "valid": false
+    },
+    {
+      "name": "udp-over-frame",
+      "schema": "ProfileConfig",
+      "raw": "{\"driver\":\"native.relay.v1\",\"wireVersion\":1,\"security\":\"mutual-tls13\",\"protocols\":[\"tcp\",\"udp\"],\"handshakeTimeoutSeconds\":5,\"idleTimeoutSeconds\":60,\"maxFrameBytes\":64,\"maxUdpDatagramBytes\":16384,\"maxConnectionsPerNode\":4096}",
+      "valid": false
+    },
+    {
+      "name": "unsorted-protocols",
+      "schema": "ProfileConfig",
+      "raw": "{\"driver\":\"native.relay.v1\",\"wireVersion\":1,\"security\":\"mutual-tls13\",\"protocols\":[\"udp\",\"tcp\"],\"handshakeTimeoutSeconds\":5,\"idleTimeoutSeconds\":60,\"maxFrameBytes\":65536,\"maxUdpDatagramBytes\":16384,\"maxConnectionsPerNode\":4096}",
+      "valid": false
+    },
+    {
+      "name": "same-node",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":1,\"type\":\"open\",\"action\":\"probe\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-a\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-b\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":4,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": false
+    },
+    {
+      "name": "same-assignment",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":1,\"type\":\"open\",\"action\":\"probe\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-b\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-a\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":4,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": false
+    },
+    {
+      "name": "newline-id",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":1,\"type\":\"open\",\"action\":\"probe\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-b\\n\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-b\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":4,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": false
+    },
+    {
+      "name": "unsafe-counter",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":1,\"type\":\"open\",\"action\":\"probe\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-b\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-b\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":9007199254740992,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": false
+    },
+    {
+      "name": "exact-exponent-counter",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":1,\"type\":\"open\",\"action\":\"probe\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-b\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-b\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":4e0,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": true
+    },
+    {
+      "name": "fraction-counter",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":1,\"type\":\"open\",\"action\":\"probe\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-b\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-b\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":4.000000000000001,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": false
+    },
+    {
+      "name": "duplicate-key",
+      "schema": "Open",
+      "raw": "{\"wireVersion\":1,\"wireVersion\":1,\"type\":\"open\",\"action\":\"probe\",\"requestId\":\"request-a\",\"binding\":{\"scopeId\":\"scope-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":1,\"ingressNodeId\":\"node-a\",\"egressNodeId\":\"node-b\",\"ingressAssignmentId\":\"assignment-a\",\"egressAssignmentId\":\"assignment-b\",\"ingressSessionEpoch\":2,\"egressSessionEpoch\":3,\"ingressFence\":4,\"egressFence\":5,\"profileId\":\"profile-a\",\"profileRevision\":1,\"profileDigest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\"}}",
+      "valid": false
+    }
+  ]
+}

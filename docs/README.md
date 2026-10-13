@@ -57,3 +57,6 @@ Owner-managed members, explicit Node grants and persistent execution authority:
 
 Independent authority, old-backup recovery, operator commands and bounded Linux capacity evidence:
 [Recovery and capacity](development/recovery-and-capacity.md).
+
+Relay contract preparation, immutable Transport Profiles and explicit capability gate:
+[Phase 3 preparation](development/relay-preparation.md).

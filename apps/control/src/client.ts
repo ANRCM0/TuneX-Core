@@ -6,7 +6,10 @@ const base = process.env.TUNEX_CONTROL_URL, caPath = process.env.TUNEX_CA_CERT, 
 if (!base?.startsWith('https://') || !caPath || !token || !scope)
     throw new Error('Trusted Control URL/CA, owner token and scope required');
 let method = 'GET', path = '', body: string | undefined;
-if (command === 'members') {
+if(command==='profiles'){path='transport-profiles';}
+else if(command==='profile-get'){if(!idOrFile)throw new Error('Profile ID required');path=`transport-profiles/${encodeURIComponent(idOrFile)}${key?`?revision=${encodeURIComponent(key)}`:''}`;}
+else if(command==='profile'){if(!idOrFile||!key||!expectedOrFile)throw new Error('Usage: profile <scope> <profileId> <input.json> <stable-key>');method='PUT';path=`transport-profiles/${encodeURIComponent(idOrFile)}`;body=JSON.stringify(parseJson(await readFile(key,'utf8')));}
+else if (command === 'members') {
     path = 'members';
 }
 else if (command === 'member') {
@@ -63,8 +66,8 @@ else if (command === 'node-revoke') {
     body = '{}';
 }
 else
-    throw new Error('Usage: create|node|get|operation|update|delete|retry|node-get|node-policy|node-revoke|members|member|node-grants|node-grant');
-const requestKey = command === 'update' || command === 'node-policy' || command === 'node-grant' ? mutationKey : command === 'delete' || command === 'retry' || command === 'member' ? expectedOrFile : key;
+    throw new Error('Usage: create|node|get|operation|update|delete|retry|node-get|node-policy|node-revoke|members|member|node-grants|node-grant|profiles|profile-get|profile');
+const requestKey = command === 'update' || command === 'node-policy' || command === 'node-grant' ? mutationKey : command === 'delete' || command === 'retry' || command === 'member' || command === 'profile' ? expectedOrFile : key;
 if (command === 'create' && !key)
     throw new Error('Provide a persistent Idempotency-Key for create and reuse it on retry');
 const url = new URL(`/api/v1/scopes/${encodeURIComponent(scope)}/${path}`, base);

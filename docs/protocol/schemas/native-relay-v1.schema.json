@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:relay:1",
+  "title": "Native Relay v1 Profile and control handshake",
+  "description": "Contract preparation only. Does not authorize ADP/2 Relay execution. ADR-0003 requires ADP/3 activation and network acceptance.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ProfileConfig"
+    },
+    {
+      "$ref": "#/$defs/Open"
+    },
+    {
+      "$ref": "#/$defs/Accept"
+    },
+    {
+      "$ref": "#/$defs/Reject"
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scopeId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "ingressNodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "egressNodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "ingressAssignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "egressAssignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "profileId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "ingressSessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "egressSessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "ingressFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "egressFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "profileRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "profileDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "scopeId",
+        "forwardId",
+        "ingressNodeId",
+        "egressNodeId",
+        "ingressAssignmentId",
+        "egressAssignmentId",
+        "profileId",
+        "forwardRevision",
+        "deploymentGeneration",
+        "ingressSessionEpoch",
+        "egressSessionEpoch",
+        "ingressFence",
+        "egressFence",
+        "profileRevision",
+        "profileDigest"
+      ]
+    },
+    "ProfileConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "driver": {
+          "const": "native.relay.v1"
+        },
+        "wireVersion": {
+          "const": 1
+        },
+        "security": {
+          "const": "mutual-tls13"
+        },
+        "protocols": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "tcp",
+              "udp"
+            ]
+          }
+        },
+        "handshakeTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "idleTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "maxFrameBytes": {
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 65536
+        },
+        "maxUdpDatagramBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "maxConnectionsPerNode": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        }
+      },
+      "required": [
+        "driver",
+        "wireVersion",
+        "security",
+        "protocols",
+        "handshakeTimeoutSeconds",
+        "idleTimeoutSeconds",
+        "maxFrameBytes",
+        "maxUdpDatagramBytes",
+        "maxConnectionsPerNode"
+      ]
+    },
+    "Open": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wireVersion": {
+          "const": 1
+        },
+        "type": {
+          "const": "open"
+        },
+        "action": {
+          "enum": [
+            "probe",
+            "tcp",
+            "udp"
+          ]
+        },
+        "requestId": {
+          "$ref": "#/$defs/id"
+        },
+        "binding": {
+          "$ref": "#/$defs/binding"
+        }
+      },
+      "required": [
+        "wireVersion",
+        "type",
+        "action",
+        "requestId",
+        "binding"
+      ]
+    },
+    "Accept": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wireVersion": {
+          "const": 1
+        },
+        "type": {
+          "const": "accepted"
+        },
+        "requestId": {
+          "$ref": "#/$defs/id"
+        },
+        "bindingDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "wireVersion",
+        "type",
+        "requestId",
+        "bindingDigest"
+      ]
+    },
+    "Reject": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wireVersion": {
+          "const": 1
+        },
+        "type": {
+          "const": "rejected"
+        },
+        "requestId": {
+          "$ref": "#/$defs/id"
+        },
+        "code": {
+          "enum": [
+            "AUTHENTICATION_FAILED",
+            "AUTHORIZATION_DENIED",
+            "STALE_DEPLOYMENT",
+            "DOWNSTREAM_NOT_ACTIVE",
+            "UNSUPPORTED_CAPABILITY",
+            "RESOURCE_LIMIT",
+            "TARGET_REJECTED",
+            "TARGET_UNAVAILABLE"
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "wireVersion",
+        "type",
+        "requestId",
+        "code",
+        "retryable"
+      ]
+    }
+  }
+}
