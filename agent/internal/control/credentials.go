@@ -133,7 +133,7 @@ func (runner *Runner) rotate(ctx context.Context) error {
 		return err
 	}
 	body, _ := json.Marshal(map[string]string{"requestId": request.RequestID, "csr": request.CSR})
-	raw, err := runner.request(ctx, "POST", "/agent/v2/credentials/rotate", body, true)
+	raw, err := runner.request(ctx, "POST", "/agent/v3/credentials/rotate", body, true)
 	if err != nil {
 		return err
 	}

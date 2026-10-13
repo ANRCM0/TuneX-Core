@@ -108,12 +108,12 @@ try {
     }>(control.db.pool, 'SELECT session_epoch,snapshot_generation FROM runtime_nodes WHERE node_id=?', [nodeId]))[0]!;
     await run(openssl, ['req', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', join(directory, 'rotated.key'), '-out', join(directory, 'rotated.csr'), '-subj', `/CN=${nodeId}`]);
     const csr = await readFile(join(directory, 'rotated.csr'), 'utf8'), rotation = { requestId: 'rotation-one', csr }, epoch = { 'x-tunex-session-epoch': String(before.session_epoch) };
-    const responses = await Promise.all([call('POST', '/agent/v2/credentials/rotate', rotation, old, epoch), call('POST', '/agent/v2/credentials/rotate', rotation, old, epoch)]);
+    const responses = await Promise.all([call('POST', '/agent/v3/credentials/rotate', rotation, old, epoch), call('POST', '/agent/v3/credentials/rotate', rotation, old, epoch)]);
     assert.equal(responses[0]!.status, 200, JSON.stringify(responses[0]));
     assert.deepEqual(responses[0], responses[1]);
     const signed = responses[0]!.body;
     const rotated: Machine = { cert: Buffer.from(signed.certificate), key: await readFile(join(directory, 'rotated.key')) };
-    const corruptRequest = await call('POST', '/agent/v2/credentials/rotate', { ...rotation, csr: csr + '\n' }, old, epoch);
+    const corruptRequest = await call('POST', '/agent/v3/credentials/rotate', { ...rotation, csr: csr + '\n' }, old, epoch);
     assert.equal(corruptRequest.status, 409);
     assert.equal(corruptRequest.body.code, 'IDEMPOTENCY_CONFLICT');
     assert.equal((await rows<{
@@ -122,10 +122,10 @@ try {
     passed('SEC-06: concurrent rotation retries produce one new credential and reject changed CSR');
     const journalBefore = await readFile(join(state, 'journal.json'));
     await writeFile(join(state, 'credential.json'), JSON.stringify({ certificate: signed.certificate, privateKey: rotated.key.toString() }), { mode: 0o600 });
-    const oldSnapshot = await call('GET', '/agent/v2/snapshot', undefined, old, epoch);
+    const oldSnapshot = await call('GET', '/agent/v3/snapshot', undefined, old, epoch);
     assert.equal(oldSnapshot.status, 200);
     assert.ok(Date.parse(oldSnapshot.body.validUntil) <= Date.parse(signed.oldCredentialUntil));
-    const newSnapshot = await call('GET', '/agent/v2/snapshot', undefined, rotated, epoch);
+    const newSnapshot = await call('GET', '/agent/v3/snapshot', undefined, rotated, epoch);
     assert.equal(newSnapshot.status, 200);
     assert.ok(Date.parse(newSnapshot.body.validUntil) > Date.parse(signed.oldCredentialUntil));
     await until(async () => (await rows<{
@@ -142,8 +142,8 @@ try {
     assert.ok(journalBefore.length > 0);
     passed('SEC-06: live credential reload preserves TCP stream, session and Forward revision');
     await until(async () => Date.now() > Date.parse(signed.oldCredentialUntil) + 50);
-    assert.equal((await call('GET', '/agent/v2/snapshot', undefined, old, epoch)).status, 403);
-    assert.equal((await call('GET', '/agent/v2/snapshot', undefined, rotated, epoch)).status, 200);
+    assert.equal((await call('GET', '/agent/v3/snapshot', undefined, old, epoch)).status, 403);
+    assert.equal((await call('GET', '/agent/v3/snapshot', undefined, rotated, epoch)).status, 200);
     passed('SEC-06: overlap has a hard bound; retired credential cannot request new authorization');
     const policy2 = { ...policy, egressPolicyRevision: 2, allowedDestinationCidrs: ['127.0.0.0/9'] };
     const stalePolicy = await call('PUT', `/api/v1/scopes/${scope}/nodes/${nodeId}/policy`, { expectedRevision: 2, policy: policy2 }, undefined, { 'idempotency-key': 'stale-policy' });
@@ -191,16 +191,16 @@ try {
         session_epoch: number;
     }>(control.db.pool, 'SELECT session_epoch FROM runtime_nodes WHERE node_id=?', [nodeId]))[0]!.session_epoch;
     assert.ok(currentSession > before.session_epoch);
-    assert.equal((await call('GET', '/agent/v2/snapshot', undefined, cliCredential, { 'x-tunex-session-epoch': String(currentSession) })).status, 200);
+    assert.equal((await call('GET', '/agent/v3/snapshot', undefined, cliCredential, { 'x-tunex-session-epoch': String(currentSession) })).status, 200);
     passed('SEC-06/ADP-13: Agent --rotate atomically installs a keypair and restarts only through a fresh online session');
     const revoked = await call('POST', `/api/v1/scopes/${scope}/nodes/${nodeId}/revoke`, {}, undefined, { 'idempotency-key': 'revoke-node' });
     assert.equal(revoked.status, 202);
     assert.deepEqual(await call('POST', `/api/v1/scopes/${scope}/nodes/${nodeId}/revoke`, {}, undefined, { 'idempotency-key': 'revoke-node' }), revoked);
     const latePolicy = await call('PUT', `/api/v1/scopes/${scope}/nodes/${nodeId}/policy`, { expectedRevision: 4, policy: { ...policy, egressPolicyRevision: 5 } }, undefined, { 'idempotency-key': 'revoked-policy' });
     assert.equal(latePolicy.status, 403);
-    assert.equal((await call('GET', '/agent/v2/snapshot', undefined, rotated, epoch)).status, 403);
-    assert.equal((await call('GET', '/agent/v2/snapshot', undefined, cliCredential, { 'x-tunex-session-epoch': String(currentSession) })).status, 403);
-    assert.equal((await call('POST', '/agent/v2/credentials/rotate', rotation, cliCredential, { 'x-tunex-session-epoch': String(currentSession) })).status, 403);
+    assert.equal((await call('GET', '/agent/v3/snapshot', undefined, rotated, epoch)).status, 403);
+    assert.equal((await call('GET', '/agent/v3/snapshot', undefined, cliCredential, { 'x-tunex-session-epoch': String(currentSession) })).status, 403);
+    assert.equal((await call('POST', '/agent/v3/credentials/rotate', rotation, cliCredential, { 'x-tunex-session-epoch': String(currentSession) })).status, 403);
     await until(async () => (await rows<{
         body: any;
     }>(control!.db.pool, 'SELECT body FROM snapshots WHERE node_id=? ORDER BY generation DESC LIMIT 1', [nodeId]))[0]!.body.assignments.length === 0);

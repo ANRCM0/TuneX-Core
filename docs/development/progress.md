@@ -1,6 +1,6 @@
 # VNext 实施进度
 
-日期：2026-10-12（Asia/Shanghai）。记录当前实现与证据，不取代目标规范。
+日期：2026-10-13（Asia/Shanghai）。记录当前实现与证据，不取代目标规范。
 Phase 0 基线提交 `2b679f5`；Phase 1 提交为 `b7e5f5b`。证据 JSON 的
 commit 字段是测试时 HEAD；另记录 Agent SHA 和测试命令，明确未提交工作树。
 
@@ -297,3 +297,19 @@ Real MySQL/HTTPS suite passes 12 checks including URI/EKU, replay/conflict, purp
 separation, overlap capacity and retirement. Agent peer key loading/renewal and
 ADP/3 runtime pin publication are not yet connected; complete two-Agent lifecycle
 and release gates remain outstanding.
+
+## ADP/3 Online Direct Cutover
+
+Baseline: `0e07483`. Control now persists and serves complete ADP/3 physical-resource
+snapshots; standard Agent enrollment/startup uses protected RuntimeJournal and only
+binds after persistent acceptance. Hello/Report/ACK, credential rotation and direct
+lifecycle use `/agent/v3/*`. Old endpoint, payload and persisted protocol history
+are refused; counters and identities are never reset as an upgrade mechanism.
+
+Static verification passes 161 TS tests plus Go tests/build/contracts/offline plan.
+Real Linux Agent passes 7 checks, access 14, recovery 9, bounded capacity 6 and
+Transport 13, with topology and dirty status recorded. Existing Go vet/race gates
+remain required. Details: [ADP/3 cutover](adp3-cutover.md).
+
+This completes the direct protocol cutover slice, not Relay or full project delivery.
+Peer identity loading and two-Agent runtime activation/traffic are next.

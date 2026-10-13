@@ -8,11 +8,12 @@ import type { RequestIdentity } from '../idempotency.ts';
 import type { ReservedSlot } from './planner.ts';
 import { compileDirect, compileSnapshot } from './planner.ts';
 import type { AuthorizedNodeFacts } from './planner.ts';
-import type { Assignment, Snapshot, Tombstone, ReportRequest, Policy } from '@tunex/contracts';
+import type { RuntimeAssignment as Assignment, RuntimeSnapshot as Snapshot, RuntimeTombstone as Tombstone, RuntimeMessages, Policy } from '@tunex/contracts';
 import { DEFAULT_POLICY } from '@tunex/contracts';
 import { json } from '../../infrastructure/mysql.ts';
 import type { Forwarding } from '../forwarding.ts';
 import { targetAllowed } from '../target-policy.ts';
+type ReportRequest=RuntimeMessages['ReportRequest'];
 export interface Operation {
     id: string;
     scope_id: string;
@@ -98,8 +99,8 @@ export class RuntimeLedger {
             body: unknown;
         }>(tx, 'SELECT body FROM snapshots WHERE node_id=? ORDER BY generation DESC LIMIT 1', [facts.nodeId]))[0];
         for (const old of previousRow ? json<Snapshot>(previousRow.body).assignments : []) {
-            if (!assignments.some(a => a.assignmentId === old.assignmentId && a.deploymentGeneration === old.deploymentGeneration && a.bindingFence === old.bindingFence) && !tombstones.some(t => t.assignmentId === old.assignmentId && t.bindingFence === old.bindingFence && t.port === old.listener.port && t.protocol === old.protocol))
-                tombstones.push({ assignmentId: old.assignmentId, forwardId: old.forwardId, protocol: old.protocol, port: old.listener.port, bindingFence: old.bindingFence, retirementGeneration: MAX_COUNTER });
+            if (!assignments.some(a => a.assignmentId === old.assignmentId && a.deploymentGeneration === old.deploymentGeneration && a.bindingFence === old.bindingFence) && !tombstones.some(t => t.assignmentId === old.assignmentId && t.bindingFence === old.bindingFence && t.port === old.resource.port && t.protocol === old.protocol))
+                tombstones.push({ assignmentId: old.assignmentId, forwardId: old.forwardId, role:old.role,protocol: old.protocol,physicalProtocol:old.resource.protocol, port: old.resource.port, bindingFence: old.bindingFence, retirementGeneration: MAX_COUNTER });
         }
         compileSnapshot({ nodeId: facts.nodeId, sessionEpoch: MAX_COUNTER, snapshotGeneration: MAX_COUNTER, issuedAt: new Date(now).toISOString(), validUntil: new Date(now + this.policy.leaseSeconds * 1000).toISOString(), assignments, tombstones, policy: this.policy });
     }
@@ -203,7 +204,7 @@ export class RuntimeLedger {
     }
     async tombstones(tx: Transaction, nodeId: string, generation: number): Promise<Tombstone[]> {
         const retired = await rows<Retirement>(tx, 'SELECT * FROM retirements WHERE node_id=? ORDER BY retirement_generation,assignment_id', [nodeId]);
-        return retired.map(r => { const a = json<Assignment>(r.body); return { assignmentId: a.assignmentId, forwardId: a.forwardId, protocol: a.protocol, port: a.listener.port, bindingFence: a.bindingFence, retirementGeneration: Math.min(r.retirement_generation, generation) }; }).sort((a, b) => (a.protocol < b.protocol ? -1 : a.protocol > b.protocol ? 1 : 0) || a.port - b.port || a.retirementGeneration - b.retirementGeneration || (a.assignmentId < b.assignmentId ? -1 : a.assignmentId > b.assignmentId ? 1 : 0));
+        return retired.map(r => { const a = json<Assignment>(r.body); return { assignmentId: a.assignmentId, forwardId: a.forwardId, role:a.role,protocol: a.protocol,physicalProtocol:a.resource.protocol, port: a.resource.port, bindingFence: a.bindingFence, retirementGeneration: Math.min(r.retirement_generation, generation) }; }).sort((a, b) => (a.physicalProtocol < b.physicalProtocol ? -1 : a.physicalProtocol > b.physicalProtocol ? 1 : 0) || a.port - b.port || a.retirementGeneration - b.retirementGeneration || (a.assignmentId < b.assignmentId ? -1 : a.assignmentId > b.assignmentId ? 1 : 0));
     }
     async observeDrains(tx: Transaction, nodeId: string, epoch: number, report: ReportRequest): Promise<void> {
         for (const drain of report.drains) {

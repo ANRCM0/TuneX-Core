@@ -1,5 +1,5 @@
-import { digest, DEFAULT_POLICY, parseMessage } from '@tunex/contracts';
-import type { HelloRequest, HelloResponse, Snapshot, ReportRequest, ReportAck, Observation, Policy } from '@tunex/contracts';
+import { digest, DEFAULT_POLICY, parseRuntimeMessage } from '@tunex/contracts';
+import type { RuntimeMessages, RuntimeSnapshot as Snapshot, Observation, Policy } from '@tunex/contracts';
 import { MAX_COUNTER, isCounter } from '@tunex/core';
 import type { Forward } from '@tunex/core';
 import { ControlError } from '../../application/errors.ts';
@@ -20,6 +20,7 @@ interface RuntimeNode {
     last_report: unknown;
     received_at: number | null;
 }
+type HelloRequest=RuntimeMessages['HelloRequest'];type HelloResponse=RuntimeMessages['HelloResponse'];type ReportRequest=RuntimeMessages['ReportRequest'];type ReportAck=RuntimeMessages['ReportAck'];
 export class RuntimeController {
     private readonly db: MySqlUnitOfWork;
     private readonly nodes: Nodes;
@@ -27,7 +28,7 @@ export class RuntimeController {
     private readonly ledger: RuntimeLedger;
     private readonly policy: Policy;
     private readonly authority:AuthorityStore|undefined;
-    constructor(db: MySqlUnitOfWork, nodes: Nodes, forwarding: Forwarding, ledger: RuntimeLedger, policy: Policy = { ...DEFAULT_POLICY },authority?:AuthorityStore) { this.db = db; this.nodes = nodes; this.forwarding = forwarding; this.ledger = ledger;this.authority=authority; this.policy = { ...parseMessage('HelloResponse', JSON.stringify({ protocolVersion: 2, nodeId: 'policy-validation', bootId: 'policy-validation', sessionEpoch: 1, serverTime: new Date().toISOString(), policy })).policy }; if (this.policy.leaseSeconds > 300 || this.policy.maxClockSkewSeconds > 5)
+    constructor(db: MySqlUnitOfWork, nodes: Nodes, forwarding: Forwarding, ledger: RuntimeLedger, policy: Policy = { ...DEFAULT_POLICY },authority?:AuthorityStore) { this.db = db; this.nodes = nodes; this.forwarding = forwarding; this.ledger = ledger;this.authority=authority; this.policy = { ...parseRuntimeMessage('HelloResponse', JSON.stringify({ protocolVersion: 3, nodeId: 'policy-validation', bootId: 'policy-validation', sessionEpoch: 1, serverTime: new Date().toISOString(), policy })).policy }; if (this.policy.leaseSeconds > 300 || this.policy.maxClockSkewSeconds > 5)
         throw new Error('Runtime policy cannot weaken the 300-second/5-second authorization baseline'); }
     private async locked(tx: Transaction, nodeId: string, epoch?: number): Promise<RuntimeNode> {
         const state = (await rows<RuntimeNode>(tx, 'SELECT * FROM runtime_nodes WHERE node_id=? FOR UPDATE', [nodeId]))[0];
@@ -36,6 +37,7 @@ export class RuntimeController {
         return state;
     }
     async hello(nodeId: string, input: HelloRequest, fingerprint?: string): Promise<HelloResponse> {
+        if(input.protocolVersion!==3||!input.capabilities.includes('adp.3'))throw new ControlError('UNSUPPORTED_PROTOCOL_VERSION',409,'ADP/3 capability required');
         if (input.nodeId !== nodeId)
             throw new ControlError('AUTHORIZATION_DENIED', 403, 'Foreign Node identity');
         if ((!input.capabilities.includes('tcp') && !input.capabilities.includes('udp')) || !input.capabilities.includes('native.direct.v1'))
@@ -44,7 +46,7 @@ export class RuntimeController {
             const current = await this.locked(tx, nodeId);
             if (fingerprint)
                 await this.nodes.credential(tx, nodeId, fingerprint);
-            await this.nodes.facts(tx, nodeId);
+            const authorized=await this.nodes.facts(tx,nodeId);
             if (input.lastStoredSnapshotGeneration > current.snapshot_generation)
                 throw new ControlError('INTEGRITY_FAILURE', 409, 'Control history is older than Node state');
             let epoch = current.session_epoch;
@@ -53,6 +55,7 @@ export class RuntimeController {
             }>(tx, 'SELECT session_epoch FROM node_boots WHERE node_id=? AND boot_id=?', [nodeId, input.bootId]))[0];
             if (boot && (boot.session_epoch !== epoch || input.bootId !== current.boot_id))
                 throw new ControlError('SESSION_SUPERSEDED', 409, 'Boot already retired');
+            if(boot&&digest([...authorized.facts.capabilities].sort())!==digest([...input.capabilities].sort()))throw new ControlError('INTEGRITY_FAILURE',409,'Current boot capabilities cannot change');
             if (!boot) {
                 if (epoch >= MAX_COUNTER)
                     throw new ControlError('RESOURCE_LIMIT', 429, 'Session counter exhausted');
@@ -61,7 +64,7 @@ export class RuntimeController {
                 await write(tx, 'UPDATE runtime_nodes SET session_epoch=?,boot_id=?,last_report_sequence=0,last_report=NULL,received_at=NULL WHERE node_id=?', [epoch, input.bootId, nodeId]);
                 await this.nodes.capabilities(tx, nodeId, input.capabilities);
             }
-            return { protocolVersion: 2, nodeId, bootId: input.bootId, sessionEpoch: epoch, serverTime: new Date().toISOString(), policy: { ...this.policy } };
+            return { protocolVersion: 3, nodeId, bootId: input.bootId, sessionEpoch: epoch, serverTime: new Date().toISOString(), policy: { ...this.policy } };
         });
     }
     private async publish(tx: Transaction, state: RuntimeNode, claim?: {
@@ -148,7 +151,7 @@ export class RuntimeController {
             const prior = (await rows<{
                 request_digest: string;
             }>(tx, 'SELECT request_digest FROM reports WHERE node_id=? AND session_epoch=? AND sequence=?', [nodeId, epoch, report.reportSequence]))[0];
-            const ack: ReportAck = { protocolVersion: 2, nodeId, bootId: report.bootId, sessionEpoch: epoch, reportSequence: report.reportSequence, status: prior ? 'duplicate' : 'accepted' };
+            const ack: ReportAck = { protocolVersion: 3, nodeId, bootId: report.bootId, sessionEpoch: epoch, reportSequence: report.reportSequence, status: prior ? 'duplicate' : 'accepted' };
             if (prior) {
                 if (prior.request_digest !== requestDigest)
                     throw new ControlError('INTEGRITY_FAILURE', 409, 'Report sequence body changed');

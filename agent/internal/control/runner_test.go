@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/authorization"
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/state"
@@ -18,20 +19,24 @@ func TestSnapshotRenewalAndPersistenceBeforeBind(t *testing.T) {
 	reservation, _ := net.Listen("tcp", "127.0.0.1:0")
 	port := uint64(reservation.Addr().(*net.TCPAddr).Port)
 	reservation.Close()
-	config := contracts.DirectConfig{Target: contracts.Target{Host: "127.0.0.1", Port: 12345}, EgressPolicyRevision: 1, AllowedDestinationCidrs: []string{"127.0.0.0/8"}}
+	target := adp3.Target{Host: "127.0.0.1", Port: 12345}
+	policyRevision := uint64(1)
+	metadata := false
+	cidrs := []string{"127.0.0.0/8"}
+	config := adp3.RuntimeConfig{Target: &target, EgressPolicyRevision: &policyRevision, AllowMetadataTargets: &metadata, AllowedDestinationCidrs: &cidrs}
 	configHash, _ := contracts.ComputeDigest(config)
-	assignment := contracts.Assignment{AssignmentId: "assignment-a", ForwardId: "forward-a", ForwardRevision: 1, DeploymentGeneration: 1, BindingFence: 1, Role: "direct", Protocol: "tcp", Phase: "active", Listener: contracts.Listen{Address: "127.0.0.1", Port: port}, Driver: contracts.Driver{Id: "native.direct.v1", SchemaVersion: 1, Config: config, ConfigDigest: configHash}, DrainTimeoutSeconds: 30}
+	assignment := adp3.Assignment{AssignmentId: "assignment-a", ForwardId: "forward-a", ForwardRevision: 1, DeploymentGeneration: 1, BindingFence: 1, Role: "direct", Protocol: "tcp", Phase: "active", Resource: adp3.Resource{Address: "127.0.0.1", Port: port, Protocol: "tcp"}, Driver: adp3.Driver{Id: "native.direct.v1", SchemaVersion: 1, Config: config, ConfigDigest: configHash}, DrainTimeoutSeconds: 30}
 	generation := uint64(1)
 	stableBody := map[string]any{}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
-			var report contracts.ReportRequest
+			var report adp3.ReportRequest
 			json.NewDecoder(r.Body).Decode(&report)
-			json.NewEncoder(w).Encode(contracts.ReportAck{ProtocolVersion: 2, NodeId: report.NodeId, BootId: report.BootId, SessionEpoch: report.SessionEpoch, ReportSequence: report.ReportSequence, Status: "accepted"})
+			json.NewEncoder(w).Encode(adp3.ReportAck{ProtocolVersion: 3, NodeId: report.NodeId, BootId: report.BootId, SessionEpoch: report.SessionEpoch, ReportSequence: report.ReportSequence, Status: "accepted"})
 			return
 		}
 		now := time.Now().UTC()
-		body := map[string]any{"protocolVersion": 2, "nodeId": "node-a", "sessionEpoch": 1, "snapshotGeneration": generation, "complete": true, "issuedAt": now.Format(time.RFC3339Nano), "validUntil": now.Add(300 * time.Second).Format(time.RFC3339Nano), "assignments": []contracts.Assignment{assignment}, "tombstones": []contracts.Tombstone{}}
+		body := map[string]any{"protocolVersion": 3, "nodeId": "node-a", "sessionEpoch": 1, "snapshotGeneration": generation, "complete": true, "issuedAt": now.Format(time.RFC3339Nano), "validUntil": now.Add(300 * time.Second).Format(time.RFC3339Nano), "assignments": []adp3.Assignment{assignment}, "tombstones": []adp3.Tombstone{}}
 		if generation == 1 {
 			now = time.Unix(2000000000, 0).UTC()
 			body["issuedAt"] = now.Format(time.RFC3339Nano)
@@ -47,7 +52,15 @@ func TestSnapshotRenewalAndPersistenceBeforeBind(t *testing.T) {
 		json.NewEncoder(w).Encode(body)
 	}))
 	defer server.Close()
-	runner := &Runner{clock: authorization.SystemClock, options: Options{URL: server.URL, NodeID: "node-a", BootID: "boot-a", Journal: filepath.Join(t.TempDir(), "journal.json")}, client: server.Client(), key: make([]byte, 32), journal: state.Journal{Fences: make(map[string]uint64), Retired: make(map[string]uint64)}, hello: contracts.HelloResponse{SessionEpoch: 1, Policy: contracts.Policy{LeaseSeconds: 300, MaxClockSkewSeconds: 5, ConnectTimeoutSeconds: 2, MaxTcpConnectionsPerAssignment: 8}}, instances: make(map[string]running)}
+	runner := &Runner{clock: authorization.SystemClock, options: Options{URL: server.URL, NodeID: "node-a", BootID: "boot-a", Journal: filepath.Join(t.TempDir(), "journal.json")}, client: server.Client(), key: make([]byte, 32), journal: state.Journal{Fences: make(map[string]uint64), Retired: make(map[string]uint64)}, hello: adp3.HelloResponse{SessionEpoch: 1, Policy: adp3.Policy{LeaseSeconds: 300, MaxClockSkewSeconds: 5, ConnectTimeoutSeconds: 2, MaxTcpConnectionsPerAssignment: 8}}, instances: make(map[string]running)}
+	if err := state.InitializeRuntimeJournal(runner.options.Journal, runner.key, runner.options.NodeID); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := state.LoadRuntimeJournal(runner.options.Journal, runner.key, runner.options.NodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.journal = stored.Journal
 	defer runner.stop()
 	ctx := context.Background()
 	// Future authorization cannot be used, even if structure and digest are valid.
@@ -80,8 +93,8 @@ func TestSnapshotRenewalAndPersistenceBeforeBind(t *testing.T) {
 	if !runner.deadline.After(deadline) {
 		t.Fatal("new generation did not renew authorization")
 	}
-	persisted, err := state.Load(runner.options.Journal, runner.key)
-	if err != nil || persisted.Generation != 3 || persisted.Fences[key] != 1 {
+	persisted, err := state.LoadRuntimeJournal(runner.options.Journal, runner.key, runner.options.NodeID)
+	if err != nil || persisted.Journal.Generation != 3 || persisted.Journal.Fences[key] != 1 {
 		t.Fatal("high-water not persisted", err)
 	}
 	generation = 4

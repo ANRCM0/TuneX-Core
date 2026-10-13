@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { HttpBindings } from '@hono/node-server';
 import { TLSSocket } from 'node:tls';
 import { randomUUID } from 'node:crypto';
-import { parseJson, parseMessage } from '@tunex/contracts';
+import { parseJson, parseRuntimeMessage } from '@tunex/contracts';
 import { isId, isCounter } from '@tunex/core';
 import { ControlError, invalid } from '../application/errors.ts';
 import type { ControlApplication } from '../application/control.ts';
@@ -41,7 +41,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         c.set('actor', await control.identity.authenticate(c.req.header('authorization')));
         await next();
     });
-    app.use('/agent/v2/*', async (c, next) => {
+    app.use('/agent/v3/*', async (c, next) => {
         const socket = c.env?.incoming?.socket;
         if (!(socket instanceof TLSSocket) || !socket.authorized)
             throw new ControlError('UNAUTHENTICATED', 401, 'Verified Node client certificate required');
@@ -85,7 +85,8 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
             throw new ControlError('SESSION_SUPERSEDED', 409, 'Valid session header required');
         return Number(value);
     }
-    app.get('/health',async c=>c.json({status:(await authority.read()).maintenance?'maintenance':'ok',protocolVersion:2}));
+    app.all('/agent/v2/*',c=>c.json({code:'UNSUPPORTED_PROTOCOL_VERSION',message:'ADP/3 required',retryable:false,requestId:c.get('requestId')},409));
+    app.get('/health',async c=>c.json({status:(await authority.read()).maintenance?'maintenance':'ok',protocolVersion:3}));
     app.post('/api/v1/scopes/:scope/relay-plan',async c=>c.json(await control.planRelay(c.get('actor'),scope(c.req.param('scope')),parseJson(await body(c.req.raw,32768)))));
     app.get('/api/v1/scopes/:scope/transport-profiles/:profile/grants',async c=>c.json(await control.transport.grants(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'))));
     app.put('/api/v1/scopes/:scope/transport-profiles/:profile/grants/:actor',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='allowed,expectedRevision'||!isCounter(input.expectedRevision)||typeof input.allowed!=='boolean')invalid('Profile grant fields required');const result=await control.transport.changeGrant(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),c.req.param('actor'),c.req.header('idempotency-key'),input.expectedRevision,input.allowed);return c.json(result.body,result.status);});
@@ -169,15 +170,15 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         const response = await control.changeNode(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.header('idempotency-key'), { kind: 'revoke' });
         return c.json(response.body, response.status);
     });
-    app.post('/agent/v2/credentials/rotate', async (c) => {
+    app.post('/agent/v3/credentials/rotate', async (c) => {
         const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;
         if (!input || Object.keys(input).sort().join(',') !== 'csr,requestId' || typeof input.csr !== 'string' || typeof input.requestId !== 'string')
             invalid('requestId and CSR required');
         return c.json(await control.nodes.rotate(c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')), input.requestId, input.csr));
     });
-    app.post('/agent/v2/relay-credential',async c=>{const input=parseJson(await body(c.req.raw,32768)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='csr,requestId'||!isId(input.requestId)||typeof input.csr!=='string')invalid('Relay credential request ID and CSR required');return c.json(await control.nodes.relayCredential(c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),input.requestId,input.csr));});
-    app.post('/agent/v2/hello', async (c) => c.json(await runtime.hello(c.get('node'), parseMessage('HelloRequest', await body(c.req.raw)), c.get('fingerprint'))));
-    app.get('/agent/v2/snapshot', async (c) => c.json(await runtime.snapshot(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), c.get('fingerprint'))));
-    app.post('/agent/v2/report', async (c) => c.json(await runtime.report(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), parseMessage('ReportRequest', await body(c.req.raw)), c.get('fingerprint'))));
+    app.post('/agent/v3/relay-credential',async c=>{const input=parseJson(await body(c.req.raw,32768)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='csr,requestId'||!isId(input.requestId)||typeof input.csr!=='string')invalid('Relay credential request ID and CSR required');return c.json(await control.nodes.relayCredential(c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),input.requestId,input.csr));});
+    app.post('/agent/v3/hello', async (c) => c.json(await runtime.hello(c.get('node'), parseRuntimeMessage('HelloRequest', await body(c.req.raw)), c.get('fingerprint'))));
+    app.get('/agent/v3/snapshot', async (c) => c.json(await runtime.snapshot(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), c.get('fingerprint'))));
+    app.post('/agent/v3/report', async (c) => c.json(await runtime.report(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), parseRuntimeMessage('ReportRequest', await body(c.req.raw)), c.get('fingerprint'))));
     return app;
 }

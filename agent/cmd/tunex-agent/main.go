@@ -212,7 +212,7 @@ func enrollment(url, node, ca, root, keyPath, certificatePath, privatePath, jour
 	if err := state.AtomicWrite(keyPath, protection); err != nil {
 		return err
 	}
-	if err := state.Save(journalPath, protection, state.Journal{Fences: make(map[string]uint64), Retired: make(map[string]uint64)}); err != nil {
+	if err := state.InitializeRuntimeJournal(journalPath, protection, node); err != nil {
 		return err
 	}
 	if err := state.AtomicWrite(certificatePath, []byte(result.Certificate)); err != nil {

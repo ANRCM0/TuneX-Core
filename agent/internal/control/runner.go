@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/authorization"
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/forward"
@@ -39,7 +40,7 @@ func (problem httpError) Error() string {
 }
 
 type running struct {
-	assignment contracts.Assignment
+	assignment adp3.Assignment
 	stream     execution
 	ticket     *authorization.Ticket
 }
@@ -50,22 +51,53 @@ type execution interface {
 	SetAuthorization(func() error)
 }
 
-func startExecution(a contracts.Assignment, p contracts.Policy, check func() error) (execution, error) {
+// The local direct engine uses its private listener/config structs; all wire messages are parsed as ADP/3 first.
+func directExecution(a adp3.Assignment) (contracts.Assignment, error) {
+	if a.Role != "direct" || a.Driver.Id != "native.direct.v1" || a.Resource.Protocol != a.Protocol {
+		return contracts.Assignment{}, fmt.Errorf("UNSUPPORTED_CAPABILITY")
+	}
+	raw, err := json.Marshal(a.Driver.Config)
+	if err != nil {
+		return contracts.Assignment{}, err
+	}
+	var config contracts.DirectConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return contracts.Assignment{}, err
+	}
+	return contracts.Assignment{AssignmentId: a.AssignmentId, ForwardId: a.ForwardId, ForwardRevision: a.ForwardRevision, DeploymentGeneration: a.DeploymentGeneration, BindingFence: a.BindingFence, Role: "direct", Protocol: a.Protocol, Phase: a.Phase, Listener: contracts.Listen{Address: a.Resource.Address, Port: a.Resource.Port}, Driver: contracts.Driver{Id: "native.direct.v1", SchemaVersion: 1, ConfigDigest: a.Driver.ConfigDigest, Config: config}, DrainTimeoutSeconds: a.DrainTimeoutSeconds}, nil
+}
+func startExecution(a adp3.Assignment, p adp3.Policy, check func() error) (execution, error) {
+	direct, err := directExecution(a)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return nil, err
+	}
+	var policy contracts.Policy
+	if err := json.Unmarshal(raw, &policy); err != nil {
+		return nil, err
+	}
 	switch a.Protocol {
 	case "tcp":
-		return forward.StartAuthorized(a, p, check)
+		return forward.StartAuthorized(direct, policy, check)
 	case "udp":
-		return forward.StartUDPAuthorized(a, p, check)
+		return forward.StartUDPAuthorized(direct, policy, check)
 	default:
 		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY")
 	}
 }
-func replaceExecution(old execution, a contracts.Assignment, check func() error) (execution, error) {
+func replaceExecution(old execution, a adp3.Assignment, check func() error) (execution, error) {
+	direct, err := directExecution(a)
+	if err != nil {
+		return nil, err
+	}
 	switch stream := old.(type) {
 	case *forward.TCP:
-		return stream.ReplaceAuthorized(a, check)
+		return stream.ReplaceAuthorized(direct, check)
 	case *forward.UDP:
-		return stream.ReplaceAuthorized(a, check)
+		return stream.ReplaceAuthorized(direct, check)
 	default:
 		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY")
 	}
@@ -81,12 +113,12 @@ type Runner struct {
 	client                *http.Client
 	key                   []byte
 	journal               state.Journal
-	hello                 contracts.HelloResponse
+	hello                 adp3.HelloResponse
 	sequence              uint64
 	pending               []byte
 	instances             map[string]running
 	drains                map[string]draining
-	observations          []contracts.Observation
+	observations          []adp3.Observation
 	mutex                 sync.Mutex
 	deadline              time.Time
 	guard                 *authorization.Guard
@@ -117,11 +149,11 @@ func New(options Options) (*Runner, error) {
 	if err != nil || len(key) != 32 {
 		return nil, fmt.Errorf("INTEGRITY_FAILURE: journal protection key unavailable")
 	}
-	journal, err := state.Load(options.Journal, key)
+	runtimeJournal, err := state.LoadRuntimeJournal(options.Journal, key, options.NodeID)
 	if err != nil {
 		return nil, err
 	}
-	runner := &Runner{options: options, key: key, journal: journal, instances: make(map[string]running), roots: roots}
+	runner := &Runner{options: options, key: key, journal: runtimeJournal.Journal, instances: make(map[string]running), roots: roots}
 	if err := runner.reloadCredential(); err != nil {
 		return nil, err
 	}
@@ -178,12 +210,12 @@ func (runner *Runner) Run(ctx context.Context) error {
 	defer cancel()
 	defer runner.stop()
 	defer runner.client.CloseIdleConnections()
-	hello := contracts.HelloRequest{ProtocolVersion: 2, NodeId: runner.options.NodeID, BootId: runner.options.BootID, AgentBuild: "vnext-phase2", Capabilities: []string{"native.direct.v1", "tcp", "udp"}, LastStoredSnapshotGeneration: runner.journal.Generation}
+	hello := adp3.HelloRequest{ProtocolVersion: 3, NodeId: runner.options.NodeID, BootId: runner.options.BootID, AgentBuild: "vnext-adp3-direct", Capabilities: []string{"adp.3", "native.direct.v1", "tcp", "udp"}, LastStoredSnapshotGeneration: runner.journal.Generation}
 	body, _ := json.Marshal(hello)
 	var raw []byte
 	var err error
 	for delay := time.Second; ; delay = min(delay*2, 30*time.Second) {
-		raw, err = runner.request(ctx, "POST", "/agent/v2/hello", body, false)
+		raw, err = runner.request(ctx, "POST", "/agent/v3/hello", body, false)
 		if err == nil {
 			break
 		}
@@ -197,11 +229,11 @@ func (runner *Runner) Run(ctx context.Context) error {
 		case <-time.After(delay):
 		}
 	}
-	message, err := contracts.ParseMessage("HelloResponse", raw)
+	message, err := adp3.Parse("HelloResponse", raw)
 	if err != nil {
 		return err
 	}
-	runner.hello = message.(contracts.HelloResponse)
+	runner.hello = message.(adp3.HelloResponse)
 	if runner.hello.NodeId != runner.options.NodeID || runner.hello.BootId != runner.options.BootID {
 		return fmt.Errorf("AUTHORIZATION_DENIED: Hello identity mismatch")
 	}
@@ -333,15 +365,15 @@ func (runner *Runner) poll(ctx context.Context) error {
 			return err
 		}
 	}
-	raw, err := runner.request(ctx, "GET", "/agent/v2/snapshot?sinceGeneration="+strconv.FormatUint(runner.journal.Generation, 10), nil, true)
+	raw, err := runner.request(ctx, "GET", "/agent/v3/snapshot?sinceGeneration="+strconv.FormatUint(runner.journal.Generation, 10), nil, true)
 	if err != nil {
 		return err
 	}
-	value, err := contracts.ParseMessage("Snapshot", raw)
+	value, err := adp3.Parse("Snapshot", raw)
 	if err != nil {
 		return err
 	}
-	snapshot := value.(contracts.Snapshot)
+	snapshot := value.(adp3.Snapshot)
 	if snapshot.NodeId != runner.options.NodeID || snapshot.SessionEpoch != runner.hello.SessionEpoch {
 		return fmt.Errorf("SESSION_SUPERSEDED")
 	}
@@ -377,7 +409,7 @@ func (runner *Runner) poll(ctx context.Context) error {
 		next.Retired[key] = value
 	}
 	incoming := make(map[string]bool)
-	var prior contracts.Snapshot
+	var prior adp3.Snapshot
 	if len(runner.journal.Snapshot) > 0 {
 		if err := json.Unmarshal(runner.journal.Snapshot, &prior); err != nil {
 			return fmt.Errorf("INTEGRITY_FAILURE: persisted snapshot corrupted")
@@ -387,9 +419,9 @@ func (runner *Runner) poll(ctx context.Context) error {
 		if (assignment.Protocol != "tcp" && assignment.Protocol != "udp") || assignment.Phase != "active" || assignment.Driver.Id != "native.direct.v1" {
 			return fmt.Errorf("UNSUPPORTED_CAPABILITY")
 		}
-		key := fmt.Sprintf("%s/%d", assignment.Protocol, assignment.Listener.Port)
+		key := fmt.Sprintf("%s/%d", assignment.Resource.Protocol, assignment.Resource.Port)
 		for _, old := range prior.Assignments {
-			if old.AssignmentId == assignment.AssignmentId && old.DeploymentGeneration == assignment.DeploymentGeneration && old.BindingFence == assignment.BindingFence && (old.Driver.ConfigDigest != assignment.Driver.ConfigDigest || old.Listener != assignment.Listener || old.Protocol != assignment.Protocol) {
+			if old.AssignmentId == assignment.AssignmentId && old.DeploymentGeneration == assignment.DeploymentGeneration && old.BindingFence == assignment.BindingFence && (old.Driver.ConfigDigest != assignment.Driver.ConfigDigest || old.Resource != assignment.Resource || old.Protocol != assignment.Protocol) {
 				return fmt.Errorf("INTEGRITY_FAILURE: execution configuration changed without a new generation/fence")
 			}
 		}
@@ -405,16 +437,18 @@ func (runner *Runner) poll(ctx context.Context) error {
 		}
 	}
 	for _, tombstone := range snapshot.Tombstones {
-		key := fmt.Sprintf("%s/%d", tombstone.Protocol, tombstone.Port)
+		key := fmt.Sprintf("%s/%d", tombstone.PhysicalProtocol, tombstone.Port)
 		next.Retired[key] = max(next.Retired[key], tombstone.BindingFence)
 	}
 	next.Generation = snapshot.SnapshotGeneration
 	next.Digest = snapshot.SnapshotDigest
 	next.Snapshot = append([]byte(nil), raw...)
 	if changed {
-		if err := state.Save(runner.options.Journal, runner.key, next); err != nil {
-			return fmt.Errorf("PERSISTENCE_FAILURE: %w", err)
+		stored, err := state.AcceptRuntimeSnapshot(runner.options.Journal, runner.key, state.RuntimeJournal{ProtocolVersion: 3, NodeID: runner.options.NodeID, Journal: runner.journal}, snapshot)
+		if err != nil {
+			return err
 		}
+		next = stored.Journal
 	}
 	runner.mutex.Lock()
 	defer runner.mutex.Unlock()
@@ -435,8 +469,8 @@ func (runner *Runner) poll(ctx context.Context) error {
 		if ctx.Err() != nil || ticket.Allow() != nil {
 			return fmt.Errorf("LEASE_EXPIRED: Authorization ended before bind")
 		}
-		key := fmt.Sprintf("%s/%d", assignment.Protocol, assignment.Listener.Port)
-		obs := contracts.Observation{AssignmentId: assignment.AssignmentId, DeploymentGeneration: assignment.DeploymentGeneration, BindingFence: assignment.BindingFence, Phase: "active", Condition: "ready", Retryable: false}
+		key := fmt.Sprintf("%s/%d", assignment.Resource.Protocol, assignment.Resource.Port)
+		obs := adp3.Observation{AssignmentId: assignment.AssignmentId, DeploymentGeneration: assignment.DeploymentGeneration, BindingFence: assignment.BindingFence, Phase: "active", Condition: "ready", Retryable: false}
 		if existing, ok := runner.instances[key]; ok && (existing.assignment.Driver.ConfigDigest != assignment.Driver.ConfigDigest || existing.assignment.DeploymentGeneration != assignment.DeploymentGeneration || existing.assignment.BindingFence != assignment.BindingFence) {
 			stream, startErr := replaceExecution(existing.stream, assignment, ticket.Allow)
 			if startErr == nil {
@@ -484,7 +518,7 @@ func (runner *Runner) poll(ctx context.Context) error {
 		return fmt.Errorf("RESOURCE_LIMIT: Report sequence exhausted")
 	}
 	runner.sequence++
-	drains := []contracts.Drain{}
+	drains := []adp3.Drain{}
 	for _, drain := range runner.drains {
 		a := drain.instance.assignment
 		count := drain.instance.stream.Remaining()
@@ -494,11 +528,11 @@ func (runner *Runner) poll(ctx context.Context) error {
 			count = 0
 			condition = "removed"
 		}
-		drains = append(drains, contracts.Drain{AssignmentId: a.AssignmentId, DeploymentGeneration: a.DeploymentGeneration, BindingFence: a.BindingFence, StartedAt: drain.started.UTC().Format(time.RFC3339Nano), Deadline: drain.deadline.UTC().Format(time.RFC3339Nano), RemainingConnections: count, Condition: condition})
+		drains = append(drains, adp3.Drain{AssignmentId: a.AssignmentId, DeploymentGeneration: a.DeploymentGeneration, BindingFence: a.BindingFence, StartedAt: drain.started.UTC().Format(time.RFC3339Nano), Deadline: drain.deadline.UTC().Format(time.RFC3339Nano), RemainingConnections: count, Condition: condition})
 	}
-	report := contracts.ReportRequest{ProtocolVersion: 2, NodeId: runner.options.NodeID, BootId: runner.options.BootID, SessionEpoch: runner.hello.SessionEpoch, ReportSequence: runner.sequence, ObservedAt: now.UTC().Format(time.RFC3339Nano), AcceptedSnapshotGeneration: runner.journal.Generation, Observations: runner.observations, Drains: drains}
+	report := adp3.ReportRequest{ProtocolVersion: 3, NodeId: runner.options.NodeID, BootId: runner.options.BootID, SessionEpoch: runner.hello.SessionEpoch, ReportSequence: runner.sequence, ObservedAt: now.UTC().Format(time.RFC3339Nano), AcceptedSnapshotGeneration: runner.journal.Generation, Observations: runner.observations, Drains: drains}
 	if report.Observations == nil {
-		report.Observations = []contracts.Observation{}
+		report.Observations = []adp3.Observation{}
 	}
 	runner.pending, err = json.Marshal(report)
 	return err
@@ -536,19 +570,19 @@ func (runner *Runner) initializeGuard() error {
 	return nil
 }
 func (runner *Runner) report(ctx context.Context) error {
-	raw, err := runner.request(ctx, "POST", "/agent/v2/report", runner.pending, true)
+	raw, err := runner.request(ctx, "POST", "/agent/v3/report", runner.pending, true)
 	if err != nil {
 		return err
 	}
-	value, err := contracts.ParseMessage("ReportAck", raw)
+	value, err := adp3.Parse("ReportAck", raw)
 	if err != nil {
 		return err
 	}
-	ack := value.(contracts.ReportAck)
+	ack := value.(adp3.ReportAck)
 	if ack.NodeId != runner.options.NodeID || ack.BootId != runner.options.BootID || ack.SessionEpoch != runner.hello.SessionEpoch || ack.ReportSequence != runner.sequence {
 		return fmt.Errorf("INTEGRITY_FAILURE: ACK mismatch")
 	}
-	var sent contracts.ReportRequest
+	var sent adp3.ReportRequest
 	json.Unmarshal(runner.pending, &sent)
 	runner.mutex.Lock()
 	for _, drain := range sent.Drains {

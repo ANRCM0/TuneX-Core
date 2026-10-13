@@ -16,9 +16,10 @@ import type { AuthorizedNodeFacts } from '../../apps/control/src/modules/runtime
 import type { Forward,ForwardSpec } from '@tunex/core';
 import { newToken } from '../../apps/control/src/modules/identity.ts';
 import { rows, write } from '../../apps/control/src/infrastructure/mysql.ts';
-import { parseMessage,digest } from '@tunex/contracts';
-import type { HelloResponse, Snapshot } from '@tunex/contracts';
+import { parseRuntimeMessage,digest } from '@tunex/contracts';
+import type { RuntimeMessages,RuntimeSnapshot as Snapshot } from '@tunex/contracts';
 
+type HelloResponse=RuntimeMessages['HelloResponse'];
 const exec=promisify(execFile);
 const databaseUrl=process.env.TUNEX_TEST_DATABASE_URL;
 if(!databaseUrl)throw new Error('TUNEX_TEST_DATABASE_URL must point at a disposable MySQL database');
@@ -95,19 +96,19 @@ try{
   const payload=Buffer.from('TuneX Phase 1 bidirectional TCP\n'+randomUUID());
   await new Promise<void>((resolve,reject)=>{const socket=connect(port,'127.0.0.1');const chunks:Buffer[]=[];socket.setTimeout(5000,()=>socket.destroy(new Error('TCP timeout')));socket.on('error',reject);socket.on('connect',()=>socket.end(payload));socket.on('data',value=>chunks.push(value));socket.on('end',()=>{try{assert.deepEqual(Buffer.concat(chunks),payload);resolve();}catch(error){reject(error);}finally{socket.destroy();}});});
   check('FWD-01: independent Agent/target processes echo exact payload with TCP half-close');
-  const foreign=await call('POST','/agent/v2/hello',{protocolVersion:2,nodeId:'foreign-node',bootId:'foreign-boot',agentBuild:'acceptance',capabilities:['tcp','native.direct.v1'],lastStoredSnapshotGeneration:0},{},machine);assert.equal(foreign.status,403);
-  const noCert=await call('GET','/agent/v2/snapshot');assert.equal(noCert.status,401);
+  const foreign=await call('POST','/agent/v3/hello',{protocolVersion:3,nodeId:'foreign-node',bootId:'foreign-boot',agentBuild:'acceptance',capabilities:['adp.3','tcp','native.direct.v1'],lastStoredSnapshotGeneration:0},{},machine);assert.equal(foreign.status,403);
+  const noCert=await call('GET','/agent/v3/snapshot');assert.equal(noCert.status,401);
   check('ADP-05: absent client certificate and foreign Node identity are rejected');
   const stateRow=(await rows<{session_epoch:number;last_report:unknown}>(server.db.pool,'SELECT session_epoch,last_report FROM runtime_nodes WHERE node_id=?',[nodeId]))[0]!;
   const report=typeof stateRow.last_report==='string'?JSON.parse(stateRow.last_report):stateRow.last_report;
-  const duplicate=await call('POST','/agent/v2/report',report,{'x-tunex-session-epoch':String(stateRow.session_epoch)},machine);assert.equal(duplicate.status,200);assert.equal(duplicate.body.status,'duplicate');
-  const changed=await call('POST','/agent/v2/report',{...report,observedAt:'2026-10-12T00:00:00Z'},{'x-tunex-session-epoch':String(stateRow.session_epoch)},machine);assert.equal(changed.status,409);assert.equal(changed.body.code,'INTEGRITY_FAILURE');
+  const duplicate=await call('POST','/agent/v3/report',report,{'x-tunex-session-epoch':String(stateRow.session_epoch)},machine);assert.equal(duplicate.status,200);assert.equal(duplicate.body.status,'duplicate');
+  const changed=await call('POST','/agent/v3/report',{...report,observedAt:'2026-10-12T00:00:00Z'},{'x-tunex-session-epoch':String(stateRow.session_epoch)},machine);assert.equal(changed.status,409);assert.equal(changed.body.code,'INTEGRITY_FAILURE');
   check('ADP-11: ACK loss replays durable duplicate; changed report body is rejected');
-  const snapshot=await call('GET','/agent/v2/snapshot',undefined,{'x-tunex-session-epoch':String(stateRow.session_epoch)},machine);parseMessage('Snapshot',JSON.stringify(snapshot.body));
+  const snapshot=await call('GET','/agent/v3/snapshot',undefined,{'x-tunex-session-epoch':String(stateRow.session_epoch)},machine);parseRuntimeMessage('Snapshot',JSON.stringify(snapshot.body));
   const snapshotMessage=snapshot.body as Snapshot;
-  const helloInput={protocolVersion:2,nodeId,bootId:'test-new-boot',agentBuild:'acceptance',capabilities:['tcp','native.direct.v1'],lastStoredSnapshotGeneration:snapshotMessage.snapshotGeneration};
-  const newSession=await call('POST','/agent/v2/hello',helloInput,{},machine);assert.equal(newSession.status,200);const hello=newSession.body as HelloResponse;assert.equal(hello.sessionEpoch,stateRow.session_epoch+1);
-  const oldReport=await call('POST','/agent/v2/report',report,{'x-tunex-session-epoch':String(stateRow.session_epoch)},machine);assert.equal(oldReport.status,409);
+  const helloInput={protocolVersion:3,nodeId,bootId:'test-new-boot',agentBuild:'acceptance',capabilities:['adp.3','tcp','native.direct.v1'],lastStoredSnapshotGeneration:snapshotMessage.snapshotGeneration};
+  const newSession=await call('POST','/agent/v3/hello',helloInput,{},machine);assert.equal(newSession.status,200);const hello=newSession.body as HelloResponse;assert.equal(hello.sessionEpoch,stateRow.session_epoch+1);
+  const oldReport=await call('POST','/agent/v3/report',report,{'x-tunex-session-epoch':String(stateRow.session_epoch)},machine);assert.equal(oldReport.status,409);
   check('ADP-10: new boot retires old report authority');
   const scopeB='scope-other',actorB='owner-other',tokenB=newToken();await server.control.identity.bootstrap(scopeB,actorB,tokenB);
   const denied=await call('GET',`/api/v1/scopes/${scope}/forwards/${accepted.body.forwardId}`,undefined,{authorization:`Bearer ${tokenB}`});assert.equal(denied.status,404);
@@ -131,16 +132,16 @@ try{
   const expiredBody=(typeof snapshotRecord.body==='string'?JSON.parse(snapshotRecord.body):snapshotRecord.body) as Snapshot;
   expiredBody.issuedAt=new Date(Date.now()-400000).toISOString();expiredBody.validUntil=new Date(Date.now()-100000).toISOString();const {snapshotDigest:omitted,...expiredContent}=expiredBody;void omitted;expiredBody.snapshotDigest=digest(expiredContent);
   await server.db.transaction(tx=>write(tx,'UPDATE snapshots SET body=?,valid_until=? WHERE node_id=? AND generation=?',[JSON.stringify(expiredBody),Date.parse(expiredBody.validUntil),nodeId,snapshotMessage.snapshotGeneration]));
-  const latest=await call('GET','/agent/v2/snapshot',undefined,{'x-tunex-session-epoch':String(hello.sessionEpoch)},machine);assert.equal(latest.status,200);
+  const latest=await call('GET','/agent/v3/snapshot',undefined,{'x-tunex-session-epoch':String(hello.sessionEpoch)},machine);assert.equal(latest.status,200);
   const lateReport={...report,bootId:helloInput.bootId,sessionEpoch:hello.sessionEpoch,reportSequence:1,acceptedSnapshotGeneration:latest.body.snapshotGeneration};
-  const freshAck=await call('POST','/agent/v2/report',lateReport,{'x-tunex-session-epoch':String(hello.sessionEpoch)},machine);assert.equal(freshAck.status,200);
+  const freshAck=await call('POST','/agent/v3/report',lateReport,{'x-tunex-session-epoch':String(hello.sessionEpoch)},machine);assert.equal(freshAck.status,200);
   // Isolated fault injection: make the reported authorization expired while leaving a newer published lease live.
   const reported=structuredClone(latest.body) as Snapshot;reported.issuedAt=new Date(Date.now()-400000).toISOString();reported.validUntil=new Date(Date.now()-100000).toISOString();const {snapshotDigest:ignored,...reportedContent}=reported;void ignored;reported.snapshotDigest=digest(reportedContent);
   await server.db.transaction(tx=>write(tx,'UPDATE snapshots SET body=?,valid_until=? WHERE node_id=? AND generation=?',[JSON.stringify(reported),Date.parse(reported.validUntil),nodeId,reported.snapshotGeneration]));
-  const renewed=await call('GET','/agent/v2/snapshot',undefined,{'x-tunex-session-epoch':String(hello.sessionEpoch)},machine);assert.ok(renewed.body.snapshotGeneration>reported.snapshotGeneration);
+  const renewed=await call('GET','/agent/v3/snapshot',undefined,{'x-tunex-session-epoch':String(hello.sessionEpoch)},machine);assert.ok(renewed.body.snapshotGeneration>reported.snapshotGeneration);
   await exec(process.execPath,['apps/control/src/client.ts','get',scope,accepted.body.forwardId],{env:{...process.env,TUNEX_CONTROL_URL:`https://127.0.0.1:${server.port}`,TUNEX_CA_CERT:caCert,TUNEX_OWNER_TOKEN:token}});
   check('Phase 1 CLI: trusted HTTPS resource query is usable independently of the test client');
-  const late=await call('POST','/agent/v2/report',{...lateReport,reportSequence:2}, {'x-tunex-session-epoch':String(hello.sessionEpoch)},machine);assert.equal(late.status,200);
+  const late=await call('POST','/agent/v3/report',{...lateReport,reportSequence:2}, {'x-tunex-session-epoch':String(hello.sessionEpoch)},machine);assert.equal(late.status,200);
   const unknown=await call('GET',`/api/v1/scopes/${scope}/forwards/${accepted.body.forwardId}`);assert.equal(unknown.body.health.condition,'unknown');
   check('ADP-07: expired reported authorization cannot borrow a newer published lease for health');
   const blocking=await server.db.pool.getConnection();await blocking.beginTransaction();
@@ -156,7 +157,7 @@ try{
   const capacityScope='capacity-scope',capacityActor='capacity-owner',capacityToken=newToken();await server.control.identity.bootstrap(capacityScope,capacityActor,capacityToken);
   const capacityNode='capacity-node',cidrs=Array.from({length:256},(_,i)=>`2001:db8:ffff:ffff:ffff:ffff:ffff:${(0x1000+i).toString(16)}/128`);
   const capacitySpec={...spec,target:{host:'2001:db8:ffff:ffff:ffff:ffff:ffff:1000',port:443}};
-  const capacityFacts:AuthorizedNodeFacts={nodeId:capacityNode,scopeId:capacityScope,capabilities:['tcp','native.direct.v1'],allowedListenerAddresses:['127.0.0.1'],allowedPorts:Array.from({length:1000},(_,i)=>10000+i),egressPolicyRevision:1,allowedDestinationCidrs:cidrs,allowMetadataTargets:false};
+  const capacityFacts:AuthorizedNodeFacts={nodeId:capacityNode,scopeId:capacityScope,capabilities:['adp.3','tcp','native.direct.v1'],allowedListenerAddresses:['127.0.0.1'],allowedPorts:Array.from({length:1000},(_,i)=>10000+i),egressPolicyRevision:1,allowedDestinationCidrs:cidrs,allowMetadataTargets:false};
   const largeAssignments:Snapshot['assignments']=[];let validCount=0;
   for(let i=0;i<1000;i++){
     const intent:Forward={id:`capacity-${i}`,scopeId:capacityScope,revision:1,spec:{...capacitySpec,ingress:{nodeId:capacityNode,listen:{address:'127.0.0.1',port:10000+i}}}};
@@ -182,7 +183,7 @@ try{
   const commit=(await exec('git',['rev-parse','HEAD'])).stdout.trim();const agentSHA=createHash('sha256').update(await readFile(agentPath)).digest('hex');
   const databaseVersion=(await rows<{version:string}>(server.db.pool,'SELECT VERSION() version'))[0]!.version;
   const workingTreeDirty=Boolean((await exec('git',['status','--porcelain'])).stdout.trim());
-  await writeFile(join(directory,'evidence.json'),JSON.stringify({status:'verified-local',commit,workingTreeDirty,command:'npm run test:phase1',agentSHA,protocolVersion:2,schema:'adp-v2-direct',snapshotGeneration:snapshotMessage.snapshotGeneration,environment:{platform:platform(),kernel:release(),arch:arch(),node:process.version,mysql:databaseVersion},topology:'MySQL + HTTPS Control + independent Go Agent process + independent TCP echo process + client',checks},null,2));
+  await writeFile(join(directory,'evidence.json'),JSON.stringify({status:'verified-local',commit,workingTreeDirty,command:'npm run test:phase1',agentSHA,protocolVersion:3,schema:'adp-v3-runtime',snapshotGeneration:snapshotMessage.snapshotGeneration,environment:{platform:platform(),kernel:release(),arch:arch(),node:process.version,mysql:databaseVersion},topology:'MySQL + HTTPS Control + independent Go Agent process + independent TCP echo process + client',checks},null,2));
   console.log(`Phase 1 local acceptance passed: ${checks.length} checks. Evidence ${directory}`);
 }finally{
   if(agent){agent.kill();await once(agent,'exit').catch(()=>{});}

@@ -99,7 +99,7 @@ try {
     await udp(udpClient, port, 'udp-before-outage');
     const persistentState = JSON.parse(await readFile(journal, 'utf8'));
     const currentGeneration = persistentState.payload.generation as number;
-    const cutoff = Date.parse(persistentState.payload.snapshot.validUntil) - policy.maxClockSkewSeconds * 1000;
+    const cutoff = Date.parse(persistentState.payload.snapshot.journal.snapshot.validUntil) - policy.maxClockSkewSeconds * 1000;
     const portControl = control.port;
     await control.close();
     control = undefined;
@@ -139,7 +139,7 @@ try {
     const drainJournal = JSON.parse(await readFile(journal, 'utf8'));
     const [runtimeRows] = await control.db.pool.query<any[]>('SELECT last_report FROM runtime_nodes WHERE node_id=?', [nodeId]);
     const drain = runtimeRows[0].last_report.drains.find((d: any) => d.condition === 'draining');
-    assert.ok(Date.parse(drain.deadline) <= Date.parse(drainJournal.payload.snapshot.validUntil));
+    assert.ok(Date.parse(drain.deadline) <= Date.parse(drainJournal.payload.snapshot.journal.snapshot.validUntil));
     await control.close();
     control = undefined;
     await until(async () => Date.now() > Date.parse(drain.deadline) + 250, 20000);

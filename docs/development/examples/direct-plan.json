@@ -8,7 +8,7 @@
     }
   },
   "nodeFacts": {
-    "nodeId": "node-hk", "scopeId": "scope-dev", "capabilities": ["native.direct.v1", "tcp"],
+    "nodeId": "node-hk", "scopeId": "scope-dev", "capabilities": ["adp.3","native.direct.v1", "tcp"],
     "allowedListenerAddresses": ["0.0.0.0"], "allowedPorts": [25565],
     "egressPolicyRevision": 1, "allowedDestinationCidrs": ["10.0.0.0/24"], "allowMetadataTargets": false
   },

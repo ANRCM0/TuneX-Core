@@ -101,8 +101,9 @@ try {
     } });
     await until(async () => connected);
     const initialJournal = JSON.parse((await linux('/bin/cat', [`${nativeRoot}/state/journal.json`])).stdout);
+    assert.equal(initialJournal.payload.snapshot.protocolVersion,3);assert.equal(initialJournal.payload.snapshot.nodeId,nodeId);assert.equal(initialJournal.payload.snapshot.journal.generation,initialJournal.payload.generation);
     const oldGeneration = initialJournal.payload.generation as number;
-    const hardCutoff = Date.parse(initialJournal.payload.snapshot.validUntil) - runtimePolicy.maxClockSkewSeconds * 1000;
+    const hardCutoff = Date.parse(initialJournal.payload.snapshot.journal.snapshot.validUntil) - runtimePolicy.maxClockSkewSeconds * 1000;
     const controlPort = control.port;
     await control.close();
     control = undefined;
@@ -110,7 +111,7 @@ try {
     assert.equal(offline.tcp, true);
     assert.equal(offline.udp, true);
     await until(async () => ended);
-    assert.ok(Date.now() >= hardCutoff - 1000);
+    assert.ok(Number.isFinite(hardCutoff));assert.ok(Date.now() >= hardCutoff - 1000);
     let udpExpired = false;
     try {
         await linux(fixture, ['--mode', 'probe', '--port', String(portStatus.port), '--udp-only']);

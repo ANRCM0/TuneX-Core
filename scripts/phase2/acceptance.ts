@@ -234,7 +234,7 @@ try {
         }>(server!.db.pool, 'SELECT last_report,session_epoch FROM runtime_nodes WHERE node_id=?', [nodeId]))[0]!;
         const lateReady = typeof beforePublication.last_report === 'string' ? JSON.parse(beforePublication.last_report) : beforePublication.last_report;
         // A current-session old snapshot report cannot complete deletion until removal is published.
-        const early = await call('POST', '/agent/v2/report', { ...lateReady, reportSequence: lateReady.reportSequence + 100 }, { 'x-tunex-session-epoch': String(beforePublication.session_epoch) }, machine);
+        const early = await call('POST', '/agent/v3/report', { ...lateReady, reportSequence: lateReady.reportSequence + 100 }, { 'x-tunex-session-epoch': String(beforePublication.session_epoch) }, machine);
         assert.equal(early.status, 200);
         assert.equal(await opStatus(deleted.body.operationId), 'running');
         assert.equal((await rows<{

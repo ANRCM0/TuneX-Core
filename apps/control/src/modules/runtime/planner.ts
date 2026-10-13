@@ -1,7 +1,7 @@
 import { deepFreeze, isCounter, isPort, parseForward } from '@tunex/core';
 import type { Forward } from '@tunex/core';
-import { DEFAULT_POLICY, digest, parseMessage, validCidr, withinLease } from '@tunex/contracts';
-import type { Assignment, DirectConfig, Policy, Snapshot } from '@tunex/contracts';
+import { DEFAULT_POLICY, digest, parseRuntimeMessage, validCidr, withinLease } from '@tunex/contracts';
+import type { RuntimeAssignment as Assignment, DirectConfig, Policy, RuntimeSnapshot as Snapshot } from '@tunex/contracts';
 
 export interface AuthorizedNodeFacts {
   readonly nodeId: string; readonly scopeId: string; readonly capabilities: readonly string[];
@@ -22,7 +22,7 @@ export function compileDirect(forward: Forward, facts: AuthorizedNodeFacts, rese
   if (spec.path?.via.length || spec.transport) throw new Error('UNSUPPORTED_CAPABILITY: Relay is not implemented');
   if (facts.nodeId !== spec.ingress.nodeId || facts.scopeId !== forward.scopeId) throw new Error('AUTHORIZATION_DENIED: Node scope mismatch');
   if (!facts.allowedListenerAddresses.includes(spec.ingress.listen.address) || !facts.allowedPorts.includes(spec.ingress.listen.port)) throw new Error('AUTHORIZATION_DENIED: Listener is not allowed');
-  if (!facts.capabilities.includes('native.direct.v1') || spec.protocols.some(p => !facts.capabilities.includes(p))) throw new Error('UNSUPPORTED_CAPABILITY: Unsupported driver or protocol');
+  if (!facts.capabilities.includes('adp.3')||!facts.capabilities.includes('native.direct.v1') || spec.protocols.some(p => !facts.capabilities.includes(p))) throw new Error('UNSUPPORTED_CAPABILITY: Unsupported driver or protocol');
   if (!isCounter(facts.egressPolicyRevision) || facts.allowedDestinationCidrs.length === 0 || facts.allowedDestinationCidrs.some(cidr => !validCidr(cidr))) throw new Error('AUTHORIZATION_DENIED: Invalid destination policy');
   if (!spec.enabled) throw new Error('INVALID_CONFIG: Disabled intent has no new active deployment');
   const config: DirectConfig = {
@@ -37,7 +37,7 @@ export function compileDirect(forward: Forward, facts: AuthorizedNodeFacts, rese
     const assignment: Assignment = {
       assignmentId, forwardId: forward.id, forwardRevision: forward.revision,
       deploymentGeneration: slot.deploymentGeneration, bindingFence: slot.bindingFence,
-      role: 'direct', protocol, phase, listener: spec.ingress.listen,
+      role: 'direct', protocol, phase, resource:{...spec.ingress.listen,protocol},
       driver: { id: 'native.direct.v1', schemaVersion: 1, configDigest: digest(config), config }, drainTimeoutSeconds,
     };
     return assignment;
@@ -52,17 +52,17 @@ export interface SnapshotInput {
 /** Assemble a complete immutable node snapshot. Generations/time and the entire node set come from a durable Runtime transaction. */
 export function compileSnapshot(input: SnapshotInput): Snapshot {
   const policy = input.policy ?? DEFAULT_POLICY;
-  parseMessage('HelloResponse', JSON.stringify({ protocolVersion: 2, nodeId: input.nodeId, bootId: 'policy-validation', sessionEpoch: input.sessionEpoch, serverTime: input.issuedAt, policy }));
+  parseRuntimeMessage('HelloResponse', JSON.stringify({ protocolVersion: 3, nodeId: input.nodeId, bootId: 'policy-validation', sessionEpoch: input.sessionEpoch, serverTime: input.issuedAt, policy }));
   if (!withinLease(input.issuedAt, input.validUntil, policy.leaseSeconds)) throw new Error('INVALID_CONFIG: Lease exceeds policy');
   if (input.assignments.length > policy.maxAssignmentsPerNode) throw new Error('RESOURCE_LIMIT: Assignment limit exceeded');
   const assignments = [...input.assignments].sort((a, b) => a.assignmentId < b.assignmentId ? -1 : a.assignmentId > b.assignmentId ? 1 : 0);
-  const tombstones = [...input.tombstones].sort((a, b) => (a.protocol < b.protocol ? -1 : a.protocol > b.protocol ? 1 : 0) || a.port - b.port || a.retirementGeneration - b.retirementGeneration || (a.assignmentId < b.assignmentId ? -1 : a.assignmentId > b.assignmentId ? 1 : 0));
+  const tombstones = [...input.tombstones].sort((a, b) => (a.physicalProtocol < b.physicalProtocol ? -1 : a.physicalProtocol > b.physicalProtocol ? 1 : 0) || a.port - b.port || a.retirementGeneration - b.retirementGeneration || (a.assignmentId < b.assignmentId ? -1 : a.assignmentId > b.assignmentId ? 1 : 0));
   const body = {
-    protocolVersion: 2 as const, nodeId: input.nodeId, sessionEpoch: input.sessionEpoch,
+    protocolVersion: 3 as const, nodeId: input.nodeId, sessionEpoch: input.sessionEpoch,
     snapshotGeneration: input.snapshotGeneration, complete: true as const,
     issuedAt: input.issuedAt, validUntil: input.validUntil, assignments, tombstones,
   };
   const raw = JSON.stringify({ ...body, snapshotDigest: digest(body) });
   if (Buffer.byteLength(raw) > policy.maxSnapshotBytes) throw new Error('RESOURCE_LIMIT: Complete snapshot too large');
-  return parseMessage('Snapshot', raw);
+  return parseRuntimeMessage('Snapshot', raw);
 }

@@ -63,3 +63,6 @@ Relay contract preparation, immutable Transport Profiles and explicit capability
 
 Complete direct/Relay runtime contract preparation and protected physical high-water:
 [ADP/3](protocol/agent-deployment-v3.md).
+
+Current online machine protocol and explicit old-state refusal:
+[ADP/3 cutover](development/adp3-cutover.md).

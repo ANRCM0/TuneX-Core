@@ -1,6 +1,6 @@
 # TuneX VNext Implementation Roadmap
 
-**状态：实施进行中，各阶段出口尚未完成。** 历史 V2 已隔离到 `legacy/v2/`；新工作区首先实现 Core、契约解析与离线 Planner，详情见 [实施进度](progress.md)。当前目标是 Core/Forward v1、Control API v1 与 **ADP/2**；[ADR-0002](../decisions/0002-runtime-contract-closure.md) 记录契约修订。下面各出口需要真实证据，文档存在不算完成。
+**状态：实施进行中，各阶段出口尚未完成。** 历史 V2 已隔离到 `legacy/v2/`；详情见 [实施进度](progress.md)。当前在线协议为 Core/Forward v1、Control API v1 与 **ADP/3**；[ADR-0002](../decisions/0002-runtime-contract-closure.md) 记录 direct 基线，[ADR-0003](../decisions/0003-native-relay-tls13.md) 与 [ADP/3](../protocol/agent-deployment-v3.md) 定义 Relay 物理资源演进。下方 Phase 0–2 的 ADP/2 引用是历史里程碑，当前回归采用 ADP/3。各出口需要真实证据，文档存在不算完成。
 
 ## Phase 0 — 契约与开发入口
 

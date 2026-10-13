@@ -185,7 +185,7 @@ export class Nodes {
         actor_id: string;
     }>(tx, 'SELECT actor_id FROM node_grants WHERE node_id=? ORDER BY actor_id', [nodeId]); return { nodeId, revision: node.grant_revision, actorIds: grants.map(g => g.actor_id) }; }); }
     intentAllowed(facts: AuthorizedNodeFacts, forward: Forward): boolean {
-        return facts.nodeId === forward.spec.ingress.nodeId && facts.scopeId === forward.scopeId && facts.allowedListenerAddresses.includes(forward.spec.ingress.listen.address) && facts.allowedPorts.includes(forward.spec.ingress.listen.port) && facts.capabilities.includes('native.direct.v1') && forward.spec.protocols.every(protocol => facts.capabilities.includes(protocol)) && targetAllowed(forward.spec.target.host, facts);
+        return facts.nodeId === forward.spec.ingress.nodeId && facts.scopeId === forward.scopeId && facts.allowedListenerAddresses.includes(forward.spec.ingress.listen.address) && facts.allowedPorts.includes(forward.spec.ingress.listen.port) && facts.capabilities.includes('adp.3') && facts.capabilities.includes('native.direct.v1') && forward.spec.protocols.every(protocol => facts.capabilities.includes(protocol)) && targetAllowed(forward.spec.target.host, facts);
     }
     async capabilities(tx: Transaction, nodeId: string, capabilities: string[]): Promise<void> { const { facts } = await this.facts(tx, nodeId); await write(tx, 'UPDATE nodes SET facts=? WHERE id=?', [JSON.stringify({ ...facts, capabilities }), nodeId]); }
     async management(tx: Transaction, actor: string, scope: string, nodeId: string): Promise<NodeRecord> {

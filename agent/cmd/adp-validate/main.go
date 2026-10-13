@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/adp3"
 )
 
 func main() {
@@ -17,11 +17,11 @@ func main() {
 	}
 	raw, err := io.ReadAll(io.LimitReader(os.Stdin, 4194305))
 	if err == nil {
-		_, err = contracts.ParseMessage(os.Args[1], raw)
+		_, err = adp3.Parse(os.Args[1], raw)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	json.NewEncoder(os.Stdout).Encode(map[string]any{"valid": true, "message": os.Args[1], "protocolVersion": 2})
+	json.NewEncoder(os.Stdout).Encode(map[string]any{"valid": true, "message": os.Args[1], "protocolVersion": 3})
 }

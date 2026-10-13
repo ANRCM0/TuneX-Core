@@ -1,7 +1,7 @@
 # Agent Deployment Protocol v3：完整资源契约
 
-状态：Accepted for implementation；Schema/TS/Go parser 与 MAC journal 已实现，
-Control/Agent 在线切换尚未接入，当前运行版本仍 ADP/2 direct。依据
+状态：direct 在线实现与本地 Linux Agent 验收已完成，Relay 全链路尚未开放。
+Control/Agent 使用 ADP/3、完整物理资源快照和受保护 RuntimeJournal。依据
 [ADR-0003](../decisions/0003-native-relay-tls13.md)，资源角色变化采用协议 3。
 
 [完整 Schema](schemas/adp-v3-runtime.schema.json) 固定 HelloRequest/Response、
@@ -9,7 +9,9 @@ Snapshot、ReportRequest/Ack 的 protocolVersion=3；ErrorResponse 仍独立严�
 [26 项共享向量](fixtures/adp-v3-runtime.json) 同时覆盖 direct/Relay、混合 Snapshot、
 身份/会话、unsafe integer、摘要、物理槽冲突、退休高水位与规范地址。
 ADP/2 的 ID、计数器、完整快照/摘要、续期、硬截止、在线重启及报告语义沿用。
-在线 endpoint、数据库发布与能力切换必须由后续集成完成，不能仅解析成功后宣称支持。
+机器入口为 `/agent/v3/hello`、`snapshot`、`report`、`credentials/rotate` 和
+`relay-credential`；Hello 必须声明 `adp.3`。同 boot 重试不能改变能力声明。
+`/agent/v2/*` 返回 `UNSUPPORTED_PROTOCOL_VERSION`，不转换旧正文。
 
 Assignment 的 `listener` 改为显式 `resource:{address,port,protocol}`。用户
 `protocol` 与物理 `resource.protocol` 是不同事实：direct/relay-ingress 采用用户
@@ -36,9 +38,16 @@ generation/digest/fences/retired。MAC 使用受保护独立 key；写入依赖�
 原始 JSON、Snapshot 摘要/身份与物理 fence；从磁盘恢复只提供持久高水位，
 不会执行缓存授权。接受新快照先加锁、重读并比较旧 generation/digest/maps，
 旧调用方不能覆盖新持久事实；保存失败返回原状态，不允许随后 bind。
-与 ADP/2 journal 没有自动清零或降级适配；在线迁移/重新注册流程仍需单独落地。
+与 ADP/2 journal 没有自动清零或降级适配。标准 Agent 首次注册创建 ADP/3
+RuntimeJournal，旧 journal 拒绝启动。Control 发现旧 ADP/2 Snapshot 历史时
+拒绝启动，不能把字段改写为 3。部署切换须停掉旧签发端、耗尽旧授权、保留
+旧 journal/计数器作审计，使用新的数据库、信任材料与 Node 身份审阅后重建。
+旧备份恢复演练当前针对同协议 ADP/3 的旧备份，不能算 ADP/2 原地升级证据。
 
-剩余：机器 endpoint/Hello 能力、current session、安全 peer cert 管理、全节点
-Runtime 发布/租约/Operation、prepared→active、Agent 对完整快照的状态接管与
-旧实例 drain、多进程双 Agent 网络及恢复验收。此阶段保留 ADP/2 在线入口，
-用户 Relay 创建仍返回 unsupported。
+Control 将 ADP/3 正文原样持久化并发送；Runtime 发布/退役/租约/Operation 都读取
+physical resource。Agent 在变更 socket 前持久接受快照，续期保持监听实例；
+报告/ACK、drain、重启和截止沿用既有严格语义。direct 执行器的内部配置转换
+不是 wire 兼容层，它只接收已经通过 ADP/3 解析的 direct Assignment。
+
+剩余：Relay peer key 加载/自动更新、双端 prepare→activate 协调、同槽接管与
+历史路径清理、多进程双 Agent 的网络/故障验收。用户 Relay 创建仍拒绝。

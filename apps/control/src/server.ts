@@ -14,6 +14,7 @@ import { AuthorityStore,trustDigest } from './infrastructure/authority.ts';
 export interface ServerOptions { databaseUrl:string; caCert:string; caKey:string; serverCert:string; serverKey:string; openssl:string; stateDirectory:string; port:number; host?:string; worker?:boolean;credentialOverlapSeconds?:number;policy?:Policy;initializeAuthority?:boolean }
 export async function startControl(options:ServerOptions):Promise<{ port:number; db:MySqlUnitOfWork; control:ControlApplication; runtime:RuntimeController;authority:AuthorityStore; close:()=>Promise<void> }> {
   const db=new MySqlUnitOfWork(options.databaseUrl); await db.migrate();
+  const [obsolete]=await db.pool.query<any[]>("SELECT COUNT(*) n FROM snapshots WHERE JSON_EXTRACT(body,'$.protocolVersion') IS NULL OR JSON_EXTRACT(body,'$.protocolVersion')<>3");if(obsolete[0].n>0){await db.close();throw new Error('UNSUPPORTED_PROTOCOL_VERSION: ADP/2 persisted history is unsupported; use a fresh ADP/3 deployment without resetting old Node identities');}
   const [records]=await db.pool.query<any[]>("SELECT CONCAT(@@server_uuid,':',DATABASE()) name,(SELECT COUNT(*) FROM nodes) nodes");const authority=new AuthorityStore(options.stateDirectory);
   try{await authority.initialize(records[0].name,trustDigest(await readFile(options.caCert)),options.initializeAuthority===true&&records[0].nodes===0);}catch(error){await db.close();throw error;}db.guard=()=>authority.allow();
   const identity=new Identity(db), ca=new NodeCertificateAuthority(options.openssl,options.caCert,options.caKey,options.stateDirectory);

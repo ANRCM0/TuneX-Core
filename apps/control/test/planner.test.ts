@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { digest, DEFAULT_POLICY, parseMessage } from '@tunex/contracts';
-import type { Assignment, Tombstone } from '@tunex/contracts';
+import { digest, DEFAULT_POLICY, parseRuntimeMessage } from '@tunex/contracts';
+import type { RuntimeAssignment as Assignment, RuntimeTombstone } from '@tunex/contracts';
 import type { Forward } from '@tunex/core';
 import { compileDirect, compileSnapshot } from '../src/modules/runtime/planner.ts';
 import type { AuthorizedNodeFacts, ReservedSlot, SnapshotInput } from '../src/modules/runtime/planner.ts';
@@ -15,7 +15,7 @@ function forward(id = 'forward-a', port = 25565): Forward {
 }
 function facts(): AuthorizedNodeFacts {
   return {
-    nodeId: 'node-a', scopeId: 'scope-a', capabilities: ['native.direct.v1', 'tcp', 'udp'],
+    nodeId: 'node-a', scopeId: 'scope-a', capabilities: ['adp.3','native.direct.v1', 'tcp', 'udp'],
     allowedListenerAddresses: ['0.0.0.0'], allowedPorts: [25565, 25566],
     egressPolicyRevision: 7, allowedDestinationCidrs: ['192.0.2.0/24', '10.0.0.0/8'], allowMetadataTargets: false,
   };
@@ -64,7 +64,7 @@ test('compiler requires the exact driver and every requested protocol capability
     assert.throws(() => compileDirect(forward(), { ...facts(), capabilities }, reservations()), /UNSUPPORTED_CAPABILITY/);
   }
   const tcp = { ...forward(), spec: { ...forward().spec, protocols: ['tcp'] as const } };
-  assert.equal(compileDirect(tcp, { ...facts(), capabilities: ['native.direct.v1', 'tcp'] }, reservations()).length, 1);
+  assert.equal(compileDirect(tcp, { ...facts(), capabilities: ['adp.3','native.direct.v1', 'tcp'] }, reservations()).length, 1);
   const relay = { ...forward(), spec: { ...forward().spec, path: { via: ['node-b'] }, transport: { profileId: 'profile-a', configRevision: 1 } } };
   assert.throws(() => compileDirect(relay, facts(), reservations()), /UNSUPPORTED_CAPABILITY/);
 });
@@ -142,7 +142,7 @@ test('planner normalizes policy order, preserves caller objects and freezes the 
   assert.equal(Object.isFrozen(authorized), false);
   assert.ok(Object.isFrozen(plan));
   assert.ok(Object.isFrozen(plan[0]?.driver.config));
-  assert.ok(Object.isFrozen(plan[0]?.listener));
+  assert.ok(Object.isFrozen(plan[0]?.resource));
   assert.ok(Object.isFrozen(plan[0]?.driver.config.allowedDestinationCidrs));
   assert.equal(plan[0]?.driver.configDigest, assignments()[0]?.driver.configDigest);
 });
@@ -163,10 +163,10 @@ test('phase changes and lease renewal preserve assignment identity, generation, 
 test('complete snapshot sorts caller-owned assignments and tombstones before hashing', () => {
   const planned = [...assignments()].reverse();
   const inputAssignmentIds = planned.map(assignment => assignment.assignmentId);
-  const retired: Tombstone[] = [
-    { assignmentId: 'retired-b', forwardId: 'old-b', protocol: 'udp', port: 25567, bindingFence: 1, retirementGeneration: 7 },
-    { assignmentId: 'retired-a', forwardId: 'old-a', protocol: 'tcp', port: 25568, bindingFence: 2, retirementGeneration: 8 },
-    { assignmentId: 'retired-c', forwardId: 'old-c', protocol: 'tcp', port: 25567, bindingFence: 3, retirementGeneration: 9 },
+  const retired: RuntimeTombstone[] = [
+    { assignmentId: 'retired-b', forwardId: 'old-b', role:'direct',physicalProtocol:'udp',protocol: 'udp', port: 25567, bindingFence: 1, retirementGeneration: 7 },
+    { assignmentId: 'retired-a', forwardId: 'old-a', role:'direct',physicalProtocol:'tcp',protocol: 'tcp', port: 25568, bindingFence: 2, retirementGeneration: 8 },
+    { assignmentId: 'retired-c', forwardId: 'old-c', role:'direct',physicalProtocol:'tcp',protocol: 'tcp', port: 25567, bindingFence: 3, retirementGeneration: 9 },
   ];
   const result = compileSnapshot(snapshot({ assignments: planned, tombstones: retired }));
   assert.equal(result.complete, true);
@@ -177,7 +177,7 @@ test('complete snapshot sorts caller-owned assignments and tombstones before has
   assert.equal(retired[0]?.assignmentId, 'retired-b');
   const { snapshotDigest, ...body } = result;
   assert.equal(snapshotDigest, digest(body));
-  assert.deepEqual(parseMessage('Snapshot', JSON.stringify(result)), result);
+  assert.deepEqual(parseRuntimeMessage('Snapshot', JSON.stringify(result)), result);
   assert.ok(Object.isFrozen(result));
   assert.ok(Object.isFrozen(result.assignments));
   assert.ok(Object.isFrozen(result.tombstones[0]));
@@ -186,14 +186,14 @@ test('complete snapshot sorts caller-owned assignments and tombstones before has
 
 test('snapshot rejects duplicate ownership even when listen IP differs', () => {
   const competitor = compileDirect(forward('forward-b'), facts(), reservations('forward-b'));
-  const otherAddress = { ...competitor[0]!, listener: { address: '127.0.0.1', port: 25565 } };
+  const otherAddress = { ...competitor[0]!, resource: { address: '127.0.0.1', port: 25565,protocol:competitor[0]!.protocol } };
   assert.throws(() => compileSnapshot(snapshot({ assignments: [...assignments(), otherAddress] })), /RESOURCE_CONFLICT/);
   assert.throws(() => compileSnapshot(snapshot({ assignments: [...assignments(), assignments()[0]!] })), /RESOURCE_CONFLICT/);
 });
 
 test('retirement fences prevent stale assignment resurrection and future tombstones', () => {
   const assignment = assignments()[0]!;
-  const retired: Tombstone = { assignmentId: assignment.assignmentId, forwardId: assignment.forwardId, protocol: assignment.protocol, port: assignment.listener.port, bindingFence: assignment.bindingFence, retirementGeneration: 9 };
+  const retired: RuntimeTombstone = { assignmentId: assignment.assignmentId, forwardId: assignment.forwardId, role:assignment.role,protocol: assignment.protocol,physicalProtocol:assignment.resource.protocol, port: assignment.resource.port, bindingFence: assignment.bindingFence, retirementGeneration: 9 };
   assert.throws(() => compileSnapshot(snapshot({ tombstones: [retired] })), /FENCING_REJECTED/);
   assert.throws(() => compileSnapshot(snapshot({ assignments: [], tombstones: [{ ...retired, retirementGeneration: 11 }] })), /INVALID_CONFIG/);
   const safe = compileSnapshot(snapshot({ tombstones: [{ ...retired, bindingFence: 3 }] }));

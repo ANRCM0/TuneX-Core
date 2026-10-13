@@ -1,6 +1,8 @@
 # VNext 开发入口
 
-当前新工作区已实现 Core、ADP/2 direct 契约、离线 Planner 和最小在线 TCP 创建切片。
+当前新工作区已实现 Core、ADP/3 在线 direct、离线 Planner 和 TCP/UDP 生命周期。
+机器协议及受保护状态见 [ADP/3](../protocol/agent-deployment-v3.md)。ADP/2 样例
+保留为历史契约校验，在线入口不兼容。
 旧源码、安装脚本及工作流已隔离到 `legacy/v2/`，不参与当前构建。
 HTTP API 与在线 Agent 的启动和验收见 [Phase 1](phase1.md)。
 

@@ -1,5 +1,10 @@
 # Phase 1 TCP Slice
 
+The current implementation runs this slice with ADP/3. The original ADP/2 evidence
+below records its development baseline. Machine routes now use `/agent/v3/*`, and
+Agent enrollment initializes a protocol/Node-bound RuntimeJournal. Existing ADP/2
+state cannot be reset in place; see [ADP/3](../protocol/agent-deployment-v3.md).
+
 This stage implements direct TCP creation from an authenticated HTTPS request to
 an independent Go Agent, a real listener and a target. It is an internal milestone.
 Update, disable, delete, retry, UDP, Relay and production release gates are not
