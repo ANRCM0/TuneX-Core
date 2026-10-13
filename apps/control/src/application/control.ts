@@ -1,3 +1,5 @@
+import { compileRelayResources } from '../modules/runtime/relay-planner.ts';
+import { RelayEndpoints } from '../modules/relay-endpoints.ts';
 import { Transport } from '../modules/transport.ts';
 import { randomUUID } from 'node:crypto';
 import { decideForwardChange, isCounter, isId, MAX_COUNTER, parseForwardSpec } from '@tunex/core';
@@ -38,12 +40,17 @@ function revision(value: number): void {
 export class ControlApplication {
     readonly forwarding = new Forwarding();
     readonly transport:Transport;
+    readonly relayEndpoints:RelayEndpoints;
     readonly ledger: RuntimeLedger;
     readonly idempotency = new Idempotency();
     readonly db: MySqlUnitOfWork;
     readonly identity: Identity;
     readonly nodes: Nodes;
-    constructor(db: MySqlUnitOfWork, identity: Identity, nodes: Nodes, policy?: Policy) { this.db = db; this.identity = identity; this.nodes = nodes; this.ledger = new RuntimeLedger(policy, nodes);this.transport=new Transport(db,identity,this.idempotency); }
+    constructor(db: MySqlUnitOfWork, identity: Identity, nodes: Nodes, policy?: Policy) { this.db = db; this.identity = identity; this.nodes = nodes; this.ledger = new RuntimeLedger(policy, nodes);this.transport=new Transport(db,identity,this.idempotency,this.forwarding);this.relayEndpoints=new RelayEndpoints(db,identity,nodes,this.idempotency,this.forwarding); }
+    async planRelay(actorId:string,scopeId:string,input:unknown){
+        const parsed=parseForwardSpec(input);if(!parsed.ok)invalid('Valid Forward spec required');const spec=parsed.value;if(spec.path?.via.length!==1||!spec.transport)throw new ControlError('UNSUPPORTED_CAPABILITY',422,'Relay preview requires one egress and locked Transport Profile');
+        return this.db.transaction(async tx=>{await this.identity.scope(tx,actorId,scopeId,true);const nodes=[];for(const nodeId of [spec.ingress.nodeId,spec.path!.via[0]!].sort())nodes.push(await this.nodes.authorizedRelayNode(tx,actorId,scopeId,nodeId));const profile=await this.transport.resolve(tx,actorId,scopeId,spec.transport!.profileId,spec.transport!.configRevision),endpoint=await this.relayEndpoints.resolve(tx,spec.path!.via[0]!);const ports=endpoint.config.allowedTcpPorts;const resources=compileRelayResources({id:'preview',scopeId,revision:1,spec},nodes,profile,endpoint,{tcp:ports[0]!,udp:ports[spec.protocols.length===2?1:0]!});return {profile:{profileId:profile.profileId,revision:profile.revision,configDigest:profile.configDigest},endpointRevision:endpoint.revision,resources,executionSupported:false,reserved:false};});
+    }
     async create(actorId: string, scopeId: string, key: string | undefined, input: unknown): Promise<Accepted> {
         const spec = directSpec(input);
         const request = requestIdentity(actorId, scopeId, key, 'POST', `/api/v1/scopes/${scopeId}/forwards`, spec);

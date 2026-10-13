@@ -51,3 +51,42 @@ Tombstone 与 capability 协商，随后同步 TS/Go/state journal 与 Controlle
 路径切换、历史会话资源回收、凭据轮换、下游故障、UDP 行为及安全审阅都有
 独立验收要求。Phase 2 的未完成矩阵/预算/环境门槛仍保留，不因进入前置设计而
 自动标为 verified。
+
+
+## Profile 使用授权、Node 内部 endpoint 与计划预览
+
+基线 `14ba7db` 的后续切片增加显式 Profile use grants：owner 管理
+`/transport-profiles/{id}/grants/{actor}`，以 `{expectedRevision,allowed}` CAS 修改
+整组 grant revision。owner 首次发布 Profile 时获显式 grant；升级既有 Profile
+为 scope owner 补 grant。仅活跃 manager 可被授予使用，scope 读取不能执行。
+同事务记录 grant 变更审计与幂等响应。当前有活动 Relay 意图的 grant 变更会
+拒绝，等待撤销协调器接入；不能先收 grant 而继续续发旧授权。
+
+Node endpoint 位于 `/nodes/{node}/relay-endpoint`，owner 提交
+`{expectedRevision,config:{listenAddress,advertisedHost,allowedTcpPorts}}`。
+监听必须是规范 IP，可达 host 不能是 wildcard，内部 TCP 端口为有界唯一列表。
+CAS、规范 no-op、幂等、Node 安全审计同事务提交。当前尚不绑定任何内部 socket；
+活动 Relay endpoint 变更在补偿协调器完成前拒绝。
+
+POST `/relay-plan` 接收 Core ForwardSpec，读取真实双端 Node grants/凭据事实、
+精确 Profile use grant/revision/digest 和 egress endpoint，检查 ADP/3、
+`native.relay.v1`、`relay.wire.1` 与协议能力，再编译独占物理资源。返回
+`reserved=false,executionSupported=false`；预览不会持久化 Forward/Operation，
+不证明端口已预留或流量可执行。当前实际 Agent 未声明这些能力，因此不会
+返回可执行 Relay。纯编译器测试明确将用户 UDP 与内部 TLS TCP 分开，两个
+egress protocol 必须使用不同 TCP 端口；最终目标按 egress 策略、peer endpoint
+按 ingress 策略检查，Agent 仍须在每次 DNS/IP 拨号后检查。
+
+```sh
+npm run control:cli -- profile-grants scope-dev secure-profile
+npm run control:cli -- profile-grant scope-dev secure-profile member-id grant-input.json stable-key
+npm run control:cli -- node-endpoint scope-dev node-id endpoint-input.json stable-key
+npm run control:cli -- node-endpoint-get scope-dev node-id
+npm run control:cli -- relay-plan scope-dev forward.json
+```
+
+迁移 `0007-relay-authorization.sql` 由 Transport/Nodes 模块分别持有授权与 endpoint，
+旧备份恢复清除全部 Profile grants，保留不可变 config，必须重新审阅/授予。
+扩展集成 suite 现为 10 项检查；新增单元用例覆盖四个物理资源、精确 capability、
+locked revision/摘要、双端目标策略和端口冲突。实际 Relay 认证、ADP/3 wire/state、
+prepare/activate、流量与故障出口仍待完成。

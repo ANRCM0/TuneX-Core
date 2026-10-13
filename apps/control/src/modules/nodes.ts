@@ -132,6 +132,9 @@ export class Nodes {
             throw new ControlError('AUTHORIZATION_DENIED', 403, 'Forward violates Node network policy');
         return facts;
     }
+    async authorizedRelayNode(tx:Transaction,actor:string,scopeId:string,nodeId:string):Promise<AuthorizedNodeFacts>{
+        if(!isId(nodeId))invalid('Valid Relay Node ID required');await this.identity.scope(tx,actor,scopeId,true);const grant=(await rows(tx,'SELECT n.id FROM nodes n JOIN node_grants g ON g.node_id=n.id WHERE n.id=? AND n.scope_id=? AND g.actor_id=? FOR SHARE',[nodeId,scopeId,actor]))[0];if(!grant)notFound();const {facts}=await this.facts(tx,nodeId);return facts;
+    }
     async hasGrant(tx: Transaction, nodeId: string, actorId: string): Promise<boolean> { return (await rows(tx, 'SELECT node_id FROM node_grants WHERE node_id=? AND actor_id=? FOR SHARE', [nodeId, actorId])).length === 1; }
     async canExecute(tx: Transaction, actorId: string, forward: Forward): Promise<boolean> {
         if (!await this.identity.executing(tx, actorId, forward.scopeId) || !await this.hasGrant(tx, forward.spec.ingress.nodeId, actorId))
@@ -208,7 +211,7 @@ export class Nodes {
         return facts;
     }
     async markRevoked(tx: Transaction, nodeId: string): Promise<void> { await write(tx, 'UPDATE nodes SET revoked=TRUE WHERE id=?', [nodeId]); await write(tx, 'UPDATE node_credentials SET revoked=TRUE WHERE node_id=?', [nodeId]); }
-    async audit(tx: Transaction, nodeId: string, actor: string | null, kind: 'credential_rotation' | 'policy_update' | 'node_revocation', details: unknown): Promise<void> { await write(tx, 'INSERT INTO node_security_events(id,node_id,actor_id,kind,created_at,details) VALUES(?,?,?,?,?,?)', [randomUUID(), nodeId, actor, kind, Date.now(), JSON.stringify(details)]); }
+    async audit(tx: Transaction, nodeId: string, actor: string | null, kind: 'credential_rotation' | 'policy_update' | 'node_revocation' | 'relay_endpoint_update', details: unknown): Promise<void> { await write(tx, 'INSERT INTO node_security_events(id,node_id,actor_id,kind,created_at,details) VALUES(?,?,?,?,?,?)', [randomUUID(), nodeId, actor, kind, Date.now(), JSON.stringify(details)]); }
     async view(actor: string, scope: string, nodeId: string) {
         return this.db.transaction(async (tx) => {
             await this.identity.scope(tx, actor, scope);

@@ -210,3 +210,21 @@ Measured 64 TCP/32 UDP, 170 FD, 201 goroutines, about 9.3 MB heap/33.6 MB runtim
 and four-Agent reconnect about 1.4 seconds. Two bounded load samples verified
 51.2/54.5 MB/s bidirectional payload; p95 about 4.9/12.7 ms. These are mixed-platform
 local samples, not a maximum supported or release capacity claim.
+
+
+## Relay preparation authority and physical resource plan
+
+Baseline: `14ba7db`. Profile use grants now require an explicit active-manager
+permission, owner CAS/idempotency and persistent audit. Node internal endpoints
+have explicit bind/reachable host/TCP ports, owner CAS, replay and Node audit.
+The authenticated preview/compiler checks both Node grants and current credentials,
+exact Profile revision/digest, egress endpoint and ADP/3/Relay wire capabilities.
+It returns unreserved physical resources, including separate internal TCP sockets
+for UDP; it does not accept a deployment. Active Relay grant/endpoint mutation is
+refused until durable withdrawal coordination exists. Old-backup recovery clears
+all Profile use grants while preserving immutable config history.
+
+The expanded real MySQL/HTTPS suite passes 10 checks; direct regressions, strict
+contracts and Go verification remain gates. ADP/3 assignment/state cutover, peer
+credentials, prepare/activate and actual encrypted two-Agent flow are next. All
+unverified Phase 2 and release requirements remain open.

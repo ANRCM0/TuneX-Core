@@ -6,7 +6,12 @@ const base = process.env.TUNEX_CONTROL_URL, caPath = process.env.TUNEX_CA_CERT, 
 if (!base?.startsWith('https://') || !caPath || !token || !scope)
     throw new Error('Trusted Control URL/CA, owner token and scope required');
 let method = 'GET', path = '', body: string | undefined;
-if(command==='profiles'){path='transport-profiles';}
+if(command==='relay-plan'){if(!idOrFile)throw new Error('Forward JSON file required');method='POST';path='relay-plan';body=JSON.stringify(parseJson(await readFile(idOrFile,'utf8')));}
+else if(command==='profile-grants'){if(!idOrFile)throw new Error('Profile ID required');path=`transport-profiles/${encodeURIComponent(idOrFile)}/grants`;}
+else if(command==='profile-grant'){if(!idOrFile||!key||!expectedOrFile||!mutationKey)throw new Error('Usage: profile-grant <scope> <profileId> <actorId> <input.json> <stable-key>');method='PUT';path=`transport-profiles/${encodeURIComponent(idOrFile)}/grants/${encodeURIComponent(key)}`;body=JSON.stringify(parseJson(await readFile(expectedOrFile,'utf8')));}
+else if(command==='node-endpoint-get'){if(!idOrFile)throw new Error('Node ID required');path=`nodes/${encodeURIComponent(idOrFile)}/relay-endpoint`;}
+else if(command==='node-endpoint'){if(!idOrFile||!key||!expectedOrFile)throw new Error('Usage: node-endpoint <scope> <nodeId> <input.json> <stable-key>');method='PUT';path=`nodes/${encodeURIComponent(idOrFile)}/relay-endpoint`;body=JSON.stringify(parseJson(await readFile(key,'utf8')));}
+else if(command==='profiles'){path='transport-profiles';}
 else if(command==='profile-get'){if(!idOrFile)throw new Error('Profile ID required');path=`transport-profiles/${encodeURIComponent(idOrFile)}${key?`?revision=${encodeURIComponent(key)}`:''}`;}
 else if(command==='profile'){if(!idOrFile||!key||!expectedOrFile)throw new Error('Usage: profile <scope> <profileId> <input.json> <stable-key>');method='PUT';path=`transport-profiles/${encodeURIComponent(idOrFile)}`;body=JSON.stringify(parseJson(await readFile(key,'utf8')));}
 else if (command === 'members') {
@@ -66,8 +71,8 @@ else if (command === 'node-revoke') {
     body = '{}';
 }
 else
-    throw new Error('Usage: create|node|get|operation|update|delete|retry|node-get|node-policy|node-revoke|members|member|node-grants|node-grant|profiles|profile-get|profile');
-const requestKey = command === 'update' || command === 'node-policy' || command === 'node-grant' ? mutationKey : command === 'delete' || command === 'retry' || command === 'member' || command === 'profile' ? expectedOrFile : key;
+    throw new Error('Usage: create|node|get|operation|update|delete|retry|node-get|node-policy|node-revoke|members|member|node-grants|node-grant|profiles|profile-get|profile|profile-grants|profile-grant|node-endpoint-get|node-endpoint');
+const requestKey = command === 'update' || command === 'node-policy' || command === 'node-grant' || command==='profile-grant' ? mutationKey : command === 'delete' || command === 'retry' || command === 'member' || command === 'profile' || command==='node-endpoint' ? expectedOrFile : key;
 if (command === 'create' && !key)
     throw new Error('Provide a persistent Idempotency-Key for create and reuse it on retry');
 const url = new URL(`/api/v1/scopes/${encodeURIComponent(scope)}/${path}`, base);

@@ -5,6 +5,11 @@ import { json, rows, write } from '../infrastructure/mysql.ts';
 import type { Transaction } from '../infrastructure/mysql.ts';
 export class Forwarding {
     async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE forwards SET recovery_suspended=TRUE');}
+    async hasLiveRelay(tx:Transaction,profileId?:string,nodeId?:string):Promise<boolean>{
+        if(profileId)return (await rows(tx,"SELECT id FROM forwards WHERE recovery_suspended=FALSE AND deleting=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.transport.profileId'))=? FOR SHARE",[profileId])).length>0;
+        if(nodeId)return (await rows(tx,"SELECT id FROM forwards WHERE recovery_suspended=FALSE AND deleting=FALSE AND (JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? OR JSON_CONTAINS(JSON_EXTRACT(spec,'$.path.via'),JSON_QUOTE(?))) AND JSON_EXTRACT(spec,'$.transport') IS NOT NULL FOR SHARE",[nodeId,nodeId])).length>0;
+        throw new Error('Explicit Relay reference required');
+    }
     async forNode(tx: Transaction, nodeId: string): Promise<Forward[]> {
         const records = await rows<{
             id: string;
