@@ -28,6 +28,7 @@
     "test:relay-switch": "node scripts/phase2/relay.ts --switch-faults",
     "test:relay-isolation": "node scripts/phase2/relay-isolation.ts",
     "test:relay-capacity": "node scripts/phase2/relay-capacity.ts",
+    "test:relay-rotation": "node scripts/phase2/relay-capacity.ts --peer-rotation",
     "test:access": "node scripts/phase2/access.ts",
     "ops": "node scripts/ops/cli.ts",
     "test:recovery": "node scripts/phase2/recovery.ts",

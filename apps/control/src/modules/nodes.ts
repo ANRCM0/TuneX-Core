@@ -25,14 +25,18 @@ export class Nodes {
     private readonly identity: Identity;
     private readonly ca: NodeCertificateAuthority;
     private readonly overlapSeconds: number;
+    private readonly relayCredentialSeconds: number;
     private readonly runtime = new RuntimeLedger();
-    constructor(db: MySqlUnitOfWork, identity: Identity, ca: NodeCertificateAuthority, overlapSeconds = 120) {
+    constructor(db: MySqlUnitOfWork, identity: Identity, ca: NodeCertificateAuthority, overlapSeconds = 120, relayCredentialSeconds = 86400) {
         if (!Number.isInteger(overlapSeconds) || overlapSeconds < 1 || overlapSeconds > 300)
             throw new Error('Credential overlap must be 1..300 seconds');
+        if (!Number.isInteger(relayCredentialSeconds) || relayCredentialSeconds < 60 || relayCredentialSeconds > 86400)
+            throw new Error('Relay credential authority must be 60..86400 seconds');
         this.db = db;
         this.identity = identity;
         this.ca = ca;
         this.overlapSeconds = overlapSeconds;
+        this.relayCredentialSeconds = relayCredentialSeconds;
     }
     async provision(actor: string, scope: string, policy: NodePolicy): Promise<{
         nodeId: string;
@@ -234,12 +238,12 @@ export class Nodes {
             const previous=(await rows<{request_digest:string;response:unknown}>(tx,'SELECT request_digest,response FROM relay_credential_requests WHERE node_id=? AND request_id=?',[nodeId,requestId]))[0];if(previous){if(previous.request_digest!==requestDigest)throw new ControlError('IDEMPOTENCY_CONFLICT',409,'Relay CSR request differs');return json(previous.response);}
             if(node.credential_fingerprint!==fingerprint)throw new ControlError('CREDENTIAL_SUPERSEDED',409,'Current machine credential required for Relay issuance');
             const active=await rows<{fingerprint:string;valid_until:number}>(tx,'SELECT fingerprint,valid_until FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE AND valid_until>? AND (retire_after IS NULL OR retire_after>?) ORDER BY issued_at FOR UPDATE',[nodeId,Date.now(),Date.now()]);if(active.length>=2)throw new ControlError('RESOURCE_LIMIT',429,'At most two Relay credentials may overlap');
-            const signed=await this.ca.sign(nodeId,csr,'relay');await this.credential(tx,nodeId,fingerprint);const now=Date.now(),until=Math.min(signed.until,machineUntil);if(until<=now)throw new ControlError('AUTHORIZATION_DENIED',403,'Relay credential has no remaining authority');
+            const signed=await this.ca.sign(nodeId,csr,'relay');await this.credential(tx,nodeId,fingerprint);const now=Date.now(),until=Math.min(signed.until,machineUntil,now+this.relayCredentialSeconds*1000);if(until<=now)throw new ControlError('AUTHORIZATION_DENIED',403,'Relay credential has no remaining authority');
             const overlap=Math.min(until,now+this.overlapSeconds*1000);await write(tx,'UPDATE node_relay_credentials SET retire_after=LEAST(valid_until,?) WHERE node_id=? AND revoked=FALSE AND retire_after IS NULL',[overlap,nodeId]);await write(tx,'INSERT INTO node_relay_credentials(fingerprint,node_id,issued_at,valid_until,certificate) VALUES(?,?,?,?,?)',[signed.fingerprint,nodeId,now,until,signed.certificate]);const response={nodeId,certificate:signed.certificate,ca:signed.ca,fingerprint:signed.fingerprint,validUntil:new Date(until).toISOString(),certificateNotAfter:new Date(signed.until).toISOString(),overlapUntil:active.length?new Date(overlap).toISOString():null};await write(tx,'INSERT INTO relay_credential_requests(node_id,request_id,request_digest,source_fingerprint,response) VALUES(?,?,?,?,?)',[nodeId,requestId,requestDigest,fingerprint,JSON.stringify(response)]);await this.audit(tx,nodeId,null,'relay_credential_issue',{fingerprint:signed.fingerprint,validUntil:until,overlapUntil:active.length?overlap:null});return response;
         });
     }
-    async relayCredentialFacts(tx:Transaction,nodeId:string):Promise<{fingerprint:string;certificate:string;validUntil:number}[]>{
-        const node=await this.state(tx,nodeId);if(node.revoked||node.credentialUntil<=Date.now())throw new ControlError('AUTHORIZATION_DENIED',403,'Node authorization expired');const credentials=await rows<{fingerprint:string;certificate:string;valid_until:number;retire_after:number|null}>(tx,'SELECT fingerprint,certificate,valid_until,retire_after FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE AND valid_until>? AND (retire_after IS NULL OR retire_after>?) ORDER BY fingerprint FOR SHARE',[nodeId,Date.now(),Date.now()]);if(credentials.length<1||credentials.length>2)throw new ControlError('AUTHORIZATION_DENIED',403,'Bounded Relay credentials required');return credentials.map(c=>({fingerprint:`sha256:${c.fingerprint}`,certificate:c.certificate,validUntil:Math.min(c.valid_until,c.retire_after??c.valid_until,node.credentialUntil)}));
+    async relayCredentialFacts(tx:Transaction,nodeId:string,currentOnly=false):Promise<{fingerprint:string;certificate:string;validUntil:number}[]>{
+        const node=await this.state(tx,nodeId);if(node.revoked||node.credentialUntil<=Date.now())throw new ControlError('AUTHORIZATION_DENIED',403,'Node authorization expired');const credentials=await rows<{fingerprint:string;certificate:string;valid_until:number;retire_after:number|null}>(tx,'SELECT fingerprint,certificate,valid_until,retire_after FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE AND valid_until>? AND (retire_after IS NULL OR retire_after>?) AND (?=FALSE OR retire_after IS NULL) ORDER BY fingerprint FOR SHARE',[nodeId,Date.now(),Date.now(),currentOnly]);if(credentials.length<1||credentials.length>2)throw new ControlError('AUTHORIZATION_DENIED',403,'Bounded Relay credentials required');return credentials.map(c=>({fingerprint:`sha256:${c.fingerprint}`,certificate:c.certificate,validUntil:Math.min(c.valid_until,c.retire_after??c.valid_until,node.credentialUntil)}));
     }
     async rotate(nodeId: string, fingerprint: string, epoch: number, requestId: string, csr: string): Promise<{
         certificate: string;

@@ -52,4 +52,6 @@ physical resource。Agent 在变更 socket 前持久接受快照，续期保持�
 显式 `--relay` Agent 已加载受保护 peer key，并在完整快照下执行 prepare/active。
 Control 已接入双端持久计划与按当前 ready 报告推进的协调，实际 Forward API 到
 两个独立 Agent 的加密 TCP/UDP 已有本地证据，见 [Relay Control](../development/relay-control.md)。
-剩余包括自动 peer 更新、完整路径/同槽切换故障矩阵、网络隔离与发布安全门槛。
+自动 peer 更新、当前叶证书 pin 重编译与过期在线恢复见
+[Relay rotation](../development/relay-rotation.md)；实网切换与网络隔离已有独立证据。
+完整验收矩阵、在线 endpoint 演进和发布安全门槛仍未全部完成。

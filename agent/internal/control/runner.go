@@ -227,6 +227,7 @@ type Runner struct {
 	roots                 *x509.CertPool
 	relayCertificate      tls.Certificate
 	relayUntil            time.Time
+	relayRenewAfter       time.Time
 }
 
 func New(options Options) (*Runner, error) {
@@ -428,7 +429,10 @@ func (runner *Runner) Run(ctx context.Context) error {
 				continue
 			}
 		}
-		if rotateRequested {
+		runner.mutex.Lock()
+		machineDue := time.Until(runner.credentialUntil) <= runner.credentialRenewalLead()
+		runner.mutex.Unlock()
+		if rotateRequested || machineDue {
 			if err := runner.rotate(ctx); err != nil {
 				fmt.Fprintln(os.Stderr, "Credential rotation retry pending:", err)
 			} else {
@@ -437,6 +441,19 @@ func (runner *Runner) Run(ctx context.Context) error {
 		}
 		if err := runner.reloadCredential(); err != nil {
 			return err
+		}
+		if runner.options.Relay && runner.relayRenewalDue() {
+			if err := runner.renewRelayCredential(ctx); err != nil {
+				fmt.Fprintln(os.Stderr, "Relay credential renewal retry pending:", err)
+				// A response may be lost after issuance. Replaying the same durable CSR
+				// before reconciling prevents a successor engine from capturing the old key.
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(time.Duration(runner.hello.Policy.PollIntervalSeconds) * time.Second):
+				}
+				continue
+			}
 		}
 		if err := runner.poll(ctx); err != nil {
 			fmt.Fprintln(os.Stderr, "Agent reconcile failed:", err)

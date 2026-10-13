@@ -1,6 +1,7 @@
 # ADR-0003：Native Relay v1、不可变 Profile 与 ADP/3 资源角色
 
-- 状态：Accepted for implementation；数据面尚未实现或开放。
+- 状态：Accepted；两节点 TLS 数据面、ADP/3 在线闭环和自动 peer 更新已实现，
+  本地实网切片已验证；完整发布门槛尚未完成。
 - 日期：2026-10-13。
 - 前置：ADR-0002 和节点安全规范第 5 节。
 

@@ -42,6 +42,8 @@ func run() error {
 	expectCutoff := flag.Bool("expect-cutoff", false, "Record an expected early authorization cutoff as load evidence")
 	targetSeconds := flag.Int("target-connection-seconds", 30, "Bounded target connection lifetime")
 	payload := flag.Int("payload-bytes", 1024, "Bounded verified payload size")
+	relayBundle := flag.String("relay-bundle", "", "Protected prior peer bundle for a rotation refusal probe")
+	relayProtectionKey := flag.String("relay-journal-key", "", "MAC key for the protected prior peer bundle")
 	relayCA := flag.String("relay-ca", "", "Trusted Relay CA for a negative probe")
 	relayCert := flag.String("relay-cert", "", "Machine-only credential used by the negative probe")
 	relayKey := flag.String("relay-key", "", "Protected fixture key path")
@@ -62,7 +64,7 @@ func run() error {
 		return tcpProxy(*host, *upstreamHost, *upstreamPort, *runID)
 	}
 	if *mode == "relay-negative" && *port > 0 && *port <= 65535 {
-		return relayNegative(*host, *port, *relayCA, *relayCert, *relayKey, *relayNode, *relayPin, *relayOpen, *oldTLS)
+		return relayNegative(*host, *port, *relayCA, *relayCert, *relayKey, *relayNode, *relayPin, *relayOpen, *relayBundle, *relayProtectionKey, *oldTLS)
 	}
 	if *mode == "load" && *port > 0 && *port <= 65535 {
 		return load(*port, *tcpClients, *udpClients, *seconds, *payload, *runID, *loadProgress, *loadInterval, *expectCutoff)

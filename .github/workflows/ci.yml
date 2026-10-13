@@ -112,7 +112,7 @@ jobs:
             .artifacts/capacity/**/evidence.json
   relay-isolation:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     services:
       mysql:
         image: mysql:8.4.9
@@ -145,6 +145,7 @@ jobs:
       - run: node scripts/run-go.mjs build -o ../.artifacts/network-fixture ./cmd/network-fixture
       - run: npm run test:relay-isolation
       - run: npm run test:relay-capacity
+      - run: npm run test:relay-rotation
       - name: Preserve isolated-network acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -155,3 +156,5 @@ jobs:
             .artifacts/relay-isolation/**/failure.json
             .artifacts/relay-capacity/**/evidence.json
             .artifacts/relay-capacity/**/failure.json
+            .artifacts/relay-rotation/**/evidence.json
+            .artifacts/relay-rotation/**/failure.json

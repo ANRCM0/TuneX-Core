@@ -13,10 +13,11 @@ import (
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/relay"
 	"github.com/tunex/vnext/agent/internal/relaycontracts"
+	"github.com/tunex/vnext/agent/internal/state"
 )
 
 // The request has the real current binding. Failure cannot be credited to malformed Open data.
-func relayNegative(host string, port int, caPath, certificatePath, keyPath, node, pin, openPath string, oldTLS bool) error {
+func relayNegative(host string, port int, caPath, certificatePath, keyPath, node, pin, openPath, bundlePath, protectionKey string, oldTLS bool) error {
 	ca, err := os.ReadFile(caPath)
 	if err != nil {
 		return err
@@ -25,7 +26,30 @@ func relayNegative(host string, port int, caPath, certificatePath, keyPath, node
 	if !roots.AppendCertsFromPEM(ca) {
 		return fmt.Errorf("Trusted CA required")
 	}
-	certificate, err := tls.LoadX509KeyPair(certificatePath, keyPath)
+	var certificate tls.Certificate
+	if bundlePath != "" {
+		key, loadErr := os.ReadFile(protectionKey)
+		if loadErr != nil || len(key) != 32 {
+			return fmt.Errorf("Protected old Relay key required")
+		}
+		bundle, loadErr := state.Load(bundlePath, key)
+		if loadErr != nil {
+			return loadErr
+		}
+		var identity struct {
+			Certificate string `json:"certificate"`
+			PrivateKey  string `json:"privateKey"`
+		}
+		if _, err := contracts.ParseJSON(bundle.Snapshot, 32768); err != nil {
+			return err
+		}
+		if err := json.Unmarshal(bundle.Snapshot, &identity); err != nil {
+			return err
+		}
+		certificate, err = tls.X509KeyPair([]byte(identity.Certificate), []byte(identity.PrivateKey))
+	} else {
+		certificate, err = tls.LoadX509KeyPair(certificatePath, keyPath)
+	}
 	if err != nil {
 		return fmt.Errorf("Fixture keypair unavailable")
 	}

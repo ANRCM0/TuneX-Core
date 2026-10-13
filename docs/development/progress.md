@@ -1,6 +1,6 @@
 # VNext 实施进度
 
-日期：2026-10-13（Asia/Shanghai）。记录当前实现与证据，不取代目标规范。
+日期：2026-10-14（Asia/Shanghai）。记录当前实现与证据，不取代目标规范。
 Phase 0 基线提交 `2b679f5`；Phase 1 提交为 `b7e5f5b`。证据 JSON 的
 commit 字段是测试时 HEAD；另记录 Agent SHA 和测试命令，明确未提交工作树。
 
@@ -456,3 +456,45 @@ host. Sustained recovery beyond peer-credential overlap, complete direct/Relay
 matrix closure, automatic peer rotation/pin transitions, transport evolution,
 product Web, external deployment and release gates remain open. CI is configured,
 not counted as a remotely verified run. The full project goal remains active.
+
+
+## Relay 自动换钥与过期在线恢复
+
+2026-10-14（Asia/Shanghai）。基线 `868dac4`。Agent 现在在有效 peer 授权到期前
+自动换钥，持久 CSR/request ID 支持签发提交后响应丢失的精确重试。新的 MAC bundle
+先原子保存，再加载身份；崩溃遗留请求按已保存 request ID 清理。有界 overlap 的
+cooldown 防止持续签发第三个有效身份。机器凭据接近到期时调用既有安全轮换流程。
+
+Control 编译时只使用当前 peer pin，历史退役凭据保留但不再缩短新计划。任一端
+peer pin 变化创建更高 deployment generation/fence 和新的持久 policy Operation，
+保持用户 revision/session，继续按尾到头 active/ready 屏障执行。旧 TCP 有界排空、
+UDP association 重置，旧成功 Operation 仍为终态。过期但 MAC 完整的 peer bundle
+不能离线恢复授权；新的在线 Hello、签发和完整快照必须保留原 journal/high-water。
+损坏状态拒绝，停机期间已过期的可信签发重放也能安全换成新请求。
+
+`npm run test:relay-rotation` 本地 9 项实网检查通过：非 root/零 capabilities、
+两端当前 active/ready、丢响应后的同 CSR 重试、两次自动换钥、真实 overlap 后的
+两段 36 秒流量、原 CA 签发旧 peer 对当前 binding 的拒绝、停机到真实有效期耗尽
+后的新 session 恢复，以及历史部署/物理资源清理。证据
+`.artifacts/relay-rotation/run-vavDNm/evidence.json` 记录 `868dac4` + dirty=true，
+同时验证 process/network cleanup；恢复 session 从 1 升到 2，快照从 19 升到 32，
+两段新流量错误均为零。更早的 8 项换钥切片证据是
+`.artifacts/relay-rotation/run-fSHXUE/evidence.json`，不包含新增真实过期恢复。
+完整行为、期限配置和限制见 [Relay rotation](relay-rotation.md)。
+
+公共检查当前通过 166 项 TS 测试、全部 Go 测试/构建、Schema/fixture、边界和
+离线 TS→Go 校验；Go vet、原生 Linux race 和 13 项 Transport/凭据回归通过。
+提交前实网回归还通过 20 项 Relay 切换/故障
+（`.artifacts/relay/run-BYoE1y/evidence.json`）、13 项网络隔离/锁边界
+（`.artifacts/relay-isolation/run-XkKszE/evidence.json`）和 8 项持续容量/硬截止
+（`.artifacts/relay-capacity/run-Pe8mcH/evidence.json`）；证据均记录当前基线和
+实际 dirty 状态，隔离/容量证据同时验证独占资源清理。
+CI 新增轮换验收和证据收集，远程结果需按实际运行核验。前一容量切片另有
+`868dac4` 干净提交的 8 项证据
+`.artifacts/relay-capacity/run-3ocRRm/evidence.json`，dirty=false。
+
+本阶段之后完整项目仍未完工：direct/Relay 全矩阵收口、长周期生产凭据演练、
+在线 endpoint/入口迁移、Link 复用与受支持传输演进、Forward-first Web/Node 管理/
+审计、全 Linux 外部 MySQL/反代部署、SBOM/许可证和完整发布演练仍需完成。
+按用户本轮要求，完成本阶段文档、提交和推送后停止开发；后续阶段保持未完成，
+待明确恢复后继续。本地实网是单物理机混合拓扑，不能据此声明生产就绪。

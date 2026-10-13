@@ -37,8 +37,9 @@ retirement and all historical per-session authorization are safe. Old observatio
 cannot release a new owner or complete a new deployment. Execution deadline/permanent
 failures remove authority and retain cleanup work; retry remains a new Operation.
 Endpoint changes while referenced by live Relay remain explicitly unsupported until
-their compensation workflow is implemented. Automatic peer-key rotation remains a
-later transport gate.
+their compensation workflow is implemented. Automatic peer-key rotation now
+creates new immutable plans and policy Operations without changing user revision;
+current pins and effective authority are covered by [Relay rotation](relay-rotation.md).
 
 Node policy/revocation, membership and Node grant workflows now enumerate ingress
 and downstream references. Profile use changes invoke Runtime withdrawal/redeployment

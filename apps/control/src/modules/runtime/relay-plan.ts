@@ -107,3 +107,14 @@ export function compileRelayPlan(input: {
   const body = { forwardId: forward.id, forwardRevision: forward.revision, deploymentGeneration: generation!, endpointRevision: input.endpoint.revision, authorizationUntil, nodes: plans };
   return deepFreeze({ ...body, planDigest: digest(body) });
 }
+
+// Compare exact current peer pins; retiring leaves remain historical authority but
+// must not shorten or invalidate a replacement plan after their overlap ends.
+export function relayPeerPinsChanged(plan: RelayPreparedPlan, facts: readonly RelayNodeExecutionFacts[]): boolean {
+  return plan.nodes.some(node => node.assignments.some(assignment => {
+    const config = assignment.driver.config as RelayConfig;
+    const peerId = assignment.role === 'relay-ingress' ? config.binding.egressNodeId : config.binding.ingressNodeId;
+    const peer = facts.find(part => part.facts.nodeId === peerId);
+    return !peer || digest(config.peerFingerprints) !== digest(peer.peers.map(credential => credential.fingerprint).sort());
+  }));
+}

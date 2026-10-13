@@ -10,7 +10,7 @@ import type { Forwarding } from '../forwarding.ts';
 import type { Transport } from '../transport.ts';
 import type { RelayEndpoints } from '../relay-endpoints.ts';
 import { compileRelayResources } from './relay-planner.ts';
-import { compileRelayPlan } from './relay-plan.ts';
+import { compileRelayPlan, relayPeerPinsChanged } from './relay-plan.ts';
 import type { RelayNodeExecutionFacts, RelayPreparedPlan } from './relay-plan.ts';
 import type { RuntimeLedger, Operation } from './ledger.ts';
 
@@ -54,7 +54,7 @@ export class RelayCoordinator {
       const state=await this.nodes.facts(tx,nodeId);
       const runtime=(await rows<{session_epoch:number}>(tx,'SELECT session_epoch FROM runtime_nodes WHERE node_id=?',[nodeId]))[0];
       if(!runtime?.session_epoch)throw new ControlError('SESSION_SUPERSEDED',409,'Both Relay Nodes require an online session');
-      const peers=await this.nodes.relayCredentialFacts(tx,nodeId);
+      const peers=await this.nodes.relayCredentialFacts(tx,nodeId,true);
       result.push({facts,sessionEpoch:runtime.session_epoch,credentialUntil:state.credentialUntil,peers});
     }
     return result;
@@ -109,7 +109,21 @@ export class RelayCoordinator {
   }
   async authorizationBound(tx:Transaction,assignments:readonly RuntimeAssignment[]):Promise<number>{
     let bound=Number.MAX_SAFE_INTEGER;
-    for(const id of new Set(assignments.filter(a=>a.role!=='direct').map(a=>a.forwardId))){const record=await this.latest(tx,id);if(!record)throw new Error('Missing Relay authority');const plan=this.plan(record);bound=Math.min(bound,plan.authorizationUntil);for(const node of plan.nodes){const current=await this.nodes.facts(tx,node.nodeId);const peers=await this.nodes.relayCredentialFacts(tx,node.nodeId);bound=Math.min(bound,current.credentialUntil,...peers.map(peer=>peer.validUntil));}}
+    for(const id of new Set(assignments.filter(a=>a.role!=='direct').map(a=>a.forwardId))){
+      const record=await this.latest(tx,id);if(!record)throw new Error('Missing Relay authority');
+      const plan=this.plan(record);bound=Math.min(bound,plan.authorizationUntil);
+      for(const node of plan.nodes){
+        const current=await this.nodes.facts(tx,node.nodeId),peers=await this.nodes.relayCredentialFacts(tx,node.nodeId);
+        const pinned=new Set(plan.nodes.flatMap(part=>part.assignments.flatMap(a=>{
+          const config=a.driver.config as RelayConfig;
+          const peerId=a.role==='relay-ingress'?config.binding.egressNodeId:config.binding.ingressNodeId;
+          return peerId===node.nodeId?config.peerFingerprints:[];
+        })));
+        const credentials=peers.filter(peer=>pinned.has(peer.fingerprint));
+        if(credentials.length!==pinned.size)throw new ControlError('AUTHORIZATION_DENIED',403,'Pinned Relay authority expired');
+        bound=Math.min(bound,current.credentialUntil,...credentials.map(peer=>peer.validUntil));
+      }
+    }
     return bound;
   }
   private async observed(tx:Transaction,node:RelayPreparedPlan['nodes'][number],phase:'prepared'|'active'):Promise<boolean>{
@@ -130,7 +144,12 @@ export class RelayCoordinator {
     if(!forward.spec.path){await write(tx,"UPDATE relay_deployments SET stage='withdrawn',updated_at=? WHERE forward_id=? AND generation=?",[Date.now(),forwardId,record.generation]);return;}
     if(op.status!=='failed'&&!forward.deleting&&forward.spec.enabled&&op.kind!=='revoke'&&!forward.recoverySuspended&&forward.revision===plan.forwardRevision){
       const staleSession=(await Promise.all(plan.nodes.map(async node=>(await rows<{session_epoch:number}>(tx,'SELECT session_epoch FROM runtime_nodes WHERE node_id=?',[node.nodeId]))[0]?.session_epoch!==node.sessionEpoch))).some(Boolean);
-      if(staleSession){const actor=await this.forwarding.authorizer(tx,forward.id);if(actor&&await this.canExecute(tx,actor,forward)){await this.acceptPlan(tx,actor,forward);await this.ledger.accept(tx,forward,{actorId:op.requested_by,scopeId:forward.scopeId,key:`relay-session:${record.generation}`,digest:digest({forwardId,generation:record.generation,reason:'new-session'})},'policy',forward.spec,op.id);return;}}
+      const actor=await this.forwarding.authorizer(tx,forward.id);
+      if(actor&&await this.canExecute(tx,actor,forward)){
+        const current=await this.facts(tx,actor,forward);
+        const changedPins=relayPeerPinsChanged(plan,current);
+        if(staleSession||changedPins){const reason=staleSession?'new-session':'peer-credential';await this.acceptPlan(tx,actor,forward);await this.ledger.accept(tx,forward,{actorId:op.requested_by,scopeId:forward.scopeId,key:`relay-refresh:${record.generation}`,digest:digest({forwardId,generation:record.generation,reason})},'policy',forward.spec,op.id);return;}
+      }
     }
     const stopped=forward.deleting||!forward.spec.enabled||op.kind==='revoke'||op.status==='failed'||forward.recoverySuspended||!await this.authorized(tx,forward,plan);
     if(stopped){await write(tx,"UPDATE relay_deployments SET stage='withdrawn',updated_at=? WHERE forward_id=? AND generation=?",[Date.now(),forwardId,record.generation]);await this.complete(tx,{...record,stage:'withdrawn'},forward,op,plan);return;}

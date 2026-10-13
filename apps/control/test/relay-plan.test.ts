@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import type { Forward } from '@tunex/core';
 import { digest } from '@tunex/contracts';
 import type { RelayConfig } from '@tunex/contracts';
-import { compileRelayPlan } from '../src/modules/runtime/relay-plan.ts';
+import { compileRelayPlan, relayPeerPinsChanged } from '../src/modules/runtime/relay-plan.ts';
 import type { RelayNodeExecutionFacts, ReservedRelayResource } from '../src/modules/runtime/relay-plan.ts';
 import { compileRelayResources } from '../src/modules/runtime/relay-planner.ts';
 import { compileSnapshot } from '../src/modules/runtime/planner.ts';
@@ -54,4 +54,17 @@ test('Relay compiler refuses expired or duplicated peer facts and bounds both No
   input.nodes[1]!.peers = [...input.nodes[1]!.peers, ...input.nodes[1]!.peers]; assert.throws(() => compileRelayPlan(input), /unique peer/);
   const expired = fixture(); expired.nodes[1]!.peers = [{ fingerprint: 'sha256:'+'2'.repeat(64), validUntil: Date.parse(expired.issuedAt) }]; assert.throws(() => compileRelayPlan(expired), /unique peer/);
   const noSession = fixture(); noSession.nodes[0]!.sessionEpoch = 0; assert.throws(() => compileRelayPlan(noSession), /Current session/);
+});
+
+test('Relay pin refresh detects either endpoint change without mutating immutable intent or plan', () => {
+  const input = fixture(), plan = compileRelayPlan(input), before = JSON.stringify(plan);
+  assert.equal(relayPeerPinsChanged(plan, input.nodes), false);
+  assert.equal(relayPeerPinsChanged(plan, [...input.nodes].reverse()), false);
+  for (const index of [0, 1]) {
+    const changed = structuredClone(input.nodes);
+    changed[index]!.peers = [{ fingerprint: 'sha256:' + 'f'.repeat(64), validUntil: Date.parse('2026-10-13T00:40:00Z') }];
+    assert.equal(relayPeerPinsChanged(plan, changed), true);
+  }
+  assert.equal(relayPeerPinsChanged(plan, input.nodes.slice(0, 1)), true);
+  assert.equal(JSON.stringify(plan), before);
 });

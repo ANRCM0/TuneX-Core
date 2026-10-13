@@ -66,7 +66,7 @@ Readiness probes share the peer connection budget. At exact saturation they may
 report downstream degradation while all admitted traffic remains live; evidence
 records the actual health and requires the completed Operation to remain terminal.
 
-Sustained post-restart execution beyond Relay credential overlap, automatic peer
-rotation/pin transitions, complete direct/Relay acceptance, external deployment,
-product Web and release gates remain open. The CI entry is configured; a local pass
+Automatic live peer renewal, pin transitions and expired-bundle recovery have a
+separate [Relay rotation](relay-rotation.md) suite. Complete direct/Relay acceptance,
+external deployment, product Web and release gates remain open. The CI entry is configured; a local pass
 does not claim a remotely executed CI result.
