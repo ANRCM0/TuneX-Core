@@ -61,3 +61,10 @@ two-host/namespace partition behavior, production non-root limits or complete re
 readiness. Remaining Phase 3 gates include failed path compensation across network
 partitions, stale observations at every activation boundary and sustained resource
 pressure. Peer-key/endpoint evolution, Web and release work remain outstanding.
+
+The later [network isolation slice](relay-network-isolation.md) adds actual isolated
+network partitions, activation-boundary/old-session checks and explicit failed-path
+compensation. It also fixes a Runtime intent-lock deadlock found by this regression.
+The current switch command includes the authentic-Report lock-contention check and
+passes 20 checks; the earlier 19-check result above is historical slice evidence.
+Sustained load and the other stated production/transport/Web/release gates remain open.

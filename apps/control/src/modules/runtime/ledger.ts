@@ -253,7 +253,9 @@ export class RuntimeLedger {
                 await write(tx, 'UPDATE retirements SET safe=TRUE WHERE node_id=? AND assignment_id=? AND deployment_generation=? AND binding_fence=?', [nodeId, r.assignment_id, r.deployment_generation, r.binding_fence]);
             }
         }
-        const operations = await rows<Operation>(tx, "SELECT o.* FROM operations o JOIN forwards f ON f.id=o.forward_id AND f.revision=o.target_revision WHERE o.recovery_invalidated=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId'))=? AND (o.status='running' OR o.cleanup_pending=TRUE) ORDER BY o.id FOR UPDATE", [nodeId]);
+        // Runtime already holds the Node lock; the joined intent is read-only.
+        // Locking Forward here inverts the API's Forward -> Node order.
+        const operations = await rows<Operation>(tx, "SELECT o.* FROM operations o JOIN forwards f ON f.id=o.forward_id AND f.revision=o.target_revision WHERE o.recovery_invalidated=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId'))=? AND (o.status='running' OR o.cleanup_pending=TRUE) ORDER BY o.id FOR UPDATE OF o", [nodeId]);
         for (const op of operations) {
             const forward = await forwarding.record(tx, op.scope_id, op.forward_id);
             if(forward.spec.path)continue;

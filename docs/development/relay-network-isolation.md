@@ -22,7 +22,12 @@ regression distinguishes a closed peer listener from an unavailable customer tar
 
 ## Acceptance
 
-`npm run test:relay-isolation` passed 12 checks locally on October 13, 2026.
+The initial `npm run test:relay-isolation` suite passed 12 checks locally on October
+13, 2026, including clean-commit evidence for `132642e`. A thirteenth regression now
+checks both authentic Agent Reports while another transaction holds Forward intent.
+The expanded 13-check suite passed locally alongside the 20-check switch suite and
+7-check direct Linux Agent regression. Each evidence file records its exact SHA and
+whether the tested tree was dirty; development runs are not clean-commit claims.
 
 | Cases | Actual assertions |
 | --- | --- |
@@ -34,6 +39,7 @@ regression distinguishes a closed peer listener from an unavailable customer tar
 | OPS-04/path compensation | An unreachable replacement egress leaves all six old/new physical reservations tracked. An explicitly injected overdue disposable DB execution_deadline triggers the actual scanner and safe two-role withdrawal. A new desired revision explicitly restores the old path; the failed Operation stays failed and unused replacement reservations release. |
 | OPS-07/ADP-10 | A real egress reboot produces a higher session/deployment. Its old signed ready Report receives SESSION_SUPERSEDED while new readiness is held; fresh reports restore traffic without changing desired revision or resetting counters. |
 | FWD-10 cleanup | Deletion closes both client protocols and releases all physical reservations after safe retirement. |
+| Runtime intent contention | A separate MySQL connection holds the real Forward row FOR UPDATE. Both current Agents must durably advance Report sequence in the same sessions before that intent lock is released. |
 
 Reports held at activation boundaries are genuine Agent observations; receiving time
 still defines freshness under ADP semantics. The stale-report test waits real elapsed
@@ -48,6 +54,15 @@ configured; no remote CI execution is claimed.
 Shared verification passed 165 TypeScript tests, all Go tests/builds, generated
 contract and boundary checks, offline TS-to-Go plan parsing, Go vet and native Linux
 race. Successful evidence is written only after owned process/network cleanup passes.
+
+The clean switch regression subsequently exposed a separate pre-existing lock-order
+failure. InnoDB confirmed API update held Forward while waiting on runtime_nodes,
+and Runtime held runtime_nodes while its unqualified Operation/Forward locking JOIN
+waited on Forward. Runtime completion now uses MySQL 8.4 `FOR UPDATE OF o`: it locks
+Operation rows and reads intent under the existing Node lock. Forward CAS, Operation
+locking and terminal-state/lease checks remain enforced. The authentic-Report
+contention regression is also part of the switch suite; it verifies the lock boundary
+without substituting a mock callback or broadening transaction retries.
 
 ## Running
 

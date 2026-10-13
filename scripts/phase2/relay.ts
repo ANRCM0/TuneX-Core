@@ -12,6 +12,7 @@ import { newToken } from '../../apps/control/src/modules/identity.ts';
 import { DEFAULT_POLICY } from '@tunex/contracts';
 import { host,linuxPath,linux,spawnLinux,linuxBinary,topology,viaWSL } from './native-linux.ts';
 import { relaySwitchFaults } from './relay-scenarios.ts';
+import { reportsDuringIntentLock } from './runtime-intent-lock.ts';
 
 const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
 if(!databaseUrl)throw new Error('Disposable MySQL URL required');
@@ -92,6 +93,8 @@ try{
  await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`)).body.health.condition==='ready','Control restart');
  assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(listenPort),'--tag',tag])).stdout).tcp,true);
  pass('Coordinator restart: persisted stages and current leases converge through the scheduled Worker without changing intent');
+ await reportsDuringIntentLock(control.db,created.body.forwardId,agents.map(agent=>agent.nodeId),until);
+ pass('Runtime lock boundary: both genuine Agent Reports commit while another transaction owns Forward intent; the Worker does not acquire a reverse intent lock');
  const noop=await call('PUT',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`,{expectedRevision:1,spec});assert.equal(noop.status,200);assert.equal(noop.body.revision,1);
  const movedSpec={...spec,ingress:{...spec.ingress,listen:{address:'127.0.0.1',port:movedPort}}},changed=await call('PUT',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`,{expectedRevision:1,spec:movedSpec});assert.equal(changed.status,202);
  await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/operations/${changed.body.operationId}`)).body.status==='succeeded','Relay port change');

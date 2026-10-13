@@ -13,6 +13,7 @@ import { startControl } from '../../apps/control/src/server.ts';
 import { newToken } from '../../apps/control/src/modules/identity.ts';
 import { host, linux, linuxPath, linuxBinary, spawnLinux, viaWSL } from './native-linux.ts';
 import { NetworkLab } from './network-lab.ts';
+import { reportsDuringIntentLock } from './runtime-intent-lock.ts';
 
 type Report=RuntimeMessages['ReportRequest'];
 interface OwnedProcess {process:ChildProcess;pid:number;binary:string;identity:string;namespace?:string;errors:string}
@@ -140,6 +141,8 @@ try{
  const bootReady=gate(egress.nodeId,report=>report.sessionEpoch>oldEpoch&&isPhase('active')(report));await stop(egress);await launchAgent(egress);await until(async()=>Boolean(bootReady.report),'new-session downstream active report held');await assertClosed();assert.equal((await latest()).stage,'egress_active');
  const oldBoot=await machineReplay(egress,oldReport);assert.equal(oldBoot.status,409);assert.equal(oldBoot.body.code,'SESSION_SUPERSEDED');assert.equal((await latest()).stage,'egress_active');bootReady.release();await waitHealthy();await until(async()=>(await call('GET',resourcePath)).body.lastOperation.status==='succeeded','restart retirement cleanup',65000);assert.equal((await probe('C')).tcp,true);
  pass('OPS-07/ADP-10: genuine old-session ready is rejected during new-boot activation; fresh reports restore both roles without resetting intent');
+ await reportsDuringIntentLock(control.db,forwardId,[ingress.nodeId,egress.nodeId],until);
+ pass('Runtime lock boundary: both authentic Agent Reports persist while a separate transaction holds the Forward intent row');
  const deleted=await call('DELETE',resourcePath,{expectedRevision:revision});assert.equal(deleted.status,202);await waitOperation(deleted.body.operationId);const [remaining]=await control.db.pool.query<any[]>('SELECT COUNT(*) n FROM port_slots WHERE owner_id=?',[forwardId]);assert.equal(remaining[0].n,0);await assertClosed();
  pass('Isolation cleanup: Forward deletion closes both client protocols and returns every physical reservation');
  const commit=(await execute('git',['rev-parse','HEAD'])).stdout.trim();evidence={commit,workingTreeDirty:Boolean((await execute('git',['status','--porcelain'])).stdout.trim()),command:'npm run test:relay-isolation',checks,caseCoverage:[{caseId:'OPS-03',checks:[1]},{caseId:'OPS-07',checks:[1,2,7,10]},{caseId:'OPS-08',checks:[3,4,5,6]},{caseId:'OPS-04',checks:[8,9]},{caseId:'ADP-07',checks:[7]},{caseId:'ADP-10',checks:[10]}],details,policy,synchronization,kernel:(await linux('/bin/uname',['-a'])).stdout.trim(),topology:`${viaWSL?'Windows locked Control/MySQL and WSL':'Native Linux Control/MySQL and'} three independent Agent network namespaces; isolated bridge, no host NAT/firewall changes; TLS remains end-to-end through Control TCP proxy`,protocolVersion:3,agentSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/tunex-agent-linux':binary)).digest('hex'),fixtureSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/network-fixture-linux':fixture)).digest('hex'),initialGeneration:generation,finalRevision:revision,deadlineInjection:'Disposable Operation execution_deadline only; actual clocks and lease waits unchanged'};

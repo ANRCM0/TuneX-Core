@@ -396,3 +396,24 @@ evidence records its own tested commit/tree status. A native Linux CI job is con
 but not counted as remotely verified. Local Control/MySQL remain on Windows, with
 three WSL Linux namespaces on one physical host. Sustained Relay capacity, production
 privileges, transport evolution, Web, deployment and release gates remain open.
+
+## Runtime Intent Lock Boundary
+
+Baseline: `132642e`, whose clean namespace suite passed 12 checks with actual network
+cleanup (`.artifacts/relay-isolation/run-B4q1dQ/evidence.json`). The switch regression
+then reproduced a 503 after Agent restart: InnoDB diagnostics confirmed opposite
+Forward/runtime_nodes lock ownership, rather than a failed Relay identity or payload.
+
+Runtime completion's Operation/Forward JOIN now explicitly locks only Operation rows
+with MySQL 8.4 `FOR UPDATE OF o`; intent stays a read under the existing Node lock.
+Both Relay suites add a real second-connection Forward lock and require authentic
+Agent Report sequences to advance before release. This preserves CAS, persistent ACK,
+Operation terminal-state and historical lease semantics. The expanded suites contain
+13 namespace checks and 20 switch/fault checks; evidence records the actual tested
+commit and dirty status. These regressions do not complete the remaining roadmap.
+
+Local verification passed 20 Relay switch checks
+(`.artifacts/relay/run-QfwaTn/evidence.json`), 13 namespace checks
+(`.artifacts/relay-isolation/run-wu7g5O/evidence.json`), 7 direct Linux Agent checks
+and the 165-test shared check. These artifacts record baseline `132642e` plus
+dirty=true; committed validation must use the artifact's own recorded SHA/status.
