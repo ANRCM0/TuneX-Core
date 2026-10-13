@@ -1,5 +1,5 @@
 import { digest, DEFAULT_POLICY, parseRuntimeMessage } from '@tunex/contracts';
-import type { RuntimeMessages, RuntimeSnapshot as Snapshot, Observation, Policy } from '@tunex/contracts';
+import type { RuntimeMessages, RuntimeSnapshot as Snapshot, Observation, Policy, RuntimeAssignment } from '@tunex/contracts';
 import { MAX_COUNTER, isCounter } from '@tunex/core';
 import type { Forward } from '@tunex/core';
 import { ControlError } from '../../application/errors.ts';
@@ -21,6 +21,7 @@ interface RuntimeNode {
     received_at: number | null;
 }
 type HelloRequest=RuntimeMessages['HelloRequest'];type HelloResponse=RuntimeMessages['HelloResponse'];type ReportRequest=RuntimeMessages['ReportRequest'];type ReportAck=RuntimeMessages['ReportAck'];
+export interface AppliedObservation extends Observation {nodeId:string;forwardRevision:number;role:RuntimeAssignment['role']}
 export class RuntimeController {
     private readonly db: MySqlUnitOfWork;
     private readonly nodes: Nodes;
@@ -191,7 +192,7 @@ export class RuntimeController {
         });
     }
     async status(tx: Transaction, forward: Forward): Promise<{
-        applied: Observation[];
+        applied: AppliedObservation[];
         health: {
             condition: 'unknown' | 'ready' | 'degraded';
             receivedAt: string | null;
@@ -211,7 +212,10 @@ export class RuntimeController {
             body: unknown;
         }>(tx, 'SELECT body FROM snapshots WHERE node_id=? AND generation=?', [state.node_id, state.snapshot_generation]))[0] : undefined;
         const assignments = current ? json<Snapshot>(current.body).assignments.filter(a => a.forwardId === forward.id) : [];
-        const applied = report?.observations.filter(obs => assignments.some(a => a.assignmentId === obs.assignmentId && a.deploymentGeneration === obs.deploymentGeneration && a.bindingFence === obs.bindingFence)) ?? [];
+        const applied = report?.observations.flatMap(obs => {
+            const assignment=assignments.find(a=>a.assignmentId===obs.assignmentId&&a.deploymentGeneration===obs.deploymentGeneration&&a.bindingFence===obs.bindingFence);
+            return assignment?[{...obs,nodeId:state.node_id,forwardRevision:assignment.forwardRevision,role:assignment.role}]:[];
+        }) ?? [];
         const reported = report ? (await rows<{
             body: unknown;
         }>(tx, 'SELECT body FROM snapshots WHERE node_id=? AND generation=? AND session_epoch=?', [state.node_id, report.acceptedSnapshotGeneration, report.sessionEpoch]))[0] : undefined;

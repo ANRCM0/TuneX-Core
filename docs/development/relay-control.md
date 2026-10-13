@@ -82,3 +82,7 @@ namespace partition testing. Full Phase 3 remains implementing pending the compl
 acceptance matrix, sustained load and network isolation, target/path switch with held
 streams, partial activation/deadline recovery, safe endpoint/key evolution and release
 security review. Product Web, deployment/SBOM/license and release gates remain open.
+
+Later same-host evidence now covers held target/path streams, same-client UDP reset,
+partial ingress bind and injected deadline/retry; see
+[Relay switch and faults](relay-switch-faults.md). Other residual gates remain open.

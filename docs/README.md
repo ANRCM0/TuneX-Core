@@ -72,3 +72,6 @@ Explicit Relay Agent capability, protected peer identity and prepared assignment
 
 Durable two-Node Relay acceptance, readiness coordination and real multiprocess flow:
 [Relay Control](development/relay-control.md).
+
+Held TCP target/path switches, same-client UDP reset and partial activation/deadline/retry:
+[Relay switch and faults](development/relay-switch-faults.md).

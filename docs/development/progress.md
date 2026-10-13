@@ -356,3 +356,20 @@ namespace/two-host and complete Phase 3/release gates remain unverified.
 Local verification on October 13, 2026: 14 Relay acceptance checks, 13 Transport,
 14 direct access, 9 same-protocol recovery, 165 TS tests and Go build/vet/Linux race.
 Each evidence artifact records the tested commit and whether its tree was dirty.
+
+## Relay Held-Stream Switch And Failure Recovery
+
+Baseline: `e7e6212`. Applied API observations now include the derived Forward revision,
+Node and role so clients distinguish a healthy old configuration from an applied new
+intent. Real tagged targets and continuous clients verify target/path switches with
+established TCP, same-client UDP reset, bounded drain and safe former-egress release.
+
+The expanded three-Agent suite passes 19 checks, adding actual external UDP bind
+conflict, full-intent degraded state, scanner cleanup with an explicitly injected
+overdue DB deadline, delayed Report duplicate/terminal protection and explicit retry
+without changing desired revision. Actual clock and leases remain enforced. Shared
+165 TS/Go/build/vet/Linux race gates pass. Details:
+[Relay switch and faults](relay-switch-faults.md).
+
+Full goal stays active. Same-host multiprocess evidence does not complete network
+partition, production limits, transport evolution, product Web or release gates.

@@ -11,6 +11,7 @@ import { startControl } from '../../apps/control/src/server.ts';
 import { newToken } from '../../apps/control/src/modules/identity.ts';
 import { DEFAULT_POLICY } from '@tunex/contracts';
 import { host,linuxPath,linux,spawnLinux,linuxBinary,topology,viaWSL } from './native-linux.ts';
+import { relaySwitchFaults } from './relay-scenarios.ts';
 
 const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
 if(!databaseUrl)throw new Error('Disposable MySQL URL required');
@@ -25,10 +26,11 @@ const dbUrl=new URL(databaseUrl);dbUrl.pathname=`/${database}`;
 const token=newToken(),scope='relay-scope',owner='relay-owner',ca=await readFile(caCert),checks:string[]=[];
 const binary=linuxBinary('tunex-agent'),fixture=linuxBinary('network-fixture'),collector=linuxBinary('time-proof');
 const nativeRoot=`/tmp/tunex-relay-${randomUUID()}`;
-const policy={...DEFAULT_POLICY,pollIntervalSeconds:1,leaseSeconds:30,renewalLeadSeconds:12,observationFreshnessSeconds:5,drainTimeoutSeconds:2,udpIdleTimeoutSeconds:2};
+const switchFaults=process.argv.includes('--switch-faults'),tag=switchFaults?'A':'';
+const policy={...DEFAULT_POLICY,pollIntervalSeconds:1,leaseSeconds:switchFaults?45:30,renewalLeadSeconds:switchFaults?18:12,observationFreshnessSeconds:5,drainTimeoutSeconds:switchFaults?20:2,udpIdleTimeoutSeconds:2};
 const options={databaseUrl:dbUrl.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,worker:false};
 let control:Awaited<ReturnType<typeof startControl>>|undefined,target:ChildProcess|undefined,targetPID:number|undefined;
-const agents:{nodeId:string;root:string;args:string[];process:ChildProcess}[]=[];
+const agents:{nodeId:string;root:string;args:string[];process:ChildProcess;errors?:string}[]=[];
 let releaseReady:(()=>void)|undefined;
 function pass(text:string){checks.push(text);console.log(`PASS ${text}`);}
 async function call(method:string,path:string,input?:unknown,key=randomUUID()):Promise<{status:number;body:any}>{const body=input===undefined?undefined:JSON.stringify(input);return new Promise((resolve,reject)=>{const req=request({hostname:host,port:control!.port,path,method,ca,agent:false,timeout:10000,headers:{authorization:`Bearer ${token}`,'content-type':'application/json','idempotency-key':key,...(body?{'content-length':String(Buffer.byteLength(body))}:{})}},res=>{const parts:Buffer[]=[];res.on('data',chunk=>parts.push(chunk));res.on('end',()=>{try{resolve({status:res.statusCode!,body:JSON.parse(Buffer.concat(parts).toString())})}catch(err){reject(err)}})});req.on('error',reject);req.on('timeout',()=>req.destroy(new Error('Control timeout')));req.end(body)});}
@@ -38,7 +40,7 @@ async function stopNative(root:string){const candidates=await linux('/usr/bin/pg
 try{
  const synchronization=JSON.parse((await linux(collector,['--check'])).stdout);assert.equal(synchronization.synchronized,true);
  control=await startControl(options);await control.control.identity.bootstrap(scope,owner,token);
- target=spawnLinux(fixture,['--mode','target','--run-id',nativeRoot]);const targetStatus=JSON.parse(await new Promise<string>((resolve,reject)=>{target!.stdout!.once('data',chunk=>resolve(chunk.toString()));target!.once('error',reject)}));assert.equal(targetStatus.platform,'linux');assert.equal(targetStatus.runId,nativeRoot);targetPID=targetStatus.pid;
+ target=spawnLinux(fixture,['--mode','target','--tag',tag,'--run-id',nativeRoot]);const targetStatus=JSON.parse(await new Promise<string>((resolve,reject)=>{target!.stdout!.once('data',chunk=>resolve(chunk.toString()));target!.once('error',reject)}));assert.equal(targetStatus.platform,'linux');assert.equal(targetStatus.runId,nativeRoot);targetPID=targetStatus.pid;
  const listenPort=await port(),movedPort=await port(),peerPorts=[await port(),await port()];assert.notEqual(peerPorts[0],peerPorts[1]);
  const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:2,idleTimeoutSeconds:2,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:32};
  assert.equal((await call('PUT',`/api/v1/scopes/${scope}/transport-profiles/secure-relay`,{expectedRevision:0,config:profile})).status,202);
@@ -46,7 +48,7 @@ try{
   const node=await call('POST',`/api/v1/scopes/${scope}/nodes`,{allowedListenerAddresses:['127.0.0.1'],allowedPorts:[listenPort,movedPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false});assert.equal(node.status,201);
   const root=`${nativeRoot}/${role}`,args=['--control',`https://${host}:${control.port}`,'--node',node.body.nodeId,'--ca',linuxPath(caCert),'--state',`${root}/state`,'--journal-key',`${root}/secrets/journal.key`,'--relay'];
   try{await linux('env',[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll']);}catch{throw new Error('Relay enrollment failed; token redacted');}
-  const process=spawnLinux(binary,args);process.stderr!.on('data',()=>{});agents.push({nodeId:node.body.nodeId,root,args,process});
+  const process=spawnLinux(binary,args),entry={nodeId:node.body.nodeId,root,args,process,errors:''};process.stderr!.on('data',chunk=>{entry.errors=(entry.errors+chunk.toString()).slice(-32768);});agents.push(entry);
   await until(async()=>{const [rows]=await control!.db.pool.query<any[]>('SELECT COUNT(*) n FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE',[node.body.nodeId]);return rows[0].n===1;},'peer issuance');
  }
  const [ingress,egress]=agents;
@@ -71,9 +73,9 @@ try{
  pass('Tail-to-head activation: prepared or unacknowledged active downstream keeps the actual client-facing ingress closed');
  releaseReady!();releaseReady=undefined;
  await until(async()=>{await control!.runtime.tick();return (await call('GET',`/api/v1/scopes/${scope}/operations/${created.body.operationId}`)).body.status==='succeeded';},'both roles active');
- const probe=JSON.parse((await linux(fixture,['--mode','probe','--port',String(listenPort)])).stdout);assert.equal(probe.tcp,true);assert.equal(probe.udp,true);
+ const probe=JSON.parse((await linux(fixture,['--mode','probe','--port',String(listenPort),'--tag',tag])).stdout);assert.equal(probe.tcp,true);assert.equal(probe.udp,true);
  const [stage]=await control.db.pool.query<any[]>('SELECT generation,stage,body FROM relay_deployments WHERE forward_id=? ORDER BY generation DESC LIMIT 1',[created.body.forwardId]);assert.equal(stage[0].stage,'active');
- const healthy=await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`);assert.equal(healthy.body.applied.length,4);assert.equal(healthy.body.health.condition,'ready');assert.equal(new Set(healthy.body.applied.map((obs:any)=>obs.nodeId)).size,2);
+ const healthy=await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`);assert.equal(healthy.body.applied.length,4);assert.equal(healthy.body.health.condition,'ready');assert.equal(new Set(healthy.body.applied.map((obs:any)=>obs.nodeId)).size,2);assert.ok(healthy.body.applied.every((obs:any)=>obs.forwardRevision===1));assert.deepEqual([...new Set(healthy.body.applied.map((obs:any)=>obs.role))].sort(),['relay-egress','relay-ingress']);
  pass('Encrypted Relay traffic: real API/Worker/two native Agents/target verify exact bidirectional TCP and UDP payload');
  const egressAssignment=stage[0].body.nodes.find((node:any)=>node.nodeId===egress!.nodeId).assignments.find((a:any)=>a.protocol==='tcp');
  const currentOpen=join(directory,'negative-open.json');await writeFile(currentOpen,JSON.stringify({wireVersion:1,type:'open',action:'probe',requestId:'negative-probe',binding:egressAssignment.driver.config.binding}));
@@ -84,16 +86,16 @@ try{
  const generation=stage[0].generation,renewedBefore=(await control.db.pool.query<any[]>('SELECT snapshot_generation FROM runtime_nodes WHERE node_id=?',[ingress!.nodeId]))[0][0].snapshot_generation;
  await until(async()=>{const [rows]=await control!.db.pool.query<any[]>('SELECT snapshot_generation FROM runtime_nodes WHERE node_id=?',[ingress!.nodeId]);return rows[0].snapshot_generation>renewedBefore;},'Relay renewal');
  const [after]=await control.db.pool.query<any[]>('SELECT generation FROM relay_deployments WHERE forward_id=? ORDER BY generation DESC LIMIT 1',[created.body.forwardId]);assert.equal(after[0].generation,generation);
- assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(listenPort)])).stdout).udp,true);
+ assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(listenPort),'--tag',tag])).stdout).udp,true);
  pass('Relay renewal: higher whole-Node Snapshot retains the same execution generation and both checked protocols');
  const savedPort=control.port;await control.close();control=await startControl({...options,port:savedPort,initializeAuthority:false,worker:true});
  await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`)).body.health.condition==='ready','Control restart');
- assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(listenPort)])).stdout).tcp,true);
+ assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(listenPort),'--tag',tag])).stdout).tcp,true);
  pass('Coordinator restart: persisted stages and current leases converge through the scheduled Worker without changing intent');
  const noop=await call('PUT',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`,{expectedRevision:1,spec});assert.equal(noop.status,200);assert.equal(noop.body.revision,1);
  const movedSpec={...spec,ingress:{...spec.ingress,listen:{address:'127.0.0.1',port:movedPort}}},changed=await call('PUT',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`,{expectedRevision:1,spec:movedSpec});assert.equal(changed.status,202);
  await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/operations/${changed.body.operationId}`)).body.status==='succeeded','Relay port change');
- assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort)])).stdout).udp,true);
+ assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort),'--tag',tag])).stdout).udp,true);
  const [oldPort]=await control.db.pool.query<any[]>('SELECT COUNT(*) n FROM port_slots WHERE node_id=? AND port=? AND owner_id=?',[ingress!.nodeId,listenPort,created.body.forwardId]);assert.equal(oldPort[0].n,0);
  const disabled=await call('PUT',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`,{expectedRevision:2,spec:{...movedSpec,enabled:false}});assert.equal(disabled.status,202);
  await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/operations/${disabled.body.operationId}`)).body.status==='succeeded','Relay disable');
@@ -107,7 +109,7 @@ try{
  let denied=false;try{await linux(fixture,['--mode','probe','--port',String(movedPort)]);}catch{denied=true;}assert.equal(denied,true);
  const restoredGrant=await call('PUT',grantsPath,{expectedRevision:2,allowed:true});assert.equal(restoredGrant.status,202);assert.equal(restoredGrant.body.operationIds.length,1);
  await until(async()=>{await control!.runtime.tick();return (await call('GET',`/api/v1/scopes/${scope}/operations/${restoredGrant.body.operationIds[0]}`)).body.status==='succeeded';},'Profile restoration');
- assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort)])).stdout).tcp,true);
+ assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort),'--tag',tag])).stdout).tcp,true);
  pass('Profile execution authority: withdrawal persists a two-Node cleanup Operation and restoration requires fresh deployment/fences');
  const nodeGrantPath=`/api/v1/scopes/${scope}/nodes/${egress!.nodeId}/grants/${owner}`;
  const nodeWithdrawn=await call('PUT',nodeGrantPath,{expectedRevision:1,allowed:false});assert.equal(nodeWithdrawn.status,202);assert.equal(nodeWithdrawn.body.operationIds.length,1);
@@ -115,22 +117,27 @@ try{
  await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/operations/${nodeWithdrawn.body.operationIds[0]}`)).body.status==='succeeded','egress grant withdrawal');
  const nodeRestored=await call('PUT',nodeGrantPath,{expectedRevision:2,allowed:true});assert.equal(nodeRestored.status,202);assert.equal(nodeRestored.body.operationIds.length,1);
  await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/operations/${nodeRestored.body.operationIds[0]}`)).body.status==='succeeded','egress grant restoration');
- assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort)])).stdout).udp,true);
+ assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort),'--tag',tag])).stdout).udp,true);
  pass('Egress Node authority: downstream use-grant withdrawal stops the whole Relay and explicit restoration recompiles both roles');
  const [beforeBoot]=await control.db.pool.query<any[]>('SELECT MAX(generation) generation FROM relay_deployments WHERE forward_id=?',[created.body.forwardId]);
- await stopNative(egress!.root);egress!.process.kill();egress!.process=spawnLinux(binary,egress!.args);egress!.process.stderr!.on('data',()=>{});
+ await stopNative(egress!.root);egress!.process.kill();egress!.process=spawnLinux(binary,egress!.args);egress!.process.stderr!.on('data',chunk=>{egress!.errors=((egress!.errors??'')+chunk.toString()).slice(-32768);});
  await until(async()=>{await control!.runtime.tick();const [latest]=await control!.db.pool.query<any[]>('SELECT generation,stage FROM relay_deployments WHERE forward_id=? ORDER BY generation DESC LIMIT 1',[created.body.forwardId]);const resource=await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`);return latest[0].generation>beforeBoot[0].generation&&latest[0].stage==='active'&&resource.body.lastOperation.status==='succeeded';},'fresh egress session and historical lease',60000);
- const reconnected=JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort)])).stdout);assert.equal(reconnected.tcp,true);assert.equal(reconnected.udp,true);
+ const reconnected=JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort),'--tag',tag])).stdout);assert.equal(reconnected.tcp,true);assert.equal(reconnected.udp,true);
  pass('Relay restart: new egress session creates a higher immutable deployment while old-session authorization remains in the retirement ledger');
+ let desiredRevision=4,scenarioDetails:unknown;
+ if(switchFaults){const result=await relaySwitchFaults({control:()=>control!,call,until,pass,agents,scope,forwardId:created.body.forwardId,spec:movedSpec,revision:4,nativeRoot,binary,fixture,caPath:caCert,freePort:port,unusedListenPort:listenPort});desiredRevision=result.revision;scenarioDetails=result.details;}
  await stopNative(egress!.root);egress!.process.kill();
  await until(async()=>{const status=await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`);return status.body.health.condition!=='ready';},'downstream loss observable');
  assert.equal((await call('GET',`/api/v1/scopes/${scope}/operations/${created.body.operationId}`)).body.status,'succeeded');
  pass('Downstream loss: ingress probe stops reporting ready while the completed Operation remains terminal');
- const deleted=await call('DELETE',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`,{expectedRevision:4});assert.equal(deleted.status,202);
+ const deleted=await call('DELETE',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`,{expectedRevision:desiredRevision});assert.equal(deleted.status,202);
  await until(async()=>{await control!.runtime.tick();return (await call('GET',`/api/v1/scopes/${scope}/operations/${deleted.body.operationId}`)).body.status==='succeeded';},'offline egress safe deletion',60000);
  const [remaining]=await control.db.pool.query<any[]>('SELECT COUNT(*) n FROM port_slots WHERE owner_id=?',[created.body.forwardId]);assert.equal(remaining[0].n,0);assert.equal((await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`)).status,404);
  pass('Relay deletion: both Nodes retain historical lease/fence facts until safe reclamation, including an offline egress');
- const commit=(await execute('git',['rev-parse','HEAD'])).stdout.trim();await writeFile(join(directory,'evidence.json'),JSON.stringify({commit,workingTreeDirty:Boolean((await execute('git',['status','--porcelain'])).stdout.trim()),command:'npm run test:relay',checks,policy,synchronization,agentSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/tunex-agent-linux':binary)).digest('hex'),kernel:(await linux('/bin/uname',['-a'])).stdout.trim(),topology:`${topology}; two independent Agents; same Linux host`,deploymentGeneration:generation,protocolVersion:3},null,2));console.log(`Relay acceptance passed: ${checks.length} checks. Evidence ${directory}`);
+ const commit=(await execute('git',['rev-parse','HEAD'])).stdout.trim();await writeFile(join(directory,'evidence.json'),JSON.stringify({commit,workingTreeDirty:Boolean((await execute('git',['status','--porcelain'])).stdout.trim()),command:switchFaults?'npm run test:relay-switch':'npm run test:relay',checks,policy,synchronization,agentSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/tunex-agent-linux':binary)).digest('hex'),fixtureSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/network-fixture-linux':fixture)).digest('hex'),kernel:(await linux('/bin/uname',['-a'])).stdout.trim(),topology:`${topology}; ${agents.length} independent Agents; same Linux host`,deploymentGeneration:generation,protocolVersion:3,scenarioDetails},null,2));console.log(`Relay acceptance passed: ${checks.length} checks. Evidence ${directory}`);
+}catch(error){
+ if(control){const [operations]=await control.db.pool.query<any[]>('SELECT id,forward_id,target_revision,kind,status,cleanup_pending,last_error FROM operations');const [runtime]=await control.db.pool.query<any[]>('SELECT node_id,session_epoch,snapshot_generation,last_report FROM runtime_nodes');const [deployments]=await control.db.pool.query<any[]>('SELECT * FROM relay_deployments');await writeFile(join(directory,'failure.json'),JSON.stringify({error:error instanceof Error?error.message:'Relay failed',operations,runtime,deployments,agents:agents.map(agent=>({nodeId:agent.nodeId,errors:agent.errors??'',exitCode:agent.process.exitCode}))},null,2));console.error(`Failure evidence: ${directory}`);}
+ throw error;
 }finally{
  releaseReady?.();
  for(const agent of agents){await stopNative(agent.root).catch(()=>{});agent.process.kill();}

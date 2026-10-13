@@ -1,6 +1,6 @@
 # Control API / Operation v1
 
-状态：**Accepted for implementation，尚未实现**。只约束 VNext `/api/v1`；历史 V2 API 不提供兼容。协议独立版本：机器端使用 [ADP/2](../protocol/agent-deployment-v2.md)。
+状态：**Accepted，正在分阶段实现与验收**。只约束 VNext `/api/v1`；历史 V2 API 不提供兼容。机器端当前使用 [ADP/3](../protocol/agent-deployment-v3.md)，ADP/2 为被取代的 direct 基线。
 
 ## 1. 最小 API
 
@@ -18,6 +18,12 @@
 启用/禁用通过 PUT 修改 enabled；禁止客户端覆盖 id/scopeId/revision。非重放请求仍须先通过 expectedRevision CAS 检查；配置规范化后完全相同的 PUT 返回 200 和当前资源，不增加 revision，不创建 Operation；请求幂等记录仍须保存。DELETE 是逻辑删除并递增 revision；普通 GET 对已删除资源返回 404，清理进度通过 Operation 查询。需要导出历史信息的审计接口不属于最小 API。
 
 请求校验失败 400/422；认证/权限失败 401/403；CAS 冲突 409 `REVISION_CONFLICT`（可附有权限查看的 currentRevision）；端口预留冲突 409 `PORT_RESERVED`；相同幂等键不同请求 409 `IDEMPOTENCY_CONFLICT`；资源上限 429。实际 Agent bind 失败是异步 Operation 结果，不能把已经提交的 202 追溯改成请求失败。
+
+`applied` 的每条观测附带由已发布 Assignment 推导的 `nodeId,role,forwardRevision`，
+同时保留 deploymentGeneration/fence/phase/condition。更新被接受时，旧 applied
+可能仍健康；`health=ready` 不能被解释为新 desired revision 已应用。客户端必须
+比较 applied.forwardRevision 与 desired.revision，Relay 还须覆盖所有当前角色/协议。
+旧 drain 的进度及清理通过 Operation 查询，不能用旧 ready 观测完成新 Operation。
 
 ## 2. 幂等请求与并发
 
