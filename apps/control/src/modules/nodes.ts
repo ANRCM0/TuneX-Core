@@ -20,6 +20,7 @@ export interface NodeRecord {
     revoked: number;
 }
 export class Nodes {
+    static async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE nodes SET revoked=TRUE');await write(tx,'UPDATE node_credentials SET revoked=TRUE');}
     private readonly db: MySqlUnitOfWork;
     private readonly identity: Identity;
     private readonly ca: NodeCertificateAuthority;

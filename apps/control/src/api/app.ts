@@ -8,7 +8,8 @@ import { ControlError, invalid } from '../application/errors.ts';
 import type { ControlApplication } from '../application/control.ts';
 import type { NodePolicy } from '../modules/nodes.ts';
 import type { RuntimeController } from '../modules/runtime/controller.ts';
-export function createApp(control: ControlApplication, runtime: RuntimeController): Hono<{
+import type { AuthorityStore } from '../infrastructure/authority.ts';
+export function createApp(control: ControlApplication, runtime: RuntimeController,authority:AuthorityStore): Hono<{
     Bindings: HttpBindings;
     Variables: {
         actor: string;
@@ -26,7 +27,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
             fingerprint: string;
         };
     }>();
-    app.use('*', async (c, next) => { c.set('requestId', randomUUID()); c.header('Cache-Control', 'no-store'); await next(); });
+    app.use('*', async (c, next) => { c.set('requestId', randomUUID()); c.header('Cache-Control', 'no-store');if(c.req.path!=='/health')await authority.allow(); await next(); });
     app.onError((error, c) => {
         const code = error.message.split(':')[0]!;
         const statuses: Record<string, ControlError['status']> = { INVALID_CONFIG: 422, RESOURCE_LIMIT: 429, INTEGRITY_FAILURE: 409, AUTHORIZATION_DENIED: 403, UNSUPPORTED_CAPABILITY: 409, RESOURCE_CONFLICT: 409, FENCING_REJECTED: 409, LEASE_EXPIRED: 409 };
@@ -84,7 +85,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
             throw new ControlError('SESSION_SUPERSEDED', 409, 'Valid session header required');
         return Number(value);
     }
-    app.get('/health', c => c.json({ status: 'ok', protocolVersion: 2 }));
+    app.get('/health',async c=>c.json({status:(await authority.read()).maintenance?'maintenance':'ok',protocolVersion:2}));
     app.get('/api/v1/scopes/:scope/members', async (c) => c.json(await control.identity.listMembers(c.get('actor'), scope(c.req.param('scope')))));
     app.put('/api/v1/scopes/:scope/members/:actor', async (c) => {
         const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;
@@ -129,13 +130,14 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         const forward = await control.forwarding.get(tx, scopeId, c.req.param('id'));
         const state = await runtime.status(tx, forward);
         const operation = await control.ledger.latest(tx, forward.id);
-        return { desired: { revision: forward.revision, spec: forward.spec, deleting: false }, ...state, lastOperation: operation ? { id: operation.id, kind: operation.kind, status: operation.status, cleanupPending: Boolean(operation.cleanup_pending) } : null };
+        const metadata=await control.forwarding.record(tx,scopeId,forward.id);
+        return { desired: { revision: forward.revision, spec: forward.spec, deleting: false,recoverySuspended:metadata.recoverySuspended }, ...state, lastOperation: operation ? { id: operation.id, kind: operation.kind, status: operation.status,recoveryInvalidated:Boolean(operation.recovery_invalidated), cleanupPending: Boolean(operation.cleanup_pending) } : null };
     })));
     app.get('/api/v1/scopes/:scope/operations/:id', async (c) => c.json(await control.db.transaction(async (tx) => {
         const scopeId = scope(c.req.param('scope'));
         await control.identity.scope(tx, c.get('actor'), scopeId);
         const op = await control.ledger.get(tx, scopeId, c.req.param('id'));
-        return { id: op.id, kind: op.kind, requestedBy: op.requested_by, sourceOperationId: op.source_operation_id, status: op.status, targetRevision: op.target_revision, cleanupPending: Boolean(op.cleanup_pending), lastError: op.last_error };
+        return { id: op.id, kind: op.kind, requestedBy: op.requested_by, sourceOperationId: op.source_operation_id, status: op.status,recoveryInvalidated:Boolean(op.recovery_invalidated), targetRevision: op.target_revision, cleanupPending: Boolean(op.cleanup_pending), lastError: op.last_error };
     })));
     app.post('/api/v1/scopes/:scope/operations/:id/retry', async (c) => {
         const input = parseJson(await body(c.req.raw)) as Record<string, unknown>;

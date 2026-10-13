@@ -54,3 +54,6 @@ OS synchronization providers, protected proof and native Linux Agent acceptance:
 
 Owner-managed members, explicit Node grants and persistent execution authority:
 [Access management](development/access-management.md).
+
+Independent authority, old-backup recovery, operator commands and bounded Linux capacity evidence:
+[Recovery and capacity](development/recovery-and-capacity.md).

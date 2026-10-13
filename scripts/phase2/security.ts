@@ -76,7 +76,7 @@ async function kill(child: ChildProcess | undefined) { if (!child || child.exitC
     return; const exit = once(child, 'exit'); child.kill(); await exit; }
 const binary = resolve('.artifacts', process.platform === 'win32' ? 'tunex-agent.exe' : 'tunex-agent');
 try {
-    control = await startControl({ databaseUrl: dbUrl.toString(), caCert, caKey, serverCert, serverKey, openssl, stateDirectory: join(directory, 'control'), port: 0, credentialOverlapSeconds: 20 });
+    control = await startControl({ databaseUrl: dbUrl.toString(), caCert, caKey, serverCert, serverKey, openssl, stateDirectory: join(directory, 'control'), initializeAuthority:true, port: 0, credentialOverlapSeconds: 20 });
     await control.control.identity.bootstrap(scope, actor, ownerToken);
     target = spawn(process.execPath, ['scripts/phase1/echo-target.mjs'], { stdio: ['ignore', 'pipe', 'pipe'] });
     const targetPort = JSON.parse(await new Promise<string>(resolve => target!.stdout!.once('data', chunk => resolve(chunk.toString())))).port as number;

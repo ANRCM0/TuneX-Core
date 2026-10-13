@@ -14,7 +14,7 @@ commit 字段是测试时 HEAD；另记录 Agent SHA 和测试命令，明确未
 | 在线 Go Agent TCP | implementing（本地验证通过） | mTLS Hello、MAC journal、先持久化后 bind、目标 CIDR/DNS、TCP 半关闭、限额、租约/证书截止与报告重试 |
 | CLI / Phase 1 本地实网 | implementing（本地验证通过） | HTTPS 创建/查询 Node、Forward 与 Operation；独立 Agent/target 进程的双向 payload；事务与协议故障注入 |
 | Linux CI / 实节点证据 | implementing | CI 已配置 MySQL 8.4.9、Go race 与同一实网脚本；本次未运行远程 Linux CI |
-| Phase 2 生命周期、安全与恢复 | planned | 更新/启停/删除/重试、UDP、持久清理、证书轮换/撤销、Linux 时钟/挂起故障与完整验收 |
+| Phase 2 生命周期、安全与恢复 | implementing | 更新/启停/删除/重试、UDP、持久清理、证书轮换/撤销、Linux 时钟/挂起故障与完整验收 |
 
 命令：`npm run check`、`node scripts/run-go.mjs vet ./...`、
 `npm run test:phase1`。本地基线仍为84项 TS测试；新 Go TCP/state/control
@@ -152,3 +152,33 @@ Linux/MySQL access gate is configured but is not counted as remotely verified.
 Details: [Access management](access-management.md). Remaining work includes full
 capacity/recovery/release evidence, Relay/transport contracts and implementation,
 the product Web surface and identity/recovery ergonomics. Full project goal stays active.
+
+
+## Independent authority, old-backup recovery and bounded capacity
+
+Baseline: `61d97f4`. Control now persists each issued authorization upper bound in
+an independently protected MAC record before database publication. Explicit fresh
+initialization, maintenance and database/CA binding prevent old MySQL restoration
+from silently resetting execution authority. Missing or partial authority state
+cannot be initialized over existing Nodes.
+
+The operator CLI performs actual single-transaction MySQL backup and checked
+fresh-database restore. It waits for historical leases plus clock/error margins,
+quarantines old Node credentials, observations, Operations, Forward execution and
+idempotency replay, rotates account credentials into a protected file, and requires
+the exact recovery review ID before resuming Control. Rebuilding each reviewed
+Forward requires a fresh Node identity and explicit new revision; Agent high-water
+is retained. SQL/manifest/credential files are synchronized and permission-protected;
+backup encryption and Windows ACL remain deployment responsibilities.
+
+The real native Linux Agent recovery suite passed 9 checks. The capacity suite passed
+6 bounded checks, measuring 64 TCP/32 UDP, resource reclamation, unchanged execution
+across renewal and simultaneous reconnect of four actual Agents. These local samples
+are not maximum performance promises. Current topology is Windows locked Control/
+MySQL with native WSL/Linux Agent/client/target. Native Linux CI entry points are
+configured; no remote run is claimed. Unit/static gates and Linux race also pass.
+
+Details and operator procedure: [Recovery and capacity](recovery-and-capacity.md).
+Evidence remains in ignored `.artifacts/recovery/` and `.artifacts/capacity/`, with
+commit/dirty state and platform data. Full Phase 2 stays implementing pending matrix,
+budget and environment gates; Relay, product Web and release work remain outstanding.

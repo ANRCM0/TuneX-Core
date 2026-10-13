@@ -10,6 +10,7 @@ import type { Forwarding } from '../forwarding.ts';
 import { RuntimeLedger } from './ledger.ts';
 import type { Operation } from './ledger.ts';
 import { compileSnapshot } from './planner.ts';
+import type { AuthorityStore } from '../../infrastructure/authority.ts';
 interface RuntimeNode {
     node_id: string;
     session_epoch: number;
@@ -25,7 +26,8 @@ export class RuntimeController {
     private readonly forwarding: Forwarding;
     private readonly ledger: RuntimeLedger;
     private readonly policy: Policy;
-    constructor(db: MySqlUnitOfWork, nodes: Nodes, forwarding: Forwarding, ledger: RuntimeLedger, policy: Policy = { ...DEFAULT_POLICY }) { this.db = db; this.nodes = nodes; this.forwarding = forwarding; this.ledger = ledger; this.policy = { ...parseMessage('HelloResponse', JSON.stringify({ protocolVersion: 2, nodeId: 'policy-validation', bootId: 'policy-validation', sessionEpoch: 1, serverTime: new Date().toISOString(), policy })).policy }; if (this.policy.leaseSeconds > 300 || this.policy.maxClockSkewSeconds > 5)
+    private readonly authority:AuthorityStore|undefined;
+    constructor(db: MySqlUnitOfWork, nodes: Nodes, forwarding: Forwarding, ledger: RuntimeLedger, policy: Policy = { ...DEFAULT_POLICY },authority?:AuthorityStore) { this.db = db; this.nodes = nodes; this.forwarding = forwarding; this.ledger = ledger;this.authority=authority; this.policy = { ...parseMessage('HelloResponse', JSON.stringify({ protocolVersion: 2, nodeId: 'policy-validation', bootId: 'policy-validation', sessionEpoch: 1, serverTime: new Date().toISOString(), policy })).policy }; if (this.policy.leaseSeconds > 300 || this.policy.maxClockSkewSeconds > 5)
         throw new Error('Runtime policy cannot weaken the 300-second/5-second authorization baseline'); }
     private async locked(tx: Transaction, nodeId: string, epoch?: number): Promise<RuntimeNode> {
         const state = (await rows<RuntimeNode>(tx, 'SELECT * FROM runtime_nodes WHERE node_id=? FOR UPDATE', [nodeId]))[0];
@@ -99,6 +101,8 @@ export class RuntimeController {
             if (!current || current.status !== 'running' || current.claim_token !== claim.token || claim.until <= Date.now() || current.execution_deadline <= Date.now())
                 throw new ControlError('STALE_CLAIM', 409, 'Worker claim expired before publication');
         }
+        if(!this.authority)throw new Error('Protected authority recorder required before publication');
+        await this.authority.issue(Date.parse(snapshot.validUntil),this.policy.leaseSeconds,this.policy.maxClockSkewSeconds);
         await write(tx, 'INSERT INTO snapshots(node_id,generation,session_epoch,valid_until,body) VALUES(?,?,?,?,?)', [state.node_id, snapshot.snapshotGeneration, state.session_epoch, Date.parse(snapshot.validUntil), JSON.stringify(snapshot)]);
         await write(tx, 'UPDATE runtime_nodes SET snapshot_generation=? WHERE node_id=?', [snapshot.snapshotGeneration, state.node_id]);
         await this.ledger.recordLeases(tx, snapshot);

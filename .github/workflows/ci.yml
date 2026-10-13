@@ -71,6 +71,25 @@ jobs:
       - run: npm run test:security
       - run: npm run test:faults
       - run: npm run test:access
+      - name: Use backup clients inside the locked MySQL service image
+        run: |
+          mkdir -p .artifacts/mysql-clients
+          cat > .artifacts/mysql-clients/mysql <<'SH'
+          #!/bin/sh
+          exec docker run --rm -i --network host --user "$(id -u):$(id -g)" --env MYSQL_PWD --volume "$PWD:$PWD" --workdir "$PWD" --entrypoint /usr/bin/mysql mysql:8.4.9 "$@"
+          SH
+          cat > .artifacts/mysql-clients/mysqldump <<'SH'
+          #!/bin/sh
+          exec docker run --rm --network host --user "$(id -u):$(id -g)" --env MYSQL_PWD --volume "$PWD:$PWD" --workdir "$PWD" --entrypoint /usr/bin/mysqldump mysql:8.4.9 "$@"
+          SH
+          chmod 700 .artifacts/mysql-clients/mysql .artifacts/mysql-clients/mysqldump
+          .artifacts/mysql-clients/mysql --version
+          .artifacts/mysql-clients/mysqldump --version
+      - run: npm run test:recovery
+        env:
+          TUNEX_MYSQL: .artifacts/mysql-clients/mysql
+          TUNEX_MYSQLDUMP: .artifacts/mysql-clients/mysqldump
+      - run: npm run test:capacity
       - name: Preserve redacted acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -82,3 +101,5 @@ jobs:
             .artifacts/security/**/evidence.json
             .artifacts/faults/**/evidence.json
             .artifacts/access/**/evidence.json
+            .artifacts/recovery/**/evidence.json
+            .artifacts/capacity/**/evidence.json

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sort"
 	"syscall"
 	"time"
 )
@@ -29,7 +30,14 @@ func run() error {
 	port := flag.Int("port", 0, "Loopback Agent port for probe")
 	runID := flag.String("run-id", "", "Acceptance run identity for target cleanup")
 	udpOnly := flag.Bool("udp-only", false, "Probe only UDP")
+	tcpClients := flag.Int("tcp-clients", 64, "Bounded TCP clients for load")
+	udpClients := flag.Int("udp-clients", 32, "Bounded UDP clients for load")
+	seconds := flag.Int("seconds", 3, "Bounded load duration")
+	payload := flag.Int("payload-bytes", 1024, "Bounded verified payload size")
 	flag.Parse()
+	if *mode == "load" && *port > 0 && *port <= 65535 {
+		return load(*port, *tcpClients, *udpClients, *seconds, *payload)
+	}
 	if *mode == "target" {
 		return target(*runID)
 	}
@@ -48,6 +56,9 @@ func run() error {
 		return monitor(*port)
 	}
 	return fmt.Errorf("target or probe with valid port required")
+}
+func sortLatency(values []int64) {
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
 }
 func target(runID string) error {
 	tcp, err := net.Listen("tcp", "127.0.0.1:0")

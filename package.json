@@ -23,7 +23,10 @@
     "test:security": "node scripts/phase2/security.ts",
     "test:faults": "node scripts/phase2/faults.ts",
     "test:linux-agent": "node scripts/phase2/linux-agent.ts",
-    "test:access": "node scripts/phase2/access.ts"
+    "test:access": "node scripts/phase2/access.ts",
+    "ops": "node scripts/ops/cli.ts",
+    "test:recovery": "node scripts/phase2/recovery.ts",
+    "test:capacity": "node scripts/phase2/capacity.ts"
   },
   "devDependencies": { "@types/node": "24.10.1", "typescript": "5.9.3" }
 }

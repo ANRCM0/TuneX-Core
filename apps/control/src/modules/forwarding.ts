@@ -4,13 +4,14 @@ import { notFound } from '../application/errors.ts';
 import { json, rows, write } from '../infrastructure/mysql.ts';
 import type { Transaction } from '../infrastructure/mysql.ts';
 export class Forwarding {
+    async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE forwards SET recovery_suspended=TRUE');}
     async forNode(tx: Transaction, nodeId: string): Promise<Forward[]> {
         const records = await rows<{
             id: string;
             scope_id: string;
             revision: number;
             spec: unknown;
-        }>(tx, "SELECT * FROM forwards WHERE deleting=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? ORDER BY id", [nodeId]);
+        }>(tx, "SELECT * FROM forwards WHERE deleting=FALSE AND recovery_suspended=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? ORDER BY id", [nodeId]);
         return records.map(record => ({ id: record.id, scopeId: record.scope_id, revision: record.revision, spec: json(record.spec) }));
     }
     async insert(tx: Transaction, forward: Forward, actorId: string): Promise<void> {
@@ -51,6 +52,7 @@ export class Forwarding {
     }
     async record(tx: Transaction, scopeId: string, id: string): Promise<Forward & {
         deleting: boolean;
+        recoverySuspended:boolean;
     }> {
         const row = (await rows<{
             id: string;
@@ -58,13 +60,14 @@ export class Forwarding {
             revision: number;
             spec: unknown;
             deleting: number;
+            recovery_suspended:number;
         }>(tx, 'SELECT * FROM forwards WHERE id=? AND scope_id=?', [id, scopeId]))[0];
         if (!row)
             notFound();
-        return { id: row.id, scopeId: row.scope_id, revision: row.revision, spec: json(row.spec), deleting: Boolean(row.deleting) };
+        return { id: row.id, scopeId: row.scope_id, revision: row.revision, spec: json(row.spec), deleting: Boolean(row.deleting),recoverySuspended:Boolean(row.recovery_suspended) };
     }
     async replace(tx: Transaction, current: Forward, next: Forward): Promise<void> {
-        const changed = await write(tx, 'UPDATE forwards SET revision=?,spec=?,deleting=FALSE WHERE id=? AND revision=? AND deleting=FALSE', [next.revision, JSON.stringify(next.spec), current.id, current.revision]);
+        const changed = await write(tx, 'UPDATE forwards SET revision=?,spec=?,deleting=FALSE,recovery_suspended=FALSE WHERE id=? AND revision=? AND deleting=FALSE', [next.revision, JSON.stringify(next.spec), current.id, current.revision]);
         if (changed !== 1)
             throw new ControlError('REVISION_CONFLICT', 409, 'Concurrent intent change');
         await write(tx, 'INSERT INTO forward_revisions(forward_id,revision,spec) VALUES(?,?,?)', [next.id, next.revision, JSON.stringify(next.spec)]);

@@ -45,6 +45,7 @@ func run() error {
 	rotate := flag.Bool("rotate", false, "Rotate Node key/certificate after online Hello without resetting execution state")
 	timeProof := flag.String("time-proof", "", "Optional supervisor OS synchronization proof")
 	timeProofKey := flag.String("time-proof-key", "", "Protected MAC key for the supervisor proof")
+	diagnostics := flag.Bool("diagnostics", false, "Write protected local resource samples for operator measurements")
 	flag.Parse()
 	if (*timeProof == "") != (*timeProofKey == "") {
 		return fmt.Errorf("time-proof and time-proof-key must be provided together")
@@ -81,7 +82,11 @@ func run() error {
 	if _, err := rand.Read(boot); err != nil {
 		return err
 	}
-	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath, Rotate: *rotate, TimeProof: *timeProof, TimeProofKey: *timeProofKey})
+	diagnosticsPath := ""
+	if *diagnostics {
+		diagnosticsPath = filepath.Join(root, "diagnostics", "status.json")
+	}
+	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath, Rotate: *rotate, TimeProof: *timeProof, TimeProofKey: *timeProofKey, Diagnostics: diagnosticsPath})
 	if err != nil {
 		return err
 	}

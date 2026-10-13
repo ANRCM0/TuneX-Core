@@ -1,0 +1,8 @@
+ALTER TABLE forwards ADD COLUMN recovery_suspended BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE operations ADD COLUMN recovery_invalidated BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE idempotency ADD COLUMN recovery_invalidated BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE recovery_events (
+  id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+  created_at BIGINT UNSIGNED NOT NULL,
+  details JSON NOT NULL
+);

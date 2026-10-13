@@ -17,6 +17,7 @@ export interface RequestIdentity {
     digest: string;
 }
 export class Idempotency {
+    async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE idempotency SET recovery_invalidated=TRUE');}
     async claim<R extends {
         status: 200 | 202;
         body: unknown;
@@ -27,7 +28,9 @@ export class Idempotency {
             request_digest: string;
             http_status: number | null;
             response: unknown;
+            recovery_invalidated:number;
         }>(tx, 'SELECT * FROM idempotency WHERE scope_id=? AND actor_id=? AND request_key=? FOR UPDATE', args))[0]!;
+        if(record.recovery_invalidated)throw new ControlError('RECOVERY_REPLAY_REQUIRES_REVIEW',409,'Restored request history cannot be automatically replayed');
         if (record.request_digest !== request.digest)
             throw new ControlError('IDEMPOTENCY_CONFLICT', 409, 'Idempotency key was used for another request');
         if (record.http_status !== null)

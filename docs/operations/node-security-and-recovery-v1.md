@@ -1,6 +1,6 @@
 # Node Security & Recovery v1
 
-状态：**Accepted for implementation，尚未实现**。适用于 ADP/2、Node Management 和发布流程。此文定义最小管理行为，不声称已部署 PKI、备份或恢复工具。
+状态：**Accepted for implementation；direct 安全与停机恢复已分切片实现，完整发布验收仍未完成**。适用于 ADP/2、Node Management 和发布流程。实际实现与运维命令见 [Node security](../development/node-security.md) 和 [Recovery and capacity](../development/recovery-and-capacity.md)。
 
 ## 1. 注册与最小权限
 
@@ -40,7 +40,7 @@ VNext 初版采用保守停机恢复，不保证恢复旧备份后透明延续 N
 3. 恢复数据库并检查一致性，只把旧意图作为待审阅数据。旧快照、Operation、观测和幂等记录可能回退，不能据其声称之前的操作从未发生或仍成功。
 4. 在独立安全存储中轮换 enrollment/Node 信任材料，关闭旧 Node 身份授权；给 Agent 通过可信管理通道安装新的 Control 信任，退役旧身份并重新注册新 Node ID。不得在同一个 Node ID 下把计数器归零。
 5. 审阅恢复的 Forward、删除意图、授权和端口事实，再以新 Node 身份和新 Operation 有意重建；未知状态保持暂停，防止从旧备份复活已撤销规则。幂等历史不完整时要求人工核对，不自动重放外部写请求。
-6. 真实验证 TLS、目标策略、端口冲突、TCP/UDP 和旧凭据拒绝后退出维护模式。保留恢复审计、备份时间、影响范围与数据损失说明。
+6. 人工审阅完成后，以精确恢复 ID 开放控制面；此时旧 Node 仍撤销，未知 Forward 仍暂停。以新 Node/新 revision 逐项重建，并在开放外部客户端流量前真实验证 TLS、目标策略、端口冲突、TCP/UDP 和旧凭据拒绝。保留恢复审计、备份时间、影响范围与数据损失说明。
 
 从最新完整备份恢复也必须演练。未来可设计独立 trust epoch 的自动恢复协议，但不得用临时清空 Agent high-water 代替。
 

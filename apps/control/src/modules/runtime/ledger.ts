@@ -29,6 +29,7 @@ export interface Operation {
     previous_spec: unknown;
     created_at: number;
     requested_by: string;
+    recovery_invalidated:number;
 }
 interface Retirement {
     node_id: string;
@@ -43,6 +44,13 @@ interface Retirement {
     safe: number;
 }
 export class RuntimeLedger {
+    async quarantineRecovery(tx:Transaction):Promise<void>{
+        await write(tx,'UPDATE operations SET recovery_invalidated=TRUE,claim_token=NULL,claim_until=NULL');
+        await write(tx,'UPDATE retirements SET safe=TRUE');
+        await write(tx,'UPDATE runtime_nodes SET last_report=NULL,received_at=NULL');
+        const previous=await rows<{node_id:string;generation:number;body:unknown}>(tx,'SELECT s.node_id,s.generation,s.body FROM snapshots s JOIN runtime_nodes r ON r.node_id=s.node_id AND r.snapshot_generation=s.generation');
+        for(const row of previous){const snapshot=json<Snapshot>(row.body);for(const a of snapshot.assignments){const operation=await this.latest(tx,a.forwardId);if(operation)await write(tx,'INSERT INTO retirements(node_id,assignment_id,deployment_generation,binding_fence,forward_id,operation_id,body,retirement_generation,safe) VALUES(?,?,?,?,?,?,?,?,TRUE) ON DUPLICATE KEY UPDATE safe=TRUE',[row.node_id,a.assignmentId,a.deploymentGeneration,a.bindingFence,a.forwardId,operation.id,JSON.stringify(a),Math.min(MAX_COUNTER,row.generation+1)]);}}
+    }
     private readonly policy: Policy;
     private readonly authorization: {
         canExecute(tx: Transaction, actor: string, forward: Forward): Promise<boolean>;
@@ -66,7 +74,7 @@ export class RuntimeLedger {
         const assignments: Assignment[] = [];
         for (const forward of forwards) {
             const op = operations.find(op => op.forward_id === forward.id && op.target_revision === forward.revision);
-            if (!op || !(op.status === 'succeeded' || ((op.status === 'running' || (includeAccepted && op.status === 'accepted')) && op.execution_deadline > Date.now())))
+            if (!op || op.recovery_invalidated || !(op.status === 'succeeded' || ((op.status === 'running' || (includeAccepted && op.status === 'accepted')) && op.execution_deadline > Date.now())))
                 continue;
             if (!forward.spec.enabled)
                 continue;
@@ -98,7 +106,7 @@ export class RuntimeLedger {
     async verifyPublishable(tx: Transaction, assignments: readonly Assignment[]): Promise<void> {
         for (const assignment of assignments) {
             const op = (await rows<Operation>(tx, 'SELECT * FROM operations WHERE forward_id=? AND target_revision=? ORDER BY created_at DESC,id DESC LIMIT 1 FOR UPDATE', [assignment.forwardId, assignment.forwardRevision]))[0];
-            if (!op || !(op.status === 'succeeded' || (op.status === 'running' && op.execution_deadline > Date.now())))
+            if (!op || op.recovery_invalidated || !(op.status === 'succeeded' || (op.status === 'running' && op.execution_deadline > Date.now())))
                 throw new ControlError('STALE_CLAIM', 409, 'Operation expired during compilation');
         }
     }
@@ -224,7 +232,7 @@ export class RuntimeLedger {
                 await write(tx, 'UPDATE retirements SET safe=TRUE WHERE node_id=? AND assignment_id=? AND deployment_generation=? AND binding_fence=?', [nodeId, r.assignment_id, r.deployment_generation, r.binding_fence]);
             }
         }
-        const operations = await rows<Operation>(tx, "SELECT o.* FROM operations o JOIN forwards f ON f.id=o.forward_id AND f.revision=o.target_revision WHERE JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId'))=? AND (o.status='running' OR o.cleanup_pending=TRUE) ORDER BY o.id FOR UPDATE", [nodeId]);
+        const operations = await rows<Operation>(tx, "SELECT o.* FROM operations o JOIN forwards f ON f.id=o.forward_id AND f.revision=o.target_revision WHERE o.recovery_invalidated=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId'))=? AND (o.status='running' OR o.cleanup_pending=TRUE) ORDER BY o.id FOR UPDATE", [nodeId]);
         for (const op of operations) {
             const forward = await forwarding.record(tx, op.scope_id, op.forward_id);
             const pending = (await rows<{
@@ -282,8 +290,8 @@ export class RuntimeLedger {
     }
     async claim(tx: Transaction): Promise<Operation | undefined> {
         const now = Date.now();
-        await write(tx, "UPDATE operations SET status='failed',last_error=?,cleanup_pending=TRUE,claim_token=NULL,claim_until=NULL,updated_at=? WHERE status IN ('accepted','running') AND execution_deadline<=?", [JSON.stringify({ code: 'EXECUTION_DEADLINE', retryable: false }), now, now]);
-        const op = (await rows<Operation>(tx, "SELECT * FROM operations WHERE status IN ('accepted','running') AND (claim_until IS NULL OR claim_until<=?) AND execution_deadline>? ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED", [now, now]))[0];
+        await write(tx, "UPDATE operations SET status='failed',last_error=?,cleanup_pending=TRUE,claim_token=NULL,claim_until=NULL,updated_at=? WHERE recovery_invalidated=FALSE AND status IN ('accepted','running') AND execution_deadline<=?", [JSON.stringify({ code: 'EXECUTION_DEADLINE', retryable: false }), now, now]);
+        const op = (await rows<Operation>(tx, "SELECT * FROM operations WHERE recovery_invalidated=FALSE AND status IN ('accepted','running') AND (claim_until IS NULL OR claim_until<=?) AND execution_deadline>? ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED", [now, now]))[0];
         if (!op)
             return undefined;
         const token = randomUUID();

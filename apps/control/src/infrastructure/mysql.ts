@@ -12,14 +12,17 @@ export async function write(tx: Pool | Transaction, sql: string, args: unknown[]
 }
 export class MySqlUnitOfWork {
     readonly pool: Pool;
+    guard: (()=>Promise<void>)|undefined;
     constructor(url: string) { this.pool = createPool({ uri: url, connectionLimit: 8, supportBigNumbers: true, bigNumberStrings: false, timezone: 'Z' }); }
     async transaction<T>(action: (tx: Transaction) => Promise<T>): Promise<T> {
         for (let attempt = 0;; attempt++) {
             const tx = await this.pool.getConnection();
             try {
+                await this.guard?.();
                 await tx.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
                 await tx.beginTransaction();
                 const result = await action(tx);
+                await this.guard?.();
                 await tx.commit();
                 return result;
             }

@@ -27,6 +27,7 @@ type Options struct {
 	URL, NodeID, BootID, Certificate, PrivateKey, CA, Journal, JournalKey string
 	Rotate                                                                bool
 	TimeProof, TimeProofKey                                               string
+	Diagnostics                                                           string
 }
 type httpError struct {
 	status int
@@ -206,6 +207,25 @@ func (runner *Runner) Run(ctx context.Context) error {
 	}
 	if err := runner.initializeGuard(); err != nil {
 		return err
+	}
+	if runner.options.Diagnostics != "" {
+		diagnosticDone := make(chan struct{})
+		go func() {
+			defer close(diagnosticDone)
+			ticker := time.NewTicker(500 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					if err := runner.writeDiagnostics(false); err != nil {
+						fmt.Fprintln(os.Stderr, "Local diagnostics unavailable")
+					}
+				}
+			}
+		}()
+		defer func() { cancel(); <-diagnosticDone; runner.stop(); runner.writeDiagnostics(true) }()
 	}
 	serverTime, err := time.Parse(time.RFC3339Nano, runner.hello.ServerTime)
 	if err != nil {
@@ -396,9 +416,9 @@ func (runner *Runner) poll(ctx context.Context) error {
 			return fmt.Errorf("PERSISTENCE_FAILURE: %w", err)
 		}
 	}
-	runner.journal = next
 	runner.mutex.Lock()
 	defer runner.mutex.Unlock()
+	runner.journal = next
 	if ctx.Err() != nil || ticket.Allow() != nil {
 		return fmt.Errorf("LEASE_EXPIRED: Authorization ended before execution")
 	}

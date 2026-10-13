@@ -61,6 +61,8 @@ docker compose -f deploy/compose.dev.yaml up -d --wait
 该 Compose 只提供开发 MySQL，绑定本机回环地址；不部署 Control/Agent。
 Phase 1 已建立真实 MySQL 事务/Operation 与 mTLS Agent 的网络测试。
 Phase 2 的 Linux namespace/容器测试须使用独立 client、Agent、target，
-实际断言 TCP payload、UDP 回包和资源回收；当前没有此验收的通过证据。
+实际断言 TCP payload、UDP 回包和资源回收。已有混合平台原生 Linux Agent
+证据见 [System time](system-time.md)，恢复/容量入口见 [Recovery and capacity](recovery-and-capacity.md)；
+完整 Linux 栈与全部矩阵出口仍待验证。
 
 实施状态见 [progress.md](progress.md)，验收要求见 [acceptance-v1.md](../testing/acceptance-v1.md)。

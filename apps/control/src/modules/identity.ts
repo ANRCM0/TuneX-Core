@@ -7,6 +7,11 @@ export function tokenHash(token: string): string { return createHash('sha256').u
 export function newToken(): string { return randomBytes(32).toString('base64url'); }
 export function validBearerToken(value: unknown): value is string { return typeof value === 'string' && value.length >= 32 && value.length <= 128 && !/[\r\n]/.test(value) && /^[A-Za-z0-9_-]+$/.test(value); }
 export class Identity {
+    async quarantineRecovery(tx:Transaction):Promise<{actorId:string;token:string;owner:boolean}[]>{
+        const accounts=await rows<{id:string;owner:number}>(tx,'SELECT a.id,EXISTS(SELECT 1 FROM scopes s WHERE s.owner_id=a.id) owner FROM accounts a ORDER BY a.id FOR UPDATE');const credentials:{actorId:string;token:string;owner:boolean}[]=[];
+        for(const account of accounts){const token=newToken();await write(tx,'UPDATE accounts SET token_hash=? WHERE id=?',[tokenHash(token),account.id]);credentials.push({actorId:account.id,token,owner:Boolean(account.owner)});}
+        await write(tx,'UPDATE scope_members m JOIN scopes s ON s.id=m.scope_id SET m.active=FALSE,m.can_manage=FALSE WHERE m.actor_id<>s.owner_id');return credentials;
+    }
     private readonly db: MySqlUnitOfWork;
     constructor(db: MySqlUnitOfWork) { this.db = db; }
     async bootstrap(scopeId: string, actorId: string, token: string): Promise<void> {

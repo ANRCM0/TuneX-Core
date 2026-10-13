@@ -37,7 +37,7 @@ const sockets: ReturnType<typeof connect>[] = [];
 const datagrams: ReturnType<typeof createSocket>[] = [];
 const checks: string[] = [];
 const policy = { ...DEFAULT_POLICY, pollIntervalSeconds: 1, leaseSeconds: 18, renewalLeadSeconds: 8, drainTimeoutSeconds: 30 };
-const configuration = { databaseUrl: dbUrl.toString(), caCert, caKey, serverCert, serverKey, openssl, stateDirectory: join(directory, 'control'), port: 0, policy };
+const configuration = { databaseUrl: dbUrl.toString(), caCert, caKey, serverCert, serverKey, openssl, stateDirectory: join(directory, 'control'), initializeAuthority:true, port: 0, policy };
 function pass(message: string) { checks.push(message); console.log(`PASS ${message}`); }
 async function call(method: string, path: string, input?: unknown) { const raw = input === undefined ? undefined : JSON.stringify(input); return new Promise<{
     status: number;

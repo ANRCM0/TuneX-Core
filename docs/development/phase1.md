@@ -43,8 +43,12 @@ export TUNEX_SERVER_KEY=/secure/control/server.key
 export TUNEX_CONTROL_STATE=/secure/control/state
 export TUNEX_OWNER_TOKEN="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
 npm run control:bootstrap -- scope-dev owner-dev
+export TUNEX_AUTHORITY_INITIALIZE=1 # First launch of a fresh deployment only
 npm run control
 ```
+
+Remove the initialization flag after the first launch. Protect the independent
+authority state and key separately from MySQL backups; see [Recovery and capacity](recovery-and-capacity.md).
 
 The default endpoint is `https://127.0.0.1:41001`. `TUNEX_CONTROL_HOST` and
 `TUNEX_CONTROL_PORT` override the bind. `TUNEX_OPENSSL` may point to OpenSSL.

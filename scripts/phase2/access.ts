@@ -47,7 +47,7 @@ const binaryPath = viaWsl ? '.artifacts/tunex-agent-linux' : '.artifacts/tunex-a
 const binary = linuxPath(binaryPath), fixture = linuxPath(viaWsl ? '.artifacts/network-fixture-linux' : '.artifacts/network-fixture'), collector = linuxPath(viaWsl ? '.artifacts/time-proof-linux' : '.artifacts/time-proof');
 const nativeRoot = `/tmp/tunex-linux-${randomUUID()}`;
 const runtimePolicy = { ...DEFAULT_POLICY, pollIntervalSeconds: 1, leaseSeconds: 18, renewalLeadSeconds: 8 };
-const serverOptions = { databaseUrl: dbUrl.toString(), caCert, caKey, serverKey, serverCert, openssl, stateDirectory: join(directory, 'control'), port: 0, host, policy: runtimePolicy };
+const serverOptions = { databaseUrl: dbUrl.toString(), caCert, caKey, serverKey, serverCert, openssl, stateDirectory: join(directory, 'control'), initializeAuthority:true, port: 0, host, policy: runtimePolicy };
 async function call(method: string, path: string, input?: unknown, bearer = token, requestKey: string = randomUUID()) {
     const body = input === undefined ? undefined : JSON.stringify(input);
     return new Promise<{

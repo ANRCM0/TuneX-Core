@@ -84,8 +84,7 @@ export class ControlApplication {
             if (!decision.ok)
                 throw new ControlError(decision.errors[0]!.code, 409, decision.errors[0]!.message);
             const next = decision.value;
-            if (next.spec.ingress.nodeId !== current.spec.ingress.nodeId)
-                throw new ControlError('UNSUPPORTED_CAPABILITY', 422, 'Changing ingress Node requires the later multi-node coordinator');
+            if (next.spec.ingress.nodeId !== current.spec.ingress.nodeId){const restored=await this.forwarding.record(tx,scopeId,id);const oldNode=await this.nodes.state(tx,current.spec.ingress.nodeId);if(!restored.recoverySuspended||!oldNode.revoked)throw new ControlError('UNSUPPORTED_CAPABILITY',422,'Live Node moves require the later multi-node coordinator');for(const nodeId of [current.spec.ingress.nodeId,next.spec.ingress.nodeId].sort())await this.ledger.lockNode(tx,nodeId);}
             const facts = await this.nodes.authorized(tx, actorId, next);
             await this.ledger.lockNode(tx, facts.nodeId);
             compileDirect({ ...next, spec: { ...next.spec, enabled: true } }, facts, next.spec.protocols.map(protocol => ({ nodeId: facts.nodeId, forwardId: next.id, protocol, port: next.spec.ingress.listen.port, bindingFence: 1, deploymentGeneration: 1 })));
@@ -149,6 +148,7 @@ export class ControlApplication {
             const forward = await this.forwarding.currentForUpdate(tx, scopeId, sourceReference.forward_id);
             await this.ledger.lockNode(tx, forward.spec.ingress.nodeId);
             const source = await this.ledger.get(tx, scopeId, sourceOperationId);
+            if(source.recovery_invalidated)throw new ControlError('OPERATION_SUPERSEDED',409,'Restored operation is not an authoritative deployment attempt');
             if (forward.revision !== expectedRevision || source.target_revision !== forward.revision)
                 throw new ControlError('OPERATION_SUPERSEDED', 409, 'Operation no longer targets an editable desired revision');
             if (source.status !== 'failed')

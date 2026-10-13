@@ -53,7 +53,7 @@ async function eventually(action:()=>Promise<boolean>,timeout=30000):Promise<voi
 async function freePort():Promise<number>{const socket=createServer();socket.listen(0,'127.0.0.1');await once(socket,'listening');const port=(socket.address() as {port:number}).port;await new Promise<void>(resolve=>socket.close(()=>resolve()));return port;}
 const agentPath=resolve('.artifacts',process.platform==='win32'?'tunex-agent.exe':'tunex-agent');
 try{
-  server=await startControl({databaseUrl:url.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),port:0,worker:false});
+  server=await startControl({databaseUrl:url.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,worker:false});
   await server.control.identity.bootstrap(scope,actor,token);
   target=spawn(process.execPath,['scripts/phase1/echo-target.mjs'],{stdio:['ignore','pipe','pipe']});
   const targetLine=await new Promise<string>((resolve,reject)=>{target!.stdout!.once('data',chunk=>resolve(chunk.toString()));target!.once('error',reject);});

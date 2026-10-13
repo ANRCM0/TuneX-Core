@@ -9,16 +9,19 @@ import { ControlApplication } from './application/control.ts';
 import { RuntimeController } from './modules/runtime/controller.ts';
 import { createApp } from './api/app.ts';
 import type { Policy } from '@tunex/contracts';
+import { AuthorityStore,trustDigest } from './infrastructure/authority.ts';
 
-export interface ServerOptions { databaseUrl:string; caCert:string; caKey:string; serverCert:string; serverKey:string; openssl:string; stateDirectory:string; port:number; host?:string; worker?:boolean;credentialOverlapSeconds?:number;policy?:Policy }
-export async function startControl(options:ServerOptions):Promise<{ port:number; db:MySqlUnitOfWork; control:ControlApplication; runtime:RuntimeController; close:()=>Promise<void> }> {
+export interface ServerOptions { databaseUrl:string; caCert:string; caKey:string; serverCert:string; serverKey:string; openssl:string; stateDirectory:string; port:number; host?:string; worker?:boolean;credentialOverlapSeconds?:number;policy?:Policy;initializeAuthority?:boolean }
+export async function startControl(options:ServerOptions):Promise<{ port:number; db:MySqlUnitOfWork; control:ControlApplication; runtime:RuntimeController;authority:AuthorityStore; close:()=>Promise<void> }> {
   const db=new MySqlUnitOfWork(options.databaseUrl); await db.migrate();
+  const [records]=await db.pool.query<any[]>("SELECT CONCAT(@@server_uuid,':',DATABASE()) name,(SELECT COUNT(*) FROM nodes) nodes");const authority=new AuthorityStore(options.stateDirectory);
+  try{await authority.initialize(records[0].name,trustDigest(await readFile(options.caCert)),options.initializeAuthority===true&&records[0].nodes===0);}catch(error){await db.close();throw error;}db.guard=()=>authority.allow();
   const identity=new Identity(db), ca=new NodeCertificateAuthority(options.openssl,options.caCert,options.caKey,options.stateDirectory);
   const nodes=new Nodes(db,identity,ca,options.credentialOverlapSeconds??120), control=new ControlApplication(db,identity,nodes,options.policy);
-  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy), app=createApp(control,runtime);
+  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy,authority), app=createApp(control,runtime,authority);
   const server=createServer({ key:await readFile(options.serverKey),cert:await readFile(options.serverCert),ca:await readFile(options.caCert),requestCert:true,rejectUnauthorized:false,minVersion:'TLSv1.3' },getRequestListener(app.fetch));
   await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(options.port,options.host??'127.0.0.1',resolve);});
   let busy=false, active:Promise<void>=Promise.resolve();
-  const interval=options.worker===false?undefined:setInterval(()=>{ if(busy)return;busy=true;active=runtime.tick().catch(()=>{console.error('Runtime tick failed');}).finally(()=>{busy=false;}); },250);
-  return { port:(server.address() as {port:number}).port,db,control,runtime,close:async()=>{clearInterval(interval);await active;server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await db.close();} };
+  const interval=options.worker===false?undefined:setInterval(()=>{ if(busy)return;busy=true;active=authority.read().then(record=>record.maintenance?undefined:runtime.tick()).catch(()=>{console.error('Runtime tick failed');}).finally(()=>{busy=false;}); },250);
+  return { port:(server.address() as {port:number}).port,db,control,runtime,authority,close:async()=>{clearInterval(interval);await active;server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await db.close();} };
 }
