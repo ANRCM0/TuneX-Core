@@ -28,6 +28,9 @@ func main() {
 func run() error {
 	mode := flag.String("mode", "", "target or probe")
 	port := flag.Int("port", 0, "Loopback Agent port for probe")
+	host := flag.String("host", "127.0.0.1", "Explicit fixture IPv4 bind or probe address")
+	upstreamHost := flag.String("upstream-host", "", "Opaque TCP proxy upstream address")
+	upstreamPort := flag.Int("upstream-port", 0, "Opaque TCP proxy upstream port")
 	runID := flag.String("run-id", "", "Acceptance run identity for target cleanup")
 	udpOnly := flag.Bool("udp-only", false, "Probe only UDP")
 	tcpOnly := flag.Bool("tcp-only", false, "Probe only TCP")
@@ -48,14 +51,20 @@ func run() error {
 	if len(*tag) > 32 || len(*nextTag) > 32 {
 		return fmt.Errorf("Bounded fixture tag required")
 	}
+	if address := net.ParseIP(*host); address == nil || address.To4() == nil || address.IsUnspecified() || address.IsMulticast() {
+		return fmt.Errorf("Explicit unicast fixture IPv4 required")
+	}
+	if *mode == "tcp-proxy" {
+		return tcpProxy(*host, *upstreamHost, *upstreamPort, *runID)
+	}
 	if *mode == "relay-negative" && *port > 0 && *port <= 65535 {
-		return relayNegative(*port, *relayCA, *relayCert, *relayKey, *relayNode, *relayPin, *relayOpen, *oldTLS)
+		return relayNegative(*host, *port, *relayCA, *relayCert, *relayKey, *relayNode, *relayPin, *relayOpen, *oldTLS)
 	}
 	if *mode == "load" && *port > 0 && *port <= 65535 {
 		return load(*port, *tcpClients, *udpClients, *seconds, *payload)
 	}
 	if *mode == "target" {
-		return target(*runID, *tag)
+		return target(*runID, *tag, *host)
 	}
 	if *mode == "port" {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -69,7 +78,7 @@ func run() error {
 		if *udpOnly && *tcpOnly {
 			return fmt.Errorf("Select only one probe protocol")
 		}
-		return probe(*port, *udpOnly, *tcpOnly, *tag)
+		return probe(*port, *udpOnly, *tcpOnly, *tag, *host)
 	}
 	if *mode == "monitor" && *port > 0 && *port <= 65535 {
 		return monitor(*port, *tag)
@@ -85,14 +94,14 @@ func run() error {
 func sortLatency(values []int64) {
 	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
 }
-func target(runID, tag string) error {
-	tcp, err := net.Listen("tcp", "127.0.0.1:0")
+func target(runID, tag, host string) error {
+	tcp, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
 	if err != nil {
 		return err
 	}
 	defer tcp.Close()
 	port := tcp.Addr().(*net.TCPAddr).Port
-	udp, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: port})
+	udp, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(host), Port: port})
 	if err != nil {
 		return err
 	}
@@ -131,13 +140,13 @@ func target(runID, tag string) error {
 	<-context.Done()
 	return nil
 }
-func probe(port int, udpOnly, tcpOnly bool, tag string) error {
+func probe(port int, udpOnly, tcpOnly bool, tag, host string) error {
 	payload := make([]byte, 256)
 	if _, err := rand.Read(payload); err != nil {
 		return err
 	}
 	if !udpOnly {
-		socket, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 5*time.Second)
+		socket, err := net.DialTimeout("tcp", net.JoinHostPort(host, fmt.Sprint(port)), 5*time.Second)
 		if err != nil {
 			return err
 		}
@@ -161,7 +170,7 @@ func probe(port int, udpOnly, tcpOnly bool, tag string) error {
 		checksum := sha256.Sum256(payload)
 		return json.NewEncoder(os.Stdout).Encode(map[string]any{"tcp": true, "udp": false, "payloadSHA": hex.EncodeToString(checksum[:]), "tag": tag})
 	}
-	udp, err := net.DialTimeout("udp", fmt.Sprintf("127.0.0.1:%d", port), 5*time.Second)
+	udp, err := net.DialTimeout("udp", net.JoinHostPort(host, fmt.Sprint(port)), 5*time.Second)
 	if err != nil {
 		return err
 	}

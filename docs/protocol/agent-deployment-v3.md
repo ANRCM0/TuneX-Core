@@ -1,7 +1,7 @@
 # Agent Deployment Protocol v3：完整资源契约
 
-状态：direct 在线实现与本地 Linux Agent 验收已完成，Relay 全链路尚未开放。
-Control/Agent 使用 ADP/3、完整物理资源快照和受保护 RuntimeJournal。依据
+状态：direct 与两节点加密 Relay 在线实现已完成，本地实网与网络隔离切片通过；
+完整阶段与发布验收仍在推进。Control/Agent 使用 ADP/3、完整物理资源快照和受保护 RuntimeJournal。依据
 [ADR-0003](../decisions/0003-native-relay-tls13.md)，资源角色变化采用协议 3。
 
 [完整 Schema](schemas/adp-v3-runtime.schema.json) 固定 HelloRequest/Response、

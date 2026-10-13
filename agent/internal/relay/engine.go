@@ -477,6 +477,9 @@ func (e *Engine) dialPeer(action string) (*tls.Conn, error) {
 	config := e.assignment.Driver.Config
 	raw, err := e.dialTarget("tcp", *config.PeerEndpoint)
 	if err != nil {
+		if strings.SplitN(err.Error(), ":", 2)[0] == "TARGET_UNAVAILABLE" {
+			return nil, fmt.Errorf("DOWNSTREAM_UNAVAILABLE: %w", err)
+		}
 		return nil, err
 	}
 	success := false

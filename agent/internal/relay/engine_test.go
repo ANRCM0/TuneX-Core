@@ -8,6 +8,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"io"
 	"net"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -424,5 +425,27 @@ func TestRelayRepeatedDrainAndAuthorizationCannotExtendRetiredFlow(t *testing.T)
 	}
 	if err := ingress.Activate(); err == nil {
 		t.Fatal("retired execution reactivated")
+	}
+}
+
+func TestRelayPeerOutageAndCustomerTargetOutageRemainDistinct(t *testing.T) {
+	target := tcpTarget(t, "", false)
+	ingress, egress := makePair(t, "tcp", target, 2, func() error { return nil })
+	if err := egress.Activate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := ingress.Activate(); err != nil {
+		t.Fatal(err)
+	}
+	egress.Close()
+	if err := ingress.Activate(); err == nil || !strings.HasPrefix(err.Error(), "DOWNSTREAM_UNAVAILABLE:") {
+		t.Fatalf("peer outage must identify the downstream link: %v", err)
+	}
+	missing := adp3relay.Target{Host: "127.0.0.1", Port: freePort(t, "tcp")}
+	if connection, err := ingress.dialTarget("tcp", missing); err == nil || err.Error() != "TARGET_UNAVAILABLE" {
+		if connection != nil {
+			connection.Close()
+		}
+		t.Fatalf("customer target outage must retain its own classification: %v", err)
 	}
 }

@@ -99,3 +99,8 @@ No production-ready claims based solely on source inspection, green unit tests, 
 - 发布：所有声明支持能力的验收，以及 REL-01..03 和第 4 节 release gate。未支持的能力明确标 N/A 并写理由，不能把缺失测试当通过。
 
 每条证据记录 `caseId, status(planned/implementing/verified), commit, command, environment, topology, expected, actual, logs`。本次新增 Schema/fixture 是设计证据，不是部署、故障注入或生产验收证据。
+
+当前真实网络隔离切片覆盖 OPS-03/04/07/08 及 ADP-07/10 的 Relay 激活、断链、
+旧报告与换路径补偿部分；命令 `npm run test:relay-isolation`。逐项断言、证据位置
+和环境限制见 [Relay network isolation](../development/relay-network-isolation.md)。
+这些部分通过不等于完整阶段、持续负载或发布门槛全部完成。

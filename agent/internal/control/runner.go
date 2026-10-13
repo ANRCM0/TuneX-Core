@@ -147,7 +147,7 @@ func executionError(a adp3.Assignment, err error) (string, bool) {
 	switch code {
 	case "AUTHENTICATION_FAILED", "AUTHORIZATION_DENIED", "INVALID_CONFIG", "INTEGRITY_FAILURE", "UNSUPPORTED_CAPABILITY", "TARGET_REJECTED", "LEASE_EXPIRED":
 		return code, false
-	case "RESOURCE_LIMIT", "DOWNSTREAM_NOT_ACTIVE", "TARGET_UNAVAILABLE":
+	case "RESOURCE_LIMIT", "DOWNSTREAM_NOT_ACTIVE", "DOWNSTREAM_UNAVAILABLE", "TARGET_UNAVAILABLE":
 		return code, true
 	default:
 		if strings.Contains(err.Error(), "bind:") {

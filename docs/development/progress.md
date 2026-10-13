@@ -373,3 +373,26 @@ without changing desired revision. Actual clock and leases remain enforced. Shar
 
 Full goal stays active. Same-host multiprocess evidence does not complete network
 partition, production limits, transport evolution, product Web or release gates.
+
+## Relay Network Namespace Isolation And Compensation
+
+Baseline: `8bf7fe4`. Three actual Linux Agents now execute in distinct network
+namespaces with run-owned bridge links and scoped internal-port packet drops.
+End-to-end HTTPS authentication through an opaque Control proxy remains enforced.
+The experiment found and fixed unreachable Relay peers being misclassified as
+customer target outages; those peer failures now report retryable
+`DOWNSTREAM_UNAVAILABLE` while target/authorization errors retain their meanings.
+
+The 12-check suite verifies prepared/stale-observation activation barriers, actual
+activation and active-network partitions, unchanged-generation recovery, genuine
+old-generation/session replay refusal, failed replacement-path deadline withdrawal,
+explicit new-revision compensation and physical cleanup. Deadline injection is only
+an overdue disposable DB Operation; clocks, synchronization and historical lease
+waits remain real. Details: [Relay network isolation](relay-network-isolation.md).
+
+Clean prior-slice evidence: `8bf7fe4` passed 19 Relay switch/fault checks with
+dirty=false (`.artifacts/relay/run-ddaHsm/evidence.json`). Current isolated-network
+evidence records its own tested commit/tree status. A native Linux CI job is configured
+but not counted as remotely verified. Local Control/MySQL remain on Windows, with
+three WSL Linux namespaces on one physical host. Sustained Relay capacity, production
+privileges, transport evolution, Web, deployment and release gates remain open.

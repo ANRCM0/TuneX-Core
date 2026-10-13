@@ -16,7 +16,7 @@ import (
 )
 
 // The request has the real current binding. Failure cannot be credited to malformed Open data.
-func relayNegative(port int, caPath, certificatePath, keyPath, node, pin, openPath string, oldTLS bool) error {
+func relayNegative(host string, port int, caPath, certificatePath, keyPath, node, pin, openPath string, oldTLS bool) error {
 	ca, err := os.ReadFile(caPath)
 	if err != nil {
 		return err
@@ -49,7 +49,7 @@ func relayNegative(port int, caPath, certificatePath, keyPath, node, pin, openPa
 		config.MinVersion = tls.VersionTLS12
 		config.MaxVersion = tls.VersionTLS12
 	}
-	socket, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 2*time.Second)
+	socket, err := net.DialTimeout("tcp", net.JoinHostPort(host, fmt.Sprint(port)), 2*time.Second)
 	if err != nil {
 		return fmt.Errorf("Live internal Relay listener required")
 	}

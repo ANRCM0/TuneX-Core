@@ -2,7 +2,7 @@
 
 **基线：v1.1 · 决策状态：Accepted for implementation · 2026-10-12**
 
-当前机器协议为 **ADP/2**；ADP/1 仅保留历史记录。基线版本、Core/Forward v1、Control API v1 与 ADP 协议版本分别管理，不混用。规范文档描述目标行为；开发入口与实施进度单独记录当前实现和证据，不代表完整目标已完成。
+当前机器协议为 **ADP/3**；ADP/1–2 保留历史契约与演进记录。基线版本、Core/Forward v1、Control API v1 与 ADP 协议版本分别管理，不混用。规范文档描述目标行为；开发入口与实施进度单独记录当前实现和证据，不代表完整目标已完成。
 
 “定稿”在本仓库意指：作为后续开发的**设计基线**，修改必须通过 ADR、契约同步和测试；**不**表示已编写或已验证实现。
 
@@ -75,3 +75,6 @@ Durable two-Node Relay acceptance, readiness coordination and real multiprocess 
 
 Held TCP target/path switches, same-client UDP reset and partial activation/deadline/retry:
 [Relay switch and faults](development/relay-switch-faults.md).
+
+Independent Linux network namespaces, actual Relay partitions and activation/path compensation:
+[Relay network isolation](development/relay-network-isolation.md).
