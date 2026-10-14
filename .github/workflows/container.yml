@@ -32,11 +32,12 @@ jobs:
       - name: Verify local-only liveness semantics
         run: node --test deploy/test/*.test.mjs
       - name: Build VNext Control image
-        run: docker build --pull -f deploy/Dockerfile.control -t tunex-control:ci .
+        run: docker build --pull --build-arg TUNEX_SOURCE_REVISION="$GITHUB_SHA" -f deploy/Dockerfile.control -t tunex-control:ci .
       - name: Confirm Control runs as non-root and uses Node
         run: |
           test "$(docker image inspect -f '{{.Config.User}}' tunex-control:ci)" = "10001:10001"
           docker run --rm --entrypoint node tunex-control:ci --version
+          test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' tunex-control:ci)" = "$GITHUB_SHA"
           test "$(docker image inspect -f '{{json .Config.Healthcheck.Test}}' tunex-control:ci)" != 'null'
       - name: Verify Control refuses startup without mounted trust and database
         run: |
@@ -45,17 +46,48 @@ jobs:
             exit 1
           fi
       - name: Build VNext Agent image
-        run: docker build --pull -f deploy/Dockerfile.agent -t tunex-agent:ci .
+        run: docker build --pull --build-arg TUNEX_SOURCE_REVISION="$GITHUB_SHA" -f deploy/Dockerfile.agent -t tunex-agent:ci .
       - name: Confirm Agent runs as non-root and binary starts
         run: |
           test "$(docker image inspect -f '{{.Config.User}}' tunex-agent:ci)" = "10001:10001"
           docker run --rm tunex-agent:ci --help
+          test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' tunex-agent:ci)" = "$GITHUB_SHA"
       - name: Verify Agent refuses startup without protected identity and journal
         run: |
           if docker run --rm tunex-agent:ci --control=https://127.0.0.1:41001 --node=test --ca=/missing-ca.pem --state=/var/lib/tunex-agent --journal-key=/run/tunex-agent-secrets/missing.key; then
             echo "Unsafe Agent startup without protected identity" >&2
             exit 1
           fi
+      - name: Report local image identifiers (not immutable registry digests)
+        run: |
+          docker image inspect --format 'Control local image ID: {{.Id}}' tunex-control:ci
+          docker image inspect --format 'Agent local image ID: {{.Id}}' tunex-agent:ci
+      - name: Generate image SBOMs for review
+        uses: anchore/sbom-action@v0.20.7
+        with:
+          image: tunex-control:ci
+          artifact-name: tunex-control-sbom.spdx.json
+          output-file: /tmp/tunex-control-sbom.spdx.json
+      - name: Generate Agent image SBOM
+        uses: anchore/sbom-action@v0.20.7
+        with:
+          image: tunex-agent:ci
+          artifact-name: tunex-agent-sbom.spdx.json
+          output-file: /tmp/tunex-agent-sbom.spdx.json
+      - name: Container vulnerability report (advisory; release block pending triage policy)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: tunex-control:ci
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+      - name: Agent vulnerability report (advisory; release block pending triage policy)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: tunex-agent:ci
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '0'
       - name: Validate runtime Compose without mounting real secrets
         env:
           TUNEX_CONTROL_IMAGE: tunex-control:ci
