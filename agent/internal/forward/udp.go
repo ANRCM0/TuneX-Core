@@ -199,6 +199,14 @@ func (slot *udpListenerSlot) receive() {
 		}
 		stream.mutex.Lock()
 		association := stream.sessions[client]
+		// A retired association may still occupy the map until its cleanup
+		// goroutine completes. Never enqueue the first packet of a new session
+		// into its canceled, unserviced queue: replace the stale mapping now.
+		// The previous goroutine only deletes its own pointer on exit.
+		if association != nil && association.ctx.Err() != nil {
+			delete(stream.sessions, client)
+			association = nil
+		}
 		if association == nil {
 			if uint64(len(stream.sessions)) >= stream.maximum {
 				stream.capacity.Add(1)
