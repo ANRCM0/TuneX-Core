@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {validate} from '../preflight.mjs';
+const digest='registry.example/tunex/control@sha256:'+'a'.repeat(64);
+const env={TUNEX_CONTROL_IMAGE:digest,TUNEX_AGENT_IMAGE:digest,TUNEX_CONTROL_STATE_DIR:'/srv/control',TUNEX_CONTROL_PKI_DIR:'/srv/pki',TUNEX_AGENT_STATE_DIR:'/srv/agent',TUNEX_AGENT_SECRETS_DIR:'/srv/secrets'};
+const fake=p=>({real:p,stat:{isDirectory:()=>true,isSymbolicLink:()=>false,mode:0o700}});
+test('immutable digests and isolated protected directories pass',()=>assert.deepEqual(validate(env,fake),[]));
+test('mutable tags rejected',()=>assert.match(validate({...env,TUNEX_AGENT_IMAGE:'tunex-agent:latest'},fake).join(';'),/immutable/));
+test('missing directory rejected closed',()=>assert.match(validate(env,()=>{throw Error('missing')}).join(';'),/cannot inspect/));
+test('Agent MAC key directory cannot be nested in state',()=>assert.match(validate({...env,TUNEX_AGENT_SECRETS_DIR:'/srv/agent/keys'},fake).join(';'),/disjoint/));
+test('world writable storage rejected',()=>assert.match(validate(env,p=>({real:p,stat:{isDirectory:()=>true,isSymbolicLink:()=>false,mode:0o777}})).join(';'),/world-writable/));
