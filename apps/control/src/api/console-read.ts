@@ -97,7 +97,7 @@ export async function consoleNodeDiagnostics(control: ControlApplication, actor:
         const failures=observations.flatMap((value: unknown)=>{
             if (!value||typeof value!=='object') return [];
             const o=value as Record<string,unknown>;
-            if (o.errorCode===null||typeof o.errorCode!=='string'||o.errorCode.length>96) return [];
+            if (typeof o.errorCode!=='string'||!/^[A-Z][A-Z0-9_]{0,63}$/.test(o.errorCode)) return [];
             return [{ assignmentId:typeof o.assignmentId==='string'?o.assignmentId:'unknown',
                 condition:typeof o.condition==='string'?o.condition:'unknown',
                 errorCode:o.errorCode,retryable:o.retryable===true }];
