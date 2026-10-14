@@ -99,6 +99,24 @@ try{
  const operation=async(id:string)=>(await call('GET',`/api/v1/scopes/${scope}/operations/${id}`)).body;
  const waitOperation=async(id:string)=>until(async()=>(await operation(id)).status==='succeeded','Operation success',65000);
  const assertClosed=async()=>{for(const args of [['-H','-ltn'],['-H','-lun']]){const sockets=(await lab.run(ingressNS,lab.ss,[...args,`sport = :${listenPort}`])).stdout.trim();assert.equal(sockets,'','Client-facing listener must remain closed');}};
+ // Egress and ingress poll independently. A held egress Prepared Report is
+ // *not* proof that ingress has accepted its successor snapshot. Only the
+ // ingress's own exact-generation/fence Prepared report authorizes the closed
+ // listener assertion. No grace window is added after that persisted report.
+ const waitIngressPrepared=async(label:string)=>until(async()=>{
+  const deployment=await latest();if(!deployment||deployment.stage!=='preparing')return false;
+  const plan=typeof deployment.body==='string'?JSON.parse(deployment.body):deployment.body;
+  const node=plan.nodes.find((part:any)=>part.nodeId===ingress.nodeId);
+  if(!node||node.assignments.length!==2)return false;
+  const [records]=await control!.db.pool.query<any[]>('SELECT session_epoch,snapshot_generation,last_report FROM runtime_nodes WHERE node_id=?',[ingress.nodeId]);
+  const state=records[0],report=typeof state?.last_report==='string'?JSON.parse(state.last_report):state?.last_report;
+  if(!report||report.sessionEpoch!==state.session_epoch||report.acceptedSnapshotGeneration!==state.snapshot_generation)return false;
+  return node.assignments.every((assignment:any)=>report.observations?.some((observation:any)=>
+   observation.assignmentId===assignment.assignmentId &&
+   observation.deploymentGeneration===assignment.deploymentGeneration &&
+   observation.bindingFence===assignment.bindingFence &&
+   observation.phase==='prepared' && observation.condition==='prepared'));
+ },label,45000);
  const probe=async(tag:string)=>JSON.parse((await lab.run(ingressNS,fixture,['--mode','probe','--port',String(listenPort),'--tag',tag])).stdout);
  const waitHealthy=async()=>until(async()=>{const plan=await latest(),resource=(await call('GET',resourcePath)).body;return plan.stage==='active'&&resource.health.condition==='ready'&&resource.applied.length===4&&resource.applied.every((obs:any)=>obs.phase==='active'&&obs.deploymentGeneration===plan.generation&&obs.forwardRevision===revision);},'exact current Relay readiness',65000);
  await until(async()=>Boolean(preparedGate.report),'prepared downstream report');assert.equal((await latest()).stage,'preparing');await assertClosed();assert.equal((await operation(created.body.operationId)).status,'running');
@@ -123,6 +141,7 @@ try{
  const [savedRows]=await control.db.pool.query<any[]>('SELECT last_report FROM runtime_nodes WHERE node_id=?',[egress.nodeId]);const savedReport=savedRows[0].last_report as Report;
  const targetC=await launchFixture('target',['--tag','C'],'target-C',egressNS),nextPrepared=gate(egress.nodeId,isPhase('prepared'));spec={...spec,target:{host:'127.0.0.1',port:targetC.port}};
  const updated=await call('PUT',resourcePath,{expectedRevision:revision,spec});assert.equal(updated.status,202);revision=updated.body.revision;await until(async()=>Boolean(nextPrepared.report),'successor prepared report held');
+ await waitIngressPrepared('ingress persisted exact successor Prepared before stale Report replay');await assertClosed();
  const replay=await machineReplay(egress,savedReport);assert.equal(replay.status,200);assert.equal(replay.body.status,'duplicate');assert.equal((await latest()).stage,'preparing');await assertClosed();assert.equal((await operation(updated.body.operationId)).status,'running');
  nextPrepared.release();await waitOperation(updated.body.operationId);await waitHealthy();assert.equal((await probe('C')).tcp,true);
  pass('OPS-07/ADP-07: delayed authentic prior-generation ready receives duplicate ACK and cannot activate or complete its successor');
