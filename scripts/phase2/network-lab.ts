@@ -9,7 +9,8 @@ type Route = {dst?:string};
 // default route, firewall policy or pre-existing service is changed.
 export class NetworkLab {
  readonly ip=process.env.TUNEX_IP??'/sbin/ip';
- readonly ss=process.env.TUNEX_SS??'/sbin/ss';
+ // iproute2 installs ss in different directories across Linux distributions.
+ readonly ss=process.env.TUNEX_SS??'ss';
  readonly libraryPath=process.env.TUNEX_NETWORK_LIBRARY_PATH;
  readonly identity=`tunex-net-${randomBytes(6).toString('hex')}`;
  readonly bridge=`txb${randomBytes(4).toString('hex')}`;

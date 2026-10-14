@@ -20,6 +20,7 @@
 | [节点安全与恢复](operations/node-security-and-recovery-v1.md) | 注册、撤销、重装、备份恢复及 Relay 安全门槛 |
 | [ADP/2 direct Schema](protocol/schemas/adp-v2-direct.schema.json) / [fixture](protocol/fixtures/adp-v2-direct.json) | Phase 2 机器可校验契约；不宣称 Relay 支持 |
 | [开发路线](development/roadmap.md) | 从空白 Core 到实网转发的交付门槛 |
+| [ForwardX 经验吸收计划](development/forwardx-gap-closure.md) | 功能差距、独立实现顺序、产品 UI/运维与验收 |
 | [开发入口](development/getting-started.md) | 工具版本、构建/测试、离线编译和开发 MySQL |
 | [Phase 1](development/phase1.md) | 真实 MySQL/HTTPS/Go TCP 创建切片、启动及验收范围 |
 | [实施进度](development/progress.md) | 当前工作树证据与后续实施范围；不是目标规范 |

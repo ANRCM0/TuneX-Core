@@ -7,6 +7,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -101,6 +102,41 @@ func TestRuntimeJournalPersistsPhysicalTCPForUDPAndRefusesHistoryReset(t *testin
 		t.Fatal("missing journal reset")
 	}
 }
+func TestRuntimeJournalInvalidJSONUsesStableIntegrityCode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.json")
+	key := bytes.Repeat([]byte{1}, 32)
+	if err := InitializeRuntimeJournal(path, key, "node-a"); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mutation := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "trailing bytes after authenticated envelope", data: append(append([]byte(nil), original...), []byte("tampered")...)},
+		{name: "invalid JSON document", data: []byte("not-json")},
+	} {
+		t.Run(mutation.name, func(t *testing.T) {
+			if err := os.WriteFile(path, mutation.data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := LoadRuntimeJournal(path, key, "node-a")
+			if err == nil || !strings.HasPrefix(err.Error(), "INTEGRITY_FAILURE:") {
+				t.Fatalf("corrupted journal must have stable error code, got %v", err)
+			}
+		})
+	}
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadRuntimeJournal(path, key, "node-a"); err != nil {
+		t.Fatalf("restored authentic journal must still load: %v", err)
+	}
+}
+
 func slotFence(s adp3.Snapshot) uint64 { return s.Assignments[0].BindingFence }
 func TestRuntimeJournalWriteFailureDoesNotAdvanceCallerHighWater(t *testing.T) {
 	s := runtimeFixture(t)
