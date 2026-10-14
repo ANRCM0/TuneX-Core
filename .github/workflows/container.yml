@@ -101,6 +101,8 @@ jobs:
       - name: Validate both scanner reports were actually produced
         run: |
           node -e "for(const p of ['control-trivy.json','agent-trivy.json']){const v=require('./'+p);if(!Array.isArray(v.Results))throw Error('Missing scanner results '+p)}"
+      - name: Block fixable CRITICAL findings in Control and Agent images
+        run: node deploy/verify-trivy.mjs control-trivy.json agent-trivy.json
       - name: Preserve scan reports for security review
         if: always()
         uses: actions/upload-artifact@v4
