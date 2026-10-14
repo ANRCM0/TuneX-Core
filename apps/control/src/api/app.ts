@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import type { HttpBindings } from '@hono/node-server';
 import { TLSSocket } from 'node:tls';
+import { readFile } from 'node:fs/promises';
+import { consoleNodes, consoleForwards, consoleOperations } from './console-read.ts';
 import { randomUUID } from 'node:crypto';
 import { parseJson, parseRuntimeMessage } from '@tunex/contracts';
 import { isId, isCounter } from '@tunex/core';
@@ -86,6 +88,18 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         return Number(value);
     }
     app.all('/agent/v2/*',c=>c.json({code:'UNSUPPORTED_PROTOCOL_VERSION',message:'ADP/3 required',retryable:false,requestId:c.get('requestId')},409));
+    // Same-origin, cookie-free alpha console. Bearer credentials remain in tab memory only.
+    function consoleHeaders(c: { header: (name: string, value: string) => void }) {
+        c.header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+        c.header('X-Content-Type-Options', 'nosniff');
+        c.header('X-Frame-Options', 'DENY');
+        c.header('Referrer-Policy', 'no-referrer');
+    }
+    app.get('/console', async c => { consoleHeaders(c); return c.html(await readFile(new URL('../../../web/index.html', import.meta.url), 'utf8')); });
+    app.get('/console/', async c => { consoleHeaders(c); return c.html(await readFile(new URL('../../../web/index.html', import.meta.url), 'utf8')); });
+    app.get('/console/app.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/app.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/model.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/model.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/style.css', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/style.css', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/css; charset=utf-8' }); });
     app.get('/health',async c=>c.json({status:(await authority.read()).maintenance?'maintenance':'ok',protocolVersion:3}));
     app.post('/api/v1/scopes/:scope/relay-plan',async c=>c.json(await control.planRelay(c.get('actor'),scope(c.req.param('scope')),parseJson(await body(c.req.raw,32768)))));
     app.get('/api/v1/scopes/:scope/transport-profiles/:profile/grants',async c=>c.json(await control.transport.grants(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'))));
@@ -111,6 +125,9 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         const response = await control.changeNodeGrant(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.param('actor'), c.req.header('idempotency-key'), input.expectedRevision, input.allowed);
         return c.json(response.body, response.status);
     });
+    app.get('/api/v1/scopes/:scope/nodes', async c => c.json(await consoleNodes(control, c.get('actor'), scope(c.req.param('scope')), c.req.query('page'), c.req.query('limit'))));
+    app.get('/api/v1/scopes/:scope/forwards', async c => c.json(await consoleForwards(control, c.get('actor'), scope(c.req.param('scope')), c.req.query('page'), c.req.query('limit'))));
+    app.get('/api/v1/scopes/:scope/operations', async c => c.json(await consoleOperations(control, c.get('actor'), scope(c.req.param('scope')), c.req.query('page'), c.req.query('limit'))));
     app.post('/api/v1/scopes/:scope/nodes', async (c) => c.json(await control.nodes.provision(c.get('actor'), scope(c.req.param('scope')), parseJson(await body(c.req.raw)) as NodePolicy), 201));
     app.post('/enrollment/v1', async (c) => {
         const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;
