@@ -45,7 +45,7 @@ Rollback is **not** volume deletion or re-enrollment. Snapshot state, fencing hi
 
 ## Third slice: provenance, inventory and pre-deployment checks
 
-Build image labels include the exact source commit SHA when passed as `--build-arg TUNEX_SOURCE_REVISION="$(git rev-parse HEAD)"`. **A label is traceability, not a cryptographic signature or supply-chain attestation.** The packaging CI verifies both image labels and produces separate SPDX SBOM artifacts. Its Trivy HIGH/CRITICAL reports are **advisory** (`exit-code: 0`); a green build does not certify zero vulnerabilities. Review and resolve/approve findings before release.
+Build image labels include the exact source commit SHA when passed as `--build-arg TUNEX_SOURCE_REVISION="$(git rev-parse HEAD)"`. **A label is traceability, not a cryptographic signature or supply-chain attestation.** The packaging CI verifies both image labels and produces separate SPDX SBOM artifacts. Automated Trivy scanning is **not yet enabled**: the referenced Action release tags were not resolvable on this CI runner, so the unverified steps were removed rather than silently treated as passed. A green build does not certify zero vulnerabilities; independently scan both pinned images and review the findings before release.
 
 Before using 1Panel with previously provisioned directories, export immutable *registry* references for both images and the four absolute, already-existing protected directories. Then execute:
 
