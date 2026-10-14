@@ -29,7 +29,7 @@ HTTPS Control 的同源 `/console` 增加 **Relay 链路** 页面，不新增跨
 
 先在管理界面“注册节点”，记录一次性 Node ID / Enrollment Token，并在信任的 Linux 主机操作。Control 的 CA 必须预先通过可信通道安装；`--journal-key` 路径必须在 `--state` 目录外。**不允许把 enrollment token 写入日志、脚本仓库、命令行参数或 systemd unit 内容。**
 
-```sh
+```bash
 # 示例路径。需要预先提供独立构建、已校验校验和的 tunex-agent、
 # 正确的 CA 文件以及实际 Control HTTPS 地址；不提供未经审查的 root 安装器。
 install -d -m 0700 /var/lib/tunex/agent /etc/tunex/secrets
