@@ -77,6 +77,25 @@ try{
   const accepted=await call('POST',`/api/v1/scopes/${scope}/forwards`,spec,{'idempotency-key':'create-one'});assert.equal(accepted.status,202,JSON.stringify(accepted.body));
   const replay=await call('POST',`/api/v1/scopes/${scope}/forwards`,spec,{'idempotency-key':'create-one'});assert.deepEqual(replay,accepted);
   check('API-01: lost-response retry returns identical persistent resource/operation IDs');
+  // Exercise actual MySQL 8.4 / mysql2 prepared statements through real HTTPS and scope ACLs.
+  const consoleBase=`/api/v1/scopes/${scope}`;
+  for(const [collection,expectedId] of [
+    ['nodes',nodeId],
+    ['forwards',accepted.body.forwardId],
+    ['operations',accepted.body.operationId],
+  ] as const){
+    const first=await call('GET',`${consoleBase}/${collection}?page=1&limit=25`);
+    assert.equal(first.status,200,`First ${collection} page: ${JSON.stringify(first.body)}`);
+    assert.ok(first.body.total>=1);
+    assert.equal(first.body.items[0].id,expectedId);
+    const second=await call('GET',`${consoleBase}/${collection}?page=2&limit=1`);
+    assert.equal(second.status,200,`Second ${collection} page: ${JSON.stringify(second.body)}`);
+    assert.deepEqual(second.body.items,[]);
+    const invalid=await call('GET',`${consoleBase}/${collection}?page=1&limit=101`);
+    assert.equal(invalid.status,422,`Out-of-range ${collection} page must be rejected`);
+  }
+  check('API-09: MySQL 8.4 scoped console Node/Forward/Operation pagination handles bounded integer offsets');
+
   const conflict=await call('POST',`/api/v1/scopes/${scope}/forwards`,{...spec,target:{...spec.target,port:targetPort+1}},{'idempotency-key':'create-one'});assert.equal(conflict.status,409);assert.equal(conflict.body.code,'IDEMPOTENCY_CONFLICT');
   const parallel=await Promise.all([call('POST',`/api/v1/scopes/${scope}/forwards`,spec,{'idempotency-key':'create-one'}),call('POST',`/api/v1/scopes/${scope}/forwards`,spec,{'idempotency-key':'create-one'})]);assert.deepEqual(parallel,[accepted,accepted]);
   check('API-02: same-key concurrency replays; changed input conflicts');
