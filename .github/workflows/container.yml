@@ -1,0 +1,55 @@
+name: VNext container packaging
+on:
+  pull_request:
+    paths:
+      - "deploy/**"
+      - ".dockerignore"
+      - "apps/control/**"
+      - "apps/web/**"
+      - "packages/**"
+      - "agent/**"
+      - "package*.json"
+      - ".github/workflows/container.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/**"
+      - ".dockerignore"
+      - "apps/control/**"
+      - "apps/web/**"
+      - "packages/**"
+      - "agent/**"
+      - "package*.json"
+      - ".github/workflows/container.yml"
+permissions:
+  contents: read
+jobs:
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build VNext Control image
+        run: docker build --pull -f deploy/Dockerfile.control -t tunex-control:ci .
+      - name: Confirm Control runs as non-root and uses Node
+        run: |
+          test "$(docker image inspect -f '{{.Config.User}}' tunex-control:ci)" = "10001:10001"
+          docker run --rm --entrypoint node tunex-control:ci --version
+      - name: Build VNext Agent image
+        run: docker build --pull -f deploy/Dockerfile.agent -t tunex-agent:ci .
+      - name: Confirm Agent runs as non-root and binary starts
+        run: |
+          test "$(docker image inspect -f '{{.Config.User}}' tunex-agent:ci)" = "10001:10001"
+          docker run --rm tunex-agent:ci --help
+      - name: Validate runtime Compose without mounting real secrets
+        env:
+          TUNEX_CONTROL_IMAGE: tunex-control:ci
+          TUNEX_AGENT_IMAGE: tunex-agent:ci
+          TUNEX_DATABASE_URL: mysql://test:test@127.0.0.1:3306/tunex
+          TUNEX_CONTROL_STATE_DIR: /tmp/disposable-control-state
+          TUNEX_CONTROL_PKI_DIR: /tmp/disposable-control-pki
+          TUNEX_CONTROL_URL: https://localhost:41001
+          TUNEX_NODE_ID: disposable-node
+          TUNEX_AGENT_STATE_DIR: /tmp/disposable-agent-state
+          TUNEX_AGENT_SECRETS_DIR: /tmp/disposable-agent-secrets
+        run: docker compose -f deploy/compose.runtime.example.yaml --profile agent config --quiet

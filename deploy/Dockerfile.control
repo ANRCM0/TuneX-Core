@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1
+# VNext Control executes the checked-in TypeScript entrypoint on Node 24.
+# Builds deliberately do not initialize the authority or generate credentials.
+FROM node:24-bookworm-slim AS dependencies
+WORKDIR /opt/tunex
+COPY package.json package-lock.json ./
+COPY apps/control/package.json apps/control/package.json
+COPY packages/core/package.json packages/core/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
+FROM node:24-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g 10001 tunex && useradd -u 10001 -g 10001 -M -s /usr/sbin/nologin tunex
+WORKDIR /opt/tunex
+COPY --from=dependencies /opt/tunex/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY apps/control ./apps/control
+COPY packages/core ./packages/core
+COPY packages/contracts ./packages/contracts
+COPY apps/web ./apps/web
+RUN mkdir -p /var/lib/tunex-control && chown 10001:10001 /var/lib/tunex-control
+USER 10001:10001
+ENV NODE_ENV=production TUNEX_CONTROL_HOST=0.0.0.0 TUNEX_CONTROL_PORT=41001
+EXPOSE 41001/tcp
+CMD ["node","apps/control/src/main.ts"]

@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+# The Go binary is statically linked; use the exact toolchain from go.mod.
+FROM golang:1.26.3-bookworm AS builder
+WORKDIR /src/agent
+COPY agent/go.mod agent/go.sum ./
+RUN go mod download
+COPY agent/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/tunex-agent ./cmd/tunex-agent
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g 10001 tunex && useradd -u 10001 -g 10001 -M -s /usr/sbin/nologin tunex
+COPY --from=builder /out/tunex-agent /usr/local/bin/tunex-agent
+RUN mkdir -p /var/lib/tunex-agent /run/tunex-agent-secrets && chown 10001:10001 /var/lib/tunex-agent /run/tunex-agent-secrets
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/tunex-agent"]
