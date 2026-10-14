@@ -13,13 +13,13 @@ function consoleApp() {
 }
 test('same-origin console assets retain content types, no-store and strict CSP', async () => {
   const app=consoleApp();
-  for(const [url,contentType] of [
+  for(const [url,contentType] of ([
     ['/console','text/html'],
     ['/console/','text/html'],
     ['/console/app.js','text/javascript'],
     ['/console/model.js','text/javascript'],
     ['/console/style.css','text/css']
-  ]) {
+  ] as const)) {
     const response=await app.request(url);
     assert.equal(response.status,200,url);
     assert.ok(response.headers.get('content-type')?.includes(contentType),url);
