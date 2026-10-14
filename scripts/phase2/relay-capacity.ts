@@ -225,7 +225,15 @@ try {
   const secondWindowStartedAt=Date.now();
   const secondWindow = await verifyWindow('second-retirement-window');
   await until(async () => (await call('GET',resourcePath)).body.lastOperation.status === 'succeeded', 'second retirement Operation terminal', 15000);
-  assert.ok(secondWindowStartedAt < Math.min(...second.credentials.filter(row=>row.retire_after!==null).map(row=>row.retire_after)), 'second fresh load must begin before old-peer retirement');
+  // Only generation-two identities are retiring during the second window.
+  // The credential ledger retains the first cycle's *already retired* rows;
+  // taking MIN across all historical retire_after values makes this condition
+  // impossible even when second-cycle live traffic itself is error-free.
+  const secondPredecessors = second.credentials.filter(row =>
+   first.current.some(prior => prior.node_id===row.node_id && prior.fingerprint===row.fingerprint));
+  assert.equal(secondPredecessors.length,2,'second retirement requires both exact previous peer fingerprints');
+  assert.ok(secondPredecessors.every(row=>row.retire_after!==null),'second predecessor credentials must be scheduled for retirement');
+  assert.ok(secondWindowStartedAt < Math.min(...secondPredecessors.map(row=>row.retire_after)), 'second fresh load must begin before its own predecessor retirement');
   assert.equal((await latest()).generation,second.plan.generation);
   assert.ok(initialCredentials.every(row=>Date.now()>row.valid_until+policy.maxClockSkewSeconds*1000));
   assert.ok(second.credentials.filter(row=>row.retire_after!==null).every(row=>Date.now()>row.retire_after+policy.maxClockSkewSeconds*1000));
