@@ -2,6 +2,8 @@
 // Local-only UDP echo/probe fixture for manual VNext Direct UDP acceptance.
 // This does not authenticate to Control or alter persistent Agent/Forward state.
 import { createSocket } from 'node:dgram';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
 function usage() {
@@ -79,7 +81,7 @@ export async function probe(port,count,timeoutMs) {
     return result;
   } finally {for(const socket of clients)socket.close();}
 }
-if(process.argv[1]&&import.meta.url===new URL('file://'+process.argv[1]).href) {
+if(process.argv[1]&&fileURLToPath(import.meta.url)===resolve(process.argv[1])) {
   try {
     const {mode,port,count,timeoutMs}=parseArgs(process.argv.slice(2));
     if(mode==='echo')await echo(port);else await probe(port,count,timeoutMs);
