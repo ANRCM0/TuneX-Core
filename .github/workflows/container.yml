@@ -75,14 +75,14 @@ jobs:
           artifact-name: tunex-agent-sbom.spdx.json
           output-file: /tmp/tunex-agent-sbom.spdx.json
       - name: Container vulnerability report (advisory; release block pending triage policy)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: tunex-control:ci
           format: table
           severity: HIGH,CRITICAL
           exit-code: '0'
       - name: Agent vulnerability report (advisory; release block pending triage policy)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: tunex-agent:ci
           format: table
