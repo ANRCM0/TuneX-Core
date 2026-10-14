@@ -123,9 +123,44 @@ try {
     });
     // Observe a full current-authority ready Report, not just its generation.
     // Report acknowledgement can precede readiness of both actual engines.
-    const renewedProbe=JSON.parse((await linux(fixture,['--mode','probe','--port',String(portStatus.port)])).stdout);
-    assert.equal(renewedProbe.tcp,true);
-    assert.equal(renewedProbe.udp,true);
+    let renewedProbe: any;
+    try {
+        renewedProbe=JSON.parse((await linux(fixture,['--mode','probe','--port',String(portStatus.port)])).stdout);
+        assert.equal(renewedProbe.tcp,true);
+        assert.equal(renewedProbe.udp,true);
+    } catch (error) {
+        // The Agent can truthfully report ready while the *real* UDP path is
+        // degraded. Preserve only bounded nonsecret observations; do not retry
+        // or convert a failed packet into a successful acceptance.
+        const [reported]=await control!.db.pool.query<any[]>('SELECT snapshot_generation,last_report FROM runtime_nodes WHERE node_id=?',[nodeId]);
+        const current=reported[0];
+        const report=typeof current?.last_report==='string'?JSON.parse(current.last_report):current?.last_report;
+        const local=await linux('/bin/cat',[diagnosticsPath]).then(out=>JSON.parse(out.stdout)).catch(()=>null);
+        const targetReachable=await linux(fixture,['--mode','probe','--udp-only','--port',String(targetStatus.port)]).then(()=>true).catch(()=>false);
+        const failure={
+            failedCheck:'post-renewal exact TCP/UDP payload',
+            errorKind:error instanceof Error?error.name:'unknown',
+            expectedCurrentGeneration:lastRenewedGeneration,
+            nodeSnapshotGeneration:current?.snapshot_generation??null,
+            observedSnapshotGeneration:report?.acceptedSnapshotGeneration??null,
+            observations:Array.isArray(report?.observations)?report.observations.map((o:any)=>({
+                protocol:o.protocol??null,condition:o.condition,phase:o.phase,
+                deploymentGeneration:o.deploymentGeneration,bindingFence:o.bindingFence
+            })):[],
+            targetUdpEchoReachable:targetReachable,
+            agentExitCode:agent?.exitCode??null,
+            diagnostics:local?{
+                snapshotGeneration:local.snapshotGeneration,authorizationActive:local.authorizationActive,
+                tcpStreams:local.tcpStreams,udpAssociations:local.udpAssociations,
+                udpCapacityDropped:local.udpCapacityDropped,udpTargetRejected:local.udpTargetRejected,
+                udpDatagramDropped:local.udpDatagramDropped,udpQueueDropped:local.udpQueueDropped,
+                udpAmplificationDropped:local.udpAmplificationDropped
+            }:null
+        };
+        await writeFile(join(directory,'failure.json'),JSON.stringify(failure,null,2));
+        console.error('Post-renewal live UDP failed; nonsecret failure evidence:',JSON.stringify(failure));
+        throw error;
+    }
     passed('Snapshot renewal: higher-generation leases are reported by Agent while TCP/UDP preserve the execution fence');
     const removed=await call('DELETE',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`,{expectedRevision:1});assert.equal(removed.status,202);await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/operations/${removed.body.operationId}`)).body.status==='succeeded');
     await until(async()=>{const measured=JSON.parse((await linux('/bin/cat',[diagnosticsPath])).stdout);return measured.tcpStreams===0&&measured.udpAssociations===0;});const reclaimed=JSON.parse((await linux('/bin/cat',[diagnosticsPath])).stdout);
