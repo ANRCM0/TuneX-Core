@@ -1,0 +1,60 @@
+# Internal example; requires existing protected state/credentials.
+# No CA initialization, enrollment or database volume recreation is performed.
+name: tunex-vnext-runtime
+services:
+  control:
+    image: ${TUNEX_CONTROL_IMAGE:?Set an immutable Control image tag or digest}
+    restart: unless-stopped
+    user: "10001:10001"
+    environment:
+      DATABASE_URL: ${TUNEX_DATABASE_URL:?External MySQL URL required}
+      TUNEX_CA_CERT: /run/tunex/pki/ca.pem
+      TUNEX_CA_KEY: /run/tunex/pki/ca.key
+      TUNEX_SERVER_CERT: /run/tunex/pki/server.pem
+      TUNEX_SERVER_KEY: /run/tunex/pki/server.key
+      TUNEX_CONTROL_STATE: /var/lib/tunex-control
+      TUNEX_CONTROL_HOST: 0.0.0.0
+      TUNEX_CONTROL_PORT: "41001"
+      TUNEX_AUTHORITY_INITIALIZE: "0"
+    volumes:
+      - type: bind
+        source: ${TUNEX_CONTROL_STATE_DIR:?Existing protected Control state directory}
+        target: /var/lib/tunex-control
+      - type: bind
+        source: ${TUNEX_CONTROL_PKI_DIR:?Existing protected PKI directory}
+        target: /run/tunex/pki
+        read_only: true
+    ports:
+      - "127.0.0.1:41001:41001/tcp"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    stop_grace_period: 45s
+
+  # An Agent should run on its own selected host. The profile avoids
+  # inadvertently starting this host-network service on Control hosts.
+  agent:
+    profiles: ["agent"]
+    image: ${TUNEX_AGENT_IMAGE:?Set an immutable Agent image tag or digest}
+    restart: unless-stopped
+    user: "10001:10001"
+    # Required for native TCP+UDP listeners; review host firewall first.
+    network_mode: host
+    entrypoint: ["/usr/local/bin/tunex-agent"]
+    command:
+      - --control=${TUNEX_CONTROL_URL:?Trusted HTTPS Control URL}
+      - --node=${TUNEX_NODE_ID:?Registered node ID}
+      - --ca=/run/tunex-agent-secrets/control-ca.pem
+      - --state=/var/lib/tunex-agent
+      - --journal-key=/run/tunex-agent-secrets/journal.key
+      - --diagnostics
+    volumes:
+      - type: bind
+        source: ${TUNEX_AGENT_STATE_DIR:?Existing Agent state directory}
+        target: /var/lib/tunex-agent
+      - type: bind
+        source: ${TUNEX_AGENT_SECRETS_DIR:?Existing protected Agent secret directory}
+        target: /run/tunex-agent-secrets
+        read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    stop_grace_period: 45s
