@@ -9,9 +9,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --test packages/core/test/*.test.ts packages/contracts/test/*.test.ts apps/control/test/*.test.ts",
+    "test:web": "node --test apps/web/test/*.test.mjs",
     "test:go": "node scripts/run-go.mjs test ./...",
     "build:go": "node scripts/run-go.mjs build ./...",
-    "check": "npm run typecheck && npm test && npm run test:go && npm run build:go && npm run contracts:check && node scripts/check-boundaries.mjs && node scripts/verify-offline-plan.mjs",
+    "check": "npm run typecheck && npm test && npm run test:web && npm run test:go && npm run build:go && npm run contracts:check && node scripts/check-boundaries.mjs && node scripts/verify-offline-plan.mjs",
     "contracts:generate": "node scripts/generate-go-contracts.mjs",
     "contracts:check": "node scripts/generate-go-contracts.mjs --check && node scripts/build-conformance-fixtures.mjs --check",
     "plan": "node apps/control/src/cli.ts",
