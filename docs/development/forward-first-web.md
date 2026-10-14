@@ -59,4 +59,4 @@ npm run check
 
 ## 与完整补齐路线的关系
 
-优先完成 [ForwardX 经验吸收计划](forwardx-gap-closure.md) 中的 P1 Web/Node 管理基础；未来才增加 Relay 全量拓扑/端点配置、Link 复用、可选驱动、运维发行和商业模块。当前文档链接如目标计划尚未合并，请按分支实际情况查阅。
+优先完成 [ForwardX 经验吸收计划](https://github.com/ANRCM0/TuneX-Core/pull/83) 中的 P1 Web/Node 管理基础；未来才增加 Relay 全量拓扑/端点配置、Link 复用、可选驱动、运维发行和商业模块。当前文档链接如目标计划尚未合并，请按分支实际情况查阅。
