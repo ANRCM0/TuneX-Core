@@ -154,6 +154,37 @@ func TestUDPIdleExpiryReclaimsAssociation(t *testing.T) {
 	}
 }
 
+// A canceled idle association may still be in the table before its goroutine
+// removes itself. A new packet from the same UDP source port must not disappear
+// into that dead association's queue. This exercises that exact receive window
+// without relying on a scheduler-dependent race.
+func TestUDPCanceledAssociationIsNotReusedForNextDatagram(t *testing.T) {
+	target := udpEchoTarget(t, "reply:")
+	stream := udpTestStream(t, udpTestAssignment(t, target), udpTestPolicy())
+	client := udpTestClient(t, stream)
+	local := client.LocalAddr().(*net.UDPAddr).AddrPort()
+	local = netip.AddrPortFrom(local.Addr().Unmap(), local.Port())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	dead := &udpAssociation{
+		stream: stream, client: local, ctx: ctx, cancel: cancel,
+		packets: make(chan []byte, UDPQueueDepth),
+	}
+	stream.mutex.Lock()
+	stream.sessions[local] = dead
+	stream.mutex.Unlock()
+	udpWrite(t, client, []byte("first-after-canceled"))
+	if got := string(udpRead(t, client)); got != "reply:first-after-canceled" {
+		t.Fatalf("stale association swallowed the first new packet: %q", got)
+	}
+	stream.mutex.Lock()
+	current := stream.sessions[local]
+	stream.mutex.Unlock()
+	if current == nil || current == dead {
+		t.Fatal("new UDP source was not re-associated")
+	}
+}
+
 func TestUDPCapacityDropPreservesExistingClient(t *testing.T) {
 	target := udpEchoTarget(t, "reply:")
 	policy := udpTestPolicy()
