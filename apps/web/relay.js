@@ -200,5 +200,17 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
     populateNodes();
     await refreshProfiles();
   }
-  return {refresh,populateNodes};
+  function clear() {
+    profileList=[];
+    knownProfiles.clear();
+    invalidate();
+    options('relay-profile-select',[]);
+    const tbody=el('relay-profile-rows');
+    tbody.replaceChildren();
+    const row=document.createElement('tr'),cell=document.createElement('td');
+    cell.colSpan=3;cell.className='empty';cell.textContent='连接后加载 Profile';
+    row.append(cell);tbody.append(row);
+    populateNodes();
+  }
+  return {refresh,populateNodes,clear};
 }
