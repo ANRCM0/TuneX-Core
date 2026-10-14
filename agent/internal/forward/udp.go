@@ -339,9 +339,16 @@ func (association *udpAssociation) replies() {
 		if err != nil {
 			if problem, ok := err.(net.Error); ok && problem.Timeout() {
 				stream.mutex.Lock()
-				active := time.Now().Before(association.lastActivity.Add(stream.idle))
+				active := time.Now().Before(association.lastActivity.Add(stream.idle)) && association.ctx.Err() == nil
+				if !active {
+					// Publish expiry before releasing the same mutex receive()
+					// uses to select the association for a new client packet.
+					// Otherwise a packet may enter a queue whose reader has
+					// already decided to exit, with no upstream reply possible.
+					association.cancel()
+				}
 				stream.mutex.Unlock()
-				if active && association.ctx.Err() == nil {
+				if active {
 					continue
 				}
 			}
