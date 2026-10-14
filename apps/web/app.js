@@ -79,7 +79,7 @@ async function mutate(method, resource, input) {
 }
 function display(view) {
   currentView = view;
-  const labels = { overview: '运行概览', nodes: '节点管理', forwards: '转发管理', operations: '执行记录' };
+  const labels = { overview: '运行概览', nodes: '节点管理', forwards: '转发管理', relay: 'Relay 链路', operations: '执行记录' };
   byId('page-title').textContent = labels[view] || labels.overview;
   document.querySelectorAll('.view').forEach(node => { node.hidden = node.id !== 'view-' + view; });
   document.querySelectorAll('.nav').forEach(node => { node.classList.toggle('active', node.dataset.view === view); });
@@ -328,7 +328,7 @@ byId('disconnect').addEventListener('click', () => {
   byId('connection-indicator').textContent = '未连接';
   byId('detail-dialog').close(); byId('detail-content').textContent = '';
   byId('forward-form').hidden = true; byId('node-form').hidden = true;
-  relayConsole.populateNodes();
+  relayConsole.clear();
   renderNodes(); renderForwards(); renderOperations(); updateOverview();
   notify('已断开连接；当前标签页中的 Bearer Token 已清除。');
 });
