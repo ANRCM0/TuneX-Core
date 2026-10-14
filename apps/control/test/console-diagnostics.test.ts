@@ -46,7 +46,7 @@ test('Node diagnostics is read-only, scoped, sanitized and never claims probe he
   assert.deepEqual(result.errors,[{assignmentId:'b',condition:'error',errorCode:'TARGET_UNAVAILABLE',retryable:true}]);
   assert.equal(JSON.stringify(result).includes('MUST_NOT_LEAK'),false);
   assert.equal(f.statements.length,1);
-  assert.deepEqual(f.statements[0].args,['node-1','allowed-scope']);
+  assert.deepEqual(f.statements[0]!.args,['node-1','allowed-scope']);
 });
 test('Node diagnostics returns 404 for out-of-scope or missing Node',async()=>{
   const f=fixture(true,false);
