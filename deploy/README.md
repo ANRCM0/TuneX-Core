@@ -45,7 +45,7 @@ Rollback is **not** volume deletion or re-enrollment. Snapshot state, fencing hi
 
 ## Third slice: provenance, inventory and pre-deployment checks
 
-Build image labels include the exact source commit SHA when passed as `--build-arg TUNEX_SOURCE_REVISION="$(git rev-parse HEAD)"`. **A label is traceability, not a cryptographic signature or supply-chain attestation.** The packaging CI verifies both image labels and produces separate SPDX SBOM artifacts. Automated Trivy scanning is **not yet enabled**: the referenced Action release tags were not resolvable on this CI runner, so the unverified steps were removed rather than silently treated as passed. A green build does not certify zero vulnerabilities; independently scan both pinned images and review the findings before release.
+Build image labels include the exact source commit SHA when passed as `--build-arg TUNEX_SOURCE_REVISION="$(git rev-parse HEAD)"`. **A label is traceability, not a cryptographic signature or supply-chain attestation.** The packaging CI verifies both image labels and produces separate SPDX SBOM artifacts. The container CI now uses the verified upstream `aquasecurity/trivy-action@v0.36.0` tag for separate **advisory** HIGH/CRITICAL scans of both actual built images. It uploads JSON findings as a CI artifact, and fails if a scan does not execute or produce a valid report. **Scanning itself is advisory in PR CI** (`exit-code: 0`): a green CI does NOT mean the images are free of vulnerabilities. Review findings prior to authorizing any release. The manual internal-candidate publisher rejects fixable CRITICAL findings (`exit-code: 1` with `ignore-unfixed: true`), but cannot certify absence of all risks.
 
 Before using 1Panel with previously provisioned directories, export immutable *registry* references for both images and the four absolute, already-existing protected directories. Then execute:
 
@@ -57,6 +57,16 @@ docker compose -f deploy/compose.runtime.example.yaml --profile agent config --q
 Preflight rejects mutable tags, missing or world-writable state paths, symlinked storage and nested Agent state/secret directories; it intentionally does not read private keys or contact the host. Use independent Control/Agent hosts as planned. This check does **not** validate file ownership, cert validity, journal correctness, firewall, database migrations, network reachability, or rollback feasibility. Do not infer those checks from a successful preflight.
 
 Capture and store your selected image digest, SBOM, scan report, schema version and recovery evidence for each test deployment. No registry image publication or automatic 1Panel rollout is implemented in this slice.
+
+## Fourth slice: verified scanning and opt-in GHCR candidate publication
+
+Image inventory and vulnerability reports are distinct: the signed-source-**looking** OCI revision label is just metadata, while the SPDX SBOM inventories components, and Trivy reports security findings. Neither is a cryptographic signature. Do not assume `candidate-<sha>` tags are themselves immutable; use the returned **registry manifest digest** for deployments.
+
+An operator can manually trigger GitHub Actions `VNext internal candidate images` (`.github/workflows/candidate-images.yml`) **from `main` only**, supplying exactly the audited 40-character Git SHA. The workflow checks this SHA matches the checkout and requires prior **successful Control/Relay contracts and container packaging CI on the same SHA**. It then builds both images from source, rejects *fixable CRITICAL* Trivy findings, checks that candidate tags do not already exist, and pushes the resulting SHA-named images to GHCR. The workflow emits registry manifest information for inventory. **It does not deploy or approve production use.** Registry permission, packages visibility and live image publishing have not yet been exercised in a release run.
+
+On 1Panel, first configure image references by complete `@sha256:<manifest-digest>` (never `:latest` or only a SHA-tag) and run `node deploy/preflight.mjs`. Then conduct an operator-reviewed staging deployment, backup/restore test and full TCP/UDP/mTLS verification before considering production.
+
+Unfixed or lower-severity vulnerabilities still require review. The release security check has an intentionally narrow fixable-CRITICAL automatic gate; manual review cannot be skipped solely because that gate passes. This slice performs **no** live host rollout or destructive migration.
 
 ## Runtime liveness and shutdown gates (second slice)
 
