@@ -101,6 +101,21 @@ try {
     assert.ok(samples.some(sample=>sample.tcpStreams>=32&&sample.udpAssociations>=16));assert.ok(samples.some(sample=>sample.authorizationActive===true));
     const peak={tcpStreams:Math.max(...samples.map(s=>s.tcpStreams)),udpAssociations:Math.max(...samples.map(s=>s.udpAssociations)),goroutines:Math.max(...samples.map(s=>s.goroutines)),heapAllocBytes:Math.max(...samples.map(s=>s.heapAllocBytes)),runtimeBytes:Math.max(...samples.map(s=>s.runtimeBytes)),openFileDescriptors:Math.max(...samples.map(s=>s.openFileDescriptors??0)),maxRSSBytes:Math.max(...samples.map(s=>s.maxRSSBytes??0)),measuredCpuTimeNanos:Math.max(...samples.map(s=>s.cpuTimeNanos??0))-(baseline.cpuTimeNanos??0)};
     passed('Capacity: independent Linux clients verify unique TCP/UDP payloads and measured latency/throughput under bounded concurrency');
+    // The second capacity burst deliberately fills all 32 permitted UDP
+    // associations. Its client sockets close first, but association entries
+    // remain legitimately active until the configured two-second idle timeout.
+    // A distinct post-renewal probe is the 33rd client and MUST be denied
+    // until those old associations reclaim their permits. Synchronize on real
+    // Agent resource reclamation; never raise the hard cap or retry a dropped
+    // datagram to hide over-capacity.
+    await until(async()=>{
+        const measured=JSON.parse((await linux('/bin/cat',[diagnosticsPath])).stdout);
+        return measured.udpAssociations===0&&measured.tcpStreams===0;
+    });
+    const preRenewalReclaimed=JSON.parse((await linux('/bin/cat',[diagnosticsPath])).stdout);
+    assert.equal(preRenewalReclaimed.udpAssociations,0);
+    assert.equal(preRenewalReclaimed.tcpStreams,0);
+    passed('Post-load UDP budget: every bounded load association releases before the distinct renewal probe');
     // The two short load bursts do not necessarily cross a real lease renewal.
     // Preserve the strict >=2 snapshots assertion, but synchronize on a real
     // higher-generation publication plus durable Agent acknowledgement first.
