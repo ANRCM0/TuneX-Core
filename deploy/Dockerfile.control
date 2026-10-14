@@ -19,8 +19,13 @@ COPY apps/control ./apps/control
 COPY packages/core ./packages/core
 COPY packages/contracts ./packages/contracts
 COPY apps/web ./apps/web
+COPY deploy/control-liveness.mjs ./deploy/control-liveness.mjs
 RUN mkdir -p /var/lib/tunex-control && chown 10001:10001 /var/lib/tunex-control
 USER 10001:10001
 ENV NODE_ENV=production TUNEX_CONTROL_HOST=0.0.0.0 TUNEX_CONTROL_PORT=41001
 EXPOSE 41001/tcp
+# Local socket liveness only. This is NOT proof of MySQL, mTLS, trust,
+# runtime lease issuance or deployment readiness.
+HEALTHCHECK --interval=15s --timeout=3s --start-period=30s --retries=3 \
+ CMD ["node","deploy/control-liveness.mjs"]
 CMD ["node","apps/control/src/main.ts"]
