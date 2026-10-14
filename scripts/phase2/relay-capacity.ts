@@ -218,7 +218,15 @@ try {
   assert.equal(negative.rejected,true); assert.equal(negative.currentBinding,true);
   const accepted = JSON.parse((await lab.run(ingressNS,fixture,['--mode','probe','--port',String(listenPort)])).stdout); assert.equal(accepted.tcp,true); assert.equal(accepted.udp,true);
   pass('Retired peer refusal: original genuine CA-signed peer cannot probe a live current binding while freshly pinned Agents still carry exact TCP/UDP');
-  const second = await waitRenewed(3,first.plan.generation), secondWindow = await verifyWindow('second-retirement-window');
+  // The second rotation has the same independent drain barrier as the first.
+  // Do not start a generation-stable 36s load after waiting for retirement,
+  // because that may cross into the third credential refresh.
+  const second = await waitRenewed(3,first.plan.generation,false);
+  const secondWindowStartedAt=Date.now();
+  const secondWindow = await verifyWindow('second-retirement-window');
+  await until(async () => (await call('GET',resourcePath)).body.lastOperation.status === 'succeeded', 'second retirement Operation terminal', 15000);
+  assert.ok(secondWindowStartedAt < Math.min(...second.credentials.filter(row=>row.retire_after!==null).map(row=>row.retire_after)), 'second fresh load must begin before old-peer retirement');
+  assert.equal((await latest()).generation,second.plan.generation);
   assert.ok(initialCredentials.every(row=>Date.now()>row.valid_until+policy.maxClockSkewSeconds*1000));
   assert.ok(second.credentials.filter(row=>row.retire_after!==null).every(row=>Date.now()>row.retire_after+policy.maxClockSkewSeconds*1000));
   await waitHealthy();
