@@ -44,6 +44,13 @@ jobs:
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           echo "CONTROL_IMAGE=ghcr.io/$owner/tunex-control:candidate-$GITHUB_SHA" >> "$GITHUB_ENV"
           echo "AGENT_IMAGE=ghcr.io/$owner/tunex-agent:candidate-$GITHUB_SHA" >> "$GITHUB_ENV"
+      - name: Authenticate to GHCR before checking private registry tags
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - name: Refuse to overwrite an existing published candidate tag
         shell: bash
         run: |
@@ -84,13 +91,6 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
           format: table
-      - name: Authenticate to GitHub Container Registry only after gates
-        env:
-          GHCR_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - name: Publish immutable-source candidate tags and record real registry digests
         shell: bash
         run: |
