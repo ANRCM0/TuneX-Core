@@ -1,0 +1,110 @@
+name: VNext internal candidate images
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: "Exact fully reviewed main SHA; never use a floating branch name"
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+  packages: write
+jobs:
+  publish-candidate:
+    # Manual-only, from main; no automatic production deployment.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify immutable source and exact green release prerequisites
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Full commit SHA required"; exit 1; }
+          [ "$GITHUB_SHA" = "$EXPECTED_SHA" ] || { echo "Expected SHA differs from checked-out main"; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$EXPECTED_SHA" ] || exit 1
+          # Fail closed if any matching full-baseline and container-image CI
+          # run for this exact commit has not completed successfully.
+          for workflow in ci.yml container.yml; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&per_page=50" \
+              | jq -e --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .conclusion=="success")] | length > 0' >/dev/null \
+              || { echo "$workflow has no successful run for requested SHA"; exit 1; }
+          done
+      - name: Prepare SHA-only candidate tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "CONTROL_IMAGE=ghcr.io/$owner/tunex-control:candidate-$GITHUB_SHA" >> "$GITHUB_ENV"
+          echo "AGENT_IMAGE=ghcr.io/$owner/tunex-agent:candidate-$GITHUB_SHA" >> "$GITHUB_ENV"
+      - name: Refuse to overwrite an existing published candidate tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in "$CONTROL_IMAGE" "$AGENT_IMAGE"; do
+            if docker manifest inspect "$image" >/dev/null 2>&1; then
+              echo "Candidate tag already exists; refuse overwrite: $image" >&2
+              exit 1
+            fi
+          done
+      - name: Build both exact-source images without access to persistent host keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull --build-arg TUNEX_SOURCE_REVISION="$GITHUB_SHA" -f deploy/Dockerfile.control -t "$CONTROL_IMAGE" .
+          docker build --pull --build-arg TUNEX_SOURCE_REVISION="$GITHUB_SHA" -f deploy/Dockerfile.agent -t "$AGENT_IMAGE" .
+          test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$CONTROL_IMAGE")" = "$GITHUB_SHA"
+          test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$AGENT_IMAGE")" = "$GITHUB_SHA"
+      - name: Reject fixable CRITICAL vulnerabilities in Control candidate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.CONTROL_IMAGE }}
+          scan-type: image
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+      - name: Reject fixable CRITICAL vulnerabilities in Agent candidate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.AGENT_IMAGE }}
+          scan-type: image
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+      - name: Authenticate to GitHub Container Registry only after gates
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Publish immutable-source candidate tags and record real registry digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push "$CONTROL_IMAGE"
+          docker push "$AGENT_IMAGE"
+          {
+            echo "## Internal candidate images — NOT production approved"
+            echo ""
+            echo "Verified source: `$GITHUB_SHA`"
+            echo ""
+            echo "Control registry manifest:"
+            docker buildx imagetools inspect "$CONTROL_IMAGE"
+            echo ""
+            echo "Agent registry manifest:"
+            docker buildx imagetools inspect "$AGENT_IMAGE"
+          } >> "$GITHUB_STEP_SUMMARY"
