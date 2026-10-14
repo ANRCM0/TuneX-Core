@@ -54,20 +54,20 @@ func LoadRuntimeJournal(path string, key []byte, node string) (RuntimeJournal, e
 		return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: Runtime journal unavailable: %w", err)
 	}
 	if _, err := contracts.ParseJSON(raw, 6291456); err != nil {
-		return RuntimeJournal{}, err
+		return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: invalid Runtime journal envelope: %w", err)
 	}
 	outer, err := Load(path, key)
 	if err != nil {
 		return RuntimeJournal{}, err
 	}
 	if _, err := contracts.ParseJSON(outer.Snapshot, 4194304+1048576); err != nil {
-		return RuntimeJournal{}, err
+		return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: invalid Runtime journal payload: %w", err)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(outer.Snapshot))
 	decoder.DisallowUnknownFields()
 	var record RuntimeJournal
 	if err := decoder.Decode(&record); err != nil {
-		return RuntimeJournal{}, err
+		return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: invalid Runtime journal body: %w", err)
 	}
 	if record.ProtocolVersion != 3 || record.NodeID != node || record.Journal.Generation != outer.Generation || record.Journal.Digest != outer.Digest || !maps.Equal(record.Journal.Fences, outer.Fences) || !maps.Equal(record.Journal.Retired, outer.Retired) {
 		return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: Runtime journal binding differs")
@@ -94,7 +94,7 @@ func LoadRuntimeJournal(path string, key []byte, node string) (RuntimeJournal, e
 	if record.Journal.Generation > 0 {
 		value, err := adp3.Parse("Snapshot", record.Journal.Snapshot)
 		if err != nil {
-			return RuntimeJournal{}, err
+			return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: invalid persisted Snapshot: %w", err)
 		}
 		s := value.(adp3.Snapshot)
 		if s.NodeId != node || s.SnapshotGeneration != record.Journal.Generation || s.SnapshotDigest != record.Journal.Digest {
