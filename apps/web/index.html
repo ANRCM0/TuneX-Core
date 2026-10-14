@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>TuneX · Control Console</title>
+  <link rel="stylesheet" href="/console/style.css">
+  <script type="module" src="/console/app.js"></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">T</span><span><strong>TuneX</strong><small>CONTROL CONSOLE · ALPHA</small></span></div>
+    <p class="nav-heading">工作空间</p>
+    <nav aria-label="控制台导航">
+      <button class="nav active" data-view="overview" type="button">▣ <span>概览</span></button>
+      <button class="nav" data-view="nodes" type="button">◈ <span>节点管理</span></button>
+      <button class="nav" data-view="forwards" type="button">⇄ <span>转发管理</span></button>
+      <button class="nav" data-view="operations" type="button">◷ <span>执行记录</span></button>
+    </nav>
+    <p class="sidebar-note">Forward First · ADP/3<br>数据由 Control API 提供，流量不经过本页面。</p>
+  </aside>
+  <main>
+    <header class="topbar">
+      <div><p class="eyebrow">TUNEX / VNEXT</p><h1 id="page-title">运行概览</h1></div>
+      <div class="toolbar"><span id="connection-indicator" class="state-tag">未连接</span><button id="refresh" type="button" class="secondary" disabled>刷新数据</button></div>
+    </header>
+    <section class="connect-card" aria-label="连接控制面">
+      <form id="connection-form" class="connection-form">
+        <label>Scope ID <input id="scope" name="scope" autocomplete="off" spellcheck="false" placeholder="例如：my-scope" required></label>
+        <label>Owner / Member Bearer Token <input id="token" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="当前标签页内存保存，不写入本地存储" required></label>
+        <button type="submit" id="connect">连接控制面</button>
+        <button type="button" id="disconnect" class="secondary" disabled>断开</button>
+      </form>
+      <p class="hint">仅连接当前 HTTPS Control；需要已有的 Scope 和 Bearer Token。刷新、关闭页面或断开连接后必须重新输入。</p>
+    </section>
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+    <section id="view-overview" class="view">
+      <div class="metrics">
+        <div class="metric"><span>受管节点</span><strong id="metric-nodes">—</strong><small>按 Scope 筛选</small></div>
+        <div class="metric"><span>转发规则</span><strong id="metric-forwards">—</strong><small>Direct / Relay</small></div>
+        <div class="metric"><span>最近 25 项中执行中</span><strong id="metric-running">—</strong><small>非已生效状态</small></div>
+        <div class="metric"><span>最近 25 项中失败</span><strong id="metric-failed">—</strong><small>需检查原因</small></div>
+      </div>
+      <section class="panel"><div class="panel-head"><h2>运行状态说明</h2></div>
+        <div class="explain-grid"><div><b>Desired</b><p>用户希望系统如何转发；Revision 代表配置版本。</p></div><div><b>Operation</b><p>Control 是否已经接收、执行或完成部署动作。</p></div><div><b>Applied</b><p>Agent 实际应用且仍新鲜的部署观察结果。</p></div><div><b>Health</b><p>Agent 上报的运行状况；不等于独立端到端探测。</p></div></div>
+      </section>
+      <section class="panel"><div class="panel-head"><h2>使用说明</h2></div><p class="muted">从“节点管理”确认 Agent 能力和端口授权，再到“转发管理”创建规则。返回 202 Accepted 仅表示任务已持久接收，需进一步查看 Operation 和详情状态。当前控制台不提供独立链路探测，不会把 Agent 在线状态伪装成“业务可用”。</p></section>
+    </section>
+
+    <section id="view-nodes" class="view" hidden>
+      <div class="panel-head section-actions"><div><h2>节点管理</h2><p class="hint">可查看授权地址、可用端口、Agent 会话和最近报告。</p></div><button id="show-node-form" type="button">注册节点</button></div>
+      <form id="node-form" class="panel editor" hidden>
+        <h3>新节点 · 预设授权</h3>
+        <p class="hint">注册仅生成一次性 Enrollment Token；安装 Agent 还需要按现有运维文档准备 TLS CA、状态目录和密钥。</p>
+        <div class="form-grid">
+          <label>监听地址 <select name="address"><option value="127.0.0.1">127.0.0.1 · 仅本机（默认）</option><option value="0.0.0.0">0.0.0.0 · IPv4 全网卡</option><option value="::">:: · IPv6 全网卡</option><option value="::1">::1 · IPv6 本机</option></select></label>
+          <label>允许端口（逗号分隔） <input name="ports" value="25565" placeholder="例如 25565,25566" required></label>
+          <label>允许目标网段（逗号分隔） <input name="cidrs" value="127.0.0.0/8" required></label>
+        </div>
+        <label class="check"><input name="metadata" type="checkbox"> 允许访问元数据地址（默认禁止）</label>
+        <div class="actions"><button type="submit">创建节点并签发注册凭据</button><button id="cancel-node" class="secondary" type="button">取消</button></div>
+      </form>
+      <div class="panel table-wrap"><table><thead><tr><th>Node ID</th><th>授权状态</th><th>Agent 报告</th><th>支持能力</th><th>操作</th></tr></thead><tbody id="node-rows"><tr><td colspan="5" class="empty">连接后加载节点</td></tr></tbody></table></div>
+      <div id="nodes-pagination" class="pagination"></div>
+    </section>
+
+    <section id="view-forwards" class="view" hidden>
+      <div class="panel-head section-actions"><div><h2>转发管理</h2><p class="hint">创建 Direct TCP/UDP；Relay 配置可查看但暂不通过简化表单修改。</p></div><button id="show-forward-form" type="button">新建转发</button></div>
+      <form id="forward-form" class="panel editor" hidden>
+        <h3 id="forward-form-title">创建 Direct Forward</h3>
+        <div class="form-grid">
+          <label>入口节点 <select name="node" id="forward-node" required></select></label>
+          <label>协议 <select name="protocol" id="forward-protocol" required></select></label>
+          <label>监听地址 <select name="listenAddress" id="forward-address" required></select></label>
+          <label>入口端口 <select name="listenPort" id="forward-port" required></select></label>
+          <label>目标主机 <input name="targetHost" autocomplete="off" spellcheck="false" placeholder="IP 或域名" required></label>
+          <label>目标端口 <input name="targetPort" type="number" min="1" max="65535" required></label>
+        </div>
+        <label class="check"><input name="enabled" type="checkbox" checked> 创建或更新后请求启用</label>
+        <p id="forward-capabilities" class="hint"></p>
+        <div class="actions"><button id="save-forward" type="submit">提交操作</button><button id="cancel-forward" class="secondary" type="button">取消</button></div>
+      </form>
+      <div class="panel table-wrap"><table><thead><tr><th>入口与端口</th><th>目标</th><th>协议</th><th>期望状态</th><th>操作状态</th><th>操作</th></tr></thead><tbody id="forward-rows"><tr><td colspan="6" class="empty">连接后加载转发</td></tr></tbody></table></div>
+      <div id="forwards-pagination" class="pagination"></div>
+    </section>
+
+    <section id="view-operations" class="view" hidden>
+      <div class="panel-head section-actions"><div><h2>执行记录</h2><p class="hint">区分 Accepted、Running、Succeeded、Failed 和 Superseded。</p></div></div>
+      <div class="panel table-wrap"><table><thead><tr><th>Operation</th><th>目标 Revision</th><th>类型</th><th>状态</th><th>更新时间</th><th>诊断</th></tr></thead><tbody id="operation-rows"><tr><td colspan="6" class="empty">连接后加载记录</td></tr></tbody></table></div>
+      <div id="operations-pagination" class="pagination"></div>
+    </section>
+  </main>
+</div>
+<dialog id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-title"><h2 id="detail-title">详细信息</h2><button id="close-detail" type="button" class="secondary">关闭</button></div><pre id="detail-content"></pre><div id="detail-secret" hidden><p class="danger-text">仅在本次创建后显示一次，请妥善保存。关闭窗口即清除当前页面中的明文凭据。</p><button id="copy-secret" type="button">复制一次性 Token</button></div></dialog>
+</body>
+</html>
