@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
-      - name: Verify local-only liveness semantics
+      - name: Verify liveness and protected deployment preflight
         run: node --test deploy/test/*.test.mjs
       - name: Build VNext Control image
         run: docker build --pull --build-arg TUNEX_SOURCE_REVISION="$GITHUB_SHA" -f deploy/Dockerfile.control -t tunex-control:ci .
