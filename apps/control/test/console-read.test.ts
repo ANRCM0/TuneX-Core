@@ -81,4 +81,3 @@ test('all three scoped lists use bounded second-page literal offsets', async () 
   assert.equal(lists.length,3);
   assert.ok(lists.every(q=>q.params.length===1&&q.params[0]==='scope-a'));
 });
-});
