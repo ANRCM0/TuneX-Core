@@ -185,6 +185,29 @@ func TestUDPCanceledAssociationIsNotReusedForNextDatagram(t *testing.T) {
 	}
 }
 
+// When an old authorization is withdrawn and a genuine new authorization is
+// installed on the same physical UDP listener, a previously idle source port
+// must be allowed to create a fresh association. An expired background reader
+// must not swallow its first datagram after the new ticket is accepted.
+func TestUDPNewAuthorizationAfterIdleReclaimsClientPort(t *testing.T) {
+	target := udpEchoTarget(t, "reply:")
+	policy := udpTestPolicy()
+	policy.UdpIdleTimeoutSeconds = 1
+	assignment := udpTestAssignment(t, target)
+	stream, err := StartUDPAuthorized(assignment, policy, func() error { return nil })
+	if err != nil { t.Fatal(err) }
+	t.Cleanup(stream.Close)
+	client := udpTestClient(t, stream)
+	udpWrite(t, client, []byte("old-authority"))
+	if got := string(udpRead(t, client)); got != "reply:old-authority" { t.Fatal(got) }
+	udpWait(t, func() bool { return stream.Remaining() == 0 }, "previous UDP association still active")
+	stream.SetAuthorization(func() error { return nil })
+	udpWrite(t, client, []byte("new-authority"))
+	if got := string(udpRead(t, client)); got != "reply:new-authority" {
+		t.Fatalf("first datagram after renewed authority was lost: %q", got)
+	}
+}
+
 func TestUDPCapacityDropPreservesExistingClient(t *testing.T) {
 	target := udpEchoTarget(t, "reply:")
 	policy := udpTestPolicy()
