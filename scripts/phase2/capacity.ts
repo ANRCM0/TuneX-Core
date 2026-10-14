@@ -117,8 +117,12 @@ try {
         const [records]=await control!.db.pool.query<any[]>('SELECT snapshot_generation,last_report FROM runtime_nodes WHERE node_id=?',[nodeId]);
         const row=records[0],report=typeof row?.last_report==='string'?JSON.parse(row.last_report):row?.last_report;
         return row?.snapshot_generation>=lastRenewedGeneration&&
-            report?.acceptedSnapshotGeneration===row.snapshot_generation;
+            report?.acceptedSnapshotGeneration===row.snapshot_generation &&
+            report.observations?.length===2 &&
+            report.observations.every((item:any)=>item.condition==='ready' && item.phase==='active' && item.deploymentGeneration===1 && item.bindingFence===1);
     });
+    // Observe a full current-authority ready Report, not just its generation.
+    // Report acknowledgement can precede readiness of both actual engines.
     const renewedProbe=JSON.parse((await linux(fixture,['--mode','probe','--port',String(portStatus.port)])).stdout);
     assert.equal(renewedProbe.tcp,true);
     assert.equal(renewedProbe.udp,true);
