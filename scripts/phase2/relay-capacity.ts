@@ -278,7 +278,19 @@ try {
  evidence = { commit, workingTreeDirty: Boolean((await execute('git', ['status', '--porcelain'])).stdout.trim()), command: 'npm run test:relay-capacity', checks, processFacts, baseline, samples, sustainedRun, renewals, reclaimed, saturation, saturatedHealth, outageAt: new Date(outageAt).toISOString(), deadlines, cutoffRun, cutoffResources, recoverySessions, restored, policy, synchronization, kernel: (await linux('/bin/uname', ['-a'])).stdout.trim(), topology: `${viaWSL ? 'Windows locked Control/MySQL with WSL' : 'Native Linux Control/MySQL and'} two independent non-root Agent network namespaces on one host; end-to-end Control TLS through opaque proxy`, protocolVersion: 3, agentSHA: createHash('sha256').update(await readFile(viaWSL ? '.artifacts/tunex-agent-linux' : binary)).digest('hex'), fixtureSHA: createHash('sha256').update(await readFile(viaWSL ? '.artifacts/network-fixture-linux' : fixture)).digest('hex'), limitations: 'Bounded 60-second local sample, not maximum supported capacity or fully Linux production deployment. At saturation readiness probes share the peer connection budget and may degrade health while established traffic remains live. Sustained recovery beyond peer-credential overlap remains a separate gate.' };
  }
 } catch (error) {
- if (control) { const [runtime] = await control.db.pool.query('SELECT node_id,session_epoch,snapshot_generation,last_report FROM runtime_nodes'); const [deployments] = await control.db.pool.query('SELECT * FROM relay_deployments'); const [credentials]=await control.db.pool.query('SELECT node_id,fingerprint,issued_at,valid_until,retire_after,revoked FROM node_relay_credentials'); await writeFile(join(directory, 'failure.json'), JSON.stringify({ credentials, error: error instanceof Error ? error.message : 'Relay capacity failed', runtime, deployments, processes: [...agents, ...processes].map(entry => ({ pid: entry.pid, namespace: entry.namespace, errors: entry.errors, exitCode: entry.process?.exitCode ?? null })) }, null, 2)); }
+ if (control) { const [runtime] = await control.db.pool.query('SELECT node_id,session_epoch,snapshot_generation,last_report FROM runtime_nodes'); const [deployments] = await control.db.pool.query('SELECT * FROM relay_deployments'); const [credentials]=await control.db.pool.query('SELECT node_id,fingerprint,issued_at,valid_until,retire_after,revoked FROM node_relay_credentials'); await writeFile(join(directory, 'failure.json'), JSON.stringify({ credentials, error: error instanceof Error ? error.message : 'Relay capacity failed', runtime, deployments, processes: [...agents, ...processes].map(entry => ({
+  pid:entry.pid,namespace:entry.namespace,errors:entry.errors,exitCode:entry.process?.exitCode??null,
+  loadProgress:'messages' in entry && Array.isArray(entry.messages)
+    ? entry.messages.slice(-3).map((item:any)=>({
+      completed:item.completed===true,reason:typeof item.reason==='string'?item.reason:null,
+      verifiedReplies:typeof item.verifiedReplies==='number'?item.verifiedReplies:null,
+      errors:typeof item.errors==='number'?item.errors:null,
+      clients:Array.isArray(item.clients)?item.clients.map((client:any)=>({
+        protocol:client.protocol,verified:client.verified,
+        failure:client.failure??null,errorKind:client.errorKind??null
+      })):[],
+    })) : [],
+})) }, null, 2)); }
  console.error(`Failure evidence: ${directory}`); throw error;
 } finally {
  const errors: unknown[] = [];
