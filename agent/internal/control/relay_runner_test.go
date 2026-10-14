@@ -239,15 +239,60 @@ func TestRelayRunnerPersistsBeforePrepareAndActivatesAfterRealPeerProbe(t *testi
 			if a.observations[0].Condition != "error" || !a.observations[0].Retryable {
 				t.Fatal("lost downstream remained falsely ready")
 			}
-			ingressRaw = runnerSnapshot(t, "node-a", 2, 4, []adp3.Assignment{})
+			// A new generation at the same client-facing physical port first becomes
+			// Prepared. Once the *ingress* accepts that Snapshot, the previous
+			// generation must stop accepting clients for both physical protocols.
+			// Merely seeing egress Prepared is not enough: Agents poll separately.
+			nextIngress := ingress
+			nextIngress.ForwardRevision = 2
+			nextIngress.DeploymentGeneration = 2
+			nextIngress.BindingFence = ingress.BindingFence + 2
+			nextIngress.Phase = "prepared"
+			nextConfig := ingress.Driver.Config
+			nextBinding := *nextConfig.Binding
+			nextBinding.ForwardRevision = 2
+			nextBinding.DeploymentGeneration = 2
+			nextBinding.IngressFence = nextIngress.BindingFence
+			nextConfig.Binding = &nextBinding
+			nextDigest, err := contracts.ComputeDigest(nextConfig)
+			if err != nil {
+				t.Fatal(err)
+			}
+			nextIngress.Driver.Config = nextConfig
+			nextIngress.Driver.ConfigDigest = nextDigest
+			ingressRaw = runnerSnapshot(t, "node-a", 2, 4, []adp3.Assignment{nextIngress})
+			if err := a.poll(ctx); err != nil {
+				t.Fatal("new generation Prepared failed", err)
+			}
+			if a.observations[0].Condition != "prepared" || a.observations[0].DeploymentGeneration != 2 {
+				t.Fatal("successor Prepared was not reported", a.observations)
+			}
+			assertAvailable := func() {
+				address := net.JoinHostPort("127.0.0.1", fmtPort(listenPort))
+				var probe net.PacketConn
+				var probeTCP net.Listener
+				var err error
+				if protocol == "tcp" {
+					probeTCP, err = net.Listen("tcp", address)
+				} else {
+					probe, err = net.ListenPacket("udp", address)
+				}
+				if err != nil {
+					t.Fatal("previous Relay listener remains bound after ingress Prepared", err)
+				}
+				if probeTCP != nil { probeTCP.Close() }
+				if probe != nil { probe.Close() }
+			}
+			assertAvailable()
+			ingressRaw = runnerSnapshot(t, "node-a", 2, 5, []adp3.Assignment{})
 			if err := a.poll(ctx); err != nil {
 				t.Fatal(err)
 			}
 			if len(a.instances) != 0 {
 				t.Fatal("removed Relay listener retained")
 			}
-			if a.journal.Retired[key] != 4 {
-				t.Fatal("physical Relay fence not retired")
+			if a.journal.Retired[key] != nextIngress.BindingFence {
+				t.Fatal("successor physical Relay fence not retired")
 			}
 		})
 	}
