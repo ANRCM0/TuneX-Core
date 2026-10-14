@@ -43,6 +43,16 @@ Both services drop Linux capabilities and set `no-new-privileges`. Protect CA pr
 
 Rollback is **not** volume deletion or re-enrollment. Snapshot state, fencing history, protected journals, authority and database versions are all security-sensitive. Record image digest, schema version, state backup and a verified recovery procedure before attempting an upgrade. Keep one owner per Agent state and set of native listening ports.
 
+## Runtime liveness and shutdown gates (second slice)
+
+The Control image includes a bounded `HEALTHCHECK` that opens a TCP connection to `127.0.0.1:TUNEX_CONTROL_PORT` and fails if the local listener is missing or the port is invalid. It does **not** verify authenticated HTTPS, MySQL, authority, Agent lease, or data plane readiness. **Do not route production traffic or authorize upgrades based solely on Docker's healthy status.** Agent readiness requires a fresh authoritative Report and real TCP/UDP payload. Do not fabricate an Agent health endpoint.
+
+Container CI now verifies both binaries start only with required trust prerequisites: bare Control must fail when required environment and protected authority state are absent; Agent must fail when its CA, credential and MAC journal key are absent. No trusted state is created by these checks.
+
+Before a controlled update on 1Panel, record the old image digest, database migration revision, full verified MySQL backup, protected Control authority state, CA keys, Agent journal and Node identity. Ensure exactly one live writer/Agent per identity and socket. Gracefully stop the replaced instance before its successor acquires the same state. Keep the old binaries/images available, but **do not start them against a newer incompatible schema**. A rollback may require a tested full restoration of corresponding database/trust state and cannot be performed by dropping volumes or re-enrolling Nodes.
+
+After a staged replacement, verify its actual HTTPS/mTLS operation, current Snapshot/Report, fresh Forward operation, TCP and UDP payload, expired credential refusal and safe resource reclamation before approving production use. Automatic one-command upgrade or downtime-free migration are **not yet implemented**.
+
 ## Next acceptance gates (not yet claimed)
 
 - Build both images on disposable Linux CI and exercise image startup and clean shutdown.
