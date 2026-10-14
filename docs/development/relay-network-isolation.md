@@ -42,7 +42,27 @@ whether the tested tree was dirty; development runs are not clean-commit claims.
 | Runtime intent contention | A separate MySQL connection holds the real Forward row FOR UPDATE. Both current Agents must durably advance Report sequence in the same sessions before that intent lock is released. |
 
 Reports held at activation boundaries are genuine Agent observations; receiving time
-still defines freshness under ADP semantics. The stale-report test waits real elapsed
+still defines freshness under ADP semantics.
+
+### Successor Prepared synchronization regression
+
+For an already-active Relay being replaced, ingress and egress poll distinct ADP/3
+Snapshots independently. Observing only the **egress** successor Prepared report does
+not prove ingress has consumed the successor or closed its old active listeners.
+The isolation acceptance now waits for the **ingress's own persisted current session
+and snapshot generation**, checking both protocol observations match the exact new
+deployment generation, assignment IDs, binding fences and `prepared` conditions.
+**Immediately after that barrier**, the test asserts TCP and UDP public listeners
+are closed. A replayed authentic older egress Report must still receive duplicate
+ACK and cannot advance the successor while its egress Prepared report is held.
+
+This is not a grace period, a relaxation of listener closure checks, or permission
+to borrow older authority. Until a new Snapshot is accepted, the former Agent lease
+still bounds any old acceptance (as in ADP/3); Control never claims instantaneous
+remote revocation. Additional Go Agent tests directly demonstrate that a
+same-port successor `prepared` snapshot retires old TCP and UDP Relay listeners
+without opening new ones. Neither Operation completion nor new traffic readiness
+is inferred from an older Report. The stale-report test waits real elapsed
 time, and no system clock or lease bound is changed. Deadline injection exercises
 scanner behavior rather than pretending the default ten-minute timeout elapsed.
 
