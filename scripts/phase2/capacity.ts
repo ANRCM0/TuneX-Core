@@ -101,6 +101,28 @@ try {
     assert.ok(samples.some(sample=>sample.tcpStreams>=32&&sample.udpAssociations>=16));assert.ok(samples.some(sample=>sample.authorizationActive===true));
     const peak={tcpStreams:Math.max(...samples.map(s=>s.tcpStreams)),udpAssociations:Math.max(...samples.map(s=>s.udpAssociations)),goroutines:Math.max(...samples.map(s=>s.goroutines)),heapAllocBytes:Math.max(...samples.map(s=>s.heapAllocBytes)),runtimeBytes:Math.max(...samples.map(s=>s.runtimeBytes)),openFileDescriptors:Math.max(...samples.map(s=>s.openFileDescriptors??0)),maxRSSBytes:Math.max(...samples.map(s=>s.maxRSSBytes??0)),measuredCpuTimeNanos:Math.max(...samples.map(s=>s.cpuTimeNanos??0))-(baseline.cpuTimeNanos??0)};
     passed('Capacity: independent Linux clients verify unique TCP/UDP payloads and measured latency/throughput under bounded concurrency');
+    // The two short load bursts do not necessarily cross a real lease renewal.
+    // Preserve the strict >=2 snapshots assertion, but synchronize on a real
+    // higher-generation publication plus durable Agent acknowledgement first.
+    const activeSnapshotRows=async()=>{
+        const [records]=await control!.db.pool.query<any[]>('SELECT generation,body FROM snapshots WHERE node_id=? ORDER BY generation',[nodeId]);
+        return records.filter((record:any)=>record.body.assignments.length===2);
+    };
+    await until(async()=>(await activeSnapshotRows()).length>=2);
+    const renewed=await activeSnapshotRows();
+    assert.ok(renewed.every((record:any)=>record.body.assignments.every((assignment:any)=>
+        assignment.deploymentGeneration===1&&assignment.bindingFence===1)));
+    const lastRenewedGeneration=renewed.at(-1)!.generation;
+    await until(async()=>{
+        const [records]=await control!.db.pool.query<any[]>('SELECT snapshot_generation,last_report FROM runtime_nodes WHERE node_id=?',[nodeId]);
+        const row=records[0],report=typeof row?.last_report==='string'?JSON.parse(row.last_report):row?.last_report;
+        return row?.snapshot_generation>=lastRenewedGeneration&&
+            report?.acceptedSnapshotGeneration===row.snapshot_generation;
+    });
+    const renewedProbe=JSON.parse((await linux(fixture,['--mode','probe','--port',String(portStatus.port)])).stdout);
+    assert.equal(renewedProbe.tcp,true);
+    assert.equal(renewedProbe.udp,true);
+    passed('Snapshot renewal: higher-generation leases are reported by Agent while TCP/UDP preserve the execution fence');
     const removed=await call('DELETE',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`,{expectedRevision:1});assert.equal(removed.status,202);await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/operations/${removed.body.operationId}`)).body.status==='succeeded');
     await until(async()=>{const measured=JSON.parse((await linux('/bin/cat',[diagnosticsPath])).stdout);return measured.tcpStreams===0&&measured.udpAssociations===0;});const reclaimed=JSON.parse((await linux('/bin/cat',[diagnosticsPath])).stdout);
     assert.ok(reclaimed.openFileDescriptors<=baseline.openFileDescriptors+4);passed('Capacity cleanup: actual stream/session counters and descriptors return near baseline after safe deletion');
