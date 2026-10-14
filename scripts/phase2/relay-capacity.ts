@@ -154,7 +154,10 @@ try {
   };
   const held = await launchFixture(ingressNS, 'load', ['--port',String(listenPort),'--tcp-clients','1','--udp-clients','1','--seconds','90','--payload-bytes','256','--load-progress','--interval-ms','200','--expect-cutoff'], 'held-before-rotation');
   await until(async () => held.entry.messages.at(-1).clients?.every((client:any) => client.verified > 0), 'held streams before automatic rotation');
-  const waitRenewed = async (count:number, previousGeneration:number) => {
+  // The new roles can become active before old connections finish their bounded
+  // retirement. Do not wait for the retirement Operation before starting the
+  // first overlap traffic window: that would consume the next scheduled renewal.
+  const waitRenewed = async (count:number, previousGeneration:number, waitForRetirement=true) => {
    await until(async () => {
     const [rows] = await control!.db.pool.query<any[]>('SELECT node_id,COUNT(*) n FROM node_relay_credentials GROUP BY node_id');
     return rows.length === 2 && rows.every(row => row.n >= count);
@@ -163,7 +166,8 @@ try {
     const plan = await latest(), [current] = await control!.db.pool.query<any[]>('SELECT node_id,fingerprint FROM node_relay_credentials WHERE retire_after IS NULL AND revoked=FALSE');
     return plan.generation > previousGeneration && plan.body.nodes.every((node:any)=>node.assignments.every((a:any)=>{const config=a.driver.config,peerId=a.role==='relay-ingress'?config.binding.egressNodeId:config.binding.ingressNodeId;return digest(config.peerFingerprints)===digest([`sha256:${current.find(row=>row.node_id===peerId)?.fingerprint}`]);}));
    }, 'latest plan includes both actual renewed peer identities');
-   await waitHealthy(); await until(async () => (await call('GET',resourcePath)).body.lastOperation.status === 'succeeded', 'renewal retirement completion', 65000);
+   await waitHealthy();
+   if(waitForRetirement) await until(async () => (await call('GET',resourcePath)).body.lastOperation.status === 'succeeded', 'renewal retirement completion', 65000);
    const plan = await latest(); assert.ok(plan.generation > previousGeneration);
    const [credentials] = await control!.db.pool.query<any[]>('SELECT node_id,fingerprint,issued_at,valid_until,retire_after FROM node_relay_credentials ORDER BY node_id,issued_at');
    const current = credentials.filter(row => row.retire_after === null); assert.equal(current.length,2);
@@ -179,15 +183,12 @@ try {
    assert.equal((await call('GET',`/api/v1/scopes/${scope}/operations/${initialOperation}`)).body.status,'succeeded');
    const detail = {count,generation:plan.generation,credentials,sessions,observedAt:new Date().toISOString()}; rotationDetails.push(detail); return {plan,credentials,current};
   };
-  const first = await waitRenewed(2,firstGeneration);
+  const first = await waitRenewed(2,firstGeneration,false);
   assert.equal(dropped,true); const lost = attempts.find(attempt=>attempt.lost)!;
   assert.ok(attempts.filter(attempt=>attempt.nodeId===lost.nodeId&&attempt.requestId===lost.requestId&&attempt.csrDigest===lost.csrDigest).length>=2);
   const [requests] = await control.db.pool.query<any[]>('SELECT node_id,request_id,request_digest FROM relay_credential_requests ORDER BY node_id,request_id');
   assert.equal(requests.filter(row=>row.node_id===lost.nodeId&&row.request_id===lost.requestId).length,1);
   pass('Automatic peer renewal: actual issuance response loss replays the same durable CSR once, creates higher fences/generation and retains both sessions and Forward revision');
-  const heldResult = await held.entry.done; assert.equal(heldResult.expectedCutoff,true); assert.equal(heldResult.errors,2);
-  for (const client of heldResult.clients) assert.ok(client.verified>0 && client.closedAt);
-  pass('Renewal retirement: initially verified held TCP drains and UDP resets during the authenticated deployment replacement; prior completed Operation stays terminal');
   const verifyWindow = async (name:string) => {
    const before = (await latest()).generation;
    const load = await launchFixture(ingressNS,'load',['--port',String(listenPort),'--tcp-clients','4','--udp-clients','2','--seconds','36','--payload-bytes','512','--load-progress','--interval-ms','20'],name);
@@ -195,7 +196,18 @@ try {
    while(!done){ samples.push({phase:name,agents:await diagnostics()}); await new Promise(resolve=>setTimeout(resolve,1000)); }
    const result = await load.entry.done; assert.equal(result.completed,true); assert.equal(result.errors,0); assert.ok(result.clients.every((client:any)=>client.verified>100)); assert.equal((await latest()).generation,before); return result;
   };
+  // New clients and genuine old-client retirement must overlap in *real time*.
+  // Previous ordering waited for old retirement first (until about t+90s),
+  // then ran a 36s window across the next automatic renewal (about t+120s).
+  // All six new clients correctly closed during that later generation change,
+  // but the test called it an unexpected retirement-window failure.
+  const windowStartedAt=Date.now();
   const firstWindow = await verifyWindow('first-retirement-window');
+  const heldResult = await held.entry.done; assert.equal(heldResult.expectedCutoff,true); assert.equal(heldResult.errors,2);
+  for (const client of heldResult.clients) assert.ok(client.verified>0 && client.closedAt);
+  await until(async () => (await call('GET',resourcePath)).body.lastOperation.status === 'succeeded', 'first retirement Operation terminal', 15000);
+  assert.ok(windowStartedAt < Math.min(...first.credentials.filter(row=>row.retire_after!==null).map(row=>row.retire_after)), 'new traffic must begin while genuine old-peer authorization is still overlapping');
+  pass('Renewal retirement: old TCP drains and UDP resets while fresh TCP/UDP clients remain error-free; prior completed Operation stays terminal');
   assert.ok(first.credentials.filter(row=>row.retire_after!==null).every(row=>Date.now()>row.retire_after+policy.maxClockSkewSeconds*1000));
   const stillFirst = await latest(); assert.equal(stillFirst.stage,'active'); assert.equal(stillFirst.generation,first.plan.generation);
   pass('Overlap closure: new encrypted TCP/UDP survives actual old-peer retirement plus clock margin, with no expiry-driven withdrawal or unnecessary deployment rebuild');
