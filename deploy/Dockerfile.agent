@@ -13,7 +13,7 @@ ARG TUNEX_SOURCE_REVISION
 LABEL org.opencontainers.image.source="https://github.com/ANRCM0/TuneX-Core" \
       org.opencontainers.image.revision="${TUNEX_SOURCE_REVISION}" \
       org.opencontainers.image.title="TuneX VNext Agent"
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* \
     && groupadd -g 10001 tunex && useradd -u 10001 -g 10001 -M -s /usr/sbin/nologin tunex
 COPY --from=builder /out/tunex-agent /usr/local/bin/tunex-agent
 RUN mkdir -p /var/lib/tunex-agent /run/tunex-agent-secrets && chown 10001:10001 /var/lib/tunex-agent /run/tunex-agent-secrets

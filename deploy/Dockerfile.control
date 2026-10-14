@@ -15,7 +15,7 @@ ARG TUNEX_SOURCE_REVISION
 LABEL org.opencontainers.image.source="https://github.com/ANRCM0/TuneX-Core" \
       org.opencontainers.image.revision="${TUNEX_SOURCE_REVISION}" \
       org.opencontainers.image.title="TuneX VNext Control"
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates openssl && rm -rf /var/lib/apt/lists/* \
     && groupadd -g 10001 tunex && useradd -u 10001 -g 10001 -M -s /usr/sbin/nologin tunex
 WORKDIR /opt/tunex
 COPY --from=dependencies /opt/tunex/node_modules ./node_modules
