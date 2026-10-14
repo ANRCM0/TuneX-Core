@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +14,16 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+// Classify transient load failures without exposing any payloads or connection secrets.
+func classifyLoadError(err error) string {
+	if err == nil { return "payload-mismatch" }
+	var network net.Error
+	if errors.As(err, &network) && network.Timeout() { return "timeout" }
+	if errors.Is(err, io.EOF) { return "eof" }
+	if errors.Is(err, net.ErrClosed) { return "closed" }
+	return "io-error"
+}
 
 func load(port, tcpCount, udpCount, seconds, size int, runID string, progress bool, interval int, expectCutoff bool) error {
 	if tcpCount < 1 || tcpCount > 256 || udpCount < 1 || udpCount > 256 || seconds < 1 || seconds > 180 || size < 64 || size > 4096 || interval < 0 || interval > 1000 || expectCutoff && !progress {
@@ -108,6 +119,7 @@ func load(port, tcpCount, udpCount, seconds, size int, runID string, progress bo
 					mutex.Lock()
 					failures = append(failures, "write")
 					clients[index]["failure"] = "write"
+					if err == nil { clients[index]["errorKind"] = "short-write" } else { clients[index]["errorKind"] = classifyLoadError(err) }
 					mutex.Unlock()
 					return
 				}
@@ -127,6 +139,7 @@ func load(port, tcpCount, udpCount, seconds, size int, runID string, progress bo
 					mutex.Lock()
 					failures = append(failures, "reply")
 					clients[index]["failure"] = "reply"
+					if malformed { clients[index]["errorKind"] = "udp-size-mismatch" } else { clients[index]["errorKind"] = classifyLoadError(err) }
 					if err == nil || malformed {
 						invalidPayload = true
 					}
@@ -160,6 +173,12 @@ func load(port, tcpCount, udpCount, seconds, size int, runID string, progress bo
 	}
 	elapsed := time.Since(started)
 	if !expectCutoff && len(failures) > 0 || completed.Load() == 0 {
+		// Preserve individual client/protocol failure kinds for CI artifacts.
+		// Only public counters, generic error classes and timestamps are emitted.
+		_ = encoder.Encode(map[string]any{
+			"completed":false,"reason":"unexpected-client-failure",
+			"clients":clients,"errors":len(failures),"verifiedReplies":completed.Load(),
+		})
 		return fmt.Errorf("load failed: %d errors, %d verified replies", len(failures), completed.Load())
 	}
 	if expectCutoff && (len(failures) != len(sockets) || elapsed >= time.Duration(seconds)*time.Second) {
