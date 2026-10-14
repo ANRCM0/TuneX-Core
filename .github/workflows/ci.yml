@@ -139,6 +139,8 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install namespace tools on this disposable runner
         run: sudo apt-get update && sudo apt-get install -y iproute2 iptables util-linux
+      - name: Verify network tooling resolves on PATH
+        run: command -v ip && command -v ss && ss -V
       - run: mkdir -p .artifacts
       - run: node scripts/run-go.mjs build -o ../.artifacts/tunex-agent ./cmd/tunex-agent
       - run: node scripts/run-go.mjs build -o ../.artifacts/time-proof ./cmd/time-proof
