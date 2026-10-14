@@ -41,8 +41,8 @@
       <div class="metrics">
         <div class="metric"><span>受管节点</span><strong id="metric-nodes">—</strong><small>按 Scope 筛选</small></div>
         <div class="metric"><span>转发规则</span><strong id="metric-forwards">—</strong><small>Direct / Relay</small></div>
-        <div class="metric"><span>运行中的操作</span><strong id="metric-running">—</strong><small>非已生效状态</small></div>
-        <div class="metric"><span>失败操作</span><strong id="metric-failed">—</strong><small>需检查原因</small></div>
+        <div class="metric"><span>最近 25 项中执行中</span><strong id="metric-running">—</strong><small>非已生效状态</small></div>
+        <div class="metric"><span>最近 25 项中失败</span><strong id="metric-failed">—</strong><small>需检查原因</small></div>
       </div>
       <section class="panel"><div class="panel-head"><h2>运行状态说明</h2></div>
         <div class="explain-grid"><div><b>Desired</b><p>用户希望系统如何转发；Revision 代表配置版本。</p></div><div><b>Operation</b><p>Control 是否已经接收、执行或完成部署动作。</p></div><div><b>Applied</b><p>Agent 实际应用且仍新鲜的部署观察结果。</p></div><div><b>Health</b><p>Agent 上报的运行状况；不等于独立端到端探测。</p></div></div>
@@ -56,9 +56,9 @@
         <h3>新节点 · 预设授权</h3>
         <p class="hint">注册仅生成一次性 Enrollment Token；安装 Agent 还需要按现有运维文档准备 TLS CA、状态目录和密钥。</p>
         <div class="form-grid">
-          <label>监听地址 <select name="address"><option value="0.0.0.0">0.0.0.0 · IPv4 全网卡</option><option value="127.0.0.1">127.0.0.1 · 仅本机</option><option value="::">:: · IPv6 全网卡</option><option value="::1">::1 · IPv6 本机</option></select></label>
+          <label>监听地址 <select name="address"><option value="127.0.0.1">127.0.0.1 · 仅本机（默认）</option><option value="0.0.0.0">0.0.0.0 · IPv4 全网卡</option><option value="::">:: · IPv6 全网卡</option><option value="::1">::1 · IPv6 本机</option></select></label>
           <label>允许端口（逗号分隔） <input name="ports" value="25565" placeholder="例如 25565,25566" required></label>
-          <label>允许目标网段（逗号分隔） <input name="cidrs" value="0.0.0.0/0" required></label>
+          <label>允许目标网段（逗号分隔） <input name="cidrs" value="127.0.0.0/8" required></label>
         </div>
         <label class="check"><input name="metadata" type="checkbox"> 允许访问元数据地址（默认禁止）</label>
         <div class="actions"><button type="submit">创建节点并签发注册凭据</button><button id="cancel-node" class="secondary" type="button">取消</button></div>
