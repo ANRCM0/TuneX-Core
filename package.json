@@ -9,7 +9,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --test packages/core/test/*.test.ts packages/contracts/test/*.test.ts apps/control/test/*.test.ts",
-    "test:web": "node --check apps/web/app.js && node --check apps/web/model.js && node --test apps/web/test/*.test.mjs",
+    "test:web": "node --check apps/web/app.js && node --check apps/web/model.js && node --check apps/web/relay.js && node --check apps/web/relay-model.js && node --test apps/web/test/*.test.mjs",
     "test:go": "node scripts/run-go.mjs test ./...",
     "build:go": "node scripts/run-go.mjs build ./...",
     "check": "npm run typecheck && npm test && npm run test:web && npm run test:go && npm run build:go && npm run contracts:check && node scripts/check-boundaries.mjs && node scripts/verify-offline-plan.mjs",

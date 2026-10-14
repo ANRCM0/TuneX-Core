@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { HttpBindings } from '@hono/node-server';
 import { TLSSocket } from 'node:tls';
 import { readFile } from 'node:fs/promises';
-import { consoleNodes, consoleForwards, consoleOperations } from './console-read.ts';
+import { consoleNodes, consoleForwards, consoleOperations, consoleNodeDiagnostics } from './console-read.ts';
 import { randomUUID } from 'node:crypto';
 import { parseJson, parseRuntimeMessage } from '@tunex/contracts';
 import { isId, isCounter } from '@tunex/core';
@@ -99,6 +99,8 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.get('/console/', async c => { consoleHeaders(c); return c.html(await readFile(new URL('../../../web/index.html', import.meta.url), 'utf8')); });
     app.get('/console/app.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/app.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/model.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/model.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/relay-model.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/relay-model.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/relay.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/relay.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/style.css', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/style.css', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/css; charset=utf-8' }); });
     app.get('/health',async c=>c.json({status:(await authority.read()).maintenance?'maintenance':'ok',protocolVersion:3}));
     app.post('/api/v1/scopes/:scope/relay-plan',async c=>c.json(await control.planRelay(c.get('actor'),scope(c.req.param('scope')),parseJson(await body(c.req.raw,32768)))));
@@ -172,6 +174,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         const result = await control.retry(c.get('actor'), scope(c.req.param('scope')), c.req.header('idempotency-key'), c.req.param('id'), input.expectedRevision);
         return c.json(result.body, result.status);
     });
+    app.get('/api/v1/scopes/:scope/nodes/:id/diagnostics', async c => c.json(await consoleNodeDiagnostics(control, c.get('actor'), scope(c.req.param('scope')), c.req.param('id'))));
     app.get('/api/v1/scopes/:scope/nodes/:id', async (c) => c.json(await control.nodes.view(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'))));
     app.put('/api/v1/scopes/:scope/nodes/:id/policy', async (c) => {
         const input = parseJson(await body(c.req.raw)) as Record<string, unknown>;

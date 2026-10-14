@@ -1,4 +1,5 @@
 import { validScope, parsePorts, parseCidrs, directCapable, allowedProtocols, directSpec, stateTone, pageCount } from './model.js';
+import { initRelayConsole } from './relay.js';
 
 const byId = id => document.getElementById(id);
 const auth = { scope: '', token: '' };
@@ -78,7 +79,7 @@ async function mutate(method, resource, input) {
 }
 function display(view) {
   currentView = view;
-  const labels = { overview: '运行概览', nodes: '节点管理', forwards: '转发管理', operations: '执行记录' };
+  const labels = { overview: '运行概览', nodes: '节点管理', forwards: '转发管理', relay: 'Relay 链路', operations: '执行记录' };
   byId('page-title').textContent = labels[view] || labels.overview;
   document.querySelectorAll('.view').forEach(node => { node.hidden = node.id !== 'view-' + view; });
   document.querySelectorAll('.nav').forEach(node => { node.classList.toggle('active', node.dataset.view === view); });
@@ -87,7 +88,7 @@ async function load(kind) {
   const result = await request('GET', kind + '?page=' + page[kind] + '&limit=25');
   store[kind] = result.items;
   totals[kind] = result.total;
-  if (kind === 'nodes') renderNodes();
+  if (kind === 'nodes') { renderNodes(); relayConsole.populateNodes(); }
   if (kind === 'forwards') renderForwards();
   if (kind === 'operations') renderOperations();
   pagination(kind, result);
@@ -134,7 +135,10 @@ function renderNodes() {
     const report = cell(tr, label(recent ? '报告较新' : '未知 / 过期', recent ? 'good' : ''));
     report.append(element('div', date(node.lastReportAt), 'subline'));
     cell(tr, element('span', (node.policy?.capabilities ?? []).join(', ') || '等待 Agent 上报', 'mono'));
-    cell(tr, button('详情', 'node-detail', node.id, 'secondary'));
+    const actionCell=cell(tr);
+    const actionGroup=element('div',undefined,'cell-actions');
+    actionGroup.append(button('详情','node-detail',node.id,'secondary'),button('诊断','node-diagnostics',node.id,'secondary'));
+    actionCell.append(actionGroup);
     tbody.append(tr);
   }
   fillNodes();
@@ -257,6 +261,7 @@ function detail(title, data, secret) {
 async function action(kind, id) {
   try {
     if (kind === 'node-detail') return detail('Node · ' + shortId(id), await request('GET', 'nodes/' + encodeURIComponent(id)));
+    if (kind === 'node-diagnostics') return detail('Node · 运行与租约诊断（非链路探测）', await request('GET', 'nodes/' + encodeURIComponent(id) + '/diagnostics'));
     if (kind === 'forward-detail') {
       const record = await request('GET', 'forwards/' + encodeURIComponent(id));
       return detail('Forward · 期望 / 应用 / 健康', record);
@@ -296,7 +301,11 @@ async function createNode(event) {
     notify('节点已创建；请使用受信任的 Agent 安装流程完成 Enrollment。');
   } catch (error) { notify(error.message, true); }
 }
-document.querySelectorAll('.nav').forEach(node => node.addEventListener('click', () => display(node.dataset.view)));
+const relayConsole=initRelayConsole({request,mutate,notify,byId,store,load,detail,display});
+document.querySelectorAll('.nav').forEach(node => node.addEventListener('click', () => {
+  display(node.dataset.view);
+  if(node.dataset.view==='relay' && auth.scope) relayConsole.refresh().catch(e=>notify(e.message,true));
+}));
 byId('connection-form').addEventListener('submit', async event => {
   event.preventDefault();
   const scope = byId('scope').value.trim();
@@ -319,6 +328,7 @@ byId('disconnect').addEventListener('click', () => {
   byId('connection-indicator').textContent = '未连接';
   byId('detail-dialog').close(); byId('detail-content').textContent = '';
   byId('forward-form').hidden = true; byId('node-form').hidden = true;
+  relayConsole.clear();
   renderNodes(); renderForwards(); renderOperations(); updateOverview();
   notify('已断开连接；当前标签页中的 Bearer Token 已清除。');
 });
