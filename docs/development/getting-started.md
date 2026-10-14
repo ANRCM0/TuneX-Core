@@ -67,4 +67,12 @@ Phase 2 的 Linux namespace/容器测试须使用独立 client、Agent、target�
 证据见 [System time](system-time.md)，恢复/容量入口见 [Recovery and capacity](recovery-and-capacity.md)；
 完整 Linux 栈与全部矩阵出口仍待验证。
 
+## Direct UDP 手工验收
+
+复用已验证的单节点 TCP 测试实例、同一个数值端口但不同物理 UDP 协议，参见
+[Direct UDP 实机验收](direct-udp-live-smoke.md)。
+脚本支持两个独立 UDP 客户端的精确字节和空数据报验证；工具自检 `npm run test:udp-smoke`
+不经过 Agent，不可替代实际部署链路验收。
+
+
 实施状态见 [progress.md](progress.md)，验收要求见 [acceptance-v1.md](../testing/acceptance-v1.md)。
