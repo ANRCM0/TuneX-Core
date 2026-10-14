@@ -14,6 +14,18 @@ export function consolePage(pageText: string | undefined, limitText: string | un
     return { page, limit, offset: (page - 1) * limit };
 }
 
+/** mysql2.execute binds JavaScript number arguments as DOUBLE. MySQL 8.4 may reject
+ * DOUBLE bound parameters in LIMIT/OFFSET with ER_WRONG_ARGUMENTS.
+ * Interpolate ONLY integers from consolePage; all user/scope values stay bound.
+ */
+export function consolePageSql(paging: ReturnType<typeof consolePage>): string {
+    if (!Number.isSafeInteger(paging.page) || paging.page < 1 || paging.page > 10000 ||
+        !Number.isSafeInteger(paging.limit) || paging.limit < 1 || paging.limit > 100 ||
+        !Number.isSafeInteger(paging.offset) || paging.offset !== (paging.page - 1) * paging.limit)
+        invalid('Invalid bounded pagination');
+    return `LIMIT ${paging.limit} OFFSET ${paging.offset}`;
+}
+
 export async function consoleNodes(control: ControlApplication, actor: string, scope: string, pageText?: string, limitText?: string) {
     const paging = consolePage(pageText, limitText);
     return control.db.transaction(async tx => {
@@ -22,7 +34,7 @@ export async function consoleNodes(control: ControlApplication, actor: string, s
         const records = await rows<{
             id: string; revoked: number; credential_until: number | null; facts: unknown;
             session_epoch: number | null; snapshot_generation: number | null; received_at: number | null;
-        }>(tx, 'SELECT n.id,n.revoked,n.credential_until,n.facts,r.session_epoch,r.snapshot_generation,r.received_at FROM nodes n LEFT JOIN runtime_nodes r ON r.node_id=n.id WHERE n.scope_id=? ORDER BY n.id LIMIT ? OFFSET ?', [scope, paging.limit, paging.offset]);
+        }>(tx, `SELECT n.id,n.revoked,n.credential_until,n.facts,r.session_epoch,r.snapshot_generation,r.received_at FROM nodes n LEFT JOIN runtime_nodes r ON r.node_id=n.id WHERE n.scope_id=? ORDER BY n.id ${consolePageSql(paging)}`, [scope]);
         return {
             page: paging.page, limit: paging.limit, total: Number(count?.n ?? 0),
             items: records.map(record => ({
@@ -44,7 +56,7 @@ export async function consoleForwards(control: ControlApplication, actor: string
         const records = await rows<{
             id: string; revision: number; spec: unknown; recovery_suspended: number;
             operation_id: string | null; operation_kind: string | null; operation_status: string | null;
-        }>(tx, "SELECT f.id,f.revision,f.spec,f.recovery_suspended,o.id operation_id,o.kind operation_kind,o.status operation_status FROM forwards f LEFT JOIN operations o ON o.id=(SELECT recent.id FROM operations recent WHERE recent.forward_id=f.id ORDER BY recent.target_revision DESC,recent.created_at DESC,recent.id DESC LIMIT 1) WHERE f.scope_id=? AND f.deleting=FALSE ORDER BY f.id LIMIT ? OFFSET ?", [scope, paging.limit, paging.offset]);
+        }>(tx, `SELECT f.id,f.revision,f.spec,f.recovery_suspended,o.id operation_id,o.kind operation_kind,o.status operation_status FROM forwards f LEFT JOIN operations o ON o.id=(SELECT recent.id FROM operations recent WHERE recent.forward_id=f.id ORDER BY recent.target_revision DESC,recent.created_at DESC,recent.id DESC LIMIT 1) WHERE f.scope_id=? AND f.deleting=FALSE ORDER BY f.id ${consolePageSql(paging)}`, [scope]);
         return {
             page: paging.page, limit: paging.limit, total: Number(count?.n ?? 0),
             items: records.map(record => ({
@@ -64,7 +76,7 @@ export async function consoleOperations(control: ControlApplication, actor: stri
         const records = await rows<{
             id: string; forward_id: string; kind: string; status: string; target_revision: number;
             created_at: number; updated_at: number; last_error: unknown; recovery_invalidated: number; cleanup_pending: number;
-        }>(tx, 'SELECT id,forward_id,kind,status,target_revision,created_at,updated_at,last_error,recovery_invalidated,cleanup_pending FROM operations WHERE scope_id=? ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?', [scope, paging.limit, paging.offset]);
+        }>(tx, `SELECT id,forward_id,kind,status,target_revision,created_at,updated_at,last_error,recovery_invalidated,cleanup_pending FROM operations WHERE scope_id=? ORDER BY created_at DESC,id DESC ${consolePageSql(paging)}`, [scope]);
         return {
             page: paging.page, limit: paging.limit, total: Number(count?.n ?? 0),
             items: records.map(record => ({
