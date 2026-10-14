@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { consolePage, consoleNodes, consoleForwards, consoleOperations } from '../src/api/console-read.ts';
+import { consolePage, consolePageSql, consoleNodes, consoleForwards, consoleOperations } from '../src/api/console-read.ts';
 import type { ControlApplication } from '../src/application/control.ts';
 
 test('console pagination is bounded and rejects malformed integers', () => {
   assert.deepEqual(consolePage(undefined, undefined), { page:1, limit:25, offset:0 });
   assert.deepEqual(consolePage('2','100'), { page:2, limit:100, offset:100 });
+  assert.equal(consolePageSql(consolePage('2','100')), 'LIMIT 100 OFFSET 100');
+  assert.equal(consolePageSql(consolePage('10000','100')), 'LIMIT 100 OFFSET 999900');
+  assert.throws(() => consolePageSql({page:1,limit:25,offset:1.5}));
+  assert.throws(() => consolePageSql({page:1,limit:0,offset:0}));
+  assert.throws(() => consolePageSql({page:1,limit:25,offset:25}));
+
   for (const value of ['0','-1','1.5','0x10','10001','Infinity','1e4','']) {
     assert.throws(() => consolePage(value,undefined));
   }
@@ -61,5 +67,18 @@ test('page queries are scope bound, return no enrollment secret and separate ope
   assert.equal(forwards.items[0]?.recoverySuspended,true);
   assert.equal(operations.items[0]?.status,'succeeded');
   assert.ok(fixture.queries.every(q=>q.params[0]==='scope-a'));
-  assert.ok(fixture.queries.filter(q=>q.sql.includes('LIMIT ? OFFSET ?')).every(q=>q.params[1]===25&&q.params[2]===0));
+  const lists = fixture.queries.filter(q=>q.sql.includes('LIMIT 25 OFFSET 0'));
+  assert.equal(lists.length,3);
+  assert.ok(lists.every(q=>q.params.length===1&&q.params[0]==='scope-a'));
+  assert.ok(fixture.queries.every(q=>!q.sql.includes('LIMIT ?')&&!q.sql.includes('OFFSET ?')));
+});
+test('all three scoped lists use bounded second-page literal offsets', async () => {
+  const fixture = stubControl(true);
+  await consoleNodes(fixture.control,'viewer','scope-a','2','40');
+  await consoleForwards(fixture.control,'viewer','scope-a','2','40');
+  await consoleOperations(fixture.control,'viewer','scope-a','2','40');
+  const lists = fixture.queries.filter(q=>q.sql.includes('LIMIT 40 OFFSET 40'));
+  assert.equal(lists.length,3);
+  assert.ok(lists.every(q=>q.params.length===1&&q.params[0]==='scope-a'));
+});
 });
