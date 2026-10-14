@@ -110,6 +110,7 @@ jobs:
             .artifacts/relay/**/evidence.json
             .artifacts/recovery/**/evidence.json
             .artifacts/capacity/**/evidence.json
+            .artifacts/capacity/**/failure.json
   relay-isolation:
     runs-on: ubuntu-latest
     timeout-minutes: 15
