@@ -5,6 +5,7 @@ import {TRANSIT_NEGOTIATION_CAPABILITIES,parseTransitNegotiation,checkTransitNeg
 import {MySqlUnitOfWork,rows,write} from '../src/infrastructure/mysql.ts';
 import {TransitNegotiator} from '../src/modules/runtime/transit-negotiation.ts';
 import {ControlError} from '../src/application/errors.ts';
+import {createApp} from '../src/api/app.ts';
 
 const url=process.env.TUNEX_TEST_DATABASE_URL;
 const rejectCode=(code:string)=>(error:unknown):boolean=>error instanceof ControlError&&error.code===code;
@@ -68,4 +69,16 @@ test('real MySQL TLS-bound Transit handshake rejects retired boot, credential re
    });
   }finally{await db.close();}
  }
+});
+
+test('transit negotiation HTTP path refuses client without a verified TLS machine certificate',async()=>{
+ const app=createApp({} as never,{} as never,{allow:async()=>{}} as never);
+ const response=await app.request('/agent/v3/transit/hello',{
+  method:'POST',headers:{'content-type':'application/json','x-tunex-session-epoch':'8'},
+  body:JSON.stringify({protocolVersion:3,extensionVersion:1,nodeId:'node-b',bootId:'boot-b',
+   sessionEpoch:8,requiredCapabilities:TRANSIT_NEGOTIATION_CAPABILITIES,
+   lastStoredTransitGeneration:0}),
+ });
+ assert.equal(response.status,401);
+ assert.equal((await response.json() as {code:string}).code,'UNAUTHENTICATED');
 });
