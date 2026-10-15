@@ -77,10 +77,10 @@ test('Multi-hop plan is deterministic across resource/facts order and does not m
 test('Transit preparation refuses missing, foreign, mixed-generation, colliding and unfenced slots',()=>{
   for(const change of [
     (i:ReturnType<typeof fixture>)=>{i.reservations.pop();},
-    (i:ReturnType<typeof fixture>)=>{i.reservations[0]!.forwardId='foreign';},
-    (i:ReturnType<typeof fixture>)=>{i.reservations[0]!.bindingFence=0;},
-    (i:ReturnType<typeof fixture>)=>{i.reservations[1]!.deploymentGeneration++;},
-    (i:ReturnType<typeof fixture>)=>{i.reservations[3]!.port=i.reservations[2]!.port;},
+    (i:ReturnType<typeof fixture>)=>{Reflect.set(i.reservations[0]!, 'forwardId', 'foreign');},
+    (i:ReturnType<typeof fixture>)=>{Reflect.set(i.reservations[0]!, 'bindingFence', 0);},
+    (i:ReturnType<typeof fixture>)=>{Reflect.set(i.reservations[1]!, 'deploymentGeneration', i.reservations[1]!.deploymentGeneration + 1);},
+    (i:ReturnType<typeof fixture>)=>{Reflect.set(i.reservations[3]!, 'port', i.reservations[2]!.port);},
     (i:ReturnType<typeof fixture>)=>{i.reservations.push({...i.reservations[0]!});},
   ]){const i=fixture();change(i);assert.throws(()=>compileTransitPreparation(i));}
 });
