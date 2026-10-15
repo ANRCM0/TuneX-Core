@@ -4,6 +4,7 @@ import type { Forward } from '@tunex/core';
 import { digest } from '@tunex/contracts';
 import { compileTransitResources, compileTransitPreparation } from '../src/modules/runtime/transit-preparation.ts';
 import type { ReservedTransitResource } from '../src/modules/runtime/transit-preparation.ts';
+import { validateTransitReservationSet } from '../src/modules/runtime/transit-reservations.ts';
 
 function fixture() {
   const forward: Forward = { id: 'forward-a', scopeId: 'scope-a', revision: 4,
@@ -101,4 +102,20 @@ test('Transit preparation rejects expired credentials, wrong peer, unadvertised 
 test('Multi-hop logical planning still refuses one- and two-Node current paths',()=>{
   const i=fixture();Reflect.set(i.forward.spec.path!, 'via', ['node-b']);
   assert.throws(()=>compileTransitPreparation(i),/UNSUPPORTED_CAPABILITY|AUTHORIZATION_DENIED/);
+});
+
+test('transactional reserve primitive rejects malformed logical sets before touching MySQL',()=>{
+  const i=fixture();
+  const resources=i.reservations.map(r=>({
+    nodeId:r.nodeId,role:r.role,forwardProtocol:r.forwardProtocol,
+    physicalProtocol:r.physicalProtocol,address:r.address,port:r.port,
+  }));
+  assert.doesNotThrow(()=>validateTransitReservationSet(i.forward,resources,7));
+  assert.throws(()=>validateTransitReservationSet(i.forward,resources.slice(0,-1),7),/RESOURCE_CONFLICT/);
+  assert.throws(()=>validateTransitReservationSet(i.forward,[...resources,resources[0]!],7),/RESOURCE_CONFLICT/);
+  const foreign=resources.map(r=>({...r}));foreign[2]!.role='egress';
+  assert.throws(()=>validateTransitReservationSet(i.forward,foreign,7),/RESOURCE_CONFLICT/);
+  const badPort=resources.map(r=>({...r}));badPort[1]!.port=0;
+  assert.throws(()=>validateTransitReservationSet(i.forward,badPort,7),/RESOURCE_CONFLICT/);
+  assert.throws(()=>validateTransitReservationSet(i.forward,resources,0),/RESOURCE_CONFLICT/);
 });
