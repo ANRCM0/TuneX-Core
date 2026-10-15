@@ -49,12 +49,15 @@ func transitRunnerSnapshot(t *testing.T,epoch,generation uint64,port uint64,phas
  intent["authorizationUntil"]=until
  intent["listener"]=map[string]any{"address":"127.0.0.1","port":port,"protocol":"tcp"}
  intent["sessionEpoch"]=epoch
+ // A changed execution grant must advance both deployment and physical Fence.
+ intent["deploymentGeneration"]=generation-6
+ intent["bindingFence"]=generation-1
  config:=map[string]any{"intent":intent}
  a:=map[string]any{
   "protocolVersion":3,"extensionVersion":1,
   "nodeId":"node-b","sessionEpoch":epoch,"assignmentId":"assign-b",
   "forwardId":"forward-1","forwardRevision":2,
-  "deploymentGeneration":4,"bindingFence":9,
+  "deploymentGeneration":generation-6,"bindingFence":generation-1,
   "role":"relay-transit","protocol":"udp","phase":phase,
   "resource":map[string]any{"address":"127.0.0.1","port":port,"protocol":"tcp"},
   "driver":map[string]any{"id":"native.transit.v1","schemaVersion":1,
