@@ -43,8 +43,9 @@ export class TransitNegotiator {
          !machine.credential_until||machine.credential_until<=now)
         throw new ControlError('AUTHORIZATION_DENIED',403,'Current mTLS machine credential required');
       const facts=json<{capabilities?:unknown}>(machine.facts);
-      if(!facts||!Array.isArray(facts.capabilities)||
-        TRANSIT_NEGOTIATION_CAPABILITIES.some(cap=>!facts.capabilities!.includes(cap)))
+      const declared=facts?.capabilities;
+      if(!Array.isArray(declared)||
+        TRANSIT_NEGOTIATION_CAPABILITIES.some(cap=>!declared.includes(cap)))
         throw new ControlError('UNSUPPORTED_CAPABILITY',409,'Transit contract not advertised in current ADP/3 Hello');
       // Control does not yet have a joined live Transit Runner/Journal protocol.
       // Never accept evidence that would require silently discarding local Fences.
