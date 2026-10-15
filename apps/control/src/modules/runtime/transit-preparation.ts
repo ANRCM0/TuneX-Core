@@ -47,6 +47,7 @@ function checkPath(input: TransitInput) {
   if (route.nodes.length < 3)
     throw new Error('UNSUPPORTED_CAPABILITY: Transit requires at least three Nodes');
   const ref = forward.spec.transport;
+  if (!ref) throw new Error('INVALID_CONFIG: Missing locked Transport reference');
   if (input.profile.profileId !== ref.profileId || input.profile.revision !== ref.configRevision ||
       !isCounter(input.profile.revision))
     throw new Error('AUTHORIZATION_DENIED: Profile revision differs');
