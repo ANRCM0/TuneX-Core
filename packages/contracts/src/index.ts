@@ -14,3 +14,6 @@ export { parseTransitIntent } from './transit.ts';
 
 export type { TransitAdpAssignment, TransitAdpSnapshot, TransitAdpTombstone } from './adp3-transit.ts';
 export { parseTransitAdpAssignment, parseTransitAdpSnapshot, requireTransitAdpCapabilities, TRANSIT_ADP_CAPABILITIES } from './adp3-transit.ts';
+
+export { TRANSIT_NEGOTIATION_CAPABILITIES, parseTransitNegotiation, checkTransitNegotiation } from './transit-negotiation.ts';
+export type { TransitNegotiationRequest, TransitNegotiationResponse } from './transit-negotiation.ts';
