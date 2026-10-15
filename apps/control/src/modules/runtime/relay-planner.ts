@@ -6,12 +6,14 @@ import type { ResolvedProfile } from '../transport.ts';
 import type { ResolvedEndpoint } from '../relay-endpoints.ts';
 import type { AuthorizedNodeFacts } from './planner.ts';
 import { targetAllowed } from '../target-policy.ts';
+import { requireTwoNodeRelayTopology } from './path-topology.ts';
 export interface RelayResource {nodeId:string;role:'ingress'|'egress';forwardProtocol:'tcp'|'udp';physicalProtocol:'tcp'|'udp';address:string;port:number}
 export function compileRelayResources(forward:Forward,nodes:readonly AuthorizedNodeFacts[],profile:ResolvedProfile,endpoint:ResolvedEndpoint,egressPorts:Readonly<Record<'tcp'|'udp',number>>):readonly RelayResource[]{
  const config=parseRelayMessage('ProfileConfig',JSON.stringify(profile.config));if(!isCounter(profile.revision)||digest(config)!==profile.configDigest)throw new Error('INTEGRITY_FAILURE: Locked Profile integrity differs');parseRelayEndpoint(endpoint.config);
  const parsed=parseForward(forward);if(!parsed.ok)throw new Error('INVALID_CONFIG: Forward is invalid');const spec=parsed.value.spec;
- if(spec.path?.via.length!==1||!spec.transport)throw new Error('UNSUPPORTED_CAPABILITY: Initial Relay requires two Nodes');
- const ingress=nodes.find(n=>n.nodeId===spec.ingress.nodeId),egress=nodes.find(n=>n.nodeId===spec.path!.via[0]);
+ const topology=requireTwoNodeRelayTopology(parsed.value);
+ if(!spec.transport)throw new Error('UNSUPPORTED_CAPABILITY: Locked Relay Transport required');
+ const ingress=nodes.find(n=>n.nodeId===topology.nodes[0]!.nodeId),egress=nodes.find(n=>n.nodeId===topology.nodes[1]!.nodeId);
  if(nodes.length!==2||!ingress||!egress||ingress.scopeId!==forward.scopeId||egress.scopeId!==forward.scopeId)throw new Error('AUTHORIZATION_DENIED: Exact same-scope Nodes required');
  if(profile.profileId!==spec.transport.profileId||profile.revision!==spec.transport.configRevision||endpoint.nodeId!==egress.nodeId||!isCounter(endpoint.revision))throw new Error('AUTHORIZATION_DENIED: Locked Profile and egress endpoint required');
  for(const node of nodes)if(!node.capabilities.includes('native.relay.v1')||!node.capabilities.includes('adp.3')||!node.capabilities.includes('relay.wire.1')||spec.protocols.some(p=>!node.capabilities.includes(p)))throw new Error('UNSUPPORTED_CAPABILITY: Exact ADP/Relay wire capability required');
