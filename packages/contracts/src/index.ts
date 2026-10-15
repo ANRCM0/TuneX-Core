@@ -11,3 +11,6 @@ export {parseRuntimeMessage,validateRuntimeSnapshot} from './adp3.ts';
 
 export type { TransitIntent, TransitNeighbor, TransitEndpoint } from './transit.ts';
 export { parseTransitIntent } from './transit.ts';
+
+export type { TransitAdpAssignment, TransitAdpSnapshot, TransitAdpTombstone } from './adp3-transit.ts';
+export { parseTransitAdpAssignment, parseTransitAdpSnapshot, requireTransitAdpCapabilities, TRANSIT_ADP_CAPABILITIES } from './adp3-transit.ts';

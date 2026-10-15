@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:adp:3:transit:1",
+  "title": "Isolated versioned ADP/3 Transit resource envelope",
+  "description": "Offline negotiation/conformance only. Not admitted by the live ADP/3 Runtime Snapshot, Control publisher or Agent Runner.",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "ipv4"
+            },
+            {
+              "type": "string",
+              "format": "ipv6"
+            }
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "protocol": {
+          "const": "tcp"
+        }
+      },
+      "required": [
+        "address",
+        "port",
+        "protocol"
+      ]
+    },
+    "driver": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "const": "native.transit.v1"
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "configDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "intent": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "intent"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "schemaVersion",
+        "configDigest",
+        "config"
+      ]
+    },
+    "Assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "extensionVersion": {
+          "const": 1
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "role": {
+          "const": "relay-transit"
+        },
+        "protocol": {
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "phase": {
+          "enum": [
+            "prepared",
+            "active",
+            "draining"
+          ]
+        },
+        "resource": {
+          "$ref": "#/$defs/resource"
+        },
+        "driver": {
+          "$ref": "#/$defs/driver"
+        },
+        "drainTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "extensionVersion",
+        "nodeId",
+        "sessionEpoch",
+        "assignmentId",
+        "forwardId",
+        "forwardRevision",
+        "deploymentGeneration",
+        "bindingFence",
+        "role",
+        "protocol",
+        "phase",
+        "resource",
+        "driver",
+        "drainTimeoutSeconds"
+      ]
+    },
+    "Tombstone": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "const": "relay-transit"
+        },
+        "protocol": {
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "physicalProtocol": {
+          "const": "tcp"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "retirementGeneration": {
+          "$ref": "#/$defs/counter"
+        }
+      },
+      "required": [
+        "assignmentId",
+        "forwardId",
+        "role",
+        "protocol",
+        "physicalProtocol",
+        "port",
+        "bindingFence",
+        "retirementGeneration"
+      ]
+    },
+    "Snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "extensionVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "transit-snapshot"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "adp.multihop.1"
+            },
+            {
+              "const": "transit.wire.1"
+            },
+            {
+              "const": "native.transit.v1"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "snapshotGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "complete": {
+          "const": true
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "snapshotDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "assignments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Assignment"
+          },
+          "maxItems": 256
+        },
+        "tombstones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Tombstone"
+          },
+          "maxItems": 65536
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "extensionVersion",
+        "kind",
+        "requiredCapabilities",
+        "nodeId",
+        "sessionEpoch",
+        "snapshotGeneration",
+        "complete",
+        "issuedAt",
+        "validUntil",
+        "snapshotDigest",
+        "assignments",
+        "tombstones"
+      ]
+    }
+  }
+}
