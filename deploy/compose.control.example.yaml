@@ -1,0 +1,36 @@
+# TuneX VNext Control host only. Use a private test database and retained CA.
+# First authority initialization must be a one-time explicit compose run -e
+# TUNEX_AUTHORITY_INITIALIZE=1. Never retain that flag in the steady service.
+name: tunex-vnext-control
+services:
+  control:
+    image: ${TUNEX_CONTROL_IMAGE:?Set pinned ghcr.io/anrcm0/tunex-control@sha256 digest}
+    restart: unless-stopped
+    user: "10001:10001"
+    environment:
+      DATABASE_URL: ${TUNEX_DATABASE_URL:?External MySQL 8.4 database URL required}
+      TUNEX_CA_CERT: /run/tunex/pki/ca.pem
+      TUNEX_CA_KEY: /run/tunex/pki/ca.key
+      TUNEX_SERVER_CERT: /run/tunex/pki/server.pem
+      TUNEX_SERVER_KEY: /run/tunex/pki/server.key
+      TUNEX_CONTROL_STATE: /var/lib/tunex-control
+      TUNEX_CONTROL_HOST: 0.0.0.0
+      TUNEX_CONTROL_PORT: "41001"
+      TUNEX_AUTHORITY_INITIALIZE: "0"
+    volumes:
+      - type: bind
+        source: ${TUNEX_CONTROL_STATE_DIR:?Pre-create protected Control state directory}
+        target: /var/lib/tunex-control
+      - type: bind
+        source: ${TUNEX_CONTROL_PKI_DIR:?Pre-create protected Control PKI directory}
+        target: /run/tunex/pki
+        read_only: true
+    # Loopback host publish only: remote Agents need trusted end-to-end TLS
+    # via deliberate private bind or an L4 TCP pass-through (never L7 TLS termination).
+    ports:
+      - "127.0.0.1:41001:41001/tcp"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 45s
