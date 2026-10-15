@@ -149,3 +149,22 @@ func TestTransitRunnerOfflinePersistBeforeEngineAndNoReplay(t *testing.T){
  }
  if generation,_:=restart.CurrentJournal();generation!=11{t.Fatal("failed activation did not retain higher fencing generation")}
 }
+
+func TestTransitRunnerBridgeRejectsUnnegotiatedLeaseAndLegacyPhysicalPort(t *testing.T){
+ port:=uint64(32100)
+ a:=adp3transit.Assignment{Resource:adp3transit.Resource{Port:port,Protocol:"tcp"}}
+ r:=&Runner{
+  options:Options{NodeID:"node-b",Relay:true},
+  journal:state.Journal{Fences:map[string]uint64{"tcp/32100":4},Retired:map[string]uint64{}},
+  instances:map[string]running{},
+ }
+ if err:=r.transitPhysicalGuard(a);err==nil{t.Fatal("historical Direct/Relay fence overwritten by Transit")}
+ if _,err:=r.transitControllerForIntegration("unused",[]string{"adp.multihop.1","transit.wire.1","native.transit.v1"},func()error{return nil});err==nil{
+  t.Fatal("Runtime with no live Agent ticket illegally enabled Transit controller")
+ }
+ r.journal.Fences=map[string]uint64{}
+ r.journal.Retired=map[string]uint64{"tcp/32100":4}
+ if err:=r.transitPhysicalGuard(a);err==nil{t.Fatal("retired ADP/3 physical fence overwritten")}
+ r.journal.Retired=map[string]uint64{}
+ if err:=r.transitPhysicalGuard(a);err!=nil{t.Fatalf("unallocated resource should be available to future coordinator: %v",err)}
+}
