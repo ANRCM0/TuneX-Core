@@ -1,0 +1,20 @@
+CREATE TABLE transit_deployments (
+ forward_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ generation BIGINT UNSIGNED NOT NULL,
+ target_revision BIGINT UNSIGNED NOT NULL,
+ scope_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ created_by VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ state ENUM('reserved','aborted') NOT NULL DEFAULT 'reserved',
+ expires_at BIGINT UNSIGNED NOT NULL,
+ plan_digest VARCHAR(71) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ body JSON NOT NULL,
+ created_at BIGINT UNSIGNED NOT NULL,
+ updated_at BIGINT UNSIGNED NOT NULL,
+ PRIMARY KEY(forward_id,generation),
+ CHECK(generation BETWEEN 1 AND 9007199254740991),
+ CHECK(target_revision BETWEEN 1 AND 9007199254740991),
+ FOREIGN KEY(forward_id) REFERENCES forwards(id),
+ FOREIGN KEY(scope_id) REFERENCES scopes(id),
+ FOREIGN KEY(created_by) REFERENCES accounts(id),
+ INDEX transit_state_expiry(state,expires_at)
+);
