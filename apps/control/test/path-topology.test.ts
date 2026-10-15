@@ -72,9 +72,9 @@ test('Bounded path allows exactly the maximum without arbitrary cycles', () => {
 test('Invalid, repeated and missing Profile paths refuse planning', () => {
   assert.throws(() => compilePathTopology(forward('node-a', ['node-b', 'node-a'])), /INVALID_CONFIG/);
   assert.throws(() => compilePathTopology(forward('node-a', ['node-b', 'node-b'])), /INVALID_CONFIG/);
-  assert.throws(() => compilePathTopology({ ...forward('node-a', ['node-b']), spec: {
-    ...forward('node-a', ['node-b']).spec, transport: undefined,
-  }}), /INVALID_CONFIG/);
+  const missingProfile = structuredClone(forward('node-a', ['node-b']));
+  Reflect.deleteProperty(missingProfile.spec, 'transport');
+  assert.throws(() => compilePathTopology(missingProfile), /INVALID_CONFIG/);
 });
 
 test('Multi-hop planning does not bypass existing ADP/3 two-node execution boundary', () => {
