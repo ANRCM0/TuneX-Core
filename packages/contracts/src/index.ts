@@ -17,3 +17,6 @@ export { parseTransitAdpAssignment, parseTransitAdpSnapshot, requireTransitAdpCa
 
 export { TRANSIT_NEGOTIATION_CAPABILITIES, parseTransitNegotiation, checkTransitNegotiation } from './transit-negotiation.ts';
 export type { TransitNegotiationRequest, TransitNegotiationResponse } from './transit-negotiation.ts';
+
+export {parseTransitDelivery} from './transit-delivery.ts';
+export type {TransitPreviewCommand,TransitDeliveryReport,TransitDeliveryAck,TransitDeliveryMessage} from './transit-delivery.ts';

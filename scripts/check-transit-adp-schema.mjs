@@ -21,4 +21,11 @@ assert.equal(embedded.replaceAll('\\r\\n','\\n'),negotiation.replaceAll('\\r\\n'
 const response=JSON.parse(negotiation).$defs.Response;
 assert.equal(response.properties.executionEnabled.const,false);
 assert.equal(response.properties.state.const,'contract-only');
-console.log('Transit contract-only mTLS negotiation parity and runtime isolation verified.');
+const delivery=readFileSync(new URL('../docs/protocol/schemas/adp-v3-transit-delivery.schema.json',import.meta.url),'utf8');
+const embeddedDelivery=readFileSync(new URL('../agent/internal/transitdelivery/schema.json',import.meta.url),'utf8');
+assert.equal(embeddedDelivery,delivery,'Transit delivery Go schema differs');
+const definitions=JSON.parse(delivery).$defs;
+assert.equal(definitions.Command.properties.executionEnabled.const,false);
+assert.equal(definitions.Ack.properties.executionEnabled.const,false);
+assert.equal(definitions.Report.properties.condition.const,'received');
+console.log('Transit negotiation + non-executable command/Report/Ack parity verified.');
