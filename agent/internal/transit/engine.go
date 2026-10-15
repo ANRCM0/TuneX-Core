@@ -154,14 +154,22 @@ func (e *Engine) accept(){
   if !e.active||e.check()!=nil||len(e.connections)>=int(e.intent.MaxConnections){
    e.mutex.Unlock();raw.Close();continue
   }
-  release,err:=forward.AcquireNodeBudget(e.intent.Protocol)
+  // UDP associations also occupy an underlying TLS/TCP socket, so debit
+  // both budgets, matching the existing native Relay resource contract.
+  tcpRelease,err:=forward.AcquireNodeBudget("tcp")
   if err!=nil{e.mutex.Unlock();raw.Close();continue}
+  udpRelease:=func(){}
+  if e.intent.Protocol=="udp"{
+   udpRelease,err=forward.AcquireNodeBudget("udp")
+   if err!=nil{tcpRelease();e.mutex.Unlock();raw.Close();continue}
+  }
   e.connections[raw]=nil
   e.workers.Add(1)
   e.mutex.Unlock()
   go func(){
    defer e.workers.Done()
-   defer release()
+   defer tcpRelease()
+   defer udpRelease()
    defer func(){raw.Close();e.mutex.Lock();delete(e.connections,raw);e.mutex.Unlock()}()
    e.serve(raw)
   }()
