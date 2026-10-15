@@ -1,6 +1,6 @@
 import { deepFreeze, isCounter, MAX_COUNTER } from '@tunex/core';
 import { digest } from '@tunex/contracts';
-import type { MySqlUnitOfWork, Transaction } from '../../infrastructure/mysql.ts';
+import type { MySqlUnitOfWork } from '../../infrastructure/mysql.ts';
 import { json, rows, write } from '../../infrastructure/mysql.ts';
 import { ControlError } from '../../application/errors.ts';
 import type { Nodes } from '../nodes.ts';
@@ -47,13 +47,16 @@ export function verifyTransitStage(row: TransitStageRow): TransitPreparation {
 
 /** All writes are confined to one transaction; nothing enters the live ADP/3 Runner. */
 export class TransitStagingCoordinator {
-  constructor(
-    private readonly db: MySqlUnitOfWork,
-    private readonly nodes: Nodes,
-    private readonly forwarding: Forwarding,
-    private readonly transport: Transport,
-    private readonly endpoints: RelayEndpoints,
-  ) {}
+  private readonly db: MySqlUnitOfWork;
+  private readonly nodes: Nodes;
+  private readonly forwarding: Forwarding;
+  private readonly transport: Transport;
+  private readonly endpoints: RelayEndpoints;
+  constructor(db: MySqlUnitOfWork,nodes: Nodes,forwarding: Forwarding,
+    transport: Transport,endpoints: RelayEndpoints) {
+    this.db=db;this.nodes=nodes;this.forwarding=forwarding;
+    this.transport=transport;this.endpoints=endpoints;
+  }
   async stage(actor:string,scopeId:string,forwardId:string,expectedRevision:number):Promise<TransitPreparation>{
     if(!isCounter(expectedRevision))
       throw new ControlError('INVALID_CONFIG',422,'Valid Forward revision required');
