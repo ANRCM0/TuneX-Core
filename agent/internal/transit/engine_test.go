@@ -85,7 +85,7 @@ func newFixture(t *testing.T,protocol string)(*Engine,Identity,*atomic.Bool){
  egress,err:=tls.Listen("tcp","127.0.0.1:0",serverTLS)
  if err!=nil{t.Fatal(err)}
  var wg sync.WaitGroup
- var engine *Engine
+ var activeEngine atomic.Pointer[Engine]
  wg.Add(1)
  go func(){
   defer wg.Done()
@@ -100,6 +100,7 @@ func newFixture(t *testing.T,protocol string)(*Engine,Identity,*atomic.Bool){
     if err:=conn.Handshake();err!=nil{return}
     var open Open
     if err:=readMessage(conn,&open);err!=nil{return}
+    engine:=activeEngine.Load()
     if engine==nil || expectedInbound(engine.outboundBinding(),open)!=nil{return}
     digest,_:=bindingDigest(engine.outboundBinding())
     if err:=writeMessage(conn,Reply{Type:"accepted",RequestID:open.RequestID,BindingDigest:digest});err!=nil{return}
@@ -128,8 +129,9 @@ func newFixture(t *testing.T,protocol string)(*Engine,Identity,*atomic.Bool){
  grant:=func()error{if !allowed.Load(){return fmt.Errorf("LEASE_EXPIRED: revoked")};return nil}
  intent:=sampleIntent(protocol,freeTCP(t),uint64(egress.Addr().(*net.TCPAddr).Port),a,c)
  raw,err:=json.Marshal(intent);if err!=nil{t.Fatal(err)}
- engine,err=Prepare(raw,Identity{b,ca.roots},grant)
+ engine,err:=Prepare(raw,Identity{b,ca.roots},grant)
  if err!=nil{t.Fatal(err)}
+ activeEngine.Store(engine)
  t.Cleanup(engine.Close)
  if err:=engine.Activate();err!=nil{t.Fatal("activation/downstream probe:",err)}
  return engine,Identity{a,ca.roots},allowed
