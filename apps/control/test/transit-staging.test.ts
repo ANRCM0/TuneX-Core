@@ -32,6 +32,8 @@ test('staging journal is detached immutable and retains independent Scope, gener
   for(const mutation of [
     (r:TransitStageRow)=>{r.scope_id='other';},
     (r:TransitStageRow)=>{r.generation=8;},
+    (r:TransitStageRow)=>{r.target_revision=5;},
+    (r:TransitStageRow)=>{r.expires_at=r.created_at;},
     (r:TransitStageRow)=>{r.plan_digest='sha256:'+'f'.repeat(64);},
     (r:TransitStageRow)=>{r.expires_at=Date.parse('2026-10-15T01:00:00Z');},
     (r:TransitStageRow)=>{Reflect.set(r.body as object,'executable',true);},
