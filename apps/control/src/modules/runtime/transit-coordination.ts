@@ -153,7 +153,8 @@ function checkProof(command: OfflineTransitCommand, proof: TransitObservationPro
   }
 }
 export class TransitCoordinationJournal {
-  constructor(private readonly db: MySqlUnitOfWork) {}
+  private readonly db: MySqlUnitOfWork;
+  constructor(db: MySqlUnitOfWork) { this.db=db; }
 
   private async stage(tx: Transaction, actor: string, scopeId: string,
     forwardId: string, generation: number): Promise<{row: TransitStageRow; plan: TransitPreparation}> {
