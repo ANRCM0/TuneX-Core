@@ -8,7 +8,7 @@ import { MySqlUnitOfWork, rows, write } from '../src/infrastructure/mysql.ts';
 import { TransitCoordinationJournal, offlineTransitStep } from '../src/modules/runtime/transit-coordination.ts';
 import type { OfflineTransitCommand, TransitObservationProof } from '../src/modules/runtime/transit-coordination.ts';
 import type { TransitStageRow } from '../src/modules/runtime/transit-staging.ts';
-import { verifyTransitStage } from '../src/modules/runtime/transit-staging.ts';
+import { verifyTransitStage, TransitStagingCoordinator } from '../src/modules/runtime/transit-staging.ts';
 
 const url=process.env.TUNEX_TEST_DATABASE_URL;
 function assertCode(code:string) {
@@ -102,6 +102,12 @@ test('offline coordination database enforces ownership, receipt CAS, recovery an
   });
 
   await assert.rejects(coordinator.begin('foreign',scope,forwardId,1),assertCode('AUTHORIZATION_DENIED'));
+  await write(db.pool,'UPDATE runtime_nodes SET session_epoch=2 WHERE node_id=?',[nodes[1]]);
+  await assert.rejects(coordinator.begin(account,scope,forwardId,1),assertCode('SESSION_SUPERSEDED'));
+  await write(db.pool,'UPDATE runtime_nodes SET session_epoch=1 WHERE node_id=?',[nodes[1]]);
+  await write(db.pool,'UPDATE port_slots SET fence=10 WHERE node_id=? AND port=?',[nodes[2],32003]);
+  await assert.rejects(coordinator.begin(account,scope,forwardId,1),assertCode('FENCING_REJECTED'));
+  await write(db.pool,'UPDATE port_slots SET fence=6 WHERE node_id=? AND port=?',[nodes[2],32003]);
   const begun=await Promise.allSettled([1,2].map(()=>coordinator.begin(account,scope,forwardId,1)));
   assert.equal(begun.filter(p=>p.status==='fulfilled').length,1,'only one coordinator writer may create journal');
   assert.equal(begun.filter(p=>p.status==='rejected').length,1);
@@ -154,6 +160,8 @@ test('offline coordination database enforces ownership, receipt CAS, recovery an
    'SELECT owner_id,fence FROM port_slots WHERE owner_id=? ORDER BY port',[forwardId]);
   assert.equal(slots.length,3,'offline coordinator must never release physical slots');
   assert.deepEqual(slots.map(s=>s.fence),[4,5,6]);
+  const staging=new TransitStagingCoordinator(db,null as never,null as never,null as never,null as never);
+  await assert.rejects(staging.abort(account,scope,forwardId,1),assertCode('FENCING_REJECTED'));
  }finally{
   try{
    await db.transaction(async tx=>{
