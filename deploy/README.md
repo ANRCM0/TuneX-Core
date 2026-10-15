@@ -68,6 +68,36 @@ On 1Panel, first configure image references by complete `@sha256:<manifest-diges
 
 Unfixed or lower-severity vulnerabilities still require review. The release security check has an intentionally narrow fixable-CRITICAL automatic gate; manual review cannot be skipped solely because that gate passes. This slice performs **no** live host rollout or destructive migration.
 
+## Automatic development and versioned release images
+
+The trusted publisher is `.github/workflows/images.yml`. **It publishes images to GHCR, not to a running 1Panel host.** The default image repositories are `ghcr.io/anrcm0/tunex-control` and `ghcr.io/anrcm0/tunex-agent` (owner lowercased from the GitHub repository).
+
+| Git event | Published tags for both Control and Agent | Meaning |
+| --- | --- | --- |
+| Push a commit to `main` | `dev-<full-40-character-Git-SHA>`, and `dev` for the current main HEAD | Development/testing, with an immutable-source per-commit trace and a moving alias |
+| Push `vMAJOR.MINOR.PATCH` (e.g. `v0.1.0`) | `v0.1.0` | Versioned stable-channel image for staged release acceptance |
+| Push a feature branch, a pull request, or a malformed/prerelease tag | No images published | No unreviewed build uploads |
+
+Both publication channels wait for **successful** `ci.yml` (Contracts/Phase 1/Relay) and `container.yml` (both image builds/Trivy) checks from a **main push of the exact Git commit**. This is why `container.yml` runs on every `main` push, even for documentation-only changes. The publisher rebuilds the checked-out commit, verifies OCI revision/UID, generates separate SPDX SBOMs and image Trivy reports, and blocks when either scan is invalid or contains a **fixable CRITICAL** finding. Higher-severity risk assessment and staging verification are still required; CI success is not an automatic deployment approval.
+
+**Example** (after review and successful merge to `main`):
+
+```sh
+git checkout main
+git pull --ff-only origin main
+# A successful push to main automatically publishes :dev-<commit> and updates :dev
+# For a formal version (tagged source must be reachable from main):
+git tag v0.1.0
+git push origin v0.1.0
+# The separate tag-triggered workflow publishes :v0.1.0
+```
+
+Stable tags require exact `vX.Y.Z` (nonnegative integers, no leading zeros). No prereleases or `:latest` are published, and tag-created binaries are **not** a production rollout. Versioned tags and per-commit `dev-<sha>` references should not be overwritten; the workflow detects existing registry references and refuses to republish them. For strong protection, also configure GitHub repository tag rulesets for `v*` and GHCR package immutability/permissions. A failed or partially pushed publication requires operator assessment; do not force-move a published stable tag.
+
+GitHub Actions requires repository `GITHUB_TOKEN` permission to **write Packages**, and GHCR packages may need repository-linked permissions. Private image pulls from 1Panel require an authorized registry login. Read the successful publisher's workflow job summary for each **real immutable `@sha256:<manifest-digest>` reference**; these are the references to use in the deployment preflight and Compose, rather than relying on mutable `:dev` or human-readable release tags.
+
+An existing manual candidate workflow remains available for operator-driven `:candidate-<sha>` images and does not publish `:dev` or `:vX.Y.Z`. No automatic Control authority initialization, Agent enrollment, MySQL migration rollback, 1Panel upgrade, or public availability of private registry images is implied.
+
 ## Runtime liveness and shutdown gates (second slice)
 
 The Control image includes a bounded `HEALTHCHECK` that opens a TCP connection to `127.0.0.1:TUNEX_CONTROL_PORT` and fails if the local listener is missing or the port is invalid. It does **not** verify authenticated HTTPS, MySQL, authority, Agent lease, or data plane readiness. **Do not route production traffic or authorize upgrades based solely on Docker's healthy status.** Agent readiness requires a fresh authoritative Report and real TCP/UDP payload. Do not fabricate an Agent health endpoint.

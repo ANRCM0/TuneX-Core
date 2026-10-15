@@ -1,0 +1,208 @@
+name: VNext publish development and release images
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+permissions:
+  contents: read
+  actions: read
+  packages: write
+# A superseded main push cannot race a later commit for the moving :dev tag.
+concurrency:
+  group: tunex-image-publish-${{ github.ref_type == 'branch' && 'main' || github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact source, channel and protected release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            channel=dev
+            image_tag="dev-$GITHUB_SHA"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            channel=release
+            image_tag="${GITHUB_REF#refs/tags/}"
+            [[ "$image_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] \
+              || { echo "Stable release requires vMAJOR.MINOR.PATCH (no prerelease)"; exit 1; }
+            # A tag on unmerged/unreviewed code can never publish a release.
+            git fetch --no-tags origin main
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+              || { echo "Release tag commit is not reachable from main"; exit 1; }
+          else
+            echo "Only main and stable vX.Y.Z tags may publish images" >&2
+            exit 1
+          fi
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          {
+            echo "TUNEX_CHANNEL=$channel"
+            echo "TUNEX_IMAGE_TAG=$image_tag"
+            echo "TUNEX_CONTROL_BASE=ghcr.io/$owner/tunex-control"
+            echo "TUNEX_AGENT_BASE=ghcr.io/$owner/tunex-agent"
+          } >> "$GITHUB_ENV"
+
+      - name: Wait for green Control, Relay and container CI for this exact main SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The container job always runs on main, even for docs-only pushes.
+          # Tags reuse completed main-branch checks on their exact commit.
+          for attempt in $(seq 1 85); do
+            all_green=true
+            for workflow in ci.yml container.yml; do
+              response="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&per_page=100")"
+              state="$(jq -r --arg sha "$GITHUB_SHA" '
+                [.workflow_runs[] | select(.head_sha==$sha and .event=="push" and .head_branch=="main")]
+                | sort_by(.created_at,.run_attempt) | last
+                | if .==null then "missing"
+                  elif .status!="completed" then "pending"
+                  else (.conclusion // "pending") end' <<< "$response")"
+              case "$state" in
+                success) ;;
+                failure|cancelled|timed_out|action_required|startup_failure|skipped)
+                  echo "$workflow failed for $GITHUB_SHA ($state)" >&2; exit 1 ;;
+                missing|pending|neutral)
+                  all_green=false ;;
+                *) echo "Unexpected $workflow status: $state" >&2; exit 1 ;;
+              esac
+            done
+            if "$all_green"; then
+              echo "Both exact-SHA main CI workflows completed successfully"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Required same-SHA CI did not complete successfully in time" >&2
+          exit 1
+
+      - name: Log in to GHCR
+        env:
+          TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Reject attempts to overwrite pinned commit/release tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in "$TUNEX_CONTROL_BASE:$TUNEX_IMAGE_TAG" "$TUNEX_AGENT_BASE:$TUNEX_IMAGE_TAG"; do
+            if docker manifest inspect "$image" >/dev/null 2>&1; then
+              echo "Refusing to overwrite existing immutable-source image tag: $image" >&2
+              exit 1
+            fi
+          done
+
+      - name: Build both exact-commit images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull --build-arg TUNEX_SOURCE_REVISION="$GITHUB_SHA" \
+            -f deploy/Dockerfile.control -t tunex-control:release-ci .
+          docker build --pull --build-arg TUNEX_SOURCE_REVISION="$GITHUB_SHA" \
+            -f deploy/Dockerfile.agent -t tunex-agent:release-ci .
+          for image in tunex-control:release-ci tunex-agent:release-ci; do
+            test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")" = "$GITHUB_SHA"
+            test "$(docker image inspect -f '{{.Config.User}}' "$image")" = "10001:10001"
+          done
+
+      - name: Generate Control image SBOM
+        uses: anchore/sbom-action@v0.20.7
+        with:
+          image: tunex-control:release-ci
+          artifact-name: tunex-published-control-sbom.spdx.json
+          output-file: /tmp/tunex-published-control.spdx.json
+
+      - name: Generate Agent image SBOM
+        uses: anchore/sbom-action@v0.20.7
+        with:
+          image: tunex-agent:release-ci
+          artifact-name: tunex-published-agent-sbom.spdx.json
+          output-file: /tmp/tunex-published-agent.spdx.json
+
+      - name: Scan Control image before publication
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: tunex-control:release-ci
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: control-trivy.json
+          exit-code: '0'
+
+      - name: Scan Agent image before publication
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: tunex-agent:release-ci
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: agent-trivy.json
+          exit-code: '0'
+
+      - name: Block both images on missing scans or fixable CRITICAL vulnerabilities
+        run: node deploy/verify-trivy.mjs control-trivy.json agent-trivy.json
+
+      - name: Archive security findings for operator review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tunex-published-image-scan-reports
+          if-no-files-found: warn
+          path: |
+            control-trivy.json
+            agent-trivy.json
+
+      - name: Publish both images to GHCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          control_ref="$TUNEX_CONTROL_BASE:$TUNEX_IMAGE_TAG"
+          agent_ref="$TUNEX_AGENT_BASE:$TUNEX_IMAGE_TAG"
+          docker tag tunex-control:release-ci "$control_ref"
+          docker tag tunex-agent:release-ci "$agent_ref"
+          docker push "$control_ref"
+          docker push "$agent_ref"
+          echo "## TuneX $TUNEX_CHANNEL images" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source commit: \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          for ref in "$control_ref" "$agent_ref"; do
+            digest="$(docker buildx imagetools inspect "$ref" | awk '$1=="Digest:" {print $2;exit}')"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] \
+              || { echo "Registry manifest digest missing for $ref" >&2; exit 1; }
+            echo "- \`${ref%:*}@$digest\` (tag: \`$ref\`)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Move development aliases only for the current main HEAD
+        if: env.TUNEX_CHANNEL == 'dev'
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_main="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          if [ "$latest_main" != "$GITHUB_SHA" ]; then
+            echo "Main advanced; keeping immutable dev-$GITHUB_SHA images, leaving :dev aliases unchanged"
+            exit 0
+          fi
+          docker tag tunex-control:release-ci "$TUNEX_CONTROL_BASE:dev"
+          docker tag tunex-agent:release-ci "$TUNEX_AGENT_BASE:dev"
+          docker push "$TUNEX_CONTROL_BASE:dev"
+          docker push "$TUNEX_AGENT_BASE:dev"
+          echo "Moving :dev aliases now refer to $GITHUB_SHA (use the digest above for deployment)" >> "$GITHUB_STEP_SUMMARY"
