@@ -132,8 +132,9 @@ export function compileTransitPreparation(input: Omit<TransitInput, 'ports'> & {
     throw new Error('INVALID_CONFIG: Invalid time or connection limit');
   const ports: Record<string, Partial<Record<'tcp' | 'udp', number>>> = {};
   for (const r of input.reservations) {
+    if (r.role === 'ingress') continue;
     if (!ports[r.nodeId]) ports[r.nodeId] = {};
-    if (r.role !== 'ingress') ports[r.nodeId]![r.forwardProtocol] = r.port;
+    ports[r.nodeId]![r.forwardProtocol] = r.port;
   }
   const { forward, route, nodeById, endpoints } = checkPath({ ...input, ports });
   const expected = compileTransitResources({ ...input, ports });
