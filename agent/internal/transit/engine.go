@@ -7,9 +7,7 @@ import (
  "crypto/x509"
  "encoding/hex"
  "fmt"
- "io"
  "net"
- "net/netip"
  "sync"
  "time"
 
