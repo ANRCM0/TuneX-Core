@@ -74,7 +74,15 @@ export class NetworkLab {
    const existing=JSON.parse((await this.admin(this.ip,['-json','link','show'])).stdout) as Link[];
    const link=existing.find(item=>item.ifname===name);if(!link)continue;
    assert.equal(link.ifalias,this.identity,'Refuse foreign link cleanup');
-   await this.admin(this.ip,['link','delete',name]);
+   try {
+    await this.admin(this.ip,['link','delete',name]);
+   } catch (error) {
+    // Deleting the owned netns destroys its veth peer and can concurrently
+    // remove the host endpoint after ip -json link show. Only tolerate ENODEV
+    // when a fresh enumeration confirms this exact owned interface is gone.
+    const refreshed=JSON.parse((await this.admin(this.ip,['-json','link','show'])).stdout) as Link[];
+    if(refreshed.some(item=>item.ifname===name))throw error;
+   }
   }
   this.links.length=0;
  }
