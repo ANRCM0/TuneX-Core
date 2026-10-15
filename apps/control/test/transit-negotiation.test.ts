@@ -82,3 +82,21 @@ test('transit negotiation HTTP path refuses client without a verified TLS machin
  assert.equal(response.status,401);
  assert.equal((await response.json() as {code:string}).code,'UNAUTHENTICATED');
 });
+
+test('Transit preview poll and delivery report deny unauthenticated clients',async()=>{
+ const app=createApp({} as never,{} as never,{allow:async()=>{}} as never);
+ const poll=await app.request('/agent/v3/transit/command',{headers:{
+  'x-tunex-session-epoch':'8','x-tunex-boot-id':'boot-b',
+ }});
+ assert.equal(poll.status,401);
+ assert.equal((await poll.json() as {code:string}).code,'UNAUTHENTICATED');
+ const report=await app.request('/agent/v3/transit/report',{
+  method:'POST',headers:{'content-type':'application/json','x-tunex-session-epoch':'8'},
+  body:JSON.stringify({protocolVersion:3,extensionVersion:1,kind:'transit-delivery-report-v1',
+   nodeId:'node-b',bootId:'boot-b',sessionEpoch:8,commandDigest:'sha256:'+'a'.repeat(64),
+   envelopeDigest:'sha256:'+'b'.repeat(64),reportSequence:1,
+   observedAt:new Date().toISOString(),condition:'received'}),
+ });
+ assert.equal(report.status,401);
+ assert.equal((await report.json() as {code:string}).code,'UNAUTHENTICATED');
+});
