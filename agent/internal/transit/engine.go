@@ -14,7 +14,6 @@ import (
  "fmt"
  "io"
  "net"
- "net/netip"
  "sync"
  "time"
 
@@ -27,7 +26,7 @@ import (
 const maxHopControlBytes=4096
 const maxHopFrameBytes=16384
 const hopHandshakeTimeout=3*time.Second
-const hopALPN="tunex-relay/1" // Legacy transport envelope; hop control messages are strictly distinct.
+const hopALPN="tunex-transit/1" // Versioned, non-downgradeable hop protocol.
 
 // hopOpen binds both ends of ONE hop, not an unrestricted TLS tunnel.
 type hopOpen struct {
@@ -140,7 +139,7 @@ func Prepare(intent transitcontracts.TransitIntent,identity relay.Identity,autho
  // Validate the entire leaf chain, URI, fingerprint, TLS purposes, and expiry
  // through the same security policy used by existing two-node Relay.
  self:=tls.ConnectionState{Version:tls.VersionTLS13,NegotiatedProtocol:hopALPN,PeerCertificates:[]*x509.Certificate{leaf}}
- if err:=relay.VerifyPeer(self,identity.Roots,checked.NodeId,[]string{relay.Fingerprint(leaf)},x509.ExtKeyUsageServerAuth,time.Now());err!=nil{return nil,err}
+ if err:=relay.VerifyPeerForProtocol(self,identity.Roots,checked.NodeId,[]string{relay.Fingerprint(leaf)},x509.ExtKeyUsageServerAuth,time.Now(),hopALPN);err!=nil{return nil,err}
  if leaf.NotAfter.Before(until){until=leaf.NotAfter}
  ctx,cancel:=context.WithCancel(context.Background())
  e:=&Engine{intent:*checked,identity:relay.Identity{Certificate:identity.Certificate,Roots:identity.Roots.Clone()},authorized:authorized,
@@ -202,7 +201,7 @@ func(e *Engine)accept(listener net.Listener){
 }
 func(e *Engine)serve(raw net.Conn){
  v:=e.intent
- conf,err:=relay.TLSConfig(e.identity.Certificate,e.identity.Roots,v.Upstream.NodeId,[]string{v.Upstream.PeerFingerprint},true);if err!=nil{return}
+ conf,err:=relay.TLSConfigForProtocol(e.identity.Certificate,e.identity.Roots,v.Upstream.NodeId,[]string{v.Upstream.PeerFingerprint},true,hopALPN);if err!=nil{return}
  upstream:=tls.Server(raw,conf)
  upstream.SetDeadline(time.Now().Add(hopHandshakeTimeout))
  if err:=upstream.HandshakeContext(e.context);err!=nil{return}
@@ -222,7 +221,7 @@ func(e *Engine)dialDownstream()(*tls.Conn,error){
  v:=e.intent
  ctx,cancel:=context.WithTimeout(e.context,hopHandshakeTimeout);defer cancel()
  addresses,err:=net.DefaultResolver.LookupNetIP(ctx,"ip",v.Downstream.Endpoint.Host);if err!=nil{return nil,err}
- conf,err:=relay.TLSConfig(e.identity.Certificate,e.identity.Roots,v.Downstream.NodeId,[]string{v.Downstream.PeerFingerprint},false)
+ conf,err:=relay.TLSConfigForProtocol(e.identity.Certificate,e.identity.Roots,v.Downstream.NodeId,[]string{v.Downstream.PeerFingerprint},false,hopALPN)
  if err!=nil{return nil,err}
  policy:=contracts.DirectConfig{AllowedDestinationCidrs:v.AllowedDestinationCidrs,AllowMetadataTargets:v.AllowMetadataTargets}
  for _,address:=range addresses{
@@ -252,9 +251,8 @@ func(e *Engine)bridge(upstream,downstream *tls.Conn){
  pump:=func(in,out *tls.Conn){
   for{
    if err:=e.check();err!=nil{done<-err;return}
-   in.SetReadDeadline(minTime(time.Now().Add(100*time.Millisecond),e.until))
+   in.SetReadDeadline(e.until)
    kind,data,err:=relay.ReadFrame(in,e.intent.Protocol,maxHopFrameBytes)
-   if nerr,ok:=err.(net.Error);ok&&nerr.Timeout(){continue}
    if err!=nil{done<-err;return}
    if kind==relay.FrameUDP&&len(data)>maxHopFrameBytes{done<-fmt.Errorf("RESOURCE_LIMIT");return}
    if err:=e.check();err!=nil{done<-err;return}
