@@ -1,118 +1,187 @@
-# TuneX VNext container foundation
+# TuneX VNext · Docker / 1Panel 部署与测试
 
-Status: **development packaging prototype**, not production-certified or two-host validated. VNext uses ADP/3; do not deploy legacy/v2 container images into this topology.
+> 本文是 **Dev 测试环境**操作手册，不是 Stable 生产就绪认证。VNext 使用 ADP/3，禁止复用 `legacy/v2` 数据库、证书或 Agent Journal。仓库根目录 [README](../README.md) 只保留快速部署命令。
 
-## Build images from the repository root
+## 1. 部署模型与前置条件
 
-```sh
-docker build -f deploy/Dockerfile.control -t tunex-control:dev .
-docker build -f deploy/Dockerfile.agent -t tunex-agent:dev .
+- **Control 主机**：Linux、Docker/Compose v2、外部 MySQL **8.4**、Control HTTPS/PKI、受保护 Authority State；Control 镜像运行 UID/GID `10001:10001`。
+- **Agent 主机**：Linux、内核时钟同步、已注册的 Node ID、原始 Control CA、独立的 State 与 Journal MAC Key，容器运行 UID/GID `10001:10001`。两个 Agent 测 Relay 时，优先分配独立主机。
+- 验证使用固定的镜像 **registry Digest**（`ghcr.io/anrcm0/tunex-control@sha256:...`、`ghcr.io/anrcm0/tunex-agent@sha256:...`），避免测试期间移动的 `:dev` 标签改变环境。GHCR 私有镜像要先用具备读取权限的令牌登录。
+- 每台主机检出本仓库同版本的 `deploy/` 配置。**Control 只用 `deploy/compose.control.example.yaml`，Agent 只用 `deploy/compose.agent.example.yaml`**；历史双服务 `compose.runtime.example.yaml` 仅供参考，不能把其中未用服务的环境变量缺失当成实际 Agent 故障。
+- 不要在 Control 主机同时运行另一个指向相同数据库/Authority 的 Control，也不要在 Agent 主机同时让两个进程占用相同的 State/Journal、Node 身份或 TCP/UDP 监听端口。
+
+### 目录与权限
+
+Control 主机：
+
+```text
+/srv/tunex/control/state/       # 持久 Authority / 信任绑定
+/srv/tunex/control/pki/         # ca.pem / ca.key / server.pem / server.key
+/secure/tunex-control.env       # 只在主机保管，严禁提交 Git
 ```
 
-The Control container uses Node.js 24 to execute the checked-in TypeScript entrypoint. The Agent is built with the Go toolchain in `agent/go.mod`. Both use UID/GID 10001 and never auto-enroll nodes or auto-initialize Control trust.
+Agent 主机：
 
-## Required preparation
-
-1. Provision **external** MySQL 8.4, schema and Control database user. The disposable `compose.dev.yaml` MySQL service is not a production database.
-2. Supply existing Control CA, signing key, server certificate/private key, and the original protected persistent authority state. Mount as files accessible to UID 10001 (not world-readable).
-3. Do not use `TUNEX_AUTHORITY_INITIALIZE=1` on an existing authority, and **never** delete the state folder/journal to make startup pass.
-4. On each Agent host, use an already **enrolled** Node; put `journal.key` in a separately protected directory outside the Agent state folder. Never commit enrollment token, certificates or journal keys.
-5. A native Agent runs with host networking because it owns real TCP/UDP listening ports; check host firewall and ensure an older Agent instance is stopped before replacing it. A Control-only host should run only the Control service.
-6. Control publishes port 41001 to host loopback only. Supply a validated HTTPS reverse proxy or configure a deliberate and firewall-restricted trusted endpoint before starting remote Agents. `TUNEX_CONTROL_URL` must match the trusted Control certificate name.
-
-## Inspect before running
-
-```sh
-# Set variables via a protected environment file; do not commit that file.
-# TUNEX_CONTROL_IMAGE, TUNEX_DATABASE_URL, TUNEX_CONTROL_STATE_DIR,
-# TUNEX_CONTROL_PKI_DIR (and, separately on Agent hosts:
-# TUNEX_AGENT_IMAGE, TUNEX_CONTROL_URL, TUNEX_NODE_ID,
-# TUNEX_AGENT_STATE_DIR, TUNEX_AGENT_SECRETS_DIR).
-docker compose -f deploy/compose.runtime.example.yaml config
-# Only after prerequisites and a recorded rollback plan:
-docker compose -f deploy/compose.runtime.example.yaml up -d control
-# Only on the intended Agent host:
-docker compose -f deploy/compose.runtime.example.yaml --profile agent up -d agent
+```text
+/srv/tunex/agent/state/         # Node 身份、凭据、journal.json、high-water
+/srv/tunex/agent/secrets/       # control-ca.pem / journal.key
+/secure/tunex-agent.env         # 只在主机保管
 ```
 
-Use immutable image tags/digests in deployments; a local `:dev` image is for isolated acceptance only. No automatic schema downgrade is provided.
+创建现有目录并赋予容器 UID `10001` 必需权限；私钥和 Journal Key 应受限为仅相应服务账户可读。**Agent `secrets/` 不得位于 `state/` 内部**，且后续常驻容器只读挂载 secrets。不要把 Node Enrollment Token 存入 Compose、Docker 镜像、Git 或命令历史。
 
-## Security and recovery
+CA 应为测试环境专用 ECDSA CA；Control 服务器证书由该 CA 信任，必须覆盖 Agent 访问的真实域名/IP SAN。**CA 与 Authority State 绑定**，已初始化实例不得更换 CA 后尝试清空/重新初始化原状态以消除错误。
 
-Both services drop Linux capabilities and set `no-new-privileges`. Protect CA private keys, Agent journal MAC keys, persisted identities, and MySQL backup credentials using OS ownership (container UID 10001). Do not mount host Docker sockets or run the Agent privileged.
+## 2. 镜像与环境文件
 
-Rollback is **not** volume deletion or re-enrollment. Snapshot state, fencing history, protected journals, authority and database versions are all security-sensitive. Record image digest, schema version, state backup and a verified recovery procedure before attempting an upgrade. Keep one owner per Agent state and set of native listening ports.
+在 [自动发布 Workflow](../.github/workflows/images.yml) 的**成功**运行 Summary 中复制两张完整 `@sha256:` Digest。每台主机只填自己角色的变量，例子中值均为占位符：
 
-## Third slice: provenance, inventory and pre-deployment checks
+Control 的 `/secure/tunex-control.env`：
 
-Build image labels include the exact source commit SHA when passed as `--build-arg TUNEX_SOURCE_REVISION="$(git rev-parse HEAD)"`. **A label is traceability, not a cryptographic signature or supply-chain attestation.** The packaging CI verifies both image labels and produces separate SPDX SBOM artifacts. Runtime Dockerfile layers explicitly upgrade Debian security packages before final build to address the previously observed `perl-base` fixable Critical vulnerabilities; repeated scanner CI confirms whether that remediation actually succeeds. The container CI now uses the verified upstream `aquasecurity/trivy-action@v0.36.0` tag for separate **advisory** HIGH/CRITICAL scans of both actual built images. It uploads JSON findings as a CI artifact, and fails if a scan does not execute or produce a valid report. **The PR CI now blocks fixable CRITICAL findings in both images** by validating actual Trivy JSON and failing closed on malformed or missing evidence. HIGH findings remain advisory and must be reviewed; a green CI does NOT mean the images are free of all vulnerabilities. The manual internal-candidate publisher also rejects fixable CRITICAL findings (`exit-code: 1` with `ignore-unfixed: true`).
-
-Before using 1Panel with previously provisioned directories, export immutable *registry* references for both images and the four absolute, already-existing protected directories. Then execute:
-
-```sh
-node deploy/preflight.mjs
-docker compose -f deploy/compose.runtime.example.yaml --profile agent config --quiet
+```dotenv
+TUNEX_CONTROL_IMAGE=ghcr.io/anrcm0/tunex-control@sha256:REPLACE_WITH_64_HEX_DIGEST
+TUNEX_DATABASE_URL=mysql://dedicated-user:REPLACE_PASSWORD@db-private.example:3306/tunex_vnext_test
+TUNEX_CONTROL_STATE_DIR=/srv/tunex/control/state
+TUNEX_CONTROL_PKI_DIR=/srv/tunex/control/pki
 ```
 
-Preflight rejects mutable tags, missing or world-writable state paths, symlinked storage and nested Agent state/secret directories; it intentionally does not read private keys or contact the host. Use independent Control/Agent hosts as planned. This check does **not** validate file ownership, cert validity, journal correctness, firewall, database migrations, network reachability, or rollback feasibility. Do not infer those checks from a successful preflight.
+Agent 的 `/secure/tunex-agent.env`：
 
-Capture and store your selected image digest, SBOM, scan report, schema version and recovery evidence for each test deployment. No registry image publication or automatic 1Panel rollout is implemented in this slice.
-
-## Fourth slice: verified scanning and opt-in GHCR candidate publication
-
-Image inventory and vulnerability reports are distinct: the signed-source-**looking** OCI revision label is just metadata, while the SPDX SBOM inventories components, and Trivy reports security findings. Neither is a cryptographic signature. Do not assume `candidate-<sha>` tags are themselves immutable; use the returned **registry manifest digest** for deployments.
-
-An operator can manually trigger GitHub Actions `VNext internal candidate images` (`.github/workflows/candidate-images.yml`) **from `main` only**, supplying exactly the audited 40-character Git SHA. The workflow checks this SHA matches the checkout and requires prior **successful Control/Relay contracts and container packaging CI on the same SHA**. It then builds both images from source, rejects *fixable CRITICAL* Trivy findings, checks that candidate tags do not already exist, and pushes the resulting SHA-named images to GHCR. The workflow emits registry manifest information for inventory. **It does not deploy or approve production use.** Registry permission, packages visibility and live image publishing have not yet been exercised in a release run.
-
-On 1Panel, first configure image references by complete `@sha256:<manifest-digest>` (never `:latest` or only a SHA-tag) and run `node deploy/preflight.mjs`. Then conduct an operator-reviewed staging deployment, backup/restore test and full TCP/UDP/mTLS verification before considering production.
-
-Unfixed or lower-severity vulnerabilities still require review. The release security check has an intentionally narrow fixable-CRITICAL automatic gate; manual review cannot be skipped solely because that gate passes. This slice performs **no** live host rollout or destructive migration.
-
-## Automatic development and versioned release images
-
-The trusted publisher is `.github/workflows/images.yml`. **It publishes images to GHCR, not to a running 1Panel host.** The default image repositories are `ghcr.io/anrcm0/tunex-control` and `ghcr.io/anrcm0/tunex-agent` (owner lowercased from the GitHub repository).
-
-| Git event | Published tags for both Control and Agent | Meaning |
-| --- | --- | --- |
-| Push a commit to `main` | `dev-<full-40-character-Git-SHA>`, and `dev` for the current main HEAD | Development/testing, with an immutable-source per-commit trace and a moving alias |
-| Push `vMAJOR.MINOR.PATCH` (e.g. `v0.1.0`) | `v0.1.0` | Versioned stable-channel image for staged release acceptance |
-| Push a feature branch, a pull request, or a malformed/prerelease tag | No images published | No unreviewed build uploads |
-
-Both publication channels wait for **successful** `ci.yml` (Contracts/Phase 1/Relay) and `container.yml` (both image builds/Trivy) checks from a **main push of the exact Git commit**. This is why `container.yml` runs on every `main` push, even for documentation-only changes. The publisher rebuilds the checked-out commit, verifies OCI revision/UID, generates separate SPDX SBOMs and image Trivy reports, and blocks when either scan is invalid or contains a **fixable CRITICAL** finding. Higher-severity risk assessment and staging verification are still required; CI success is not an automatic deployment approval.
-
-**Example** (after review and successful merge to `main`):
-
-```sh
-git checkout main
-git pull --ff-only origin main
-# A successful push to main automatically publishes :dev-<commit> and updates :dev
-# For a formal version (tagged source must be reachable from main):
-git tag v0.1.0
-git push origin v0.1.0
-# The separate tag-triggered workflow publishes :v0.1.0
+```dotenv
+TUNEX_AGENT_IMAGE=ghcr.io/anrcm0/tunex-agent@sha256:REPLACE_WITH_64_HEX_DIGEST
+TUNEX_CONTROL_URL=https://control-dev.example:41001
+TUNEX_NODE_ID=REPLACE_WITH_ENROLLED_NODE_ID
+TUNEX_AGENT_STATE_DIR=/srv/tunex/agent/state
+TUNEX_AGENT_SECRETS_DIR=/srv/tunex/agent/secrets
 ```
 
-Stable tags require exact `vX.Y.Z` (nonnegative integers, no leading zeros). No prereleases or `:latest` are published, and tag-created binaries are **not** a production rollout. Versioned tags and per-commit `dev-<sha>` references should not be overwritten; the workflow detects existing registry references and refuses to republish them. For strong protection, also configure GitHub repository tag rulesets for `v*` and GHCR package immutability/permissions. A failed or partially pushed publication requires operator assessment; do not force-move a published stable tag.
+`docker compose --env-file` 用于**Compose 变量插值**。Shell 中临时导出的变量不会自动传入容器，除非在 Compose 的 `environment:` 明确声明，或在 `docker compose run -e NAME` 中显式透传。仓库的角色独立模板已经声明常驻服务所需变量。不要对任何生产日志打印数据库 URL、Owner Token 或私钥。
 
-GitHub Actions requires repository `GITHUB_TOKEN` permission to **write Packages**, and GHCR packages may need repository-linked permissions. Private image pulls from 1Panel require an authorized registry login. Read the successful publisher's workflow job summary for each **real immutable `@sha256:<manifest-digest>` reference**; these are the references to use in the deployment preflight and Compose, rather than relying on mutable `:dev` or human-readable release tags.
+## 3. Control 首次初始化与正常启动
 
-An existing manual candidate workflow remains available for operator-driven `:candidate-<sha>` images and does not publish `:dev` or `:vX.Y.Z`. No automatic Control authority initialization, Agent enrollment, MySQL migration rollback, 1Panel upgrade, or public availability of private registry images is implied.
+**仅对真正全新的独立数据库、原始 CA 和空 Authority State 做一次初始化**。如果已经通过初始化和重启，请跳到“正常启动”。
 
-## Runtime liveness and shutdown gates (second slice)
+```bash
+# 在仓库根目录，确认使用的数据库、证书及 state 目录确实为新的测试环境
+docker compose --env-file /secure/tunex-control.env \
+  -f deploy/compose.control.example.yaml config --quiet
+docker compose --env-file /secure/tunex-control.env \
+  -f deploy/compose.control.example.yaml pull control
 
-The Control image includes a bounded `HEALTHCHECK` that opens a TCP connection to `127.0.0.1:TUNEX_CONTROL_PORT` and fails if the local listener is missing or the port is invalid. It does **not** verify authenticated HTTPS, MySQL, authority, Agent lease, or data plane readiness. **Do not route production traffic or authorize upgrades based solely on Docker's healthy status.** Agent readiness requires a fresh authoritative Report and real TCP/UDP payload. Do not fabricate an Agent health endpoint.
+# 一次性运行服务，明确覆盖固定的 0；此运行不会通过 Compose 暴露服务端口
+docker compose --env-file /secure/tunex-control.env \
+  -f deploy/compose.control.example.yaml run --rm --no-deps \
+  -e TUNEX_AUTHORITY_INITIALIZE=1 control
+# 看到 "Control listening" 且确认无错误后，Ctrl+C 正常结束一次性实例
+```
 
-Container CI now verifies both binaries start only with required trust prerequisites: bare Control must fail when required environment and protected authority state are absent; Agent must fail when its CA, credential and MAC journal key are absent. No trusted state is created by these checks.
+然后创建 Owner/Scope。Owner Token 应在可信终端交互输入，并且保留在安全密码管理器中，**不能丢失或明文提交**：
 
-Before a controlled update on 1Panel, record the old image digest, database migration revision, full verified MySQL backup, protected Control authority state, CA keys, Agent journal and Node identity. Ensure exactly one live writer/Agent per identity and socket. Gracefully stop the replaced instance before its successor acquires the same state. Keep the old binaries/images available, but **do not start them against a newer incompatible schema**. A rollback may require a tested full restoration of corresponding database/trust state and cannot be performed by dropping volumes or re-enrolling Nodes.
+```bash
+read -rsp 'New owner token: ' TUNEX_OWNER_TOKEN; echo
+export TUNEX_OWNER_TOKEN
+docker compose --env-file /secure/tunex-control.env \
+  -f deploy/compose.control.example.yaml run --rm --no-deps \
+  -e TUNEX_OWNER_TOKEN control node apps/control/src/bootstrap.ts scope-dev owner-dev
+unset TUNEX_OWNER_TOKEN
+```
 
-After a staged replacement, verify its actual HTTPS/mTLS operation, current Snapshot/Report, fresh Forward operation, TCP and UDP payload, expired credential refusal and safe resource reclamation before approving production use. Automatic one-command upgrade or downtime-free migration are **not yet implemented**.
+正常启动（常驻模板固定 `TUNEX_AUTHORITY_INITIALIZE=0`）：
 
-## Next acceptance gates (not yet claimed)
+```bash
+docker compose --env-file /secure/tunex-control.env \
+  -f deploy/compose.control.example.yaml up -d control
+docker compose --env-file /secure/tunex-control.env \
+  -f deploy/compose.control.example.yaml ps
+docker compose --env-file /secure/tunex-control.env \
+  -f deploy/compose.control.example.yaml logs --tail=80 control
+```
 
-- Build both images on disposable Linux CI and exercise image startup and clean shutdown.
-- Runtime health/readiness checks, verified image digest/labels, SBOM and vulnerability/permission checks.
-- Controlled 1Panel deployment, external MySQL backup/restore and downgrade compatibility decision.
-- Two independent host Relay tests including TCP/UDP, mTLS negative peer test, renewed certificate, forced disconnect, failover and real firewalling.
+在同主机通过受信任 CA 验证 HTTPS。以下使用域名 SAN，并强制该域名在此命令解析为回环：
 
-Passing this Docker packaging review alone is **not** a production readiness guarantee.
+```bash
+curl --fail --show-error --cacert /srv/tunex/control/pki/ca.pem \
+  --resolve control-dev.example:41001:127.0.0.1 \
+  https://control-dev.example:41001/health
+```
+
+应得到 `protocolVersion: 3` 和健康状态；**单纯 `/health` 成功不代表 MySQL/Agent/业务转发就绪**。浏览器在有相同信任链的 HTTPS 地址打开 `/console`，用 `scope-dev` 与 Owner Token 进入界面。
+
+### 跨主机 HTTPS 与 1Panel
+
+现有 Control 模板默认只发布 `127.0.0.1:41001`，远端 Agent **无法直接连接**。需要为测试网络选择一条明确、受限的入口：绑定可信内网接口并使用防火墙限制来源，或用 **TCP 四层透传（TLS passthrough）** 暴露到对应私有地址。证书 SAN 必须与 `TUNEX_CONTROL_URL` 一致。
+
+**不要用默认 1Panel OpenResty/Nginx 七层 HTTPS 终止反代代理 Agent 的 `/agent/v3/*`**：Control 需要实际 TLS 客户端证书进行 Node 身份认证，而不是信任可伪造的请求头。可单独规划 Console 的访问入口，但不要让普通 HTTP 反代破坏机器侧的端到端 mTLS。
+
+## 4. Node Enrollment、Agent 启动
+
+在 `/console` 创建允许实际测试 TCP/UDP 地址、端口及目标 CIDR 的 Node，记录 Node ID 与**短时有效**的一次性 Enrollment Token。先通过可信方式放置 `control-ca.pem`，保证 Agent state/secrets 权限。
+
+Enrollment 是**显式的一次性操作**。使用 `docker run` 在 Agent 主机交互执行，可避免 Compose 常驻 secret 的只读挂载及临时环境变量传递问题：
+
+```bash
+# 从发布 Summary 复制的完整 Digest；不要填示例占位符
+export TUNEX_AGENT_IMAGE='ghcr.io/anrcm0/tunex-agent@sha256:REPLACE_WITH_64_HEX_DIGEST'
+export TUNEX_CONTROL_URL='https://control-dev.example:41001'
+export TUNEX_NODE_ID='REPLACE_WITH_ENROLLED_NODE_ID'
+read -rsp 'Enrollment Token: ' TUNEX_ENROLLMENT_TOKEN; echo
+export TUNEX_ENROLLMENT_TOKEN
+
+docker run --rm --network host --user 10001:10001 \
+  -e TUNEX_ENROLLMENT_TOKEN \
+  -v /srv/tunex/agent/state:/var/lib/tunex-agent \
+  -v /srv/tunex/agent/secrets:/run/tunex-agent-secrets \
+  "$TUNEX_AGENT_IMAGE" \
+  --enroll --control="$TUNEX_CONTROL_URL" --node="$TUNEX_NODE_ID" \
+  --ca=/run/tunex-agent-secrets/control-ca.pem \
+  --state=/var/lib/tunex-agent \
+  --journal-key=/run/tunex-agent-secrets/journal.key
+
+unset TUNEX_ENROLLMENT_TOKEN
+```
+
+确认 Enrollment 成功、`journal.key` 与 `journal.json` 均已受保护持久化后，启动常驻 Agent：
+
+```bash
+docker compose --env-file /secure/tunex-agent.env \
+  -f deploy/compose.agent.example.yaml config --quiet
+docker compose --env-file /secure/tunex-agent.env \
+  -f deploy/compose.agent.example.yaml up -d agent
+docker compose --env-file /secure/tunex-agent.env \
+  -f deploy/compose.agent.example.yaml logs --tail=100 agent
+```
+
+该 Agent 模板明确包含 `--relay`。只跑 Direct 时可在本机副本中删掉 `--relay`，不要修改已持久化的节点授权或 Journal。**实测采用 `network_mode: host` 验证原生端口和 Relay**；Bridge 模式中的 TLS/执行期限错误应检查内部端点 `advertisedHost`、监听/映射、DNS、双向 TCP 连通性及防火墙，不能简单断言 Bridge 永远不支持 Relay。
+
+## 5. 转发与 Relay 冒烟测试
+
+**Direct TCP**：在 Agent 可达的目标主机准备独立 HTTP Echo（测试主机可用 `python3 -m http.server 18080 --bind 127.0.0.1`）。在 `/console` 建立 TCP Forward（示例：`127.0.0.1:25565` → `127.0.0.1:18080`）；前提是 Node Policy 允许该监听、目标 CIDR/端口。验证：
+
+```bash
+curl --fail http://127.0.0.1:25565/
+```
+
+**Direct UDP**：在仓库目录执行 `node scripts/manual/udp-smoke.mjs echo --port 18081`，在 Console 另建 UDP-only Forward（`127.0.0.1:25565/udp` → `127.0.0.1:18081/udp`），然后执行：
+
+```bash
+node scripts/manual/udp-smoke.mjs probe --port 25565 --count 5 --timeout-ms 3000
+```
+
+必须看到两个独立 socket 共 10 个报文精确返回，并重新验证同数值端口的 TCP 仍可用。完整细节见 [UDP 实机检查](../docs/development/direct-udp-live-smoke.md)。
+
+**Relay**：在第二台 Agent 主机重复注册和部署，且两端使用 `--relay`。于 Console 完成出口 Node Endpoint（公网/私网实际可达地址及独立内部 TLS/TCP 端口）、不可变 Transport Profile、Node/Profile 使用授权，再先预览 Plan，后创建 Relay Forward。只有两端当前 `active/ready` 且真实 TCP/UDP payload 通过才计为业务成功。正确拒绝测试包括伪造 CA、错误 Node ID、旧 peer pin 和无权限目的地址。参见 [Relay Console](../docs/development/relay-console.md) 与 [Relay Control](../docs/development/relay-control.md)。
+
+以上用例可先在同主机独立容器中跑内部冒烟；**两台容器不等于两台物理主机**。跨主机网络隔离、丢包及故障切换需要单独验收。
+
+## 6. 凭据轮换、故障恢复、备份与回滚
+
+- `--rotate` 表示**主动触发机器凭据轮换**，不等于已经验证无人操作的长期自动 peer 轮换。先记录 Node 当前 session、Forward Health 和真实 Relay TCP/UDP 客户端收发，再触发轮换并复测；不能靠清空 Journal 来回到旧 session。
+- 在隔离环境下分别验证 Agent 重启、Control 中断、Relay egress 不可达、旧凭据拒绝以及真实租约截止。故障后的恢复要检查新 Snapshot/Report、Operation 和实际用户 payload，而不是只看容器 `healthy`。
+- MySQL 备份还原**不能单独代表安全回滚**。保护并核对 Authority 状态、CA、Agent Journal/high-water、数据库版本和凭据；禁止 `docker compose down -v`、重复 Authority 初始化、清空 Journal 或重用旧 V2 数据。需要进行真实恢复时遵循 [节点安全与恢复](../docs/operations/node-security-and-recovery-v1.md) 与 [恢复和容量](../docs/development/recovery-and-capacity.md)，在停用发行者、检查历史租约后按正式恢复工具的流程操作。
+- 记录每次验收使用的 **完整 Digest、Git SHA、数据库 Schema 版本、容器用户/权限、脱敏日志、Forward/Operation ID、TCP/UDP 实际结果**。不公开 Owner/Enrollment Token、CA 私钥、Node 私钥、Journal Key 和原始数据库备份。
+
+## 7. 仍不属于“生产就绪”的范围
+
+Docker CI、SBOM、修复版 Critical 漏洞阻断和 GHCR 自动 Dev/版本镜像发布已经接入；这些不能代替安全复核。剩余发布门槛包括：不同**物理** Linux 主机的 Relay、实际宿主机防火墙与 L4 TLS 入口、无人值守自动轮换与长时间稳定性测试、High 漏洞分级、备份恢复/升级兼容性、多版本回滚及 1Panel 用户体验校验。
+
+**开发排期与可交付出口：** [下一阶段开发目标](../docs/development/next-milestones.md)。
