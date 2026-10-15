@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:adp:3:transit:delivery:1",
+  "title": "Authenticated non-executable Transit command preview and transport receipt",
+  "description": "Transport-only preview and receipt. No grant to prepare/activate/withdraw a live hop; executionEnabled always false and receipt condition only received.",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "Command": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "extensionVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "transit-command-preview-v1"
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "coordinationRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "previewAction": {
+          "enum": [
+            "prepare",
+            "activate",
+            "withdraw"
+          ]
+        },
+        "commandDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "issuedAt": {
+          "$ref": "#/$defs/time"
+        },
+        "validUntil": {
+          "$ref": "#/$defs/time"
+        },
+        "envelopeDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "extensionVersion",
+        "kind",
+        "executionEnabled",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "forwardId",
+        "deploymentGeneration",
+        "coordinationRevision",
+        "previewAction",
+        "commandDigest",
+        "issuedAt",
+        "validUntil",
+        "envelopeDigest"
+      ]
+    },
+    "Report": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "extensionVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "transit-delivery-report-v1"
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "commandDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "envelopeDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "reportSequence": {
+          "$ref": "#/$defs/counter"
+        },
+        "observedAt": {
+          "$ref": "#/$defs/time"
+        },
+        "condition": {
+          "const": "received"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "extensionVersion",
+        "kind",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "commandDigest",
+        "envelopeDigest",
+        "reportSequence",
+        "observedAt",
+        "condition"
+      ]
+    },
+    "Ack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "extensionVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "transit-delivery-ack-v1"
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "commandDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "envelopeDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "reportSequence": {
+          "$ref": "#/$defs/counter"
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "duplicate"
+          ]
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "extensionVersion",
+        "kind",
+        "executionEnabled",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "commandDigest",
+        "envelopeDigest",
+        "reportSequence",
+        "status"
+      ]
+    }
+  }
+}
