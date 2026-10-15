@@ -58,7 +58,7 @@ export async function reserveTransitResources(
     await write(tx,'INSERT INTO port_slots(node_id,protocol,port) VALUES(?,?,?) ON DUPLICATE KEY UPDATE port=port',args);
     const row=(await rows<{owner_id:string|null;fence:number}>(tx,
       'SELECT owner_id,fence FROM port_slots WHERE node_id=? AND protocol=? AND port=? FOR UPDATE',args))[0];
-    if(!row || row.owner_id!==null && row.owner_id!==forward.id)
+    if(!row || row.owner_id!==null)
       throw new ControlError('PORT_RESERVED',409,'Physical port owned by another Forward');
     if(!Number.isSafeInteger(row.fence) || row.fence<0 || row.fence>=MAX_COUNTER)
       throw new ControlError('RESOURCE_LIMIT',429,'Fencing counter exhausted');
