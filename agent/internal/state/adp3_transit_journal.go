@@ -139,6 +139,11 @@ func AcceptTransitSnapshot(path string,key []byte,current TransitJournal,s adp3t
    return current,fmt.Errorf("FENCING_REJECTED: Stale Transit physical owner")
   }
   for _,prior:=range old.Assignments{
+   samePort:=prior.Resource.Protocol==a.Resource.Protocol&&prior.Resource.Port==a.Resource.Port
+   if samePort&&a.BindingFence==prior.BindingFence&&
+    (prior.AssignmentId!=a.AssignmentId||prior.DeploymentGeneration!=a.DeploymentGeneration||prior.ForwardId!=a.ForwardId){
+    return current,fmt.Errorf("FENCING_REJECTED: Transit port ownership changed without advancing Fence")
+   }
    if prior.AssignmentId==a.AssignmentId&&prior.DeploymentGeneration==a.DeploymentGeneration&&prior.BindingFence==a.BindingFence {
     if prior.Driver.ConfigDigest!=a.Driver.ConfigDigest||prior.Resource!=a.Resource||prior.Protocol!=a.Protocol||
      prior.Phase=="active"&&a.Phase=="prepared"||prior.Phase=="draining"&&a.Phase!="draining"{
