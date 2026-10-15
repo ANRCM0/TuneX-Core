@@ -1,10 +1,11 @@
-import { MAX_COUNTER, isCounter } from '@tunex/core';
+import { MAX_COUNTER, isCounter, isPort } from '@tunex/core';
 import type { Forward } from '@tunex/core';
 import { DEFAULT_POLICY } from '@tunex/contracts';
 import { ControlError } from '../../application/errors.ts';
 import { rows, write } from '../../infrastructure/mysql.ts';
 import type { Transaction } from '../../infrastructure/mysql.ts';
 import type { TransitResource, ReservedTransitResource } from './transit-preparation.ts';
+import { compilePathTopology } from './path-topology.ts';
 
 /**
  * Offline multi-hop coordinator building block. Caller MUST authorize every
@@ -13,21 +14,35 @@ import type { TransitResource, ReservedTransitResource } from './transit-prepara
  *
  * No production Control API, ADP/3 publisher or Agent Runner calls this.
  */
+export function validateTransitReservationSet(
+  forward: Forward, resources: readonly TransitResource[], generation: number,
+): void {
+  const route = compilePathTopology(forward);
+  const sockets = resources.map(r => r.nodeId + '/' + r.physicalProtocol + '/' + r.port);
+  const logical = resources.map(r => r.nodeId + '/' + r.forwardProtocol);
+  if (!forward.spec.enabled || route.nodes.length < 3 || !isCounter(generation) ||
+      resources.length !== route.nodes.length * forward.spec.protocols.length ||
+      new Set(sockets).size !== resources.length ||
+      new Set(logical).size !== resources.length ||
+      resources.some(r => {
+        const hop = route.nodes.find(n => n.nodeId === r.nodeId);
+        return !hop || hop.role !== r.role || !forward.spec.protocols.includes(r.forwardProtocol) ||
+          !isPort(r.port) || !['tcp','udp'].includes(r.physicalProtocol) ||
+          (r.role === 'ingress' && (r.physicalProtocol !== r.forwardProtocol ||
+            r.address !== forward.spec.ingress.listen.address ||
+            r.port !== forward.spec.ingress.listen.port)) ||
+          (r.role !== 'ingress' && r.physicalProtocol !== 'tcp');
+      })) {
+    throw new ControlError('RESOURCE_CONFLICT',409,'Incomplete, unauthorized or duplicate multi-hop reservation set');
+  }
+}
+
 export async function reserveTransitResources(
   tx: Transaction, forward: Forward, resources: readonly TransitResource[],
   generation: number,
 ): Promise<readonly ReservedTransitResource[]> {
+  validateTransitReservationSet(forward,resources,generation);
   const uniqueNodes = new Set(resources.map(r => r.nodeId));
-  const sockets = resources.map(r => r.nodeId + '/' + r.physicalProtocol + '/' + r.port);
-  if (!isCounter(generation) || uniqueNodes.size < 3 || uniqueNodes.size > 8 ||
-      resources.length < uniqueNodes.size || resources.length > 16 ||
-      sockets.length !== new Set(sockets).size ||
-      resources.some(r => !['tcp','udp'].includes(r.forwardProtocol) ||
-        !['tcp','udp'].includes(r.physicalProtocol) ||
-        (r.role === 'ingress' && r.physicalProtocol !== r.forwardProtocol) ||
-        (r.role !== 'ingress' && r.physicalProtocol !== 'tcp'))) {
-    throw new ControlError('RESOURCE_CONFLICT',409,'Invalid multi-hop physical resource set');
-  }
   const ordered = [...resources].sort((a,b) =>
     a.nodeId.localeCompare(b.nodeId) ||
     a.physicalProtocol.localeCompare(b.physicalProtocol) || a.port-b.port);
