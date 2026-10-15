@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { digest } from '@tunex/contracts';
+import { digest,parseTransitDelivery,TRANSIT_NEGOTIATION_CAPABILITIES } from '@tunex/contracts';
+import { TransitDeliveryService } from '../src/modules/runtime/transit-delivery.ts';
 import { ControlError } from '../src/application/errors.ts';
 import { MySqlUnitOfWork, rows, write } from '../src/infrastructure/mysql.ts';
 import { TransitCoordinationJournal, offlineTransitStep } from '../src/modules/runtime/transit-coordination.ts';
@@ -77,6 +78,9 @@ test('offline coordination database enforces ownership, receipt CAS, recovery an
  const nodes=[0,1,2].map(i=>'tcn-'+i+'-'+suffix);
  const row=stageFixture(account,scope,forwardId,nodes);
  const coordinator=new TransitCoordinationJournal(db);
+ const delivery=new TransitDeliveryService(db);
+ const machineFingerprint='c'.repeat(48)+suffix;
+ const machineBoot='boot-'+suffix;
  try{
   await db.migrate();
   await db.transaction(async tx=>{
@@ -91,9 +95,14 @@ test('offline coordination database enforces ownership, receipt CAS, recovery an
    await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec) VALUES(?,?,?,?)',
     [forwardId,scope,1,JSON.stringify(spec)]);
    for(let i=0;i<nodes.length;i++){
-    await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,facts) VALUES(?,?,?,?,?)',
-     [nodes[i],scope,String(i).repeat(48)+suffix,9999999999,'{}']);
-    await write(tx,'INSERT INTO runtime_nodes(node_id,session_epoch) VALUES(?,?)',[nodes[i],1]);
+    await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',
+     [nodes[i],scope,String(i).repeat(48)+suffix,9999999999,Date.now()+300000,
+      JSON.stringify({capabilities:['adp.3','native.direct.v1','tcp','udp',...TRANSIT_NEGOTIATION_CAPABILITIES]})]);
+    await write(tx,'INSERT INTO runtime_nodes(node_id,session_epoch,boot_id) VALUES(?,?,?)',
+     [nodes[i],1,i===2?machineBoot:'boot-'+i+'-'+suffix]);
+    if(i===2)await write(tx,
+     'INSERT INTO node_credentials(fingerprint,node_id,issued_at,valid_until) VALUES(?,?,?,?)',
+     [machineFingerprint,nodes[i],Date.now(),Date.now()+180000]);
     await write(tx,'INSERT INTO port_slots(node_id,protocol,port,owner_id,fence,deployment_generation) VALUES(?,?,?,?,?,?)',
      [nodes[i],'tcp',32001+i,forwardId,4+i,1]);
    }
@@ -114,6 +123,44 @@ test('offline coordination database enforces ownership, receipt CAS, recovery an
   let command=await coordinator.peek(account,scope,forwardId,1);
   assert.equal(command?.nodeId,nodes[2]);
   assert.equal(command?.action,'prepare');
+
+  // Transport delivery acknowledgments do not advance the offline coordinator.
+  const preview=await delivery.enqueuePreview(account,scope,forwardId,1);
+  assert.equal(preview.executionEnabled,false);
+  assert.equal(preview.kind,'transit-command-preview-v1');
+  assert.equal(preview.nodeId,nodes[2]);
+  assert.equal(preview.previewAction,'prepare');
+  assert.equal((await delivery.enqueuePreview(account,scope,forwardId,1)).envelopeDigest,
+   preview.envelopeDigest,'retries reuse the durable command');
+  await assert.rejects(delivery.poll(nodes[2],'e'.repeat(64),1,machineBoot),
+   assertCode('AUTHORIZATION_DENIED'));
+  await write(db.pool,'UPDATE node_credentials SET revoked=TRUE WHERE fingerprint=?',[machineFingerprint]);
+  await assert.rejects(delivery.poll(nodes[2],machineFingerprint,1,machineBoot),
+   assertCode('AUTHORIZATION_DENIED'));
+  await write(db.pool,'UPDATE node_credentials SET revoked=FALSE WHERE fingerprint=?',[machineFingerprint]);
+  assert.equal((await delivery.poll(nodes[2],machineFingerprint,1,machineBoot))?.envelopeDigest,
+   preview.envelopeDigest);
+  await assert.rejects(delivery.poll(nodes[2],machineFingerprint,1,'retired-boot'),
+   assertCode('SESSION_SUPERSEDED'));
+  const report=parseTransitDelivery('Report',JSON.stringify({
+   protocolVersion:3,extensionVersion:1,kind:'transit-delivery-report-v1',
+   nodeId:nodes[2],bootId:machineBoot,sessionEpoch:1,
+   commandDigest:preview.commandDigest,envelopeDigest:preview.envelopeDigest,
+   reportSequence:1,observedAt:new Date().toISOString(),condition:'received',
+  }));
+  const accepted=await Promise.allSettled([1,2].map(()=>
+   delivery.report(nodes[2],machineFingerprint,1,report)));
+  assert.equal(accepted.filter(x=>x.status==='fulfilled').length,2);
+  assert.deepEqual(accepted.filter(x=>x.status==='fulfilled').map(x=>x.value.status).sort(),
+   ['accepted','duplicate']);
+  await assert.rejects(delivery.report(nodes[2],machineFingerprint,1,
+   {...report,commandDigest:'sha256:'+'f'.repeat(64)}),assertCode('INTEGRITY_FAILURE'));
+  await assert.rejects(delivery.report(nodes[2],machineFingerprint,1,
+   {...report,reportSequence:2}),assertCode('FENCING_REJECTED'));
+  assert.equal((await delivery.poll(nodes[2],machineFingerprint,1,machineBoot)),null);
+  assert.equal((await coordinator.peek(account,scope,forwardId,1))?.commandDigest,
+   command?.commandDigest,'delivery receipt does not attest Ready');
+
   const simulatedVerifier=async (_proof:TransitObservationProof)=>true;
   const first=observation(command!,1);
   await assert.rejects(coordinator.confirm(account,scope,forwardId,1,first,async()=>false),
@@ -165,9 +212,12 @@ test('offline coordination database enforces ownership, receipt CAS, recovery an
  }finally{
   try{
    await db.transaction(async tx=>{
+    await write(tx,'DELETE FROM transit_delivery_receipts WHERE node_id=?',[nodes[2]]);
+    await write(tx,'DELETE FROM transit_delivery_outbox WHERE forward_id=?',[forwardId]);
     await write(tx,'DELETE FROM transit_coordination WHERE forward_id=?',[forwardId]);
     await write(tx,'DELETE FROM transit_deployments WHERE forward_id=?',[forwardId]);
     await write(tx,'DELETE FROM port_slots WHERE node_id IN (?,?,?)',nodes);
+    await write(tx,'DELETE FROM node_credentials WHERE node_id IN (?,?,?)',nodes);
     await write(tx,'DELETE FROM runtime_nodes WHERE node_id IN (?,?,?)',nodes);
     await write(tx,'DELETE FROM nodes WHERE id IN (?,?,?)',nodes);
     await write(tx,'DELETE FROM forwards WHERE id=?',[forwardId]);
