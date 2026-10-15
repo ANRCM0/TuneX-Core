@@ -12,3 +12,8 @@ test('relay plan refuses missing exact capability, wrong Profile revision and TL
 test('relay plan applies final target policy at egress and peer endpoint policy at ingress',()=>{assert.throws(()=>compileRelayResources(forward,[{...facts('node-a'),allowedDestinationCidrs:['10.0.0.0/8']},facts('node-b')],profile,endpoint,{tcp:32003,udp:32004}),/dial policy/);assert.throws(()=>compileRelayResources(forward,[facts('node-a'),{...facts('node-b'),allowedDestinationCidrs:['10.0.0.0/8']}],profile,endpoint,{tcp:32003,udp:32004}),/dial policy/);});
 
 test('Relay reachable endpoints reject wildcard/multicast/mapped wildcard and duplicate internal ports',()=>{for(const advertisedHost of ['0.0.0.0','::','::ffff:0.0.0.0','224.0.0.1','ff02::1'])assert.throws(()=>parseRelayEndpoint({...endpoint.config,advertisedHost}));assert.throws(()=>parseRelayEndpoint({...endpoint.config,allowedTcpPorts:[32003,32003]}));});
+
+test('current Relay resource allocator fails closed on a proposed Transit hop',()=>{
+ const multi:Forward={...forward,spec:{...forward.spec,path:{via:['node-mid','node-b']}}};
+ assert.throws(()=>compileRelayResources(multi,[facts('node-a'),facts('node-mid'),facts('node-b')],profile,endpoint,{tcp:32003,udp:32004}),/UNSUPPORTED_CAPABILITY/);
+});
