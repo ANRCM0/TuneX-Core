@@ -8,9 +8,9 @@ import { ControlError } from '../src/application/errors.ts';
 
 function example():TransitStageRow {
   const assignments=[
-    {nodeId:'node-a',role:'ingress',sessionEpoch:2,bindingFence:4,resource:{nodeId:'node-a',role:'ingress',port:32001}},
-    {nodeId:'node-b',role:'transit',sessionEpoch:3,bindingFence:5,resource:{nodeId:'node-b',role:'transit',port:32101}},
-    {nodeId:'node-c',role:'egress',sessionEpoch:4,bindingFence:6,resource:{nodeId:'node-c',role:'egress',port:32102}},
+    {nodeId:'node-a',role:'ingress',sessionEpoch:2,bindingFence:4,protocol:'tcp',resource:{nodeId:'node-a',role:'ingress',forwardProtocol:'tcp',physicalProtocol:'tcp',port:32001}},
+    {nodeId:'node-b',role:'transit',sessionEpoch:3,bindingFence:5,protocol:'tcp',resource:{nodeId:'node-b',role:'transit',forwardProtocol:'tcp',physicalProtocol:'tcp',port:32101}},
+    {nodeId:'node-c',role:'egress',sessionEpoch:4,bindingFence:6,protocol:'tcp',resource:{nodeId:'node-c',role:'egress',forwardProtocol:'tcp',physicalProtocol:'tcp',port:32102}},
   ];
   const body={executable:false,forwardId:'forward-a',scopeId:'scope-a',
     forwardRevision:4,deploymentGeneration:7,pathDigest:'sha256:'+'2'.repeat(64),
