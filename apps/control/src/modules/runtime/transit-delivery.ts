@@ -5,7 +5,7 @@ import {ControlError} from '../../application/errors.ts';
 import type {MySqlUnitOfWork,Transaction} from '../../infrastructure/mysql.ts';
 import {json,rows,write} from '../../infrastructure/mysql.ts';
 import {TransitCoordinationJournal,offlineTransitStep} from './transit-coordination.ts';
-import type {OfflineTransitCommand,TransitCoordinationPhase} from './transit-coordination.ts';
+import type {TransitCoordinationPhase} from './transit-coordination.ts';
 import {verifyTransitStage} from './transit-staging.ts';
 import type {TransitStageRow} from './transit-staging.ts';
 
@@ -104,7 +104,7 @@ export class TransitDeliveryService{
     reject('FENCING_REJECTED','Transit coordination step already changed');
    const body={forwardId:forward,generation,planDigest:plan.planDigest,phase:position.phase,
     position:position.position,revision:position.revision,
-    receiptHighwater:json(position.receipt_highwater)};
+    receiptHighwater:json<Record<string,number>>(position.receipt_highwater)};
    if(digest(body)!==position.journal_digest||
       offlineTransitStep(plan,body)?.commandDigest!==expected.commandDigest)
     reject('INTEGRITY_FAILURE','Transit current offline coordinator differs');
