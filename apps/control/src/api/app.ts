@@ -4,8 +4,9 @@ import { TLSSocket } from 'node:tls';
 import { readFile } from 'node:fs/promises';
 import { consoleNodes, consoleForwards, consoleOperations, consoleNodeDiagnostics } from './console-read.ts';
 import { randomUUID } from 'node:crypto';
-import { parseJson, parseRuntimeMessage, parseTransitNegotiation } from '@tunex/contracts';
+import { parseJson, parseRuntimeMessage, parseTransitNegotiation, parseTransitDelivery } from '@tunex/contracts';
 import { TransitNegotiator } from '../modules/runtime/transit-negotiation.ts';
+import { TransitDeliveryService } from '../modules/runtime/transit-delivery.ts';
 import { isId, isCounter } from '@tunex/core';
 import { ControlError, invalid } from '../application/errors.ts';
 import type { ControlApplication } from '../application/control.ts';
@@ -200,6 +201,16 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.post('/agent/v3/relay-credential',async c=>{const input=parseJson(await body(c.req.raw,32768)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='csr,requestId'||!isId(input.requestId)||typeof input.csr!=='string')invalid('Relay credential request ID and CSR required');return c.json(await control.nodes.relayCredential(c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),input.requestId,input.csr));});
     const transitNegotiator=new TransitNegotiator(control.db);
     // Read-only mTLS session/feature negotiation; never dispatches a Transit job.
+    const transitDelivery=new TransitDeliveryService(control.db);
+    app.get('/agent/v3/transit/command',async c=>{
+      const boot=c.req.header('x-tunex-boot-id');
+      if(!boot||!isId(boot))invalid('Current Transit Boot ID header required');
+      return c.json(await transitDelivery.poll(c.get('node'),c.get('fingerprint'),
+        epoch(c.req.header('x-tunex-session-epoch')),boot));
+    });
+    app.post('/agent/v3/transit/report',async c=>c.json(await transitDelivery.report(
+      c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),
+      parseTransitDelivery('Report',await body(c.req.raw,8192)))));
     app.post('/agent/v3/transit/hello',async c=>c.json(await transitNegotiator.hello(
       c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),
       parseTransitNegotiation('Request',await body(c.req.raw,8192)))));
