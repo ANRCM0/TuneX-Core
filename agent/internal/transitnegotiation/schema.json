@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:adp:3:transit:negotiation:1",
+  "title": "Authenticated Transit ADP/3 capability negotiation without execution grant",
+  "description": "Read-only, versioned negotiation bound to an existing TLS authenticated ADP/3 Hello session; executionEnabled is unconditionally false.",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "counterOrZero": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "Request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "extensionVersion": {
+          "const": 1
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "adp.multihop.1"
+            },
+            {
+              "const": "transit.wire.1"
+            },
+            {
+              "const": "native.transit.v1"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "lastStoredTransitGeneration": {
+          "$ref": "#/$defs/counterOrZero"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "extensionVersion",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "requiredCapabilities",
+        "lastStoredTransitGeneration"
+      ]
+    },
+    "Response": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "extensionVersion": {
+          "const": 1
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "adp.multihop.1"
+            },
+            {
+              "const": "transit.wire.1"
+            },
+            {
+              "const": "native.transit.v1"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "serverTime": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "state": {
+          "const": "contract-only"
+        },
+        "executionEnabled": {
+          "const": false
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "extensionVersion",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "requiredCapabilities",
+        "serverTime",
+        "state",
+        "executionEnabled"
+      ]
+    }
+  }
+}
