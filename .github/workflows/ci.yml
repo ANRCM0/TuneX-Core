@@ -68,6 +68,8 @@ jobs:
       - run: node scripts/run-go.mjs build -o ../.artifacts/network-fixture ./cmd/network-fixture
       - name: Transit real MySQL transaction acceptance
         run: node --test apps/control/test/transit-mysql-acceptance.test.ts
+      - name: Transit offline coordination MySQL acceptance
+        run: node --test apps/control/test/transit-coordination.test.ts
       - run: npm run test:phase1
       - run: npm run test:phase2
       - run: npm run test:security
