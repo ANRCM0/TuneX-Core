@@ -88,6 +88,26 @@ func TestTransitJournalPersistenceRetirementAndReplay(t *testing.T){
  if err!=nil||disk.Digest!=stored.Digest{t.Fatalf("lost retained Transit journal: %v",err)}
  if _,err=AcceptTransitSnapshot(path,key,initial,first);err==nil{t.Fatal("stale writer accepted")}
  if _,err=AcceptTransitSnapshot(path,key,disk,transitTestSnapshot(t,9,true,9,false));err==nil{t.Fatal("generation rollback accepted")}
+ // An unrelated logical assignment must never inherit a port at the same Fence.
+ takeover:=transitTestSnapshot(t,11,true,9,false)
+ encoded,err:=json.Marshal(takeover)
+ if err!=nil{t.Fatal(err)}
+ var candidate map[string]any
+ if err=json.Unmarshal(encoded,&candidate);err!=nil{t.Fatal(err)}
+ a:=candidate["assignments"].([]any)[0].(map[string]any)
+ a["assignmentId"]="assign-foreign"
+ config:=a["driver"].(map[string]any)["config"].(map[string]any)
+ config["intent"].(map[string]any)["assignmentId"]="assign-foreign"
+ a["driver"].(map[string]any)["configDigest"]=transitTestHash(t,config)
+ delete(candidate,"snapshotDigest")
+ candidate["snapshotDigest"]=transitTestHash(t,candidate)
+ encoded,err=json.Marshal(candidate)
+ if err!=nil{t.Fatal(err)}
+ forged,err:=adp3transit.ParseSnapshot(encoded)
+ if err!=nil{t.Fatal(err)}
+ if _,err=AcceptTransitSnapshot(path,key,disk,*forged);err==nil{
+  t.Fatal("different port owner inherited existing binding Fence")
+ }
  removed:=transitTestSnapshot(t,11,false,9,true)
  disk,err=AcceptTransitSnapshot(path,key,disk,removed)
  if err!=nil{t.Fatal(err)}
