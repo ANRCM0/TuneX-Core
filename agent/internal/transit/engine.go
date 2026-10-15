@@ -217,7 +217,15 @@ func(e *Engine)serve(raw net.Conn){
  e.mu.Lock();if e.stopping {e.mu.Unlock();return};e.live[raw]=downstream;e.mu.Unlock()
  if err:=answerOpen(upstream,incoming);err!=nil{return}
  upstream.SetDeadline(time.Time{})
- e.bridge(upstream,downstream)
+ cutoff:=e.until
+ // Peer certificates do not renew the authority of already-opened flows.
+ // Terminate at the earliest local lease, upstream leaf or downstream leaf expiry.
+ for _,peer:=range []*tls.Conn{upstream,downstream}{
+  certs:=peer.ConnectionState().PeerCertificates
+  if len(certs)==0{return}
+  cutoff=minTime(cutoff,certs[0].NotAfter)
+ }
+ e.bridge(upstream,downstream,cutoff)
 }
 func(e *Engine)dialDownstream()(*tls.Conn,error){
  v:=e.intent
@@ -248,17 +256,18 @@ func(e *Engine)dialDownstream()(*tls.Conn,error){
 // bridge preserves TCP FIN semantics and UDP datagram boundaries. There is no
 // cross-client multiplexing: one upstream connection gets one downstream
 // authenticated connection and an independent Agent-wide resource permit.
-func(e *Engine)bridge(upstream,downstream *tls.Conn){
+func(e *Engine)bridge(upstream,downstream *tls.Conn,cutoff time.Time){
  done:=make(chan error,2)
  pump:=func(in,out *tls.Conn){
   for{
    if err:=e.check();err!=nil{done<-err;return}
-   in.SetReadDeadline(e.until)
+   if !time.Now().Before(cutoff){done<-fmt.Errorf("LEASE_EXPIRED: Peer credential expired");return}
+   in.SetReadDeadline(cutoff)
    kind,data,err:=relay.ReadFrame(in,e.intent.Protocol,maxHopFrameBytes)
    if err!=nil{done<-err;return}
    if kind==relay.FrameUDP&&len(data)>maxHopFrameBytes{done<-fmt.Errorf("RESOURCE_LIMIT");return}
    if err:=e.check();err!=nil{done<-err;return}
-   out.SetWriteDeadline(minTime(time.Now().Add(hopHandshakeTimeout),e.until))
+   out.SetWriteDeadline(minTime(time.Now().Add(hopHandshakeTimeout),cutoff))
    if err:=relay.WriteFrame(out,kind,data,e.intent.Protocol,maxHopFrameBytes);err!=nil{done<-err;return}
    if kind==relay.FrameFIN&&e.intent.Protocol=="tcp"{done<-nil;return}
    if kind==relay.FrameClose{done<-nil;return}
