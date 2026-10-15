@@ -77,8 +77,12 @@ export class TransitStagingCoordinator {
       const path=compilePathTopology(forward),ref=forward.spec.transport;
       if(!forward.spec.enabled || path.nodes.length<3 || !ref)
         throw new ControlError('UNSUPPORTED_CAPABILITY',422,'Locked three-Node Transport required');
+      // Serialize first-stage writers on the Forward row even when the journal is empty.
+      // A second transaction must see the committed stage before selecting its generation.
       const old=(await rows<TransitStageRow>(tx,
         'SELECT * FROM transit_deployments WHERE forward_id=? ORDER BY generation DESC LIMIT 1 FOR UPDATE',[forwardId]))[0];
+      if(old && old.target_revision>forward.revision)
+        integrity('Transit journal revision exceeds locked Forward revision');
       if(old?.state==='reserved')
         throw new ControlError('RESOURCE_CONFLICT',409,'Abort old proposal before another staging attempt');
       const generation=Math.max(forward.revision,(old?.generation??0)+1);
