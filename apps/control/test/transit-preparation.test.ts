@@ -99,6 +99,6 @@ test('Transit preparation rejects expired credentials, wrong peer, unadvertised 
 });
 
 test('Multi-hop logical planning still refuses one- and two-Node current paths',()=>{
-  const i=fixture();i.forward.spec.path!.via=['node-b'];
+  const i=fixture();Reflect.set(i.forward.spec.path!, 'via', ['node-b']);
   assert.throws(()=>compileTransitPreparation(i),/UNSUPPORTED_CAPABILITY|AUTHORIZATION_DENIED/);
 });
