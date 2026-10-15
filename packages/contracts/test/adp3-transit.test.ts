@@ -36,6 +36,7 @@ function makeSnapshot(assignments: TransitAdpAssignment[] = [makeAssignment()]):
 }
 function rehash(snapshot: TransitAdpSnapshot): TransitAdpSnapshot {
  const {snapshotDigest: _old, ...body} = snapshot;
+ void _old;
  return {...body, snapshotDigest: digest(body)};
 }
 function mutation<T>(item: T): T { return structuredClone(item); }
