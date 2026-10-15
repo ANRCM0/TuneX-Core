@@ -10,17 +10,11 @@ on:
       - "agent/**"
       - "package*.json"
       - ".github/workflows/container.yml"
+      - ".github/workflows/images.yml"
+  # Image publication waits for this exact-SHA scan on EVERY main push,
+  # including docs-only changes. PR runs remain scoped to touched files.
   push:
     branches: [main]
-    paths:
-      - "deploy/**"
-      - ".dockerignore"
-      - "apps/control/**"
-      - "apps/web/**"
-      - "packages/**"
-      - "agent/**"
-      - "package*.json"
-      - ".github/workflows/container.yml"
 permissions:
   contents: read
 jobs:
