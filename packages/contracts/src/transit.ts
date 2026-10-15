@@ -35,8 +35,7 @@ const ajv = new Ajv2020({strict: true, allErrors: true, code: {regExp: fullStrin
 const addFormats: (a: Ajv2020) => void = createRequire(import.meta.url)('ajv-formats');
 addFormats(ajv);
 ajv.addSchema(schema);
-const validate = ajv.getSchema(schema.$id);
-if (!validate) throw new Error('INVALID_CONFIG: Transit contract schema missing');
+const validate = ajv.compile({ $ref: `${schema.$id}#/$defs/TransitIntent` });
 
 /** Parse a proposed Transit hop WITHOUT approving execution or minting authority.
  * This contract MUST NOT be accepted by the deployed ADP/3 Snapshot parser.
