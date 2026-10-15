@@ -12,6 +12,7 @@ export function compileRelayResources(forward:Forward,nodes:readonly AuthorizedN
  const config=parseRelayMessage('ProfileConfig',JSON.stringify(profile.config));if(!isCounter(profile.revision)||digest(config)!==profile.configDigest)throw new Error('INTEGRITY_FAILURE: Locked Profile integrity differs');parseRelayEndpoint(endpoint.config);
  const parsed=parseForward(forward);if(!parsed.ok)throw new Error('INVALID_CONFIG: Forward is invalid');const spec=parsed.value.spec;
  const topology=requireTwoNodeRelayTopology(parsed.value);
+ if(!spec.transport)throw new Error('UNSUPPORTED_CAPABILITY: Locked Relay Transport required');
  const ingress=nodes.find(n=>n.nodeId===topology.nodes[0]!.nodeId),egress=nodes.find(n=>n.nodeId===topology.nodes[1]!.nodeId);
  if(nodes.length!==2||!ingress||!egress||ingress.scopeId!==forward.scopeId||egress.scopeId!==forward.scopeId)throw new Error('AUTHORIZATION_DENIED: Exact same-scope Nodes required');
  if(profile.profileId!==spec.transport.profileId||profile.revision!==spec.transport.configRevision||endpoint.nodeId!==egress.nodeId||!isCounter(endpoint.revision))throw new Error('AUTHORIZATION_DENIED: Locked Profile and egress endpoint required');
