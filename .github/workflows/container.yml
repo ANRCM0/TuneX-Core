@@ -117,4 +117,7 @@ jobs:
           TUNEX_NODE_ID: disposable-node
           TUNEX_AGENT_STATE_DIR: /tmp/disposable-agent-state
           TUNEX_AGENT_SECRETS_DIR: /tmp/disposable-agent-secrets
-        run: docker compose -f deploy/compose.runtime.example.yaml --profile agent config --quiet
+        run: |
+          docker compose -f deploy/compose.runtime.example.yaml --profile agent config --quiet
+          docker compose -f deploy/compose.control.example.yaml config --quiet
+          docker compose -f deploy/compose.agent.example.yaml config --quiet
