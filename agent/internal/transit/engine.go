@@ -265,7 +265,7 @@ func(e *Engine)bridge(upstream,downstream *tls.Conn){
  go pump(upstream,downstream)
  go pump(downstream,upstream)
  first:=<-done
- if first!=nil||e.intent.Protocol=="udp"{upstream.Close();downstream.Close()} // UDP is session-scoped
+ if first!=nil{upstream.Close();downstream.Close()} // Normal TCP FIN/UDP Close must preserve reverse-direction completion
  <-done
  upstream.Close();downstream.Close()
 }
