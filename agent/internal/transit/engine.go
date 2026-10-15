@@ -4,6 +4,7 @@
 package transit
 
 import (
+ "bytes"
  "context"
  "crypto/rand"
  "crypto/tls"
@@ -61,8 +62,8 @@ func writeControl(c net.Conn, value any) error {
  raw,err:=json.Marshal(value);if err!=nil{return err}
  if len(raw)>maxHopControlBytes{return fmt.Errorf("RESOURCE_LIMIT: Transit handshake too large")}
  header:=make([]byte,4);binary.BigEndian.PutUint32(header,uint32(len(raw)))
- if _,err:=c.Write(header);err!=nil{return err}
- _,err=c.Write(raw);return err
+ if err:=writeAll(c,header);err!=nil{return err}
+ return writeAll(c,raw)
 }
 func readControl(c net.Conn, dest any) error {
  var head [4]byte
@@ -70,17 +71,18 @@ func readControl(c net.Conn, dest any) error {
  size:=binary.BigEndian.Uint32(head[:]);if size<2||size>maxHopControlBytes{return fmt.Errorf("RESOURCE_LIMIT: Transit handshake size refused")}
  raw:=make([]byte,size);if _,err:=io.ReadFull(c,raw);err!=nil{return err}
  if _,err:=contracts.ParseJSON(raw,maxHopControlBytes);err!=nil{return err}
- dec:=json.NewDecoder(bytesReader(raw));dec.DisallowUnknownFields()
+ dec:=json.NewDecoder(bytes.NewReader(raw));dec.DisallowUnknownFields()
  if err:=dec.Decode(dest);err!=nil{return err}
  // The message is exactly one strict JSON object, not trailing data.
  if dec.Decode(new(any))!=io.EOF{return fmt.Errorf("INVALID_CONFIG: Trailing Transit message")}
  return nil
 }
 
-// Avoid linking the legacy Relay control decoder: its binding is for two nodes.
-func bytesReader(raw []byte) io.Reader { return &sliceReader{data:raw} }
-type sliceReader struct{data []byte}
-func(r *sliceReader)Read(p []byte)(int,error){if len(r.data)==0{return 0,io.EOF};n:=copy(p,r.data);r.data=r.data[n:];return n,nil}
+// No legacy Relay/1 control message parser is used on this protocol.
+func writeAll(out io.Writer,raw []byte)error{
+ for len(raw)>0{n,err:=out.Write(raw);if err!=nil{return err};if n<=0{return io.ErrShortWrite};raw=raw[n:]}
+ return nil
+}
 
 func buildOpen(v transitcontracts.TransitIntent, outgoing bool, requestID string) hopOpen {
  p:=hopOpen{Version:1,Type:"hop-open",RequestID:requestID,ScopeID:v.ScopeId,ForwardID:v.ForwardId,
