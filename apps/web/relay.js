@@ -1,9 +1,10 @@
-import { relayCapable, relayProfile, relayEndpoint, relaySpec } from './relay-model.js';
+import { relayCapable, multihopCapable, multihopSpec, relayProfile, relayEndpoint, relaySpec } from './relay-model.js';
 
 export function initRelayConsole({ request, mutate, notify, byId, store, load, detail, display }) {
   const knownProfiles = new Map();
   let profileList = [];
   let previewed = null;
+  let multihopEnabled=false, intermediates=[],editing=null,pinnedProfileRevision=null,deploymentId=null;
   const el = byId;
   const formValue = (form, name) => form.elements.namedItem(name).value;
   const check = (form, name) => form.elements.namedItem(name).checked;
@@ -25,6 +26,26 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
     previewed = null;
     el('relay-submit').disabled = true;
     el('relay-preview-output').hidden = true;
+    renderPath();
+  }
+  function renderPath(){
+    const path=[el('relay-ingress').value,...intermediates,el('relay-egress').value];
+    el('relay-topology').replaceChildren();
+    path.forEach((id,i)=>{const li=document.createElement('li');li.textContent=(i===0?'入口 ':i===path.length-1?'出口 ':'中继 ')+shortId(id||'待选择');el('relay-topology').append(li);});
+    el('multihop-path').replaceChildren();
+    intermediates.forEach((id,index)=>{
+      const li=document.createElement('li'),name=document.createElement('span');name.textContent=shortId(id);li.append(name);
+      for(const [label,move] of [['上移',-1],['下移',1],['移除',0]]){
+        const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=label;
+        button.disabled=move===-1&&index===0||move===1&&index===intermediates.length-1;
+        button.setAttribute('aria-label',label+' '+id);
+        button.addEventListener('click',()=>{if(!move)intermediates.splice(index,1);else [intermediates[index],intermediates[index+move]]=[intermediates[index+move],intermediates[index]];invalidate();});li.append(button);
+      }
+      el('multihop-path').append(li);
+    });
+    options('multihop-candidate',store.nodes.filter(n=>multihopCapable(n)&&!path.includes(n.id)).map(n=>({value:n.id})));
+    el('multihop-add').disabled=!multihopEnabled||intermediates.length>=6||!el('multihop-candidate').value;
+    el('multihop-controls').hidden=!multihopEnabled;
   }
   function eligibleNodes() {
     return store.nodes.filter(relayCapable);
@@ -85,10 +106,11 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
     options('relay-profile-select',profileList.map(p=>({value:p.profileId,label:p.profileId+' · r'+p.currentRevision})));
     invalidate();
   }
-  async function loadProfile(profileId) {
-    if(knownProfiles.has(profileId)) return knownProfiles.get(profileId);
-    const response=await request('GET','transport-profiles/'+encodeURIComponent(profileId));
-    knownProfiles.set(profileId,response);
+  async function loadProfile(profileId,revision) {
+    const key=profileId+'/'+(revision??'current');
+    if(knownProfiles.has(key)) return knownProfiles.get(key);
+    const response=await request('GET','transport-profiles/'+encodeURIComponent(profileId)+(revision?'?revision='+revision:''));
+    knownProfiles.set(key,response);
     return response;
   }
   async function publishProfile(event) {
@@ -143,27 +165,27 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
     const form=el('relay-forward-form');
     const ingress=store.nodes.find(n=>n.id===formValue(form,'ingressId'));
     const egress=store.nodes.find(n=>n.id===formValue(form,'egressId'));
-    const profile=await loadProfile(formValue(form,'profileId'));
-    return relaySpec({
+    const profile=await loadProfile(formValue(form,'profileId'),pinnedProfileRevision);
+    const fields={
       protocol:formValue(form,'protocol'),listenAddress:formValue(form,'listenAddress'),
       listenPort:formValue(form,'listenPort'),targetHost:formValue(form,'targetHost'),
       targetPort:formValue(form,'targetPort'),enabled:check(form,'enabled')
-    },ingress,egress,profile);
+    };
+    return intermediates.length?multihopSpec(fields,[ingress,...intermediates.map(id=>store.nodes.find(n=>n.id===id)),egress],profile,multihopEnabled):relaySpec(fields,ingress,egress,profile);
   }
   async function preview() {
     invalidate();
     try {
       const spec=await buildSpec();
-      const egressId=spec.path.via[0];
       // Presence is necessary, not sufficient; the server preview checks use grants and policy.
-      await request('GET','nodes/'+encodeURIComponent(egressId)+'/relay-endpoint');
+      for(const nodeId of spec.path.via)await request('GET','nodes/'+encodeURIComponent(nodeId)+'/relay-endpoint');
       const response=await request('POST','relay-plan',spec);
       previewed=JSON.stringify(spec);
       el('relay-preview-output').hidden=false;
       el('relay-preview-output').textContent=JSON.stringify({
         verifiedAt:new Date().toISOString(),source:'Control Relay compiler',
         reserved:response.reserved,executionSupported:response.executionSupported,
-        profile:response.profile,endpointRevision:response.endpointRevision,
+        profile:response.profile,endpointRevision:response.endpointRevision,endpointRevisions:response.endpointRevisions,path:response.path,
         physicalResources:response.resources,
         note:'预览只做能力/授权/物理资源计划检查，不预留任何端口，不保证未来部署成功或网络可达。'
       },null,2);
@@ -177,11 +199,12 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
       const spec=await buildSpec();
       if(!previewed||JSON.stringify(spec)!==previewed)throw Error('表单已变化，请重新执行计划预览');
       el('relay-submit').disabled=true;
-      const result=await mutate('POST','forwards',spec);
+      const result=editing?await mutate('PUT','forwards/'+encodeURIComponent(editing.id),{expectedRevision:editing.revision,spec}):await mutate('POST','forwards',spec);
+      cancelEdit();
       previewed=null;
       await Promise.all([load('forwards'),load('operations')]);
       display('operations');
-      notify('Relay Forward 已接受，Operation '+result.operationId+'；请观察两个 Agent 的应用状态。');
+      notify('链路操作已接受，Operation '+(result.operationId??'无变更')+'；请观察路径中各节点的应用状态。');
     }catch(e){notify(e.message,true);}
   }
   el('relay-profile-form').addEventListener('submit',publishProfile);
@@ -190,17 +213,61 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
   el('relay-endpoint-node').addEventListener('change',populateEndpointListen);
   el('relay-ingress').addEventListener('change',()=>{populateIngress();invalidate();});
   el('relay-egress').addEventListener('change',invalidate);
-  el('relay-profile-select').addEventListener('change',invalidate);
+  el('relay-profile-select').addEventListener('change',()=>{pinnedProfileRevision=null;invalidate();});
   el('relay-forward-form').addEventListener('input',invalidate);
   el('relay-forward-form').addEventListener('change',invalidate);
   el('relay-forward-form').addEventListener('submit',submit);
   el('relay-preview').addEventListener('click',preview);
   el('relay-reload').addEventListener('click',()=>refresh().catch(e=>notify(e.message,true)));
+  el('multihop-add').addEventListener('click',()=>{const id=el('multihop-candidate').value;if(id&&multihopEnabled&&intermediates.length<6&&!intermediates.includes(id)){intermediates.push(id);invalidate();}});
+  el('relay-cancel-edit').addEventListener('click',cancelEdit);
+  function cancelEdit(){editing=null;pinnedProfileRevision=null;intermediates=[];el('relay-cancel-edit').hidden=true;el('relay-submit').textContent='创建链路';el('relay-ingress').disabled=false;invalidate();}
+  async function edit(item){
+    await refresh();editing={id:item.id,revision:item.revision};pinnedProfileRevision=item.spec.transport.configRevision;
+    const form=el('relay-forward-form'),s=item.spec;
+    el('relay-ingress').value=s.ingress.nodeId;el('relay-egress').value=s.path.via.at(-1);populateIngress();
+    el('relay-ingress').disabled=true;el('relay-profile-select').value=s.transport.profileId;
+    form.elements.namedItem('protocol').value=s.protocols.length===2?'both':s.protocols[0];
+    form.elements.namedItem('listenAddress').value=s.ingress.listen.address;form.elements.namedItem('listenPort').value=String(s.ingress.listen.port);
+    form.elements.namedItem('targetHost').value=s.target.host;form.elements.namedItem('targetPort').value=String(s.target.port);form.elements.namedItem('enabled').checked=s.enabled;
+    intermediates=s.path.via.slice(0,-1);el('relay-submit').textContent='更新链路 r'+item.revision;el('relay-cancel-edit').hidden=false;
+    invalidate();display('relay');
+  }
+  el('deployment-close').addEventListener('click',()=>el('deployment-dialog').close());
+  el('deployment-refresh').addEventListener('click',()=>deployment(deploymentId).catch(e=>notify(e.message,true)));
+  async function deployment(id){
+    deploymentId=id;const [response,forward,history]=await Promise.all([request('GET','forwards/'+encodeURIComponent(id)+'/deployment'),request('GET','forwards/'+encodeURIComponent(id)),request('GET','forwards/'+encodeURIComponent(id)+'/revisions')]);
+    const d=response.deployment;if(!d)throw Error('尚无持久化部署计划');
+    el('deployment-state').textContent='部署 g'+d.generation+' / '+d.stage+'；Control 续租：'+(d.renewalAllowed?'允许':'已停止或尚未授权')+'；已准备 '+(d.preparedCount??'—')+'，已请求激活 '+(d.activatedCount??'—')+'；隔离资源 '+d.isolation.length+'。流量验收尚无证据。';
+    el('deployment-topology').replaceChildren();el('deployment-nodes').replaceChildren();
+    if(d.operation?.lastError){
+      const error=document.createElement('p');error.className='hint';error.textContent='最近操作 '+d.operation.id+' / '+d.operation.status+' / '+JSON.stringify(d.operation.lastError);el('deployment-nodes').append(error);
+    }
+    for(const node of d.nodes){
+      const li=document.createElement('li');li.textContent=shortId(node.nodeId)+' · '+(node.ready?'就绪':node.prepared?'已准备':'等待或异常');li.className=node.ready?'ready':'';el('deployment-topology').append(li);
+      const p=document.createElement('p');p.className='hint';p.textContent=node.nodeId+' / '+node.role+' / Session '+node.currentSessionEpoch+' / 最近快照截止 '+(node.validUntil??'未下发')+' / '+(node.reportFresh?node.observations.map(o=>o.errorCode||o.condition).join(', ')||'暂无当前执行实例报告':'暂无新鲜报告');el('deployment-nodes').append(p);
+    }
+    const revisions=history.revisions.filter(r=>r.revision<forward.desired.revision);
+    if(revisions.length){
+      const label=document.createElement('label'),select=document.createElement('select');label.textContent='恢复历史配置（重新授权和部署）';
+      for(const r of revisions){const option=document.createElement('option');option.value=String(r.revision);option.textContent='r'+r.revision;select.append(option);}label.append(select);
+      const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='部署所选配置';
+      button.addEventListener('click',async()=>{try{
+        const selected=revisions.find(r=>String(r.revision)===select.value);if(!confirm('将 r'+selected.revision+' 的配置作为新 revision 部署，重新检查权限与端口。继续？'))return;
+        button.disabled=true;const result=await mutate('PUT','forwards/'+encodeURIComponent(id),{expectedRevision:forward.desired.revision,spec:selected.spec});
+        el('deployment-dialog').close();await Promise.all([load('forwards'),load('operations')]);notify('历史配置已提交，Operation '+(result.operationId??'无变更'));
+      }catch(e){notify(e.message,true);button.disabled=false;}});
+      el('deployment-nodes').append(label,button);
+    }
+    if(!el('deployment-dialog').open)el('deployment-dialog').showModal();
+  }
   async function refresh(){
+    const features=await request('GET','execution-capabilities');multihopEnabled=features.multihopEnabled===true;
     populateNodes();
     await refreshProfiles();
   }
   function clear() {
+    multihopEnabled=false;cancelEdit();
     profileList=[];
     knownProfiles.clear();
     invalidate();
@@ -212,5 +279,5 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
     row.append(cell);tbody.append(row);
     populateNodes();
   }
-  return {refresh,populateNodes,clear};
+  return {refresh,populateNodes,clear,edit,deployment};
 }

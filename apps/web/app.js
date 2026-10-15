@@ -153,7 +153,7 @@ function renderForwards() {
     const entry = cell(tr, element('div', a.ingress.nodeId.slice(0, 13), 'mono cell-title'));
     entry.append(element('div', a.ingress.listen.address + ':' + a.ingress.listen.port, 'subline'));
     const target = cell(tr, element('div', a.target.host + ':' + a.target.port, 'cell-title'));
-    target.append(element('div', 'r' + item.revision + (a.path ? ' · Relay' : ' · Direct'), 'subline'));
+    target.append(element('div', 'r' + item.revision + (a.path ? ' · '+(a.path.via.length+1)+' 节点链路' : ' · Direct'), 'subline'));
     cell(tr, label(a.protocols.join(' + ').toUpperCase(), ''));
     cell(tr, label(item.recoverySuspended ? '恢复挂起' : a.enabled ? '希望启用' : '希望停用', item.recoverySuspended ? 'progress' : ''));
     const operation = cell(tr, item.lastOperation ? label(item.lastOperation.status) : label('无操作记录'));
@@ -161,7 +161,8 @@ function renderForwards() {
     const action = cell(tr);
     const group = element('div', undefined, 'cell-actions');
     group.append(button('详情', 'forward-detail', item.id, 'secondary'));
-    if (!a.path) group.append(button('编辑', 'forward-edit', item.id, 'secondary'));
+    group.append(button('编辑', 'forward-edit', item.id, 'secondary'));
+    if(a.path)group.append(button('部署进度', 'forward-deployment', item.id, 'secondary'));
     group.append(button(a.enabled ? '停用' : '启用', 'forward-toggle', item.id, 'secondary'), button('删除', 'forward-delete', item.id, 'secondary'));
     action.append(group);
     tbody.append(tr);
@@ -269,7 +270,8 @@ async function action(kind, id) {
     if (kind === 'operation-detail') return detail('Operation · ' + shortId(id), await request('GET', 'operations/' + encodeURIComponent(id)));
     const forward = store.forwards.find(f => f.id === id);
     if (!forward) throw new Error('Forward 列表已更新，请刷新');
-    if (kind === 'forward-edit') return editor(forward);
+    if (kind === 'forward-edit') return forward.spec.path?await relayConsole.edit(forward):editor(forward);
+    if (kind === 'forward-deployment') return await relayConsole.deployment(id);
     if (kind === 'forward-toggle') {
       const result = await mutate('PUT', 'forwards/' + encodeURIComponent(id), { expectedRevision: forward.revision, spec: { ...forward.spec, enabled: !forward.spec.enabled } });
       await Promise.all([load('forwards'), load('operations')]);

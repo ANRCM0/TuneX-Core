@@ -7,7 +7,7 @@ import type { ResolvedEndpoint } from '../relay-endpoints.ts';
 import type { AuthorizedNodeFacts } from './planner.ts';
 import { targetAllowed } from '../target-policy.ts';
 import { requireTwoNodeRelayTopology } from './path-topology.ts';
-export interface RelayResource {nodeId:string;role:'ingress'|'egress';forwardProtocol:'tcp'|'udp';physicalProtocol:'tcp'|'udp';address:string;port:number}
+export interface RelayResource {nodeId:string;role:'ingress'|'transit'|'egress';forwardProtocol:'tcp'|'udp';physicalProtocol:'tcp'|'udp';address:string;port:number}
 export function compileRelayResources(forward:Forward,nodes:readonly AuthorizedNodeFacts[],profile:ResolvedProfile,endpoint:ResolvedEndpoint,egressPorts:Readonly<Record<'tcp'|'udp',number>>):readonly RelayResource[]{
  const config=parseRelayMessage('ProfileConfig',JSON.stringify(profile.config));if(!isCounter(profile.revision)||digest(config)!==profile.configDigest)throw new Error('INTEGRITY_FAILURE: Locked Profile integrity differs');parseRelayEndpoint(endpoint.config);
  const parsed=parseForward(forward);if(!parsed.ok)throw new Error('INVALID_CONFIG: Forward is invalid');const spec=parsed.value.spec;

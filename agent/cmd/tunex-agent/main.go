@@ -44,6 +44,8 @@ func run() error {
 	enroll := flag.Bool("enroll", false, "Exchange TUNEX_ENROLLMENT_TOKEN, then initialize state")
 	rotate := flag.Bool("rotate", false, "Rotate Node key/certificate after online Hello without resetting execution state")
 	relayEnabled := flag.Bool("relay", false, "Enable authenticated Relay execution with a dedicated Node peer credential")
+	multihopEnabled := flag.Bool("multihop", false, "Opt in to execution extension 1 and upgrade the protected journal; requires --relay")
+	importTransit := flag.String("import-transit-journal", "", "Explicit legacy offline Transit journal to import as retired high-water; requires --multihop")
 	timeProof := flag.String("time-proof", "", "Optional supervisor OS synchronization proof")
 	timeProofKey := flag.String("time-proof-key", "", "Protected MAC key for the supervisor proof")
 	diagnostics := flag.Bool("diagnostics", false, "Write protected local resource samples for operator measurements")
@@ -87,7 +89,7 @@ func run() error {
 	if *diagnostics {
 		diagnosticsPath = filepath.Join(root, "diagnostics", "status.json")
 	}
-	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath, Rotate: *rotate, Relay: *relayEnabled, TimeProof: *timeProof, TimeProofKey: *timeProofKey, Diagnostics: diagnosticsPath})
+	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath, Rotate: *rotate, Relay: *relayEnabled, Multihop: *multihopEnabled, ImportTransitJournal: *importTransit, TimeProof: *timeProof, TimeProofKey: *timeProofKey, Diagnostics: diagnosticsPath})
 	if err != nil {
 		return err
 	}

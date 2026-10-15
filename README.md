@@ -25,3 +25,7 @@ docker compose --env-file /secure/tunex-agent.env -f deploy/compose.agent.exampl
 **→ [完整部署与测试文档（首次初始化、节点注册、1Panel、Relay、备份恢复）](deploy/README.md)**
 
 [后续开发目标](docs/development/next-milestones.md) · [设计与协议文档](docs/README.md)
+
+Default-off multi-hop execution is under development:
+[implementation, deferred acceptance and release gates](docs/development/multihop-execution.md).
+No physical-host or production-readiness result is implied.

@@ -72,6 +72,8 @@ jobs:
         run: node --test apps/control/test/transit-coordination.test.ts
       - name: Transit mTLS capability negotiation MySQL acceptance
         run: node --test apps/control/test/transit-negotiation.test.ts
+      - name: Multi-hop failure withdrawal and full-path capacity transactions
+        run: node --test apps/control/test/multihop-runtime.test.ts
       - run: npm run test:phase1
       - run: npm run test:phase2
       - run: npm run test:security
@@ -117,6 +119,56 @@ jobs:
             .artifacts/recovery/**/evidence.json
             .artifacts/capacity/**/evidence.json
             .artifacts/capacity/**/failure.json
+  multihop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        nodes: [3, 4, 8]
+    services:
+      mysql:
+        image: mysql:8.4.9
+        env:
+          MYSQL_ROOT_PASSWORD: ci-disposable-only
+          MYSQL_DATABASE: tunex_multihop
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -pci-disposable-only"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      TUNEX_TEST_DATABASE_URL: mysql://root:ci-disposable-only@127.0.0.1:3306/tunex_multihop
+      TUNEX_MULTIHOP_NODES: ${{ matrix.nodes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install tools on the disposable acceptance runner
+        run: sudo apt-get update && sudo apt-get install -y iproute2 iptables util-linux
+      - run: mkdir -p .artifacts
+      - run: node scripts/run-go.mjs build -o ../.artifacts/tunex-agent ./cmd/tunex-agent
+      - run: node scripts/run-go.mjs build -o ../.artifacts/time-proof ./cmd/time-proof
+      - run: node scripts/run-go.mjs build -o ../.artifacts/network-fixture ./cmd/network-fixture
+      - name: Real Control and independent Agent lifecycle acceptance
+        run: npm run test:multihop
+      - name: Interior partition, latency and loss in owned network namespaces
+        run: npm run test:multihop -- --isolated
+      - name: Preserve evidence without enrollment or private key material
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multihop-${{ matrix.nodes }}-node-acceptance
+          path: |
+            .artifacts/multihop/**/evidence.json
+            .artifacts/multihop/**/failure.json
   relay-isolation:
     runs-on: ubuntu-latest
     timeout-minutes: 15

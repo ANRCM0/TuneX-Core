@@ -3,6 +3,16 @@ import { parsePorts, directCapable } from './model.js';
 export function relayCapable(node) {
   return directCapable(node) && ['native.relay.v1', 'relay.wire.1'].every(c => node.policy.capabilities.includes(c));
 }
+export function multihopCapable(node) {
+  return relayCapable(node)&&['adp.execution.1','native.multihop.v1','multihop.wire.1'].every(c=>node.policy.capabilities.includes(c));
+}
+export function multihopSpec(form, path, profile, enabled) {
+  if(!enabled)throw new Error('Control 尚未开启多跳执行');
+  if(!Array.isArray(path)||path.length<3||path.length>8||new Set(path.map(n=>n?.id)).size!==path.length||path.some(n=>!multihopCapable(n)))throw new Error('多跳路径要求 3–8 个不同且支持多跳执行的有效节点');
+  const spec=relaySpec(form,path[0],path.at(-1),profile);
+  if(path.some(n=>spec.protocols.some(p=>!n.policy.capabilities.includes(p))))throw new Error('路径中的每个节点都必须支持业务协议');
+  return {...spec,path:{via:path.slice(1).map(n=>n.id)}};
+}
 export function relayProfile(input) {
   const protocol=String(input.protocol??'');
   if (!['tcp','udp','both'].includes(protocol)) throw new Error('Relay Profile 协议不受支持');

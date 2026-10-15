@@ -89,9 +89,11 @@ export class RuntimeController {
         }>(tx, "SELECT COUNT(*) n FROM operations o JOIN forwards f ON f.id=o.forward_id AND f.revision=o.target_revision WHERE o.status='accepted' AND JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId'))=?", [state.node_id]))[0]!.n;
         // Preserve the last explicit authorization until persisted work is claimed; do not renew it.
         if (this.relay) await this.relay.advanceForNode(tx,state.node_id);
-        if (!withdrawn && awaitingClaim > 0 && previous?.sessionEpoch === state.session_epoch && Date.parse(previous.validUntil) > now + 5000 && Date.parse(previous.validUntil) <= credentialUntil)
-            return previous;
         const assignments = (withdrawn ? [] : await this.ledger.assignments(tx, this.forwarding, facts)).map(a => ({ ...a, drainTimeoutSeconds: this.policy.drainTimeoutSeconds }));
+        const keepMultihop = previous?.assignments.every(old => !old.role.startsWith('multihop-') || assignments.some(a => a.assignmentId === old.assignmentId && a.deploymentGeneration === old.deploymentGeneration && a.bindingFence === old.bindingFence && a.phase === old.phase && a.driver.configDigest === old.driver.configDigest));
+        // An unrelated queued command cannot delay withdrawal of a failed path.
+        if (!withdrawn && awaitingClaim > 0 && keepMultihop && previous?.sessionEpoch === state.session_epoch && Date.parse(previous.validUntil) > now + 5000 && Date.parse(previous.validUntil) <= credentialUntil)
+            return previous;
         const relayBound=this.relay?await this.relay.authorizationBound(tx,assignments):Number.MAX_SAFE_INTEGER;
         if (previous && previous.sessionEpoch === state.session_epoch && digest(previous.assignments) === digest(assignments) && Date.parse(previous.validUntil) <= Math.min(credentialUntil,relayBound) && Date.parse(previous.validUntil) - now > this.policy.renewalLeadSeconds * 1000)
             return previous;
@@ -121,14 +123,17 @@ export class RuntimeController {
         const cleanup = await rows<{
             node_id: string;
         }>(this.db.pool, "SELECT node_id FROM retirements WHERE safe=FALSE UNION SELECT CAST(JSON_UNQUOTE(JSON_EXTRACT(f.spec,'$.ingress.nodeId')) AS CHAR CHARACTER SET ascii) COLLATE ascii_bin node_id FROM operations o JOIN forwards f ON f.id=o.forward_id WHERE o.cleanup_pending=TRUE AND o.status='failed' LIMIT 20");
-        for (const item of cleanup)
+        const relayNodes=this.relay?await this.db.transaction(tx=>this.relay!.pendingNodeIDs(tx)):[];
+        // Publication prioritizes entry withdrawal. Each transaction still takes
+        // the complete related Node lock set in its canonical order.
+        for (const nodeId of new Set([...relayNodes,...cleanup.map(item=>item.node_id)]))
             await this.db.transaction(async (tx) => {
-                const state = await this.locked(tx, item.node_id);
+                const state = await this.locked(tx, nodeId);
                 if (state.session_epoch)
                     await this.publish(tx, state);
-                await this.ledger.complete(tx, item.node_id, this.forwarding);
+                await this.ledger.complete(tx, nodeId, this.forwarding);
+                if(this.relay)await this.relay.advanceForNode(tx,nodeId);
             });
-        if(this.relay){const nodes=await this.db.transaction(tx=>this.relay!.pendingNodeIDs(tx));for(const nodeId of nodes)await this.db.transaction(async tx=>{const state=await this.locked(tx,nodeId);if(state.session_epoch)await this.publish(tx,state);await this.ledger.complete(tx,nodeId,this.forwarding);await this.relay!.advanceForNode(tx,nodeId);});}
         const claim = await this.db.transaction(tx => this.ledger.claim(tx));
         if (!claim)
             return;
@@ -181,8 +186,12 @@ export class RuntimeController {
             if (snapshot && snapshot.snapshotGeneration === state.snapshot_generation && Date.parse(snapshot.validUntil) > now + this.policy.maxClockSkewSeconds * 1000) {
                 for (const a of snapshot.assignments) {
                     const obs = report.observations.find(o => o.assignmentId === a.assignmentId);
-                    if (obs?.condition === 'error')
-                        await write(tx, "UPDATE operations SET last_error=?,updated_at=?,status=IF(?,'running','failed'),cleanup_pending=IF(?,cleanup_pending,TRUE) WHERE forward_id=? AND target_revision=? AND status='running'", [JSON.stringify({ code: obs.errorCode, retryable: obs.retryable }), now, obs.retryable, obs.retryable, a.forwardId, a.forwardRevision]);
+                    if (obs?.condition === 'error') {
+                        if (a.role.startsWith('multihop-'))
+                            await this.relay?.executionError(tx, snapshot, a, obs);
+                        else
+                            await write(tx, "UPDATE operations SET last_error=?,updated_at=?,status=IF(?,'running','failed'),cleanup_pending=IF(?,cleanup_pending,TRUE) WHERE forward_id=? AND target_revision=? AND status='running'", [JSON.stringify({ code: obs.errorCode, retryable: obs.retryable }), now, obs.retryable, obs.retryable, a.forwardId, a.forwardRevision]);
+                    }
                 }
             }
             if (snapshot && snapshot.snapshotGeneration === state.snapshot_generation)

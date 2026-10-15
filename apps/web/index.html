@@ -89,7 +89,7 @@
     </section>
 
     <section id="view-relay" class="view" hidden>
-      <div class="panel-head section-actions"><div><h2>双节点 Relay · 可视化部署</h2><p class="hint">当前仅支持一个入口和一个出口，TLS 1.3 双向认证；所有资源仍由 Control 和 Agent 验证。</p></div><button id="relay-reload" type="button" class="secondary">刷新 Profile</button></div>
+      <div class="panel-head section-actions"><div><h2>节点链路部署</h2><p class="hint">按顺序选择路径，逐跳双向认证。执行状态和实际流量验收分别展示。</p></div><button id="relay-reload" type="button" class="secondary">刷新配置</button></div>
       <section class="panel">
         <div class="panel-head"><h3>第 1 步 · 发布 Transport Profile</h3></div>
         <form id="relay-profile-form">
@@ -133,9 +133,16 @@
             <label>最终目标主机 <input name="targetHost" placeholder="出口节点可达的目标地址" spellcheck="false" required></label>
             <label>目标端口 <input type="number" name="targetPort" min="1" max="65535" required></label>
           </div>
+          <fieldset id="multihop-controls" class="path-editor" hidden>
+            <legend>可选中继路径</legend>
+            <p class="hint">中继按列表顺序转发，最多 6 个；留空时使用双节点 Relay。</p>
+            <ol id="multihop-path" class="path-list"></ol>
+            <div class="actions"><label>添加中继 <select id="multihop-candidate" aria-label="可用中继节点"></select></label><button id="multihop-add" type="button" class="secondary">添加到路径</button></div>
+          </fieldset>
+          <ol id="relay-topology" class="topology" aria-label="当前有序节点路径"></ol>
           <label class="check"><input name="enabled" type="checkbox" checked> 部署后请求启用</label>
           <p class="hint" id="relay-readiness">需要两台不同的已授权 Relay Agent，以及已发布、已授予使用权限的 Profile 和有效 Endpoint。</p>
-          <div class="actions"><button type="button" id="relay-preview">验证部署计划</button><button type="submit" id="relay-submit" disabled>创建 Relay Forward</button></div>
+          <div class="actions"><button type="button" id="relay-preview">验证部署计划</button><button type="submit" id="relay-submit" disabled>创建链路</button><button type="button" id="relay-cancel-edit" class="secondary" hidden>取消编辑</button></div>
           <pre id="relay-preview-output" class="plan-output" hidden></pre>
           <p class="hint">预览不预留端口、不保证实际 ready；提交后会生成持久 Operation，请到“执行记录”中查看。</p>
         </form>
@@ -150,5 +157,6 @@
   </main>
 </div>
 <dialog id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-title"><h2 id="detail-title">详细信息</h2><button id="close-detail" type="button" class="secondary">关闭</button></div><pre id="detail-content"></pre><div id="detail-secret" hidden><p class="danger-text">仅在本次创建后显示一次，请妥善保存。关闭窗口即清除当前页面中的明文凭据。</p><button id="copy-secret" type="button">复制一次性 Token</button></div></dialog>
+<dialog id="deployment-dialog" aria-labelledby="deployment-title"><div class="dialog-title"><h2 id="deployment-title">链路部署</h2><button id="deployment-close" type="button" class="secondary">关闭</button></div><p id="deployment-state" class="hint" role="status"></p><ol id="deployment-topology" class="topology"></ol><div id="deployment-nodes"></div><p class="hint">Agent 就绪报告不代表端到端流量验收通过；历史租约未确认回收的资源继续隔离。</p><div class="actions"><button id="deployment-refresh" type="button">刷新状态</button></div></dialog>
 </body>
 </html>

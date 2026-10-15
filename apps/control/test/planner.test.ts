@@ -23,7 +23,7 @@ function facts(): AuthorizedNodeFacts {
 function reservations(id = 'forward-a', port = 25565): ReservedSlot[] {
   return ['tcp', 'udp'].map(protocol => ({ nodeId: 'node-a', forwardId: id, protocol: protocol as 'tcp' | 'udp', port, bindingFence: 4, deploymentGeneration: 2 }));
 }
-function assignments(): readonly Assignment[] { return compileDirect(forward(), facts(), reservations()); }
+function assignments(): ReturnType<typeof compileDirect> { return compileDirect(forward(), facts(), reservations()); }
 function snapshot(overrides: Partial<SnapshotInput> = {}): SnapshotInput {
   return {
     nodeId: 'node-a', sessionEpoch: 5, snapshotGeneration: 10,

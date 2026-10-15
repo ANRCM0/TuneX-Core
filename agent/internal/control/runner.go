@@ -30,6 +30,8 @@ type Options struct {
 	URL, NodeID, BootID, Certificate, PrivateKey, CA, Journal, JournalKey string
 	Rotate                                                                bool
 	Relay                                                                 bool
+	Multihop                                                              bool
+	ImportTransitJournal                                                  string
 	TimeProof, TimeProofKey                                               string
 	Diagnostics                                                           string
 }
@@ -165,6 +167,24 @@ func (runner *Runner) startAssignment(a adp3.Assignment, check func() error) (ex
 	if err != nil {
 		return nil, err
 	}
+	if a.Driver.Id == "native.multihop.v1" {
+		if !runner.options.Multihop {
+			return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY: Multi-hop execution disabled")
+		}
+		maximum := runner.hello.Policy.MaxTcpConnectionsPerAssignment
+		if a.Protocol == "udp" {
+			maximum = runner.hello.Policy.MaxUdpSessionsPerAssignment
+		}
+		engine, err := relay.PrepareMultihop(a, identity, int(min(maximum, 4096)), check)
+		if err != nil {
+			return nil, err
+		}
+		if err = relayPhase(engine, a.Phase); err != nil {
+			engine.Close()
+			return nil, err
+		}
+		return engine, nil
+	}
 	raw, err := json.Marshal(a)
 	if err != nil {
 		return nil, err
@@ -210,6 +230,7 @@ type Runner struct {
 	client                *http.Client
 	key                   []byte
 	journal               state.Journal
+	runtimeState          state.RuntimeJournal
 	hello                 adp3.HelloResponse
 	sequence              uint64
 	pending               []byte
@@ -231,6 +252,9 @@ type Runner struct {
 }
 
 func New(options Options) (*Runner, error) {
+	if options.Multihop && !options.Relay || options.ImportTransitJournal != "" && !options.Multihop {
+		return nil, fmt.Errorf("INVALID_CONFIG: Multi-hop requires Relay and explicit journal migration")
+	}
 	if !strings.HasPrefix(options.URL, "https://") {
 		return nil, fmt.Errorf("HTTPS Control URL required")
 	}
@@ -253,9 +277,20 @@ func New(options Options) (*Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	runner := &Runner{options: options, key: key, journal: runtimeJournal.Journal, instances: make(map[string]running), roots: roots}
+	if runtimeJournal.ExecutionExtension != nil && !options.Multihop {
+		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY: Migrated journal requires multi-hop-aware Runner")
+	}
+	runner := &Runner{options: options, key: key, journal: runtimeJournal.Journal, runtimeState: runtimeJournal, instances: make(map[string]running), roots: roots}
 	if err := runner.reloadCredential(); err != nil {
 		return nil, err
+	}
+	if options.Multihop {
+		runtimeJournal, err = state.EnableRuntimeExecution(options.Journal, key, options.NodeID, options.ImportTransitJournal)
+		if err != nil {
+			return nil, err
+		}
+		runner.journal = runtimeJournal.Journal
+		runner.runtimeState = runtimeJournal
 	}
 	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 		runner.mutex.Lock()
@@ -313,6 +348,9 @@ func (runner *Runner) Run(ctx context.Context) error {
 	hello := adp3.HelloRequest{ProtocolVersion: 3, NodeId: runner.options.NodeID, BootId: runner.options.BootID, AgentBuild: "vnext-adp3-direct", Capabilities: []string{"adp.3", "native.direct.v1", "tcp", "udp"}, LastStoredSnapshotGeneration: runner.journal.Generation}
 	if runner.options.Relay {
 		hello.Capabilities = append(hello.Capabilities, "native.relay.v1", "relay.wire.1")
+	}
+	if runner.options.Multihop {
+		hello.Capabilities = append(hello.Capabilities, "adp.execution.1", "native.multihop.v1", "multihop.wire.1")
 	}
 	body, _ := json.Marshal(hello)
 	var raw []byte
@@ -498,6 +536,9 @@ func (runner *Runner) poll(ctx context.Context) error {
 		return err
 	}
 	snapshot := value.(adp3.Snapshot)
+	if snapshot.ExecutionExtension != nil && !runner.options.Multihop {
+		return fmt.Errorf("UNSUPPORTED_CAPABILITY: Multi-hop execution disabled")
+	}
 	if snapshot.NodeId != runner.options.NodeID || snapshot.SessionEpoch != runner.hello.SessionEpoch {
 		return fmt.Errorf("SESSION_SUPERSEDED")
 	}
@@ -544,7 +585,7 @@ func (runner *Runner) poll(ctx context.Context) error {
 			return fmt.Errorf("UNSUPPORTED_CAPABILITY")
 		}
 		if assignment.Role != "direct" {
-			if !runner.options.Relay || assignment.Driver.Id != "native.relay.v1" {
+			if !runner.options.Relay || assignment.Driver.Id != "native.relay.v1" && !(runner.options.Multihop && assignment.Driver.Id == "native.multihop.v1") {
 				return fmt.Errorf("UNSUPPORTED_CAPABILITY")
 			}
 			if _, _, err := runner.relayIdentity(); err != nil {
@@ -579,11 +620,16 @@ func (runner *Runner) poll(ctx context.Context) error {
 	next.Digest = snapshot.SnapshotDigest
 	next.Snapshot = append([]byte(nil), raw...)
 	if changed {
-		stored, err := state.AcceptRuntimeSnapshot(runner.options.Journal, runner.key, state.RuntimeJournal{ProtocolVersion: 3, NodeID: runner.options.NodeID, Journal: runner.journal}, snapshot)
+		current := runner.runtimeState
+		if current.NodeID == "" {
+			current = state.RuntimeJournal{ProtocolVersion: 3, NodeID: runner.options.NodeID, Journal: runner.journal}
+		}
+		stored, err := state.AcceptRuntimeSnapshot(runner.options.Journal, runner.key, current, snapshot)
 		if err != nil {
 			return err
 		}
 		next = stored.Journal
+		runner.runtimeState = stored
 	}
 	runner.mutex.Lock()
 	defer runner.mutex.Unlock()

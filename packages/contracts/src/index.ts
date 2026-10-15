@@ -8,6 +8,8 @@ export type * from './relay.ts';
 export { parseRelayMessage,parseRelayAssignment } from './relay.ts';
 export type {RuntimeAssignment,RuntimeTombstone,RuntimeSnapshot,RuntimeMessages} from './adp3.ts';
 export {parseRuntimeMessage,validateRuntimeSnapshot} from './adp3.ts';
+export {MULTIHOP_CAPABILITY,hopPathDigest,validateHopConfig} from './multihop.ts';
+export type {HopNode,HopConfig,MultihopConfig} from './multihop.ts';
 
 export type { TransitIntent, TransitNeighbor, TransitEndpoint } from './transit.ts';
 export { parseTransitIntent } from './transit.ts';

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/adp3relay"
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/forward"
@@ -27,6 +28,7 @@ type Identity struct {
 	Roots       *x509.CertPool
 }
 type Engine struct {
+	multihop        *adp3.HopConfig
 	assignment      adp3relay.Assignment
 	identity        Identity
 	credentialUntil time.Time
@@ -89,6 +91,9 @@ func acquireNode(maximum int, protocol string) (func(), error) {
 	}, nil
 }
 func Prepare(assignment adp3relay.Assignment, identity Identity, maximum int, allow func() error) (*Engine, error) {
+	return prepare(assignment, identity, maximum, allow, nil)
+}
+func prepare(assignment adp3relay.Assignment, identity Identity, maximum int, allow func() error, hop *adp3.HopConfig) (*Engine, error) {
 	raw, err := json.Marshal(assignment)
 	if err != nil {
 		return nil, err
@@ -126,7 +131,7 @@ func Prepare(assignment adp3relay.Assignment, identity Identity, maximum int, al
 	}
 	identity.Roots = identity.Roots.Clone()
 	ctx, cancel := context.WithCancel(context.Background())
-	engine := &Engine{assignment: checked, identity: identity, credentialUntil: leaf.NotAfter, peers: map[*tls.Conn]time.Time{}, ctx: ctx, cancel: cancel, allow: allow, maximum: maximum, connections: map[net.Conn]net.Conn{}, sessions: map[netip.AddrPort]*association{}, guardDone: make(chan struct{})}
+	engine := &Engine{multihop: hop, assignment: checked, identity: identity, credentialUntil: leaf.NotAfter, peers: map[*tls.Conn]time.Time{}, ctx: ctx, cancel: cancel, allow: allow, maximum: maximum, connections: map[net.Conn]net.Conn{}, sessions: map[netip.AddrPort]*association{}, guardDone: make(chan struct{})}
 	if checked.Role == "relay-egress" {
 		listener, err := net.Listen("tcp", net.JoinHostPort(checked.Resource.Address, fmt.Sprint(checked.Resource.Port)))
 		if err != nil {
@@ -203,7 +208,7 @@ func (e *Engine) Activate() error {
 	e.mutex.Lock()
 	if e.active {
 		e.mutex.Unlock()
-		if e.assignment.Role == "relay-ingress" {
+		if e.hasDownstream() {
 			peer, err := e.dialPeer("probe")
 			if err != nil {
 				return err
@@ -218,7 +223,7 @@ func (e *Engine) Activate() error {
 		return fmt.Errorf("LEASE_EXPIRED")
 	}
 	e.mutex.Unlock()
-	if e.assignment.Role == "relay-ingress" {
+	if e.hasDownstream() {
 		peer, err := e.dialPeer("probe")
 		if err != nil {
 			return err
@@ -361,7 +366,7 @@ func (e *Engine) acceptPeers() {
 }
 func (e *Engine) servePeer(client net.Conn) {
 	config := e.assignment.Driver.Config
-	tlsConfig, err := TLSConfig(e.identity.Certificate, e.identity.Roots, config.Binding.IngressNodeId, config.PeerFingerprints, true)
+	tlsConfig, err := e.peerTLS(false)
 	if err != nil {
 		e.rejected.Add(1)
 		return
@@ -375,12 +380,12 @@ func (e *Engine) servePeer(client net.Conn) {
 		return
 	}
 	e.trackPeer(connection)
-	var open relaycontracts.Open
-	if err := ReadControl(connection, "Open", &open); err != nil {
+	open, err := e.readOpen(connection)
+	if err != nil {
 		e.rejected.Add(1)
 		return
 	}
-	expected, err := relayBinding(config.Binding)
+	expected, err := e.wireBinding(false)
 	if err != nil {
 		return
 	}
@@ -400,12 +405,25 @@ func (e *Engine) servePeer(client net.Conn) {
 		e.rejected.Add(1)
 		return
 	}
-	hash, err := contracts.ComputeDigest(expected)
+	hash, err := e.wireDigest(expected)
 	if err != nil {
 		return
 	}
 	if open.Action == "probe" {
+		if e.multihop != nil && e.hasDownstream() {
+			peer, err := e.dialPeer("probe")
+			if err != nil {
+				WriteControl(connection, "Reject", relaycontracts.Reject{WireVersion: 1, Type: "rejected", RequestId: open.RequestId, Code: "DOWNSTREAM_NOT_ACTIVE", Retryable: true})
+				return
+			}
+			closeSocket(peer)
+			e.untrackPeer(peer)
+		}
 		WriteControl(connection, "Accept", relaycontracts.Accept{WireVersion: 1, Type: "accepted", RequestId: open.RequestId, BindingDigest: hash})
+		return
+	}
+	if e.multihop != nil && e.hasDownstream() {
+		e.serveTransit(client, connection, open, hash)
 		return
 	}
 	target, err := e.dialTarget(e.assignment.Protocol, *config.Target)
@@ -475,7 +493,15 @@ func (e *Engine) dialTarget(protocol string, target adp3relay.Target) (net.Conn,
 }
 func (e *Engine) dialPeer(action string) (*tls.Conn, error) {
 	config := e.assignment.Driver.Config
-	raw, err := e.dialTarget("tcp", *config.PeerEndpoint)
+	endpoint := config.PeerEndpoint
+	if e.multihop != nil {
+		n := e.multihop.Path[e.multihop.HopIndex+1]
+		endpoint = &adp3relay.Target{Host: n.Host, Port: n.Port}
+	}
+	if endpoint == nil {
+		return nil, fmt.Errorf("INVALID_CONFIG: Downstream endpoint required")
+	}
+	raw, err := e.dialTarget("tcp", *endpoint)
 	if err != nil {
 		if strings.SplitN(err.Error(), ":", 2)[0] == "TARGET_UNAVAILABLE" {
 			return nil, fmt.Errorf("DOWNSTREAM_UNAVAILABLE: %w", err)
@@ -488,7 +514,7 @@ func (e *Engine) dialPeer(action string) (*tls.Conn, error) {
 			raw.Close()
 		}
 	}()
-	tlsConfig, err := TLSConfig(e.identity.Certificate, e.identity.Roots, config.Binding.EgressNodeId, config.PeerFingerprints, false)
+	tlsConfig, err := e.peerTLS(true)
 	if err != nil {
 		return nil, err
 	}
@@ -501,15 +527,15 @@ func (e *Engine) dialPeer(action string) (*tls.Conn, error) {
 	if _, err := rand.Read(request); err != nil {
 		return nil, err
 	}
-	binding, err := relayBinding(config.Binding)
+	binding, err := e.wireBinding(true)
 	if err != nil {
 		return nil, err
 	}
 	open := relaycontracts.Open{WireVersion: 1, Type: "open", Action: action, RequestId: hex.EncodeToString(request), Binding: binding}
-	if err := WriteControl(client, "Open", open); err != nil {
+	if err := e.writeOpen(client, open); err != nil {
 		return nil, err
 	}
-	hash, err := contracts.ComputeDigest(binding)
+	hash, err := e.wireDigest(binding)
 	if err != nil {
 		return nil, err
 	}

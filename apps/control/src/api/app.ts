@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { HttpBindings } from '@hono/node-server';
 import { TLSSocket } from 'node:tls';
 import { readFile } from 'node:fs/promises';
+import { rows } from '../infrastructure/mysql.ts';
 import { consoleNodes, consoleForwards, consoleOperations, consoleNodeDiagnostics } from './console-read.ts';
 import { randomUUID } from 'node:crypto';
 import { parseJson, parseRuntimeMessage, parseTransitNegotiation, parseTransitDelivery } from '@tunex/contracts';
@@ -106,6 +107,19 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.get('/console/style.css', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/style.css', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/css; charset=utf-8' }); });
     app.get('/health',async c=>c.json({status:(await authority.read()).maintenance?'maintenance':'ok',protocolVersion:3}));
     app.post('/api/v1/scopes/:scope/relay-plan',async c=>c.json(await control.planRelay(c.get('actor'),scope(c.req.param('scope')),parseJson(await body(c.req.raw,32768)))));
+    app.get('/api/v1/scopes/:scope/execution-capabilities',async c=>{
+        await control.db.transaction(tx=>control.identity.scope(tx,c.get('actor'),scope(c.req.param('scope'))));
+        return c.json({multihopEnabled:control.relay.multihopEnabled,maxPathNodes:8,executionExtension:1});
+    });
+    app.get('/api/v1/scopes/:scope/forwards/:id/deployment',async c=>c.json(await control.db.transaction(async tx=>{
+        const scopeId=scope(c.req.param('scope'));await control.identity.scope(tx,c.get('actor'),scopeId);
+        const forward=await control.forwarding.get(tx,scopeId,c.req.param('id'));return {deployment:await control.relay.status(tx,forward)};
+    })));
+    app.get('/api/v1/scopes/:scope/forwards/:id/revisions',async c=>c.json(await control.db.transaction(async tx=>{
+        const scopeId=scope(c.req.param('scope'));await control.identity.scope(tx,c.get('actor'),scopeId);
+        const forward=await control.forwarding.get(tx,scopeId,c.req.param('id'));
+        return {revisions:await rows(tx,'SELECT revision,spec FROM forward_revisions WHERE forward_id=? ORDER BY revision DESC LIMIT 25',[forward.id])};
+    })));
     app.get('/api/v1/scopes/:scope/transport-profiles/:profile/grants',async c=>c.json(await control.transport.grants(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'))));
     app.put('/api/v1/scopes/:scope/transport-profiles/:profile/grants/:actor',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='allowed,expectedRevision'||!isCounter(input.expectedRevision)||typeof input.allowed!=='boolean')invalid('Profile grant fields required');const result=await control.transport.changeGrant(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),c.req.param('actor'),c.req.header('idempotency-key'),input.expectedRevision,input.allowed);return c.json(result.body,result.status);});
     app.get('/api/v1/scopes/:scope/nodes/:node/relay-endpoint',async c=>c.json(await control.relayEndpoints.get(c.get('actor'),scope(c.req.param('scope')),c.req.param('node'))));

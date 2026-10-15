@@ -23,11 +23,13 @@ COPY package.json package-lock.json ./
 COPY apps/control ./apps/control
 COPY packages/core ./packages/core
 COPY packages/contracts ./packages/contracts
+COPY docs/protocol/schemas ./docs/protocol/schemas
 COPY apps/web ./apps/web
 COPY deploy/control-liveness.mjs ./deploy/control-liveness.mjs
+RUN node --input-type=module -e "await import('@tunex/contracts')"
 RUN mkdir -p /var/lib/tunex-control && chown 10001:10001 /var/lib/tunex-control
 USER 10001:10001
-ENV NODE_ENV=production TUNEX_CONTROL_HOST=0.0.0.0 TUNEX_CONTROL_PORT=41001
+ENV NODE_ENV=production TUNEX_CONTROL_HOST=0.0.0.0 TUNEX_CONTROL_PORT=41001 TUNEX_SOURCE_REVISION=${TUNEX_SOURCE_REVISION}
 EXPOSE 41001/tcp
 # Local socket liveness only. This is NOT proof of MySQL, mTLS, trust,
 # runtime lease issuance or deployment readiness.

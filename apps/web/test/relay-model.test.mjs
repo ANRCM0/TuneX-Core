@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { relayCapable,relayProfile,relayEndpoint,relaySpec } from '../relay-model.js';
+import { relayCapable,multihopCapable,multihopSpec,relayProfile,relayEndpoint,relaySpec } from '../relay-model.js';
 const node=(id)=>({
   id,revoked:false,credentialUntil:'2099-01-01T00:00:00Z',
   policy:{allowedListenerAddresses:['127.0.0.1','0.0.0.0'],allowedPorts:[25565,25566],
@@ -40,4 +40,15 @@ test('Relay spec binds two distinct authorized nodes and immutable Profile revis
   assert.throws(()=>relaySpec(form,{...node('node-a'),revoked:true},node('node-b'),profile));
   assert.throws(()=>relaySpec(form,node('node-a'),{...node('node-b'),policy:{...node('node-b').policy,capabilities:['adp.3','native.direct.v1','tcp']}},profile));
   assert.equal(relayCapable(node('node-a')),true);
+});
+
+test('multi-hop editor preserves route order and refuses cycles, missing capabilities and a closed gate',()=>{
+  const hop=id=>{const n=node(id);n.policy.capabilities.push('adp.execution.1','native.multihop.v1','multihop.wire.1');return n;};
+  const path=['ingress','middle-a','middle-b','egress'].map(hop);
+  assert.deepEqual(multihopSpec(form,path,profile,true).path.via,['middle-a','middle-b','egress']);
+  assert.equal(multihopCapable(path[1]),true);
+  assert.throws(()=>multihopSpec(form,path,profile,false));
+  assert.throws(()=>multihopSpec(form,[...path,path[0]],profile,true));
+  assert.throws(()=>multihopSpec(form,[path[0],node('old-agent'),path[3]],profile,true));
+  assert.throws(()=>multihopSpec(form,Array.from({length:9},(_,i)=>hop('node-'+i)),profile,true));
 });

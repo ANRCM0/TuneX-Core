@@ -16,6 +16,7 @@ services:
       - --state=/var/lib/tunex-agent
       - --journal-key=/run/tunex-agent-secrets/journal.key
       - --relay
+      - --multihop=${TUNEX_MULTIHOP_AGENT:-false}
       - --diagnostics
     volumes:
       - type: bind

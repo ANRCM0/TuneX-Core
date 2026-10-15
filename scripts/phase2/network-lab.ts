@@ -14,11 +14,18 @@ export class NetworkLab {
  readonly libraryPath=process.env.TUNEX_NETWORK_LIBRARY_PATH;
  readonly identity=`tunex-net-${randomBytes(6).toString('hex')}`;
  readonly bridge=`txb${randomBytes(4).toString('hex')}`;
- readonly namespaces=[`${this.identity}-i`,`${this.identity}-e`,`${this.identity}-r`];
+ readonly namespaces:string[];
+ readonly peerLinks=new Map<string,string>();
  readonly links:string[]=[];
  readonly inodes=new Map<string,string>();
  subnet='';gateway='';ingress='';egress='';replacement='';
  private sudo=false;
+
+ constructor(count=3){
+  assert.ok(Number.isInteger(count)&&count>=3&&count<=8,'Bounded independent namespace count required');
+  this.namespaces=Array.from({length:count},(_,i)=>`${this.identity}-${['i','e','r'][i]??i}`);
+ }
+ address(index:number):string{assert.ok(Number.isInteger(index)&&index>=0&&index<this.namespaces.length);return this.gateway.slice(0,this.gateway.lastIndexOf('.'))+'.'+(index+2);}
 
  private admin(command:string,args:string[]=[]){const tool=this.libraryPath?'/usr/bin/env':command,argumentsIn=this.libraryPath?[`LD_LIBRARY_PATH=${this.libraryPath}`,command,...args]:args;return this.sudo?linux('/usr/bin/sudo',['-n',tool,...argumentsIn]):linux(tool,argumentsIn);}
  host(command:string,args:string[]=[]){return this.admin(command,args);}
@@ -46,12 +53,13 @@ export class NetworkLab {
     await this.admin(this.ip,['netns','add',namespace]);
     this.inodes.set(namespace,(await this.admin('stat',['-Lc','%i',`/var/run/netns/${namespace}`])).stdout.trim());
     const hostLink=`tx${index}h${this.bridge.slice(3)}`,peerLink=`tx${index}p${this.bridge.slice(3)}`;
+    this.peerLinks.set(namespace,peerLink);
     await this.admin(this.ip,['link','add',hostLink,'type','veth','peer','name',peerLink]);this.links.push(hostLink);
     await this.admin(this.ip,['link','set','dev',hostLink,'alias',this.identity]);
     await this.admin(this.ip,['link','set',peerLink,'netns',namespace]);
     await this.admin(this.ip,['link','set',hostLink,'master',this.bridge]);
     await this.admin(this.ip,['link','set',hostLink,'up']);
-    await this.run(namespace,this.ip,['address','add',`${[this.ingress,this.egress,this.replacement][index]}/24`,'dev',peerLink]);
+    await this.run(namespace,this.ip,['address','add',`${this.address(index)}/24`,'dev',peerLink]);
     await this.run(namespace,this.ip,['link','set',peerLink,'up']);
     await this.run(namespace,this.ip,['link','set','lo','up']);
    }
@@ -64,6 +72,15 @@ export class NetworkLab {
   for(const port of ports)await this.run(this.namespaces[0]!,'/usr/sbin/iptables',['-w','5',blocked?'-I':'-D','OUTPUT','-d',`${egress}/32`,'-p','tcp','--dport',String(port),'-m','comment','--comment',this.identity,'-j','DROP']);
  }
  async counters(){return (await this.run(this.namespaces[0]!,'/usr/sbin/iptables',['-w','5','-nvxL','OUTPUT'])).stdout;}
+ async cutEdge(index:number,downstream:number,ports:number[],blocked:boolean){
+  const address=this.address(downstream),namespace=this.namespaces[index];assert.ok(namespace&&index!==downstream);
+  assert.ok(ports.length>0&&ports.every(p=>Number.isInteger(p)&&p>0&&p<=65535));
+  for(const port of ports)await this.run(namespace,'/usr/sbin/iptables',['-w','5',blocked?'-I':'-D','OUTPUT','-d',address+'/32','-p','tcp','--dport',String(port),'-m','comment','--comment',this.identity,'-j','DROP']);
+ }
+ async shape(index:number,delayMs:number,lossPercent:number){
+  const namespace=this.namespaces[index];assert.ok(namespace&&Number.isInteger(delayMs)&&delayMs>=0&&delayMs<=500&&Number.isFinite(lossPercent)&&lossPercent>=0&&lossPercent<=30);
+  await this.run(namespace,'tc',['qdisc','replace','dev',this.peerLinks.get(namespace)!,'root','netem','delay',delayMs+'ms','loss',lossPercent+'%']);
+ }
  async close(){
   for(const [namespace,inode] of this.inodes){
    const actual=await this.admin('stat',['-Lc','%i',`/var/run/netns/${namespace}`]).catch(()=>undefined);

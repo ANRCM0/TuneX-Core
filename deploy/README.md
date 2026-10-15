@@ -185,3 +185,13 @@ node scripts/manual/udp-smoke.mjs probe --port 25565 --count 5 --timeout-ms 3000
 Docker CI、SBOM、修复版 Critical 漏洞阻断和 GHCR 自动 Dev/版本镜像发布已经接入；这些不能代替安全复核。剩余发布门槛包括：不同**物理** Linux 主机的 Relay、实际宿主机防火墙与 L4 TLS 入口、无人值守自动轮换与长时间稳定性测试、High 漏洞分级、备份恢复/升级兼容性、多版本回滚及 1Panel 用户体验校验。
 
 **开发排期与可交付出口：** [下一阶段开发目标](../docs/development/next-milestones.md)。
+
+## 8. Default-off multi-hop development
+
+The new execution path is described in
+[multi-hop implementation and deferred acceptance](../docs/development/multihop-execution.md).
+Base Control and Agent templates remain opt-in. Production Control additionally
+requires an exact-source, reviewed evidence bundle. The optional
+[Control override](compose.multihop-control.override.example.yaml) mounts that
+bundle read-only; it is not a shortcut around runtime, physical-host or P0 gates.
+Keep the upgraded Agent journal and its high-water when withdrawing the feature.

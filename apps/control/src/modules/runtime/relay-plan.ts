@@ -21,6 +21,8 @@ export interface ReservedRelayResource extends RelayResource {
   bindingFence: number;
 }
 export interface RelayPreparedPlan {
+  path?: string[];
+  endpointRevisions?: Record<string,number>;
   forwardId: string;
   forwardRevision: number;
   deploymentGeneration: number;

@@ -1,0 +1,12 @@
+# Apply only to the Control host after the complete evidence bundle is approved.
+# The base Control template still defaults to multihop execution disabled.
+services:
+  control:
+    environment:
+      TUNEX_MULTIHOP_EXECUTION: "1"
+      TUNEX_MULTIHOP_RELEASE_EVIDENCE: /run/tunex-release/manifest.json
+    volumes:
+      - type: bind
+        source: ${TUNEX_MULTIHOP_EVIDENCE_DIR:?Reviewed exact-source evidence bundle required}
+        target: /run/tunex-release
+        read_only: true

@@ -17,8 +17,12 @@ import (
 
 //go:embed schema.json
 var rawSchema []byte
+
+//go:embed execution.schema.json
+var executionSchema []byte
 var once sync.Once
 var validators map[string]*jsonschema.Schema
+var executionValidator *jsonschema.Schema
 var compileError error
 
 func compile() {
@@ -43,6 +47,17 @@ func compile() {
 		}
 		validators[name] = v
 	}
+	var execution any
+	if err := json.Unmarshal(executionSchema, &execution); err != nil {
+		compileError = err
+		return
+	}
+	const executionID = "urn:tunex:adp:3:execution:1"
+	if err := c.AddResource(executionID, execution); err != nil {
+		compileError = err
+		return
+	}
+	executionValidator, compileError = c.Compile(executionID + "#/$defs/Snapshot")
 }
 func Parse(name string, raw []byte) (any, error) {
 	once.Do(compile)
@@ -60,6 +75,11 @@ func Parse(name string, raw []byte) (any, error) {
 	value, err := contracts.ParseJSON(raw, maximum)
 	if err != nil {
 		return nil, err
+	}
+	if name == "Snapshot" {
+		if object, ok := value.(map[string]any); ok && object["executionExtension"] != nil {
+			schema = executionValidator
+		}
 	}
 	if err := schema.Validate(value); err != nil {
 		return nil, fmt.Errorf("INVALID_CONFIG: ADP/3 structure rejected: %w", err)
@@ -142,7 +162,7 @@ func validateSnapshot(s Snapshot, raw []byte) error {
 			if err != nil || address.Zone() != "" || address.String() != a.Resource.Address {
 				return fmt.Errorf("INVALID_CONFIG: Canonical resource address required")
 			}
-			direct := map[string]any{"assignmentId": a.AssignmentId, "forwardId": a.ForwardId, "forwardRevision": a.ForwardRevision, "deploymentGeneration": a.DeploymentGeneration, "bindingFence": a.BindingFence, "role": "direct", "protocol": a.Protocol, "phase": a.Phase, "listener": Listen{a.Resource.Address, a.Resource.Port}, "driver": a.Driver, "drainTimeoutSeconds": a.DrainTimeoutSeconds}
+			direct := map[string]any{"assignmentId": a.AssignmentId, "forwardId": a.ForwardId, "forwardRevision": a.ForwardRevision, "deploymentGeneration": a.DeploymentGeneration, "bindingFence": a.BindingFence, "role": "direct", "protocol": a.Protocol, "phase": a.Phase, "listener": Listen{Address: a.Resource.Address, Port: a.Resource.Port}, "driver": a.Driver, "drainTimeoutSeconds": a.DrainTimeoutSeconds}
 			message := map[string]any{"protocolVersion": 2, "nodeId": s.NodeId, "sessionEpoch": s.SessionEpoch, "snapshotGeneration": s.SnapshotGeneration, "complete": true, "issuedAt": s.IssuedAt, "validUntil": s.ValidUntil, "assignments": []any{direct}, "tombstones": []any{}}
 			hash, err := contracts.ComputeDigest(message)
 			if err != nil {
@@ -154,6 +174,10 @@ func validateSnapshot(s Snapshot, raw []byte) error {
 				return err
 			}
 			if _, err := contracts.ParseMessage("Snapshot", raw); err != nil {
+				return err
+			}
+		} else if a.Driver.Id == "native.multihop.v1" {
+			if err := ValidateMultihopAssignment(a, s.NodeId, s.SessionEpoch, s.ExecutionExtension); err != nil {
 				return err
 			}
 		} else {
@@ -198,7 +222,7 @@ func validateSnapshot(s Snapshot, raw []byte) error {
 	var prior *Tombstone
 	for i, t := range s.Tombstones {
 		protocol := t.Protocol
-		if t.Role == "relay-egress" {
+		if t.Role == "relay-egress" || t.Role == "multihop-egress" || t.Role == "multihop-transit" {
 			protocol = "tcp"
 		}
 		if t.PhysicalProtocol != protocol {

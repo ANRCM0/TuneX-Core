@@ -14,7 +14,8 @@ export interface ReservedSlot {
   readonly port: number; readonly bindingFence: number; readonly deploymentGeneration: number;
 }
 /** Deterministic compiler for an authorized, already-reserved direct intent. It does not grant authority or reserve resources. */
-export function compileDirect(forward: Forward, facts: AuthorizedNodeFacts, reservations: readonly ReservedSlot[], phase: Assignment['phase'] = 'active', drainTimeoutSeconds = DEFAULT_POLICY.drainTimeoutSeconds): readonly Assignment[] {
+export type DirectRuntimeAssignment = Assignment & {driver: Assignment["driver"] & {config: DirectConfig}};
+export function compileDirect(forward: Forward, facts: AuthorizedNodeFacts, reservations: readonly ReservedSlot[], phase: Assignment['phase'] = 'active', drainTimeoutSeconds = DEFAULT_POLICY.drainTimeoutSeconds): readonly DirectRuntimeAssignment[] {
   if (!['prepared', 'active', 'draining'].includes(phase) || !Number.isInteger(drainTimeoutSeconds) || drainTimeoutSeconds < 0 || drainTimeoutSeconds > 300) throw new Error('INVALID_CONFIG: Invalid execution phase/drain timeout');
   const parsed = parseForward(forward);
   if (!parsed.ok) throw new Error('INVALID_CONFIG: Invalid Forward');
@@ -34,7 +35,7 @@ export function compileDirect(forward: Forward, facts: AuthorizedNodeFacts, rese
     const slot = slots[0];
     if (slots.length !== 1 || !slot || !isCounter(slot.bindingFence) || !isCounter(slot.deploymentGeneration) || !isPort(slot.port)) throw new Error('RESOURCE_CONFLICT: Missing or ambiguous reservation');
     const assignmentId = `a:${digest({ nodeId: facts.nodeId, forwardId: forward.id, protocol, role: 'direct' }).slice(7)}`;
-    const assignment: Assignment = {
+    const assignment: DirectRuntimeAssignment = {
       assignmentId, forwardId: forward.id, forwardRevision: forward.revision,
       deploymentGeneration: slot.deploymentGeneration, bindingFence: slot.bindingFence,
       role: 'direct', protocol, phase, resource:{...spec.ingress.listen,protocol},
@@ -58,7 +59,7 @@ export function compileSnapshot(input: SnapshotInput): Snapshot {
   const assignments = [...input.assignments].sort((a, b) => a.assignmentId < b.assignmentId ? -1 : a.assignmentId > b.assignmentId ? 1 : 0);
   const tombstones = [...input.tombstones].sort((a, b) => (a.physicalProtocol < b.physicalProtocol ? -1 : a.physicalProtocol > b.physicalProtocol ? 1 : 0) || a.port - b.port || a.retirementGeneration - b.retirementGeneration || (a.assignmentId < b.assignmentId ? -1 : a.assignmentId > b.assignmentId ? 1 : 0));
   const body = {
-    protocolVersion: 3 as const, nodeId: input.nodeId, sessionEpoch: input.sessionEpoch,
+    protocolVersion: 3 as const, ...(assignments.some(a=>a.driver.id==="native.multihop.v1")||tombstones.some(t=>t.role.startsWith("multihop-"))?{executionExtension:1 as const}:{}), nodeId: input.nodeId, sessionEpoch: input.sessionEpoch,
     snapshotGeneration: input.snapshotGeneration, complete: true as const,
     issuedAt: input.issuedAt, validUntil: input.validUntil, assignments, tombstones,
   };

@@ -65,7 +65,7 @@ export class RuntimeLedger {
     async assignments(tx: Transaction, forwarding: Forwarding, facts: AuthorizedNodeFacts, includeAccepted = false): Promise<Assignment[]> {
         const forwards = (await forwarding.forNode(tx, facts.nodeId)).filter(forward=>!forward.spec.path);
         if (!forwards.length)
-            return this.additionalAssignments?this.additionalAssignments(tx,facts.nodeId,includeAccepted):[];
+            return this.additionalAssignments?(await this.additionalAssignments(tx,facts.nodeId,includeAccepted)).sort((a,b)=>a.assignmentId<b.assignmentId?-1:a.assignmentId>b.assignmentId?1:0):[];
         const placeholders = forwards.map(() => '?').join(',');
         const operations = await rows<Operation>(tx, `SELECT * FROM operations WHERE forward_id IN (${placeholders}) ORDER BY created_at DESC,id DESC FOR UPDATE`, forwards.map(forward => forward.id));
         const slots = await rows<{
@@ -222,6 +222,18 @@ export class RuntimeLedger {
         for (const a of snapshot.assignments)
             await write(tx, 'INSERT INTO execution_leases(forward_id,node_id,assignment_id,deployment_generation,binding_fence,session_epoch,valid_until) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE valid_until=GREATEST(valid_until,VALUES(valid_until))', [a.forwardId, snapshot.nodeId, a.assignmentId, a.deploymentGeneration, a.bindingFence, snapshot.sessionEpoch, Date.parse(snapshot.validUntil)]);
     }
+    async previousLeasesSafe(tx:Transaction,forwardId:string,desired:readonly {nodeId:string;assignments:readonly Assignment[]}[]):Promise<boolean>{
+        const current=new Set(desired.flatMap(node=>node.assignments.map(a=>`${node.nodeId}/${a.assignmentId}/${a.deploymentGeneration}/${a.bindingFence}`)));
+        const leases=await rows<{node_id:string;assignment_id:string;deployment_generation:number;binding_fence:number}>(tx,
+            'SELECT l.node_id,l.assignment_id,l.deployment_generation,l.binding_fence FROM execution_leases l LEFT JOIN retirements r ON r.node_id=l.node_id AND r.assignment_id=l.assignment_id AND r.deployment_generation=l.deployment_generation AND r.binding_fence=l.binding_fence WHERE l.forward_id=? AND l.valid_until+5000>? AND (r.safe IS NULL OR r.safe=FALSE)',[forwardId,Date.now()]);
+        return leases.every(l=>current.has(`${l.node_id}/${l.assignment_id}/${l.deployment_generation}/${l.binding_fence}`));
+    }
+    async sessionAuthoritySafe(tx:Transaction,nodeId:string,epoch:number):Promise<boolean>{
+        const result=await rows<{n:number}>(tx,
+            'SELECT COUNT(*) n FROM execution_leases l LEFT JOIN retirements r ON r.node_id=l.node_id AND r.assignment_id=l.assignment_id AND r.deployment_generation=l.deployment_generation AND r.binding_fence=l.binding_fence WHERE l.node_id=? AND l.session_epoch<>? AND l.valid_until+5000>? AND (r.safe IS NULL OR r.safe=FALSE)',
+            [nodeId,epoch,Date.now()]);
+        return result[0]!.n===0;
+    }
     async tombstones(tx: Transaction, nodeId: string, generation: number): Promise<Tombstone[]> {
         const retired = await rows<Retirement>(tx, 'SELECT * FROM retirements WHERE node_id=? ORDER BY retirement_generation,assignment_id', [nodeId]);
         return retired.map(r => { const a = json<Assignment>(r.body); return { assignmentId: a.assignmentId, forwardId: a.forwardId, role:a.role,protocol: a.protocol,physicalProtocol:a.resource.protocol, port: a.resource.port, bindingFence: a.bindingFence, retirementGeneration: Math.min(r.retirement_generation, generation) }; }).sort((a, b) => (a.physicalProtocol < b.physicalProtocol ? -1 : a.physicalProtocol > b.physicalProtocol ? 1 : 0) || a.port - b.port || a.retirementGeneration - b.retirementGeneration || (a.assignmentId < b.assignmentId ? -1 : a.assignmentId > b.assignmentId ? 1 : 0));
@@ -284,6 +296,7 @@ export class RuntimeLedger {
                 await write(tx, 'UPDATE operations SET cleanup_pending=FALSE,updated_at=? WHERE id=?', [Date.now(), op.id]);
             }
             else if (!stopped && currentReady) {
+                if(!await this.previousLeasesSafe(tx,forward.id,[{nodeId,assignments:snapshot!.assignments.filter(a=>a.forwardId===forward.id)}]))continue;
                 await this.releaseObsoleteSlots(tx, forward);
                 await write(tx, "UPDATE operations SET status=IF(status='running','succeeded',status),cleanup_pending=FALSE,claim_token=NULL,claim_until=NULL,updated_at=? WHERE id=?", [Date.now(), op.id]);
                 await write(tx, "UPDATE operations SET cleanup_pending=FALSE WHERE forward_id=? AND status IN ('failed','superseded')", [forward.id]);

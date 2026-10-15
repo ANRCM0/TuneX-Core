@@ -256,6 +256,12 @@ func normalizedHost(host string) (string, bool) {
 	return normalized, true
 }
 
+// CanonicalHost shares the wire contracts' exact target normalization.
+func CanonicalHost(host string) bool {
+	normalized, valid := normalizedHost(host)
+	return valid && normalized == host
+}
+
 // ValidCIDR requires an IP network with zero host bits and an ordinary decimal prefix.
 func ValidCIDR(value string) bool {
 	parts := strings.Split(value, "/")
