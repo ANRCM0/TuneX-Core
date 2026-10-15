@@ -34,9 +34,9 @@ test('staging journal is detached immutable and retains independent Scope, gener
     (r:TransitStageRow)=>{r.generation=8;},
     (r:TransitStageRow)=>{r.plan_digest='sha256:'+'f'.repeat(64);},
     (r:TransitStageRow)=>{r.expires_at=Date.parse('2026-10-15T01:00:00Z');},
-    (r:TransitStageRow)=>{Reflect.set(r.body,'executable',true);},
+    (r:TransitStageRow)=>{Reflect.set(r.body as object,'executable',true);},
     (r:TransitStageRow)=>{Reflect.set((r.body as {assignments:unknown[]}).assignments[0]!, 'bindingFence',0);},
-    (r:TransitStageRow)=>{Reflect.set(r.body,'activationOrder',['node-b','node-b','node-a']);},
+    (r:TransitStageRow)=>{Reflect.set(r.body as object,'activationOrder',['node-b','node-b','node-a']);},
   ]){
     const copy=structuredClone(row);mutation(copy);
     assert.throws(()=>verifyTransitStage(copy),rejected);
