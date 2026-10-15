@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { ControlError } from '../src/application/errors.ts';
 import type { Forward } from '@tunex/core';
 import { digest } from '@tunex/contracts';
 import { compileTransitResources, compileTransitPreparation } from '../src/modules/runtime/transit-preparation.ts';
@@ -110,12 +111,13 @@ test('transactional reserve primitive rejects malformed logical sets before touc
     nodeId:r.nodeId,role:r.role,forwardProtocol:r.forwardProtocol,
     physicalProtocol:r.physicalProtocol,address:r.address,port:r.port,
   }));
+  const conflict = (error: unknown) => error instanceof ControlError && error.code === 'RESOURCE_CONFLICT';
   assert.doesNotThrow(()=>validateTransitReservationSet(i.forward,resources,7));
-  assert.throws(()=>validateTransitReservationSet(i.forward,resources.slice(0,-1),7),/RESOURCE_CONFLICT/);
-  assert.throws(()=>validateTransitReservationSet(i.forward,[...resources,resources[0]!],7),/RESOURCE_CONFLICT/);
+  assert.throws(()=>validateTransitReservationSet(i.forward,resources.slice(0,-1),7),conflict);
+  assert.throws(()=>validateTransitReservationSet(i.forward,[...resources,resources[0]!],7),conflict);
   const foreign=resources.map(r=>({...r}));foreign[2]!.role='egress';
-  assert.throws(()=>validateTransitReservationSet(i.forward,foreign,7),/RESOURCE_CONFLICT/);
+  assert.throws(()=>validateTransitReservationSet(i.forward,foreign,7),conflict);
   const badPort=resources.map(r=>({...r}));badPort[1]!.port=0;
-  assert.throws(()=>validateTransitReservationSet(i.forward,badPort,7),/RESOURCE_CONFLICT/);
-  assert.throws(()=>validateTransitReservationSet(i.forward,resources,0),/RESOURCE_CONFLICT/);
+  assert.throws(()=>validateTransitReservationSet(i.forward,badPort,7),conflict);
+  assert.throws(()=>validateTransitReservationSet(i.forward,resources,0),conflict);
 });
