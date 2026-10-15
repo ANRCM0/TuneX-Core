@@ -90,7 +90,7 @@ test('offline coordination database enforces ownership, receipt CAS, recovery an
     enabled:true,protocols:['tcp'],
     ingress:{nodeId:nodes[0],listen:{address:'127.0.0.1',port:32001}},
     target:{host:'127.0.0.1',port:18080},
-    path:{via:[nodes[1],nodes[2]]},transport:{profileId:'profile-a',configRevision:1},
+    path:{via:[nodes[1],nodes[2]!]},transport:{profileId:'profile-a',configRevision:1},
    };
    await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec) VALUES(?,?,?,?)',
     [forwardId,scope,1,JSON.stringify(spec)]);
@@ -114,50 +114,50 @@ test('offline coordination database enforces ownership, receipt CAS, recovery an
   await write(db.pool,'UPDATE runtime_nodes SET session_epoch=2 WHERE node_id=?',[nodes[1]]);
   await assert.rejects(coordinator.begin(account,scope,forwardId,1),assertCode('SESSION_SUPERSEDED'));
   await write(db.pool,'UPDATE runtime_nodes SET session_epoch=1 WHERE node_id=?',[nodes[1]]);
-  await write(db.pool,'UPDATE port_slots SET fence=10 WHERE node_id=? AND port=?',[nodes[2],32003]);
+  await write(db.pool,'UPDATE port_slots SET fence=10 WHERE node_id=? AND port=?',[nodes[2]!,32003]);
   await assert.rejects(coordinator.begin(account,scope,forwardId,1),assertCode('FENCING_REJECTED'));
-  await write(db.pool,'UPDATE port_slots SET fence=6 WHERE node_id=? AND port=?',[nodes[2],32003]);
+  await write(db.pool,'UPDATE port_slots SET fence=6 WHERE node_id=? AND port=?',[nodes[2]!,32003]);
   const begun=await Promise.allSettled([1,2].map(()=>coordinator.begin(account,scope,forwardId,1)));
   assert.equal(begun.filter(p=>p.status==='fulfilled').length,1,'only one coordinator writer may create journal');
   assert.equal(begun.filter(p=>p.status==='rejected').length,1);
   let command=await coordinator.peek(account,scope,forwardId,1);
-  assert.equal(command?.nodeId,nodes[2]);
+  assert.equal(command?.nodeId,nodes[2]!);
   assert.equal(command?.action,'prepare');
 
   // Transport delivery acknowledgments do not advance the offline coordinator.
   const preview=await delivery.enqueuePreview(account,scope,forwardId,1);
   assert.equal(preview.executionEnabled,false);
   assert.equal(preview.kind,'transit-command-preview-v1');
-  assert.equal(preview.nodeId,nodes[2]);
+  assert.equal(preview.nodeId,nodes[2]!);
   assert.equal(preview.previewAction,'prepare');
   assert.equal((await delivery.enqueuePreview(account,scope,forwardId,1)).envelopeDigest,
    preview.envelopeDigest,'retries reuse the durable command');
-  await assert.rejects(delivery.poll(nodes[2],'e'.repeat(64),1,machineBoot),
+  await assert.rejects(delivery.poll(nodes[2]!,'e'.repeat(64),1,machineBoot),
    assertCode('AUTHORIZATION_DENIED'));
   await write(db.pool,'UPDATE node_credentials SET revoked=TRUE WHERE fingerprint=?',[machineFingerprint]);
-  await assert.rejects(delivery.poll(nodes[2],machineFingerprint,1,machineBoot),
+  await assert.rejects(delivery.poll(nodes[2]!,machineFingerprint,1,machineBoot),
    assertCode('AUTHORIZATION_DENIED'));
   await write(db.pool,'UPDATE node_credentials SET revoked=FALSE WHERE fingerprint=?',[machineFingerprint]);
-  assert.equal((await delivery.poll(nodes[2],machineFingerprint,1,machineBoot))?.envelopeDigest,
+  assert.equal((await delivery.poll(nodes[2]!,machineFingerprint,1,machineBoot))?.envelopeDigest,
    preview.envelopeDigest);
-  await assert.rejects(delivery.poll(nodes[2],machineFingerprint,1,'retired-boot'),
+  await assert.rejects(delivery.poll(nodes[2]!,machineFingerprint,1,'retired-boot'),
    assertCode('SESSION_SUPERSEDED'));
   const report=parseTransitDelivery('Report',JSON.stringify({
    protocolVersion:3,extensionVersion:1,kind:'transit-delivery-report-v1',
-   nodeId:nodes[2],bootId:machineBoot,sessionEpoch:1,
+   nodeId:nodes[2]!,bootId:machineBoot,sessionEpoch:1,
    commandDigest:preview.commandDigest,envelopeDigest:preview.envelopeDigest,
    reportSequence:1,observedAt:new Date().toISOString(),condition:'received',
   }));
   const accepted=await Promise.allSettled([1,2].map(()=>
-   delivery.report(nodes[2],machineFingerprint,1,report)));
+   delivery.report(nodes[2]!,machineFingerprint,1,report)));
   assert.equal(accepted.filter(x=>x.status==='fulfilled').length,2);
   assert.deepEqual(accepted.filter(x=>x.status==='fulfilled').map(x=>x.value.status).sort(),
    ['accepted','duplicate']);
-  await assert.rejects(delivery.report(nodes[2],machineFingerprint,1,
+  await assert.rejects(delivery.report(nodes[2]!,machineFingerprint,1,
    {...report,commandDigest:'sha256:'+'f'.repeat(64)}),assertCode('INTEGRITY_FAILURE'));
-  await assert.rejects(delivery.report(nodes[2],machineFingerprint,1,
+  await assert.rejects(delivery.report(nodes[2]!,machineFingerprint,1,
    {...report,reportSequence:2}),assertCode('FENCING_REJECTED'));
-  assert.equal((await delivery.poll(nodes[2],machineFingerprint,1,machineBoot)),null);
+  assert.equal((await delivery.poll(nodes[2]!,machineFingerprint,1,machineBoot)),null);
   assert.equal((await coordinator.peek(account,scope,forwardId,1))?.commandDigest,
    command?.commandDigest,'delivery receipt does not attest Ready');
 
@@ -212,7 +212,7 @@ test('offline coordination database enforces ownership, receipt CAS, recovery an
  }finally{
   try{
    await db.transaction(async tx=>{
-    await write(tx,'DELETE FROM transit_delivery_receipts WHERE node_id=?',[nodes[2]]);
+    await write(tx,'DELETE FROM transit_delivery_receipts WHERE node_id=?',[nodes[2]!]);
     await write(tx,'DELETE FROM transit_delivery_outbox WHERE forward_id=?',[forwardId]);
     await write(tx,'DELETE FROM transit_coordination WHERE forward_id=?',[forwardId]);
     await write(tx,'DELETE FROM transit_deployments WHERE forward_id=?',[forwardId]);
