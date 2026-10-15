@@ -165,6 +165,15 @@ export class TransitStagingCoordinator {
         throw new ControlError('AUTHORIZATION_DENIED',403,'Only original staging actor may abort');
       const plan=verifyTransitStage(record);
       if(record.state==='aborted')return false;
+      // Once even an offline coordination journal exists, abort cannot assume
+      // that no future operation or report needs this physical Fence.
+      // Quarantined/compensated stages require a later explicit lease-proof cleanup.
+      const coordination=await rows(tx,
+        'SELECT generation FROM transit_coordination WHERE forward_id=? AND generation=? FOR UPDATE',
+        [forwardId,generation]);
+      if(coordination.length)
+        throw new ControlError('FENCING_REJECTED',409,
+          'Coordinated Transit reservations require explicit verified cleanup');
       const nodeIds=[...new Set(plan.assignments.map(a=>a.nodeId))].sort();
       for(const nodeId of nodeIds){
         const found=await rows(tx,'SELECT node_id FROM runtime_nodes WHERE node_id=? FOR UPDATE',[nodeId]);
