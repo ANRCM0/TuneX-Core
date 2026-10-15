@@ -6,6 +6,7 @@ import type { ResolvedProfile } from '../transport.ts';
 import type { ResolvedEndpoint } from '../relay-endpoints.ts';
 import type { AuthorizedNodeFacts } from './planner.ts';
 import { compileRelayResources } from './relay-planner.ts';
+import { requireTwoNodeRelayTopology } from './path-topology.ts';
 import type { RelayResource } from './relay-planner.ts';
 
 export interface RelayNodeExecutionFacts {
@@ -42,12 +43,13 @@ export function compileRelayPlan(input: {
   const parsed = parseForward(input.forward);
   if (!parsed.ok) throw new Error('INVALID_CONFIG: Invalid Forward');
   const forward = parsed.value;
-  if (!forward.spec.enabled || forward.spec.path?.via.length !== 1 || !forward.spec.transport) throw new Error('UNSUPPORTED_CAPABILITY: Enabled two-Node Relay intent required');
+  const topology = requireTwoNodeRelayTopology(forward);
+  if (!forward.spec.enabled || !forward.spec.transport) throw new Error('UNSUPPORTED_CAPABILITY: Enabled two-Node Relay intent required');
   validateTime(input.issuedAt);
   const now = Date.parse(input.issuedAt);
   if (!Number.isInteger(input.drainTimeoutSeconds) || input.drainTimeoutSeconds < 0 || input.drainTimeoutSeconds > 300) throw new Error('INVALID_CONFIG: Bounded drain timeout required');
-  const ingress = input.nodes.find(node => node.facts.nodeId === forward.spec.ingress.nodeId);
-  const egress = input.nodes.find(node => node.facts.nodeId === forward.spec.path!.via[0]);
+  const ingress = input.nodes.find(node => node.facts.nodeId === topology.nodes[0]!.nodeId);
+  const egress = input.nodes.find(node => node.facts.nodeId === topology.nodes[1]!.nodeId);
   if (input.nodes.length !== 2 || !ingress || !egress || ingress === egress) throw new Error('AUTHORIZATION_DENIED: Exact two Node facts required');
   let authorizationUntil = Number.MAX_SAFE_INTEGER;
   for (const node of [ingress, egress]) {
