@@ -42,6 +42,12 @@
 
 - **出口**：真实双 Agent TCP/UDP 流量、错误对端身份拒绝、下游只有 prepared 时入口保持关闭、下游失联可观测、切换/清理符合策略。公网生产不能使用未经认证/加密的实验通道。
 
+## Node 身份与多跳演进（ADR-0004）
+
+已确定 [唯一 Agent 身份与角色化路径 ADR](../decisions/0004-role-neutral-agent-multihop.md)：Node 是身份，Ingress/Transit/Egress 是每条 Forward 中派生的角色，同一个 Agent 可在不同路径承担多个角色。本阶段只实现有界拓扑规划与相邻关系、出口优先激活顺序，**现有双 Node Relay 仍严格拒绝 Transit 执行**。
+
+严格纵向推进顺序：纯路径规划与测试 → 版本化 Transit 协议/TS-Go fixtures → 单 Agent Transit 执行器/身份与端口安全 → A→B→C 真实 TCP/UDP → 有界 N 跳、容量及跨物理主机验收 → 动态选路。任何阶段不得将“规划器接受路径”误认为“Agent 已支持该路径”。
+
 ## Phase 4 — Transport 演进
 
 - 在 Phase 3 已有安全传输和 Profile 基础上扩展驱动、密钥轮换自动化、Link 复用；不在这里首次补最基本的节点间认证。
