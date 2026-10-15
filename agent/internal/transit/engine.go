@@ -5,9 +5,7 @@ import (
  "crypto/tls"
  "crypto/x509"
  "encoding/json"
- "errors"
  "fmt"
- "io"
  "net"
  "net/netip"
  "strconv"
@@ -226,26 +224,21 @@ func(e *Engine) pump(src,dst *tls.Conn)error{
   if err=e.peerAllow(src);err!=nil{return err}
   if err=e.peerAllow(dst);err!=nil{return err}
   if err=relay.WriteFrame(dst,kind,payload,e.intent.Protocol,e.frameMaximum);err!=nil{return err}
-  if kind==relay.FrameFIN||kind==relay.FrameClose{return nil}
+  if kind==relay.FrameClose{return fmt.Errorf("TRANSIT_PEER_CLOSED")}
+  if kind==relay.FrameFIN{return nil}
  }
 }
 func(e *Engine) bridge(upstream,downstream *tls.Conn){
- completed:=make(chan error,1)
- go func(){completed<-e.pump(upstream,downstream)}()
- reverse:=make(chan error,1)
- go func(){reverse<-e.pump(downstream,upstream)}()
- first:=false
- for i:=0;i<2;i++{
-  select{
-  case err:=<-completed:
-   if err!=nil && !errors.Is(err,io.EOF){closeConn(upstream);closeConn(downstream)}
-   first=true
-  case err:=<-reverse:
-   if err!=nil && !errors.Is(err,io.EOF){closeConn(upstream);closeConn(downstream)}
-   first=true
-  case <-e.ctx.Done():closeConn(upstream);closeConn(downstream)
+ outbound:=make(chan error,1)
+ inbound:=make(chan error,1)
+ go func(){outbound<-e.pump(upstream,downstream)}()
+ go func(){inbound<-e.pump(downstream,upstream)}()
+ for i:=0;i<2;i++ {
+  select {
+  case err:=<-outbound:if err!=nil{closeConn(upstream);closeConn(downstream)}
+  case err:=<-inbound:if err!=nil{closeConn(upstream);closeConn(downstream)}
+  case <-e.ctx.Done():closeConn(upstream);closeConn(downstream);return
   }
-  if i==0&&!first{break}
  }
 }
 func closeConn(conn net.Conn){
