@@ -4,7 +4,8 @@ import { TLSSocket } from 'node:tls';
 import { readFile } from 'node:fs/promises';
 import { consoleNodes, consoleForwards, consoleOperations, consoleNodeDiagnostics } from './console-read.ts';
 import { randomUUID } from 'node:crypto';
-import { parseJson, parseRuntimeMessage } from '@tunex/contracts';
+import { parseJson, parseRuntimeMessage, parseTransitNegotiation } from '@tunex/contracts';
+import { TransitNegotiator } from '../modules/runtime/transit-negotiation.ts';
 import { isId, isCounter } from '@tunex/core';
 import { ControlError, invalid } from '../application/errors.ts';
 import type { ControlApplication } from '../application/control.ts';
@@ -197,6 +198,11 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         return c.json(await control.nodes.rotate(c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')), input.requestId, input.csr));
     });
     app.post('/agent/v3/relay-credential',async c=>{const input=parseJson(await body(c.req.raw,32768)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='csr,requestId'||!isId(input.requestId)||typeof input.csr!=='string')invalid('Relay credential request ID and CSR required');return c.json(await control.nodes.relayCredential(c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),input.requestId,input.csr));});
+    const transitNegotiator=new TransitNegotiator(control.db);
+    // Read-only mTLS session/feature negotiation; never dispatches a Transit job.
+    app.post('/agent/v3/transit/hello',async c=>c.json(await transitNegotiator.hello(
+      c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),
+      parseTransitNegotiation('Request',await body(c.req.raw,8192)))));
     app.post('/agent/v3/hello', async (c) => c.json(await runtime.hello(c.get('node'), parseRuntimeMessage('HelloRequest', await body(c.req.raw)), c.get('fingerprint'))));
     app.get('/agent/v3/snapshot', async (c) => c.json(await runtime.snapshot(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), c.get('fingerprint'))));
     app.post('/agent/v3/report', async (c) => c.json(await runtime.report(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), parseRuntimeMessage('ReportRequest', await body(c.req.raw)), c.get('fingerprint'))));
