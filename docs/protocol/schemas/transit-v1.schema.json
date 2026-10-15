@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:multihop:transit:1",
+  "title": "Proposed Relay Transit v1 assignment contract (NOT executable ADP/3)",
+  "description": "Contract validation only. ADP/3 has no transit runtime driver; this schema must not be admitted into existing Snapshots.",
+  "$ref": "#/$defs/TransitIntent",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "protocol": {
+      "enum": [
+        "tcp",
+        "udp"
+      ]
+    },
+    "Endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "required": [
+        "host",
+        "port"
+      ]
+    },
+    "Listener": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 45
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "protocol": {
+          "const": "tcp"
+        }
+      },
+      "required": [
+        "address",
+        "port",
+        "protocol"
+      ]
+    },
+    "Upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "peerFingerprint": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "required": [
+        "nodeId",
+        "assignmentId",
+        "sessionEpoch",
+        "bindingFence",
+        "peerFingerprint"
+      ]
+    },
+    "Downstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "peerFingerprint": {
+          "$ref": "#/$defs/digest"
+        },
+        "endpoint": {
+          "$ref": "#/$defs/Endpoint"
+        }
+      },
+      "required": [
+        "nodeId",
+        "assignmentId",
+        "sessionEpoch",
+        "bindingFence",
+        "peerFingerprint",
+        "endpoint"
+      ]
+    },
+    "TransitIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contractVersion": {
+          "const": 1
+        },
+        "role": {
+          "const": "relay-transit"
+        },
+        "driver": {
+          "const": "native.transit.v1"
+        },
+        "security": {
+          "const": "mutual-tls13"
+        },
+        "scopeId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "profileId": {
+          "$ref": "#/$defs/id"
+        },
+        "profileRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "profileDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "pathDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "protocol": {
+          "$ref": "#/$defs/protocol"
+        },
+        "hopIndex": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "hopCount": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 8
+        },
+        "listener": {
+          "$ref": "#/$defs/Listener"
+        },
+        "upstream": {
+          "$ref": "#/$defs/Upstream"
+        },
+        "downstream": {
+          "$ref": "#/$defs/Downstream"
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "authorizationUntil": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "egressPolicyRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "allowedDestinationCidrs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 49
+          }
+        },
+        "allowMetadataTargets": {
+          "type": "boolean"
+        },
+        "maxConnections": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        }
+      },
+      "required": [
+        "contractVersion",
+        "role",
+        "driver",
+        "security",
+        "scopeId",
+        "forwardId",
+        "forwardRevision",
+        "deploymentGeneration",
+        "profileId",
+        "profileRevision",
+        "profileDigest",
+        "pathDigest",
+        "nodeId",
+        "assignmentId",
+        "sessionEpoch",
+        "bindingFence",
+        "protocol",
+        "hopIndex",
+        "hopCount",
+        "listener",
+        "upstream",
+        "downstream",
+        "issuedAt",
+        "authorizationUntil",
+        "egressPolicyRevision",
+        "allowedDestinationCidrs",
+        "allowMetadataTargets",
+        "maxConnections"
+      ]
+    }
+  }
+}
