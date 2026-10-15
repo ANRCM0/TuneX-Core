@@ -1,0 +1,32 @@
+# TuneX VNext Agent host only. Enroll exactly once outside this steady service.
+# Host network is the verified native listener/Relay deployment mode.
+name: tunex-vnext-agent
+services:
+  agent:
+    image: ${TUNEX_AGENT_IMAGE:?Set pinned ghcr.io/anrcm0/tunex-agent@sha256 digest}
+    restart: unless-stopped
+    user: "10001:10001"
+    network_mode: host
+    entrypoint:
+      - /usr/local/bin/tunex-agent
+    command:
+      - --control=${TUNEX_CONTROL_URL:?Trusted end-to-end TLS Control URL required}
+      - --node=${TUNEX_NODE_ID:?Enrolled Node ID required}
+      - --ca=/run/tunex-agent-secrets/control-ca.pem
+      - --state=/var/lib/tunex-agent
+      - --journal-key=/run/tunex-agent-secrets/journal.key
+      - --relay
+      - --diagnostics
+    volumes:
+      - type: bind
+        source: ${TUNEX_AGENT_STATE_DIR:?Existing protected Agent state directory}
+        target: /var/lib/tunex-agent
+      - type: bind
+        source: ${TUNEX_AGENT_SECRETS_DIR:?Existing protected Agent secrets directory}
+        target: /run/tunex-agent-secrets
+        read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 45s
