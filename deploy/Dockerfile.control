@@ -25,6 +25,7 @@ COPY packages/core ./packages/core
 COPY packages/contracts ./packages/contracts
 COPY docs/protocol/schemas ./docs/protocol/schemas
 COPY apps/web ./apps/web
+COPY scripts/ops ./scripts/ops
 COPY deploy/control-liveness.mjs ./deploy/control-liveness.mjs
 RUN node --input-type=module -e "await import('@tunex/contracts')"
 RUN mkdir -p /var/lib/tunex-control && chown 10001:10001 /var/lib/tunex-control

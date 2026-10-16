@@ -34,6 +34,7 @@ jobs:
         run: |
           test "$(docker image inspect -f '{{.Config.User}}' tunex-control:ci)" = "10001:10001"
           docker run --rm --entrypoint node tunex-control:ci --version
+          docker run --rm --network none --entrypoint node tunex-control:ci --input-type=module -e "await import('./scripts/ops/upgrade-inspect.ts')"
           test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' tunex-control:ci)" = "$GITHUB_SHA"
           test "$(docker image inspect -f '{{json .Config.Healthcheck.Test}}' tunex-control:ci)" != 'null'
       - name: Verify Control refuses startup without mounted trust and database

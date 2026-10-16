@@ -2,6 +2,9 @@
 
 > 本文是 **Dev 测试环境**操作手册，不是 Stable 生产就绪认证。VNext 使用 ADP/3，禁止复用 `legacy/v2` 数据库、证书或 Agent Journal。仓库根目录 [README](../README.md) 只保留快速部署命令。
 
+升级、关闭多跳或计划恢复前，先执行 [只读升级与恢复评估](../docs/operations/upgrade-assessment.md)。
+评估不会自动迁移或批准恢复；已迁移 Journal 不允许回退旧 Agent。
+
 ## 1. 部署模型与前置条件
 
 - **Control 主机**：Linux、Docker/Compose v2、外部 MySQL **8.4**、Control HTTPS/PKI、受保护 Authority State；Control 镜像运行 UID/GID `10001:10001`。

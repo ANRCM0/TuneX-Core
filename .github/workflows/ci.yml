@@ -86,6 +86,8 @@ jobs:
         run: node --test apps/control/test/transit-negotiation.test.ts
       - name: Multi-hop failure withdrawal and full-path capacity transactions
         run: node --test apps/control/test/multihop-runtime.test.ts
+      - name: Read-only upgrade assessment with SELECT-only MySQL and authenticated Agent journal
+        run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
       - run: npm run test:phase1
       - run: npm run test:phase2
       - run: npm run test:security

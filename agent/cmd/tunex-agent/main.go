@@ -49,11 +49,15 @@ func run() error {
 	timeProof := flag.String("time-proof", "", "Optional supervisor OS synchronization proof")
 	timeProofKey := flag.String("time-proof-key", "", "Protected MAC key for the supervisor proof")
 	diagnostics := flag.Bool("diagnostics", false, "Write protected local resource samples for operator measurements")
+	inspectJournal := flag.Bool("inspect-journal", false, "Read-only authenticated journal summary; requires node, state and journal-key, no Control connection")
 	flag.Parse()
+	if *inspectJournal && (*enroll || *rotate || *multihopEnabled || *importTransit != "" || *diagnostics) {
+		return fmt.Errorf("Journal inspection cannot be combined with state-changing flags")
+	}
 	if (*timeProof == "") != (*timeProofKey == "") {
 		return fmt.Errorf("time-proof and time-proof-key must be provided together")
 	}
-	if *url == "" || *node == "" || *ca == "" || *directory == "" || *journalKey == "" || !strings.HasPrefix(*url, "https://") {
+	if *node == "" || *directory == "" || *journalKey == "" || !*inspectJournal && (*url == "" || *ca == "" || !strings.HasPrefix(*url, "https://")) {
 		return fmt.Errorf("control, node, ca, state and journal-key are required")
 	}
 	root, err := filepath.Abs(*directory)
@@ -73,6 +77,17 @@ func run() error {
 	certificate := filepath.Join(root, "node.pem")
 	privateKey := filepath.Join(root, "private.pem")
 	journal := filepath.Join(root, "journal.json")
+	if *inspectJournal {
+		key, err := os.ReadFile(keyPath)
+		if err != nil || len(key) != 32 {
+			return fmt.Errorf("JOURNAL_INSPECTION_FAILED")
+		}
+		summary, err := state.InspectRuntimeJournal(journal, key, *node)
+		if err != nil {
+			return fmt.Errorf("JOURNAL_INSPECTION_FAILED")
+		}
+		return json.NewEncoder(os.Stdout).Encode(summary)
+	}
 	if *enroll {
 		return enrollment(*url, *node, *ca, root, keyPath, certificate, privateKey, journal)
 	}

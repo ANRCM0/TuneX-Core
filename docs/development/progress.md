@@ -8,6 +8,15 @@ commit 字段是测试时 HEAD；另记录 Agent SHA 和测试命令，明确未
 
 ## 当前源码快照与后续排期
 
+后续核验（2026-10-16）：`6e9586d` 主 CI `38831559895` 的 7 个 job、
+容器 `38831559907` 和 Dev 发布 `38831559896` 均通过；3/4/8 节点及隔离矩阵
+已经完成该 SHA 的 CI 验证。下方历史失败/待核验文字保留为切片记录。
+当前新增 [只读升级与恢复评估](../operations/upgrade-assessment.md)：
+SELECT-only MySQL、受保护 Authority 校验、Agent Journal 无副作用摘要、
+Schema/Journal 回退拒绝矩阵、机器可读结论及备份责任。
+纯矩阵、真实 MySQL/Agent 和容器接线已编写，等待本切片对应提交的 Actions；
+本地未运行功能测试，不代表完成真实升级或生产恢复验收。
+
 2026-10-16 源码基线：`11b95451464c5adb0068a09cb976492850479b4e`。
 已提交默认关闭的多跳统一所有权/授权、混合执行 Snapshot、生产 Runner
 适配、Report 驱动协调、Console 路径管理与验收/发布门槛工具。

@@ -18,6 +18,7 @@
 | [ADR-0002](decisions/0002-runtime-contract-closure.md) | 租约、会话、切换与实施依赖收口 |
 | [Control API / Operation v1](spec/control-api-v1.md) | 幂等、事务、连续修改、终态及状态查询 |
 | [节点安全与恢复](operations/node-security-and-recovery-v1.md) | 注册、撤销、重装、备份恢复及 Relay 安全门槛 |
+| [只读升级与恢复评估](operations/upgrade-assessment.md) | Schema/Journal 兼容矩阵、只读状态采集、备份责任与明确回退拒绝 |
 | [ADP/2 direct Schema](protocol/schemas/adp-v2-direct.schema.json) / [fixture](protocol/fixtures/adp-v2-direct.json) | Phase 2 机器可校验契约；不宣称 Relay 支持 |
 | [开发路线](development/roadmap.md) | 从空白 Core 到实网转发的交付门槛 |
 | [Docker / 1Panel 部署手册](../deploy/README.md) | 分主机 Control/Agent、首次初始化与 Enrollment、真实 TCP/UDP、Relay 与恢复测试 |
