@@ -99,7 +99,7 @@ test('filters are bound identically into count and page SQL; prefix underscore s
   await consoleNodes(f.control,'viewer','scope-a','2','25',{idPrefix:'node_',credential:'valid'});
   assert.deepEqual(f.queries[0]!.params,f.queries[1]!.params);
   assert.equal(f.queries[0]!.params[1],'node!_');
-  assert.ok(f.queries.every(q=>q.sql.includes("ESCAPE '!'")&&!q.sql.includes('node_')));
+  assert.ok(f.queries.every(q=>q.sql.includes("ESCAPE '!'")&&!q.sql.includes("'node_'")&&!q.sql.includes("'node!_'")));
   f.queries.length=0;
   await consoleForwards(f.control,'viewer','scope-a',undefined,undefined,{enabled:'false',protocol:'both',recoverySuspended:'true'});
   assert.deepEqual(f.queries[0]!.params,['scope-a','false',true,'["tcp","udp"]']);

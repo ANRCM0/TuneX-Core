@@ -366,12 +366,11 @@ async function refreshDirectCandidates() {
   if (!await loadCandidates('direct', [nodeId])) return;
   fillNodes(nodeId);
   if (byId('forward-node').value === nodeId) fillCapabilities(preferred);
-  if (editing) {
-    byId('forward-node').disabled = true;
-    if (!candidates.direct.some(n => n.id === nodeId)) {
-      byId('save-forward').disabled = true;
-      throw new Error('当前入口节点的权限、凭据或能力已失效');
-    }
+  if (editing) byId('forward-node').disabled = true;
+  if (nodeId && !candidates.direct.some(n => n.id === nodeId)) {
+    byId('forward-node').value = '';
+    fillCapabilities();
+    throw new Error('当前入口节点的权限、凭据或能力已失效，请重新选择');
   }
 }
 for (const kind of ['nodes', 'forwards', 'operations']) {

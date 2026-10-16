@@ -116,6 +116,20 @@ test('late responses cannot cross connections or overwrite a newer page', async 
   assert.equal(h.elements.get('metric-nodes').textContent, '—');
   assert.equal(h.flow.candidates.direct.length, 0);
 });
+test('Direct candidate refresh never silently changes a revoked selection to a different node', async () => {
+  let revoked = false;
+  const h = await harness(resource => {
+    const id = new URLSearchParams(resource.split('?')[1]).get('nodeId');
+    return page(id ? revoked ? [] : [node(id)] : [node(revoked ? 'replacement' : 'selected')]);
+  });
+  h.flow.connect();
+  await h.flow.editor(null);
+  assert.equal(h.elements.get('forward-node').value, 'selected');
+  revoked = true;
+  await assert.rejects(h.flow.refreshDirectCandidates(), /已失效/);
+  assert.equal(h.elements.get('forward-node').value, '');
+  assert.equal(h.elements.get('save-forward').disabled, true);
+});
 test('Relay selections survive independent candidate searches and fail closed after grant loss', async () => {
   let revoked = false;
   const h = await harness(resource => {
