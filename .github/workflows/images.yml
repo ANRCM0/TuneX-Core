@@ -23,6 +23,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
 
       - name: Verify exact source, channel and protected release tag
         shell: bash
@@ -62,16 +65,11 @@ jobs:
           for attempt in $(seq 1 85); do
             all_green=true
             for workflow in ci.yml container.yml; do
-              response="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&per_page=100")"
-              state="$(jq -r --arg sha "$GITHUB_SHA" '
-                [.workflow_runs[] | select(.head_sha==$sha and .event=="push" and .head_branch=="main")]
-                | sort_by(.created_at,.run_attempt) | last
-                | if .==null then "missing"
-                  elif .status!="completed" then "pending"
-                  else (.conclusion // "pending") end' <<< "$response")"
+              state="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&event=push&head_sha=$GITHUB_SHA&per_page=100" \
+                | node deploy/ci-prerequisites.mjs "$GITHUB_SHA" "$workflow")"
               case "$state" in
                 success) ;;
-                failure|cancelled|timed_out|action_required|startup_failure|skipped)
+                failure|cancelled|timed_out|action_required|startup_failure|skipped|stale)
                   echo "$workflow failed for $GITHUB_SHA ($state)" >&2; exit 1 ;;
                 missing|pending|neutral)
                   all_green=false ;;
@@ -176,6 +174,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # A rerun may have started or failed while the images were building.
+          for workflow in ci.yml container.yml; do
+            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&event=push&head_sha=$GITHUB_SHA&per_page=100" \
+              | node deploy/ci-prerequisites.mjs "$GITHUB_SHA" "$workflow")"
+            [ "$state" = success ] || { echo "$workflow changed before publication ($state)" >&2; exit 1; }
+          done
           control_ref="$TUNEX_CONTROL_BASE:$TUNEX_IMAGE_TAG"
           agent_ref="$TUNEX_AGENT_BASE:$TUNEX_IMAGE_TAG"
           docker tag tunex-control:release-ci "$control_ref"

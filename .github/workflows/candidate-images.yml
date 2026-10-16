@@ -20,6 +20,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
       - name: Verify immutable source and exact green release prerequisites
         env:
           GH_TOKEN: ${{ github.token }}
@@ -30,12 +33,12 @@ jobs:
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Full commit SHA required"; exit 1; }
           [ "$GITHUB_SHA" = "$EXPECTED_SHA" ] || { echo "Expected SHA differs from checked-out main"; exit 1; }
           [ "$(git rev-parse HEAD)" = "$EXPECTED_SHA" ] || exit 1
-          # Fail closed if any matching full-baseline and container-image CI
-          # run for this exact commit has not completed successfully.
+          # Each API run reflects its latest attempt; an old success cannot
+          # authorize publication after a newer failure or pending run.
           for workflow in ci.yml container.yml; do
-            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&per_page=50" \
-              | jq -e --arg sha "$EXPECTED_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .conclusion=="success")] | length > 0' >/dev/null \
-              || { echo "$workflow has no successful run for requested SHA"; exit 1; }
+            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&event=push&head_sha=$EXPECTED_SHA&per_page=100" \
+              | node deploy/ci-prerequisites.mjs "$EXPECTED_SHA" "$workflow")"
+            [ "$state" = success ] || { echo "$workflow is not green for requested SHA ($state)" >&2; exit 1; }
           done
       - name: Prepare SHA-only candidate tags
         shell: bash
@@ -92,9 +95,19 @@ jobs:
           exit-code: '1'
           format: table
       - name: Publish immutable-source candidate tags and record real registry digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         shell: bash
         run: |
           set -euo pipefail
+          # Builds and scans take time: reject a newly failed or pending rerun
+          # before the first registry write, not only before building.
+          for workflow in ci.yml container.yml; do
+            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&event=push&head_sha=$EXPECTED_SHA&per_page=100" \
+              | node deploy/ci-prerequisites.mjs "$EXPECTED_SHA" "$workflow")"
+            [ "$state" = success ] || { echo "$workflow changed before publication ($state)" >&2; exit 1; }
+          done
           docker push "$CONTROL_IMAGE"
           docker push "$AGENT_IMAGE"
           {

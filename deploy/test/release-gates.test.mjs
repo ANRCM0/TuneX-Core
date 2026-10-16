@@ -9,7 +9,12 @@ test('manual-only candidate gate checks SHA and exact successful VNext workflows
  assert.match(candidate,/github\.ref == 'refs\/heads\/main'/);
  assert.match(candidate,/GITHUB_SHA.*EXPECTED_SHA/);
  assert.match(candidate,/ci\.yml container\.yml/);
- assert.match(candidate,/\.head_sha==\$sha and \.conclusion=="success"/);
+ assert.match(candidate,/branch=main&event=push&head_sha=\$EXPECTED_SHA/);
+ assert.match(candidate,/node deploy\/ci-prerequisites\.mjs "\$EXPECTED_SHA" "\$workflow"/);
+ assert.match(candidate,/\[ "\$state" = success \]/);
+ assert.equal((candidate.match(/node deploy\/ci-prerequisites\.mjs/g)||[]).length,2);
+ assert.ok(candidate.lastIndexOf('node deploy/ci-prerequisites.mjs')<candidate.indexOf('docker push'));
+ assert.doesNotMatch(candidate,/\.conclusion=="success".*\| length > 0/);
  assert.match(candidate,/--password-stdin/);
 });
 test('release forbids overwriting previously published candidate tags',()=>{

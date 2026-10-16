@@ -16,8 +16,10 @@ test('only pushes to main or pushed v* tags enter automatic publication',()=>{
 
 test('publication requires prior exact-commit successful push checks',()=>{
  assert.match(publishing,/for workflow in ci\.yml container\.yml/);
- assert.match(publishing,/\.head_sha==\$sha and \.event=="push" and \.head_branch=="main"/);
- assert.match(publishing,/elif \.status!="completed" then "pending"/);
+ assert.match(publishing,/branch=main&event=push&head_sha=\$GITHUB_SHA/);
+ assert.match(publishing,/node deploy\/ci-prerequisites\.mjs "\$GITHUB_SHA" "\$workflow"/);
+ assert.equal((publishing.match(/node deploy\/ci-prerequisites\.mjs/g)||[]).length,2);
+ assert.ok(publishing.lastIndexOf('node deploy/ci-prerequisites.mjs')<publishing.indexOf('docker push'));
  assert.match(publishing,/failure\|cancelled\|timed_out/);
  assert.match(container,/push:\n    branches: \[main\]/);
  assert.doesNotMatch(container,/push:\n    branches: \[main\]\n    paths:/);
