@@ -57,6 +57,44 @@ TUNEX_AGENT_SECRETS_DIR=/srv/tunex/agent/secrets
 
 `docker compose --env-file` 用于**Compose 变量插值**。Shell 中临时导出的变量不会自动传入容器，除非在 Compose 的 `environment:` 明确声明，或在 `docker compose run -e NAME` 中显式透传。仓库的角色独立模板已经声明常驻服务所需变量。不要对任何生产日志打印数据库 URL、Owner Token 或私钥。
 
+### 分角色只读预检
+
+在对应 Linux 主机使用仓库指定的 Node 版本，检查该角色环境文件。Control
+还需提供 Agent 实际访问的 HTTPS origin，以核对服务器证书 SAN；也可将
+`TUNEX_CONTROL_URL` 写入 Control 的环境文件，仅供预检使用。
+
+```bash
+# 已有 Control；实际地址必须对应证书 SAN
+node --env-file=/secure/tunex-control.env deploy/preflight.mjs \
+  --role control --control-url https://control-dev.example:41001 --json
+
+# 已注册 Agent；只需要 Agent 的变量和本机文件
+node --env-file=/secure/tunex-agent.env deploy/preflight.mjs --role agent --json
+```
+
+首次部署或注册前增加 `--phase initial`：要求现有 State 目录为空，Agent Secrets
+仅含可信 `control-ca.pem`。它不会创建目录、修改权限、初始化 Authority 或执行
+Enrollment；数据库是否全新仍由正式初始化流程确认。已有实例默认使用
+`--phase existing`，Control 必须存在 Authority 状态和 Key，Agent 必须存在
+证书、私钥、Journal 和 Key。不能改用 initial 掩盖缺失的旧状态。
+
+预检检查角色所需的镜像 Digest、目录边界、UID/GID `10001:10001` 的 POSIX
+权限、证书有效期/签发关系/用途、私钥匹配，以及 Control 的精确 DNS/IP SAN。
+当前按模板的直接 CA 签发模型检查，不做中间 CA 链构建，DNS SAN 不接受通配符；
+需要其他 PKI 模型时先明确部署支持范围。受保护文件要求服务 UID 所有、
+仅所有者可读，目录和证书不得允许 group/world 写入。
+
+输出 `scope: local-static` 和 `runtimeReady: false`。退出码 `0` 仅表示所实现的
+本地静态检查通过，`1` 表示拒绝，`2` 表示必要检查未完成（如在 Windows 上
+无法证明 Linux 权限）。报告明确保留未检查项：实际挂载/ACL/UID 映射、
+OS 时钟同步、网络/mTLS/MySQL 连通性、状态 MAC 和高水位完整性。
+Agent 主机本地预检不会拨号读取远端服务器证书。真实服务启动仍必须执行全部
+身份、Journal 和授权校验；静态结果不能作为运行验收或生产批准。
+
+测试在 GitHub Actions 的 `deployment-tools` 和容器工作流运行，覆盖正反例和
+CLI 调用；本地开发只做语法等静态检查。原 `validate(env, inspect)` 导出保留为
+布局检查兼容接口，不能将其旧结果视为完整的分角色预检。
+
 ## 3. Control 首次初始化与正常启动
 
 **仅对真正全新的独立数据库、原始 CA 和空 Authority State 做一次初始化**。如果已经通过初始化和重启，请跳到“正常启动”。

@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 // Read-only deployment preflight: never print environment values or secrets.
 import { lstatSync, realpathSync } from 'node:fs';
-import { isAbsolute, relative, sep } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { parsePreflightArguments, rolePreflight } from './preflight-role.mjs';
 
+export { rolePreflight } from './preflight-role.mjs';
+
+// Compatibility API for existing layout-only callers. New CLI calls select a role.
 export function validate(env, inspect=(path)=>({stat:lstatSync(path),real:realpathSync(path)})){
  const errors=[];
  for(const name of ['TUNEX_CONTROL_IMAGE','TUNEX_AGENT_IMAGE']){
@@ -30,8 +35,23 @@ export function validate(env, inspect=(path)=>({stat:lstatSync(path),real:realpa
  }
  return errors;
 }
-if(process.argv[1] && import.meta.url.endsWith(process.argv[1])){
- const errors=validate(process.env);
- if(errors.length){console.error('Deployment preflight rejected:\n'+errors.join('\n'));process.exitCode=1}
- else console.log('Deployment preflight passed (paths and immutable references only; not runtime readiness)');
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  try {
+    const options = parsePreflightArguments(process.argv.slice(2));
+    if (options.help) {
+      console.log('Usage: node --env-file=/secure/role.env deploy/preflight.mjs --role control|agent [--phase initial|existing] [--control-url https://control.example] [--json]');
+    } else {
+      const report = rolePreflight(process.env, options);
+      if (options.json) console.log(JSON.stringify(report, null, 2));
+      else {
+        console.log('Local static preflight: ' + report.status + ' (runtime readiness is unverified)');
+        for (const check of report.checks) console.log(`${check.status} ${check.code} [${check.subject}]: ${check.message}`);
+      }
+      process.exitCode = report.status === 'passed' ? 0 : report.status === 'incomplete' ? 2 : 1;
+    }
+  } catch {
+    const error = { version: 1, scope: 'local-static', status: 'rejected', runtimeReady: false, code: 'INVALID_OPTIONS', message: 'Invalid preflight arguments; use --help' };
+    console.error(process.argv.includes('--json') ? JSON.stringify(error) : error.message);
+    process.exitCode = 1;
+  }
 }

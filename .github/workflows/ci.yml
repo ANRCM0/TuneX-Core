@@ -10,6 +10,18 @@ concurrency:
   group: vnext-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  deployment-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Verify local certificate fixture tooling
+        run: openssl version
+      - name: Role-specific deployment preflight regression
+        run: node --test deploy/test/preflight*.test.mjs
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 10
