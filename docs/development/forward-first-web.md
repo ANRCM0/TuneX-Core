@@ -8,7 +8,7 @@ Control HTTPS 同源提供 `/console`；没有新端口、新数据库、新 npm
 
 页面提供：
 
-- 概览：Scope 节点数、Forward 数及**当前第一页 Operation 中**的执行中/失败数量。不是全局健康或性能统计。
+- 概览：通过独立服务端聚合显示 Scope 节点数、非删除 Forward 数、全部待执行/执行中操作及历史失败操作数；不受当前列表页或筛选影响。不是全局健康或性能统计。
 - 节点：分页列表、授权策略和实际会话/报告时间、Node 详情、按预设生成 Node Policy 并创建一次性 enrollment token（不自动远程安装 Agent）。
 - Forward：分页列表、Direct 能力驱动的受控表单、创建/编辑、启停、删除、按 ID 查完整期望与 Agent 观察状态。Relay 可以查看，但不通过简化表单编辑。
 - Operation：最近执行动作及查询详情；Succeeded 是执行完成，不等于独立业务探测成功。
@@ -18,6 +18,12 @@ Control HTTPS 同源提供 `/console`；没有新端口、新数据库、新 npm
 - `GET /api/v1/scopes/:scope/nodes?page=1&limit=25`
 - `GET /api/v1/scopes/:scope/forwards?page=1&limit=25`
 - `GET /api/v1/scopes/:scope/operations?page=1&limit=25`
+
+后续扩展加入 `GET /api/v1/scopes/:scope/overview` 和独立
+`GET /api/v1/scopes/:scope/nodes/candidates`，以及三类列表的服务端筛选。
+候选按当前管理权限、显式 Grant、有效凭据和能力初筛，Direct/Relay 编辑器
+不再依赖节点管理列表的当前页；已选节点通过精确查询重新验证。
+完整字段、权限、统计语义和测试边界见 [Console 查询契约](console-query.md)。
 
 每次读取必须在 SQL 中限制 scope，不能仅靠 UI 过滤。每页上限 100，页码上限 10000；所有 read model 均不包含 Enrollment Token、私钥或数据库凭据。Node 报告时间是观察事实，不代表链路可用；Forward 列表中的 Operation 状态不是 Health。现有 Forward 详情的 `health.condition` 来自 Agent 观测，还不是单独的端到端探测。
 

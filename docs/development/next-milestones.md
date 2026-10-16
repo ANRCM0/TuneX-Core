@@ -134,6 +134,11 @@ Agent Runtime Journal 增加只读升级评估，不另建一套恢复系统：
 
 ### PR 3 · 统一诊断查询与全量概览
 
+2026-10-16 本切片已实现 [服务端查询与全量概览](console-query.md)：
+三类列表有界筛选、独立 Grant/能力候选、Scope 单语句聚合及现有 Console 接线，
+并加入分页外记录、SELECT-only 全表只读性和轻量 DOM 数据流回归。
+等待本切片 SHA 的 Actions；这不表示完成真实浏览器或所有关联诊断的集中验收。
+
 从已有 `console-read.ts`、Forward/Operation 查询和部署状态投影扩展：
 
 - 建立 Node → Forward → Operation → Deployment/Assignment 的查询关联，

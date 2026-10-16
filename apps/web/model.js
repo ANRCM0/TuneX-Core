@@ -54,3 +54,18 @@ export function stateTone(value) {
   return '';
 }
 export function pageCount(total, limit) { return Math.max(1, Math.ceil(total / limit)); }
+export function listResource(kind, page, filters = {}) {
+  if (!['nodes', 'forwards', 'operations', 'nodes/candidates'].includes(kind) || !Number.isSafeInteger(page) || page < 1 || page > 10000)
+    throw new Error('查询页码超出允许范围');
+  const query = new URLSearchParams({ page: String(page), limit: '25' });
+  for (const [key, value] of Object.entries(filters)) if (value !== '') query.set(key, String(value));
+  return kind + '?' + query;
+}
+/** Keep only this page and revalidated selections, never accumulate every visited page. */
+export function candidateChoices(items, selectedIds, selectedItems) {
+  if (items.length > 25 || selectedIds.length > 9) throw new Error('节点候选超过查询上限');
+  const pinned = new Set(selectedIds), result = new Map();
+  for (const node of items) if (!pinned.has(node.id)) result.set(node.id, node);
+  for (const node of selectedItems) if (pinned.has(node.id)) result.set(node.id, node);
+  return [...result.values()];
+}

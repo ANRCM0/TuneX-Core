@@ -1,10 +1,10 @@
 import { relayCapable, multihopCapable, multihopSpec, relayProfile, relayEndpoint, relaySpec } from './relay-model.js';
 
-export function initRelayConsole({ request, mutate, notify, byId, store, load, detail, display }) {
+export function initRelayConsole({ request, mutate, notify, byId, candidates, load, loadOverview, loadCandidates, detail, display }) {
   const knownProfiles = new Map();
   let profileList = [];
   let previewed = null;
-  let multihopEnabled=false, intermediates=[],editing=null,pinnedProfileRevision=null,deploymentId=null;
+  let multihopEnabled=false, intermediates=[],editing=null,pinnedProfileRevision=null,deploymentId=null,editVersion=0;
   const el = byId;
   const formValue = (form, name) => form.elements.namedItem(name).value;
   const check = (form, name) => form.elements.namedItem(name).checked;
@@ -43,12 +43,12 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
       }
       el('multihop-path').append(li);
     });
-    options('multihop-candidate',store.nodes.filter(n=>multihopCapable(n)&&!path.includes(n.id)).map(n=>({value:n.id})));
+    options('multihop-candidate',candidates.relay.filter(n=>multihopCapable(n)&&!path.includes(n.id)).map(n=>({value:n.id})));
     el('multihop-add').disabled=!multihopEnabled||intermediates.length>=6||!el('multihop-candidate').value;
     el('multihop-controls').hidden=!multihopEnabled;
   }
   function eligibleNodes() {
-    return store.nodes.filter(relayCapable);
+    return candidates.relay.filter(relayCapable);
   }
   function nodeOptions() {
     return eligibleNodes().map(n => ({ value:n.id, label:shortId(n.id) + ' · ' + n.policy.capabilities.filter(c=>c==='tcp'||c==='udp').join('/') }));
@@ -66,19 +66,19 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
     updateHint();
   }
   function populateEndpointListen() {
-    const node = store.nodes.find(n=>n.id===el('relay-endpoint-node').value);
+    const node = candidates.relay.find(n=>n.id===el('relay-endpoint-node').value);
     options('relay-endpoint-listen', (node?.policy?.allowedListenerAddresses??[]).map(address=>({value:address})));
   }
   function populateIngress() {
-    const node = store.nodes.find(n=>n.id===el('relay-ingress').value);
+    const node = candidates.relay.find(n=>n.id===el('relay-ingress').value);
     options('relay-listen-address', (node?.policy?.allowedListenerAddresses??[]).map(address=>({value:address})));
     options('relay-listen-port', (node?.policy?.allowedPorts??[]).map(port=>({value:port})));
   }
   function updateHint() {
     const nodes=eligibleNodes();
     el('relay-readiness').textContent=nodes.length<2?
-      '至少需要两台能力包含 adp.3、native.direct.v1、native.relay.v1、relay.wire.1 的有效节点；当前候选数量：'+nodes.length :
-      '节点能力已识别。验证计划时仍要检查两端 Peer 凭据、实时 Session、Profile Grant、Endpoint 和目标 CIDR。';
+      '当前候选页和已选节点不足两台；请搜索或翻页选择仍有授权和有效凭据的 Relay 节点。' :
+      '当前页含已选节点；候选不等于完整授权。验证计划时仍要检查 Peer 凭据、实时 Session、Profile Grant、Endpoint 和目标 CIDR。';
     invalidate();
   }
   async function refreshProfiles() {
@@ -163,15 +163,15 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
   }
   async function buildSpec() {
     const form=el('relay-forward-form');
-    const ingress=store.nodes.find(n=>n.id===formValue(form,'ingressId'));
-    const egress=store.nodes.find(n=>n.id===formValue(form,'egressId'));
+    const ingress=candidates.relay.find(n=>n.id===formValue(form,'ingressId'));
+    const egress=candidates.relay.find(n=>n.id===formValue(form,'egressId'));
     const profile=await loadProfile(formValue(form,'profileId'),pinnedProfileRevision);
     const fields={
       protocol:formValue(form,'protocol'),listenAddress:formValue(form,'listenAddress'),
       listenPort:formValue(form,'listenPort'),targetHost:formValue(form,'targetHost'),
       targetPort:formValue(form,'targetPort'),enabled:check(form,'enabled')
     };
-    return intermediates.length?multihopSpec(fields,[ingress,...intermediates.map(id=>store.nodes.find(n=>n.id===id)),egress],profile,multihopEnabled):relaySpec(fields,ingress,egress,profile);
+    return intermediates.length?multihopSpec(fields,[ingress,...intermediates.map(id=>candidates.relay.find(n=>n.id===id)),egress],profile,multihopEnabled):relaySpec(fields,ingress,egress,profile);
   }
   async function preview() {
     invalidate();
@@ -202,7 +202,7 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
       const result=editing?await mutate('PUT','forwards/'+encodeURIComponent(editing.id),{expectedRevision:editing.revision,spec}):await mutate('POST','forwards',spec);
       cancelEdit();
       previewed=null;
-      await Promise.all([load('forwards'),load('operations')]);
+      await Promise.all([load('forwards'),load('operations'),loadOverview()]);
       display('operations');
       notify('链路操作已接受，Operation '+(result.operationId??'无变更')+'；请观察路径中各节点的应用状态。');
     }catch(e){notify(e.message,true);}
@@ -221,9 +221,12 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
   el('relay-reload').addEventListener('click',()=>refresh().catch(e=>notify(e.message,true)));
   el('multihop-add').addEventListener('click',()=>{const id=el('multihop-candidate').value;if(id&&multihopEnabled&&intermediates.length<6&&!intermediates.includes(id)){intermediates.push(id);invalidate();}});
   el('relay-cancel-edit').addEventListener('click',cancelEdit);
-  function cancelEdit(){editing=null;pinnedProfileRevision=null;intermediates=[];el('relay-cancel-edit').hidden=true;el('relay-submit').textContent='创建链路';el('relay-ingress').disabled=false;invalidate();}
+  function cancelEdit(){editVersion++;editing=null;pinnedProfileRevision=null;intermediates=[];el('relay-cancel-edit').hidden=true;el('relay-submit').textContent='创建链路';el('relay-ingress').disabled=false;invalidate();}
   async function edit(item){
-    await refresh();editing={id:item.id,revision:item.revision};pinnedProfileRevision=item.spec.transport.configRevision;
+    const version=++editVersion;
+    if (!await refresh([item.spec.ingress.nodeId,...item.spec.path.via]) || version!==editVersion) return;
+    if ([item.spec.ingress.nodeId,...item.spec.path.via].some(id=>!candidates.relay.some(n=>n.id===id))) throw Error('路径中存在不再具备候选资格的节点，请检查授权、凭据和能力');
+    editing={id:item.id,revision:item.revision};pinnedProfileRevision=item.spec.transport.configRevision;
     const form=el('relay-forward-form'),s=item.spec;
     el('relay-ingress').value=s.ingress.nodeId;el('relay-egress').value=s.path.via.at(-1);populateIngress();
     el('relay-ingress').disabled=true;el('relay-profile-select').value=s.transport.profileId;
@@ -255,19 +258,37 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
       button.addEventListener('click',async()=>{try{
         const selected=revisions.find(r=>String(r.revision)===select.value);if(!confirm('将 r'+selected.revision+' 的配置作为新 revision 部署，重新检查权限与端口。继续？'))return;
         button.disabled=true;const result=await mutate('PUT','forwards/'+encodeURIComponent(id),{expectedRevision:forward.desired.revision,spec:selected.spec});
-        el('deployment-dialog').close();await Promise.all([load('forwards'),load('operations')]);notify('历史配置已提交，Operation '+(result.operationId??'无变更'));
+        el('deployment-dialog').close();await Promise.all([load('forwards'),load('operations'),loadOverview()]);notify('历史配置已提交，Operation '+(result.operationId??'无变更'));
       }catch(e){notify(e.message,true);button.disabled=false;}});
       el('deployment-nodes').append(label,button);
     }
     if(!el('deployment-dialog').open)el('deployment-dialog').showModal();
   }
-  async function refresh(){
-    const features=await request('GET','execution-capabilities');multihopEnabled=features.multihopEnabled===true;
+  async function refreshCandidates(pinnedIds){
+    invalidate();
+    el('relay-preview').disabled=true;
+    const ingress=el('relay-ingress').value;
+    const preferred={address:el('relay-listen-address').value,port:el('relay-listen-port').value};
+    const ids=pinnedIds??[ingress,el('relay-egress').value,el('relay-endpoint-node').value,...intermediates];
+    if (!await loadCandidates('relay',ids)) return false;
     populateNodes();
+    if(el('relay-ingress').value===ingress){
+      el('relay-listen-address').value=preferred.address;el('relay-listen-port').value=preferred.port;
+    }
+    if(editing)el('relay-ingress').disabled=true;
+    if(ids.filter(Boolean).some(id=>!candidates.relay.some(n=>n.id===id)))throw Error('部分已选节点的授权、凭据或能力已失效，请重新检查路径');
+    el('relay-preview').disabled=false;
+    return true;
+  }
+  async function refresh(pinnedIds){
+    const features=await request('GET','execution-capabilities');multihopEnabled=features.multihopEnabled===true;
+    if (!await refreshCandidates(pinnedIds)) return false;
     await refreshProfiles();
+    return true;
   }
   function clear() {
-    multihopEnabled=false;cancelEdit();
+    multihopEnabled=false;deploymentId=null;cancelEdit();
+    el('deployment-nodes').replaceChildren();el('deployment-topology').replaceChildren();el('deployment-state').textContent='';
     profileList=[];
     knownProfiles.clear();
     invalidate();
@@ -279,5 +300,5 @@ export function initRelayConsole({ request, mutate, notify, byId, store, load, d
     row.append(cell);tbody.append(row);
     populateNodes();
   }
-  return {refresh,populateNodes,clear,edit,deployment};
+  return {refresh,populateNodes,refreshCandidates,clear,edit,deployment};
 }

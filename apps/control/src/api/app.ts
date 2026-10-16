@@ -3,7 +3,7 @@ import type { HttpBindings } from '@hono/node-server';
 import { TLSSocket } from 'node:tls';
 import { readFile } from 'node:fs/promises';
 import { rows } from '../infrastructure/mysql.ts';
-import { consoleNodes, consoleForwards, consoleOperations, consoleNodeDiagnostics } from './console-read.ts';
+import { consoleNodes, consoleForwards, consoleOperations, consoleNodeDiagnostics, consoleQuery, consoleNodeCandidates, consoleOverview } from './console-read.ts';
 import { randomUUID } from 'node:crypto';
 import { parseJson, parseRuntimeMessage, parseTransitNegotiation, parseTransitDelivery } from '@tunex/contracts';
 import { TransitNegotiator } from '../modules/runtime/transit-negotiation.ts';
@@ -143,9 +143,16 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         const response = await control.changeNodeGrant(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.param('actor'), c.req.header('idempotency-key'), input.expectedRevision, input.allowed);
         return c.json(response.body, response.status);
     });
-    app.get('/api/v1/scopes/:scope/nodes', async c => c.json(await consoleNodes(control, c.get('actor'), scope(c.req.param('scope')), c.req.query('page'), c.req.query('limit'))));
-    app.get('/api/v1/scopes/:scope/forwards', async c => c.json(await consoleForwards(control, c.get('actor'), scope(c.req.param('scope')), c.req.query('page'), c.req.query('limit'))));
-    app.get('/api/v1/scopes/:scope/operations', async c => c.json(await consoleOperations(control, c.get('actor'), scope(c.req.param('scope')), c.req.query('page'), c.req.query('limit'))));
+    for (const [kind, read] of [['nodes', consoleNodes], ['forwards', consoleForwards], ['operations', consoleOperations], ['candidates', consoleNodeCandidates]] as const) {
+        app.get('/api/v1/scopes/:scope/' + (kind === 'candidates' ? 'nodes/candidates' : kind), async c => {
+            const query = consoleQuery(kind, new URL(c.req.url).searchParams);
+            return c.json(await read(control, c.get('actor'), scope(c.req.param('scope')!), query.page, query.limit, query.filters));
+        });
+    }
+    app.get('/api/v1/scopes/:scope/overview', async c => {
+        if (new URL(c.req.url).search) invalid('Overview does not accept list filters');
+        return c.json(await consoleOverview(control, c.get('actor'), scope(c.req.param('scope'))));
+    });
     app.post('/api/v1/scopes/:scope/nodes', async (c) => c.json(await control.nodes.provision(c.get('actor'), scope(c.req.param('scope')), parseJson(await body(c.req.raw)) as NodePolicy), 201));
     app.post('/enrollment/v1', async (c) => {
         const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;

@@ -42,8 +42,8 @@
       <div class="metrics">
         <div class="metric"><span>受管节点</span><strong id="metric-nodes">—</strong><small>按 Scope 筛选</small></div>
         <div class="metric"><span>转发规则</span><strong id="metric-forwards">—</strong><small>Direct / Relay</small></div>
-        <div class="metric"><span>最近 25 项中执行中</span><strong id="metric-running">—</strong><small>非已生效状态</small></div>
-        <div class="metric"><span>最近 25 项中失败</span><strong id="metric-failed">—</strong><small>需检查原因</small></div>
+        <div class="metric"><span>待执行 / 执行中操作</span><strong id="metric-running">—</strong><small>Scope 全量 · 非已生效状态</small></div>
+        <div class="metric"><span>历史失败操作</span><strong id="metric-failed">—</strong><small>Scope 全量 · 非当前故障节点数</small></div>
       </div>
       <section class="panel"><div class="panel-head"><h2>运行状态说明</h2></div>
         <div class="explain-grid"><div><b>Desired</b><p>用户希望系统如何转发；Revision 代表配置版本。</p></div><div><b>Operation</b><p>Control 是否已经接收、执行或完成部署动作。</p></div><div><b>Applied</b><p>Agent 实际应用且仍新鲜的部署观察结果。</p></div><div><b>Health</b><p>Agent 上报的运行状况；不等于独立端到端探测。</p></div></div>
@@ -64,6 +64,11 @@
         <label class="check"><input name="metadata" type="checkbox"> 允许访问元数据地址（默认禁止）</label>
         <div class="actions"><button type="submit">创建节点并签发注册凭据</button><button id="cancel-node" class="secondary" type="button">取消</button></div>
       </form>
+      <form id="nodes-filter" class="query-controls panel" aria-label="节点服务端筛选">
+        <label>Node ID 前缀<input name="idPrefix" maxlength="128" autocomplete="off" placeholder="留空查询全部"></label>
+        <label>凭据状态<select name="credential"><option value="">全部状态</option><option value="valid">有效且未撤销</option><option value="expired">已到期且未撤销</option><option value="unenrolled">未注册且未撤销</option><option value="revoked">已撤销</option></select></label>
+        <button type="submit" class="secondary">应用筛选</button>
+      </form>
       <div class="panel table-wrap"><table><thead><tr><th>Node ID</th><th>授权状态</th><th>Agent 报告</th><th>支持能力</th><th>操作</th></tr></thead><tbody id="node-rows"><tr><td colspan="5" class="empty">连接后加载节点</td></tr></tbody></table></div>
       <div id="nodes-pagination" class="pagination"></div>
     </section>
@@ -72,6 +77,13 @@
       <div class="panel-head section-actions"><div><h2>转发管理</h2><p class="hint">创建 Direct TCP/UDP；Relay 配置可查看但暂不通过简化表单修改。</p></div><button id="show-forward-form" type="button">新建转发</button></div>
       <form id="forward-form" class="panel editor" hidden>
         <h3 id="forward-form-title">创建 Direct Forward</h3>
+        <div class="query-controls">
+          <label>独立节点候选 · ID 前缀<input id="direct-candidate-prefix" maxlength="128" autocomplete="off" placeholder="不受节点列表当前页影响"></label>
+          <button id="direct-candidate-search" type="button" class="secondary">查询候选</button>
+          <button id="direct-candidate-prev" type="button" class="secondary" disabled>上一页</button>
+          <button id="direct-candidate-next" type="button" class="secondary" disabled>下一页</button>
+        </div>
+        <p id="direct-candidate-page" class="hint" role="status">尚未查询候选</p>
         <div class="form-grid">
           <label>入口节点 <select name="node" id="forward-node" required></select></label>
           <label>协议 <select name="protocol" id="forward-protocol" required></select></label>
@@ -84,12 +96,29 @@
         <p id="forward-capabilities" class="hint"></p>
         <div class="actions"><button id="save-forward" type="submit">提交操作</button><button id="cancel-forward" class="secondary" type="button">取消</button></div>
       </form>
+      <form id="forwards-filter" class="query-controls panel" aria-label="转发服务端筛选">
+        <label>Forward ID 前缀<input name="idPrefix" maxlength="128" autocomplete="off"></label>
+        <label>期望启用<select name="enabled"><option value="">全部</option><option value="true">希望启用</option><option value="false">希望停用</option></select></label>
+        <label>恢复挂起<select name="recoverySuspended"><option value="">全部</option><option value="true">挂起</option><option value="false">未挂起</option></select></label>
+        <label>业务协议<select name="protocol"><option value="">全部</option><option value="tcp">包含 TCP</option><option value="udp">包含 UDP</option><option value="both">同时包含 TCP / UDP</option></select></label>
+        <button type="submit" class="secondary">应用筛选</button>
+      </form>
       <div class="panel table-wrap"><table><thead><tr><th>入口与端口</th><th>目标</th><th>协议</th><th>期望状态</th><th>操作状态</th><th>操作</th></tr></thead><tbody id="forward-rows"><tr><td colspan="6" class="empty">连接后加载转发</td></tr></tbody></table></div>
       <div id="forwards-pagination" class="pagination"></div>
     </section>
 
     <section id="view-relay" class="view" hidden>
       <div class="panel-head section-actions"><div><h2>节点链路部署</h2><p class="hint">按顺序选择路径，逐跳双向认证。执行状态和实际流量验收分别展示。</p></div><button id="relay-reload" type="button" class="secondary">刷新配置</button></div>
+      <section class="panel" aria-label="Relay 独立节点候选">
+        <div class="query-controls">
+          <label>Relay 节点候选 · ID 前缀<input id="relay-candidate-prefix" maxlength="128" autocomplete="off" placeholder="搜索其他页的节点"></label>
+          <button id="relay-candidate-search" type="button" class="secondary">查询候选</button>
+          <button id="relay-candidate-prev" type="button" class="secondary" disabled>上一页</button>
+          <button id="relay-candidate-next" type="button" class="secondary" disabled>下一页</button>
+        </div>
+        <p id="relay-candidate-page" class="hint" role="status">尚未查询候选</p>
+        <p class="hint">候选已按当前管理权限、显式 Node Grant、凭据和能力初筛；翻页保留仍有权限的已选节点。中继还须支持多跳能力，预览会重新检查完整路径。</p>
+      </section>
       <section class="panel">
         <div class="panel-head"><h3>第 1 步 · 发布 Transport Profile</h3></div>
         <form id="relay-profile-form">
@@ -151,6 +180,12 @@
 
     <section id="view-operations" class="view" hidden>
       <div class="panel-head section-actions"><div><h2>执行记录</h2><p class="hint">区分 Accepted、Running、Succeeded、Failed 和 Superseded。</p></div></div>
+      <form id="operations-filter" class="query-controls panel" aria-label="执行记录服务端筛选">
+        <label>Forward ID<input name="forwardId" maxlength="128" autocomplete="off" placeholder="精确匹配"></label>
+        <label>操作状态<select name="status"><option value="">全部状态</option><option>accepted</option><option>running</option><option>succeeded</option><option>failed</option><option>superseded</option></select></label>
+        <label>操作类型<select name="kind"><option value="">全部类型</option><option>create</option><option>update</option><option>enable</option><option>disable</option><option>delete</option><option>retry</option><option>policy</option><option>revoke</option></select></label>
+        <button type="submit" class="secondary">应用筛选</button>
+      </form>
       <div class="panel table-wrap"><table><thead><tr><th>Operation</th><th>目标 Revision</th><th>类型</th><th>状态</th><th>更新时间</th><th>诊断</th></tr></thead><tbody id="operation-rows"><tr><td colspan="6" class="empty">连接后加载记录</td></tr></tbody></table></div>
       <div id="operations-pagination" class="pagination"></div>
     </section>
