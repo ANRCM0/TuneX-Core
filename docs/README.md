@@ -21,7 +21,7 @@
 | [ADP/2 direct Schema](protocol/schemas/adp-v2-direct.schema.json) / [fixture](protocol/fixtures/adp-v2-direct.json) | Phase 2 机器可校验契约；不宣称 Relay 支持 |
 | [开发路线](development/roadmap.md) | 从空白 Core 到实网转发的交付门槛 |
 | [Docker / 1Panel 部署手册](../deploy/README.md) | 分主机 Control/Agent、首次初始化与 Enrollment、真实 TCP/UDP、Relay 与恢复测试 |
-| [下一阶段开发目标](development/next-milestones.md) | P0 运维与双物理主机出口，后续 UI、正式发行与 Transport 研发顺序 |
+| [下一阶段开发目标](development/next-milestones.md) | 多跳代码交付后的部署/升级、诊断审计、证据流程、Console、集中验收与发布排期 |
 | [ForwardX 经验吸收计划](development/forwardx-gap-closure.md) | 功能差距、独立实现顺序、产品 UI/运维与验收 |
 | [Forward-first Web Alpha](development/forward-first-web.md) | 节点、Direct、Operation 的可视化界面及安全边界 |
 | [Relay Web 与节点诊断](development/relay-console.md) | 双节点 Relay 引导、只读诊断和安全安装手册 |

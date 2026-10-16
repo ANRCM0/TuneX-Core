@@ -119,6 +119,30 @@ No local runtime tests were run, and no Actions result is claimed for this
 follow-up fix yet. Its runtime validation requires a new exact-commit CI run;
 rerunning the failed old SHA would not test the fix.
 
+### Follow-up batches and CI-only testing
+
+The domain boundary fix was pushed as `b8217fe`. Its Actions run
+`38830077965` passed contracts/Go race and Relay isolation/capacity/rotation.
+The MySQL suite progressed to five passing cases; two remaining cases tried
+to mutate a frozen parsed Report in their synthetic fixture. The 3/4-node
+process cases passed real bidirectional TCP/UDP, renewal, bounded sustained
+load, Control restart, intermediate restarts, replay rejection and grant
+withdrawal/restoration, then failed at the deletion request. The acceptance
+client omitted Content-Length for its DELETE body. These partial results do
+not constitute a passing multi-hop run or isolated-network acceptance.
+
+Commit `95315f8` clones the synthetic Reports before fixture changes and
+explicitly frames acceptance request bodies. It does not weaken Report
+parsing, TLS, execution authority, cleanup assertions or lease deadlines.
+The 8-node and subsequent isolated cases are not counted as passed here.
+The complete follow-up tree must obtain new exact-SHA Actions results.
+
+Independent hardening commits are `73b019d` (role-specific read-only
+deployment preflight) and `c9629e4` (shared latest exact-source CI gates).
+Their regression cases run in GitHub Actions, including the pinned-Node
+container packaging workflow. No local functional tests, MySQL services,
+network labs, containers or browser acceptance were started.
+
 These checks do not establish runtime correctness. New unit, conformance,
 MySQL, network, process, race, container, UI and physical-host acceptance cases
 were authored during development; the remote results and remaining gaps are

@@ -2,6 +2,15 @@
 
 **状态：实施进行中，各阶段出口尚未完成。** 历史 V2 已隔离到 `legacy/v2/`；详情见 [实施进度](progress.md)。当前在线协议为 Core/Forward v1、Control API v1 与 **ADP/3**；[ADR-0002](../decisions/0002-runtime-contract-closure.md) 记录 direct 基线，[ADR-0003](../decisions/0003-native-relay-tls13.md) 与 [ADP/3](../protocol/agent-deployment-v3.md) 定义 Relay 物理资源演进。下方 Phase 0–2 的 ADP/2 引用是历史里程碑，当前回归采用 ADP/3。各出口需要真实证据，文档存在不算完成。
 
+2026-10-16 排期更新：默认关闭的 3–8 节点多跳执行已在 `11b9545` 提交，
+该 SHA 的多跳创建/MySQL 与 3/4/8 节点 CI 失败。领域边界修复 `b8217fe`
+已推进运行验证；余下夹具/请求修复 `95315f8`、分角色预检 `73b019d` 和
+发布门禁 `c9629e4` 已分别提交，完整新树的 Actions 尚待核验。
+后续优先级以 [下一阶段开发目标](next-milestones.md)
+为准：先恢复 CI 基线，收口分角色预检并修复内部 candidate 门禁，再推进
+升级保护、诊断审计、证据流程和 Console，最后冻结版本集中验收。
+本页保留架构阶段与出口要求，不将已实现的功能重复列为尚未开始的开发。
+
 ## Phase 0 — 契约与开发入口
 
 - 冻结 Core 不变量、Control API/Operation、ADP/2 direct Schema/fixture、运行默认值和节点注册恢复行为。
@@ -42,11 +51,22 @@
 
 - **出口**：真实双 Agent TCP/UDP 流量、错误对端身份拒绝、下游只有 prepared 时入口保持关闭、下游失联可观测、切换/清理符合策略。公网生产不能使用未经认证/加密的实验通道。
 
-## Node 身份与多跳演进（ADR-0004）
+## Node 身份与多跳演进（ADR-0004 / ADR-0005）
 
-已确定 [唯一 Agent 身份与角色化路径 ADR](../decisions/0004-role-neutral-agent-multihop.md)：Node 是身份，Ingress/Transit/Egress 是每条 Forward 中派生的角色，同一个 Agent 可在不同路径承担多个角色。本阶段只实现有界拓扑规划与相邻关系、出口优先激活顺序，**现有双 Node Relay 仍严格拒绝 Transit 执行**。
+已确定 [唯一 Agent 身份与角色化路径 ADR](../decisions/0004-role-neutral-agent-multihop.md)：
+Node 是身份，Ingress/Transit/Egress 是每条 Forward 中派生的角色，同一个 Agent
+可在不同路径承担多个角色。早期规划、Transit v1 契约与离线执行器已有实现。
 
-严格纵向推进顺序：纯路径规划与测试 → 版本化 Transit 协议/TS-Go fixtures → 单 Agent Transit 执行器/身份与端口安全 → A→B→C 真实 TCP/UDP → 有界 N 跳、容量及跨物理主机验收 → 动态选路。任何阶段不得将“规划器接受路径”误认为“Agent 已支持该路径”。
+[ADR-0005](../decisions/0005-mixed-multihop-execution.md) 进一步确定：
+生产多跳采用 `native.multihop.v1`、完整混合执行 Snapshot、统一物理所有权 Journal
+与 `tunex-multihop/1`；独立 Transit v1 保持离线。原双 Node Relay 保留原契约，
+不能接受伪装成旧 Assignment 的 Transit 命令。
+
+`11b9545` 已提交三至八节点 Runner、真实 Report 驱动的协调、Console 和验收工具，
+执行仍默认关闭，运行/物理主机出口未通过。后续为源码冻结后的实际 TCP/UDP、
+故障、容量、迁移及跨主机验收，细节见 [交付台账](multihop-delivery.md) 和
+[执行手册](multihop-execution.md)。动态选路继续后置，任何阶段不得将
+“规划器接受路径”或“实现已提交”误认为链路验收完成。
 
 ## Phase 4 — Transport 演进
 

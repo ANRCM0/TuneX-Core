@@ -2,6 +2,11 @@
 
 状态：**Planned / incremental delivery**。建立于 2026-10-14 的 VNext ADP/3 基线之上。本文只定义差距、优先级、验收门槛；没有真实代码和带 commit 的实网证据时，不把功能标记为已实现。
 
+2026-10-16 排期说明：本文保留产品方向及原始切片，当前交付顺序以
+[下一阶段开发目标](next-milestones.md) 为准。固定 3–8 Node 路径已按
+[ADR-0005](../decisions/0005-mixed-multihop-execution.md) 实现且默认关闭，
+运行验收仍待执行；下文 Link/Path 的历史先后顺序不再作为多跳前置要求。
+
 参考产品：[ForwardX](https://github.com/poouo/Forwardx)；仅借鉴其公开产品设计思路、用户工作流和对转发资源的分类。**不得复制 AGPL-3.0-only 源码、资产、组件实现、文档段落或未经许可的衍生代码**。历史 V2 许可证审查继续以 [legal/NOTICE.md](../../legal/NOTICE.md) 为准。
 
 ## 0. 方向与不可退让的边界
@@ -39,7 +44,8 @@
 产品层（不写回 Pure Core）：
 - **Node**：身份、能力、地址事实、Owner/Grant、凭据、在线 session 和租约事实；无权以 Node Owner 推导 Forward 授权。
 - **Forward**：用户可见规则；属于 scope/workspace；不可跳过 `expectedRevision` CAS。
-- **Path**：固定路径/策略与可见的解析结果；初版维持现有 direct 和两节点 Relay，扩展多跳需要独立 ADR。
+- **Path**：固定路径/策略与可见的解析结果；direct、两节点 Relay 已有实现，
+  3–8 节点多跳按 ADR-0004/0005 实现且默认关闭，尚待运行验收；动态策略单独排期。
 - **Transport Profile**：不可变 revision；公开驱动能力与参数模式；运行时接收编译后的严格配置，不接自由 JSON。
 - **Operation / Deployment**：Runtime 归属；每次部署变更有持久 Operation、generation、fence、终态和诊断。
 - **Link（未来）**：物理共享连接池/引用关系由 Transport 模块拥有，不用它替代 Forward 身份或端口预留。
