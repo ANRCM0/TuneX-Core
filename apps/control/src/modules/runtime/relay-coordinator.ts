@@ -149,7 +149,8 @@ export class RelayCoordinator {
         if(!ports[id]![protocol])throw new ControlError('PORT_RESERVED',409,'No exclusive multi-hop TLS resource is available');
       }
     }
-    return {forward:{...forward,spec:{...forward.spec,enabled:true}},nodes,profile,endpoints,ports};
+    // Stored Forward records also carry lifecycle metadata, not domain intent.
+    return {forward:{id:forward.id,scopeId:forward.scopeId,revision:forward.revision,spec:{...forward.spec,enabled:true}},nodes,profile,endpoints,ports};
   }
   private pinsChanged(plan:RelayPreparedPlan,facts:readonly RelayNodeExecutionFacts[]):boolean{
     if(!plan.path)return relayPeerPinsChanged(plan,facts);

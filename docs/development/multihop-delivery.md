@@ -85,10 +85,44 @@ Static checks performed during development:
 - Browser JavaScript syntax checks and module/document boundary checks pass.
 - Five changed CI/Compose YAML files parse, and `git diff --check` passes.
 
+### Exact-commit CI follow-up (2026-10-16, Asia/Shanghai)
+
+The remote results for `11b95451464c5adb0068a09cb976492850479b4e` were
+checked directly against GitHub Actions:
+
+- Container packaging run `38825824444` passed.
+- Contract baseline run `38825824472` failed. Its `contracts` job passed,
+  including `npm run check`, Go vet and Go race tests. Its `relay-isolation`
+  job also passed, including isolation, capacity and peer rotation.
+- All seven multi-hop MySQL regressions failed while creating their initial
+  deployment. The 3/4/8-node process cases enrolled Agents successfully but
+  failed when creating the Forward (HTTP 422). Their isolated-network steps
+  and the subsequent Phase 1 acceptance steps were skipped, not passed.
+- Image publication run `38825824411` stopped at the exact-SHA CI gate.
+  Successful container packaging does not establish published images.
+
+The MySQL stack traces identify `Locked multi-hop Forward required`.
+`Forwarding.record()` returns lifecycle metadata (`deleting` and
+`recoverySuspended`), and the multi-hop coordinator spread that metadata into
+the strict domain parser during capacity checks and publication authorization.
+The initial creation transaction therefore rolled back.
+
+The follow-up source fix explicitly selects the four Forward domain fields
+at the coordinator boundary; the parser still rejects unknown fields.
+New database-free 3/4/8-node regressions cover stored-record authorization
+and preview, input immutability, strict compiler rejection of metadata, and
+the default-off execution gate. They are included by the existing `npm test`
+glob in the `contracts` CI job.
+
+The follow-up passes local type, syntax, boundary and diff checks only.
+No local runtime tests were run, and no Actions result is claimed for this
+follow-up fix yet. Its runtime validation requires a new exact-commit CI run;
+rerunning the failed old SHA would not test the fix.
+
 These checks do not establish runtime correctness. New unit, conformance,
 MySQL, network, process, race, container, UI and physical-host acceptance cases
-are authored but not reported as passing. Final static rechecks are recorded
-by the development session; deferred acceptance must use the actual tested
+were authored during development; the remote results and remaining gaps are
+distinguished above. Deferred acceptance must use the actual tested
 commit, tree state, binary hashes and image digests.
 
 Operational details, the unified command sequence, physical inventory format and
