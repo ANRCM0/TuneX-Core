@@ -135,7 +135,7 @@ test('retryable downstream failure keeps the active generation recoverable',{ski
 test('grant withdrawal immediately clears deployment readiness while retaining fresh execution evidence',{skip:!url},async()=>{
   await withRuntime(async f=>{
     for(let index=0;index<f.plan.nodes.length;index++){
-      const report=f.report(index);
+      const report=structuredClone(f.report(index));
       report.observations=report.observations.map(o=>({...o,condition:'ready',errorCode:null,retryable:false}));
       await f.runtime.report(report.nodeId,report.sessionEpoch,report);
     }
@@ -154,7 +154,7 @@ test('grant withdrawal immediately clears deployment readiness while retaining f
 test('stale execution reports do not appear as fresh deployment observations',{skip:!url},async()=>{
   await withRuntime(async f=>{
     for(let index=0;index<f.plan.nodes.length;index++){
-      const report=f.report(index);
+      const report=structuredClone(f.report(index));
       report.observations=report.observations.map(o=>({...o,condition:'ready',errorCode:null,retryable:false}));
       await f.runtime.report(report.nodeId,report.sessionEpoch,report);
     }

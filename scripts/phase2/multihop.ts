@@ -37,7 +37,7 @@ async function until(action:()=>Promise<boolean>,label:string,timeout=120000){co
 async function call(method:string,path:string,input?:unknown,key=randomUUID()):Promise<{status:number;body:any}>{
   const body=input===undefined?undefined:JSON.stringify(input);return new Promise((resolve,reject)=>{
     const req=request({hostname:host,port:control!.port,path:`/api/v1/scopes/${scope}/`+path,method,ca,agent:false,timeout:15000,
-      headers:{authorization:`Bearer ${token}`,'content-type':'application/json','idempotency-key':key}},res=>{const parts:Buffer[]=[];res.on('data',b=>parts.push(b));res.on('end',()=>{try{resolve({status:res.statusCode!,body:JSON.parse(Buffer.concat(parts).toString())});}catch(e){reject(e);}});});
+      headers:{authorization:`Bearer ${token}`,'content-type':'application/json','idempotency-key':key,...(body!==undefined?{'content-length':String(Buffer.byteLength(body))}:{})}},res=>{const parts:Buffer[]=[];res.on('data',b=>parts.push(b));res.on('end',()=>{try{resolve({status:res.statusCode!,body:JSON.parse(Buffer.concat(parts).toString())});}catch(e){reject(e);}});});
     req.on('error',reject);req.on('timeout',()=>req.destroy(Error('Acceptance HTTP timeout')));req.end(body);
   });
 }
