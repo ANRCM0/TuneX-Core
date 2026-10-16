@@ -35,7 +35,7 @@ const node = id => ({
 async function harness(handler) {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   const elements = new Map();
-  for (const match of html.matchAll(/<([a-z]+)\b[^>]*\bid="([^"]+)"[^>]*>/g))
+  for (const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g))
     elements.set(match[2], new Element(match[1]));
   for (const match of html.matchAll(/<form\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/form>/g)) {
     const fields = new Map();
