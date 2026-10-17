@@ -104,6 +104,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.get('/console/model.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/model.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/relay-model.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/relay-model.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/relay.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/relay.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/probe.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/probe.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/style.css', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/style.css', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/css; charset=utf-8' }); });
     app.get('/health',async c=>c.json({status:(await authority.read()).maintenance?'maintenance':'ok',protocolVersion:3}));
     app.post('/api/v1/scopes/:scope/relay-plan',async c=>c.json(await control.planRelay(c.get('actor'),scope(c.req.param('scope')),parseJson(await body(c.req.raw,32768)))));

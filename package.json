@@ -3,13 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.14.1 <25", "npm": ">=11 <12" },
+  "engines": {
+    "node": ">=24.14.1 <25",
+    "npm": ">=11 <12"
+  },
   "packageManager": "npm@11.11.0",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --test packages/core/test/*.test.ts packages/contracts/test/*.test.ts apps/control/test/*.test.ts",
-    "test:web": "node --check apps/web/app.js && node --check apps/web/model.js && node --check apps/web/relay.js && node --check apps/web/relay-model.js && node --test apps/web/test/*.test.mjs",
+    "test:web": "node --check apps/web/app.js && node --check apps/web/model.js && node --check apps/web/relay.js && node --check apps/web/relay-model.js && node --check apps/web/probe.js && node --test apps/web/test/*.test.mjs",
     "test:udp-smoke": "node --test scripts/manual/test/*.test.mjs",
     "test:go": "node scripts/run-go.mjs test ./...",
     "build:go": "node scripts/run-go.mjs build ./...",
@@ -43,5 +49,9 @@
     "test:capacity": "node scripts/phase2/capacity.ts",
     "test:transport": "node scripts/phase2/transport.ts"
   },
-  "devDependencies": { "@types/node": "24.10.1", "typescript": "5.9.3" }
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "playwright": "1.64.1",
+    "typescript": "5.9.3"
+  }
 }

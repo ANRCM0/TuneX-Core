@@ -96,7 +96,14 @@ Control 显式选择一秒最大时钟偏差策略，Agent 分别 opt-in 登记�
 新增 5 组 owner/管理、2 组 HTTP、6 组 Go 回归，以及独立 `probe-workflow` Actions 的真实 Agent/Control/mTLS/MySQL/零负载 TCP 组合脚本。
 保留原两秒许可、一秒发现冷却与失败关闭；任务可能到期而没有结果，不把 202 当送达保证。
 本批没有新增 Core、机器 Schema、迁移、Journal、长期历史或健康聚合，契约见 [Probe 管理 v1](../spec/forward-probe-management-v1.md)。
-这些工作树变更均待对应提交的 Actions；下一步核对真实组合验收并接 Console 操作/剩余原生能力与遥测切片，
+同日第二十一批接入 Console 的一次性 Direct TCP 探测、已知 ID 查询、有界等待及显式撤销。
+失败保留原键/原请求供手动重放，不确定提交需确认后才能放弃；成功不自动再签发。
+断开、切换 ID 与停止等待取消/丢弃旧响应；历史连接成功仍标记 agent-reported / health unknown。
+新增 10 组轻量 DOM/控制器回归，并将桌面/390px 真实 Chromium 接到同一真实 Agent/Control/MySQL Actions，
+覆盖已提交响应丢失、同键重放、查询撤销、无凭据落盘与历史结果展示；仅输出脱敏 JSON/指定截图。
+本机不下载或运行浏览器，Playwright 为固定版本开发依赖；测试上下文仅忽略一次性夹具 CA，不替代生产 TLS 验收。
+生产闭环此前已存本地 `47843fd`，尚未推送；本批及前批均待对应提交的 Actions，未借用历史绿灯。
+下一步核对真实组合验收并推进剩余原生能力/规则与隧道管理、遥测及后续拓扑切片，
 内部门禁与实例表不冒充完整远程防重放或执行撤权；
 并继续盘点剩余 API 读写及原生适配验收，不宣布统一框架完成。
 此调整不取消下方

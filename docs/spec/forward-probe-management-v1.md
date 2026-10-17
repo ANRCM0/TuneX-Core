@@ -120,8 +120,48 @@ Infrastructure/clock uncertainty fails closed. No new Forward Operation or lease
 is created for a Probe. The original receipt owner still reauthorizes consumption,
 each status observation and ingestion; user and machine APIs cannot bypass it.
 
+## Console workflow
+
+The same-origin Console adds a restricted Probe view. Select a Direct TCP Forward
+from its list; the command holds that selected Forward revision, never a caller
+target or instance. Control capability lookup defaults unknown/off on any error.
+Issuance additionally requires an explicit checkbox and bounded integer timeout.
+It is not scheduled by navigation, receipt queries, refresh or result failure.
+
+A lost or failed acceptance keeps the tab-local key and frozen request. The only
+retry is an explicit replay of that exact command/key. Success disables that
+command; preparing another explicit command clears consent, and abandoning an
+uncertain one first warns that it might already have executed. Reconnection or
+disconnect clears keys and aborts/discards old work, but is never advertised as
+remote withdrawal. No keys or credentials are persisted in browser storage.
+
+Known-ID receipt lookup works without selecting a Forward or enabling issuance.
+Waiting is explicit, at most eight GETs and five seconds, with each GET bounded
+to 1500 ms; changing the ID or connection and local stop invalidate late replies.
+There is no hidden POST/new key on wait timeout. These are cooperative browser
+timers, not hard realtime guarantees. Withdraw operates only on the displayed,
+confirmed ID and submits `{}`; a failed withdrawal is not assumed successful.
+Any follow-up query may return unavailable because retained records can be pruned.
+
+The display projection always labels Agent results historical and application
+health unknown, including a connected zero-ms observation. Null/malformed/missing
+results never create latency or health samples. It shows no reusable execution
+credentials and does not inject report content as HTML. The selected revision may
+be stale; the original server CAS and authorization are authoritative.
+
 New `probe-permit-ports`, `forward-probes-api`, Go `TestProbeWorkflow*` and dedicated
 `npm run test:probe` Actions coverage complement existing contracts/race/MySQL
-gates. They are authored and wired, not accepted for this working-tree SHA.
-Console controls, long-lived history, health aggregation, automatic switching,
+gates. Console regressions cover lost-acceptance replay, duplicate clicks,
+cancel/reset/out-of-order results, missing/invalid reports and bounded reads.
+The `probe-workflow` job sets `TUNEX_PROBE_BROWSER=1`, installs pinned Playwright's
+Chromium on the disposable runner, and drives the actual same-origin HTTPS
+Console against the actual Control/MySQL/Agent fixture. This covers a deliberately
+lost committed acceptance, stable-key replay, receipt query/withdrawal, empty
+storage, desktop/390px layouts and a genuine Agent report's historical display.
+Only that ephemeral browser context ignores the disposable test CA's trust;
+it does not test production certificate trust or change production TLS policy.
+No browser is downloaded or executed by local static checks. Artifacts allow only
+redacted evidence JSON and named screenshots, never traces/HAR, PKI or state.
+These tests are authored and wired, not accepted for this working-tree SHA.
+Long-lived history, health aggregation, automatic switching,
 physical multi-host and production-readiness gates remain outstanding.

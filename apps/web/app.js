@@ -1,5 +1,6 @@
 import { validScope, parsePorts, parseCidrs, directCapable, allowedProtocols, directSpec, stateTone, pageCount, listResource, candidateChoices } from './model.js';
 import { initRelayConsole } from './relay.js';
+import { initProbeConsole } from './probe.js';
 
 const byId = id => document.getElementById(id);
 const auth = { scope: '', token: '' };
@@ -60,7 +61,7 @@ function connected() {
 function endpoint(resource) {
   return '/api/v1/scopes/' + encodeURIComponent(auth.scope) + '/' + resource;
 }
-async function request(method, resource, input, stableKey) {
+async function request(method, resource, input, stableKey, options = {}) {
   connected();
   const version = connectionVersion;
   const headers = { Authorization: 'Bearer ' + auth.token, Accept: 'application/json' };
@@ -68,12 +69,13 @@ async function request(method, resource, input, stableKey) {
   if (stableKey) headers['Idempotency-Key'] = stableKey;
   const response = await fetch(endpoint(resource), {
     method, headers, credentials: 'omit', cache: 'no-store', redirect: 'error',
-    referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000),
+    referrerPolicy: 'no-referrer', signal: AbortSignal.any([AbortSignal.timeout(options.timeoutMs ?? 15000), ...(options.signal ? [options.signal] : [])]),
     ...(input === undefined ? {} : { body: JSON.stringify(input) }),
   });
   let result;
   try { result = await response.json(); } catch { throw new Error('Control 返回了非 JSON 响应'); }
   if (version !== connectionVersion) throw new Error('连接已变化，已丢弃旧请求结果');
+  options.signal?.throwIfAborted();
   if (!response.ok) throw new Error(String(result.code ?? 'HTTP_' + response.status) + '：' + String(result.message ?? '请求失败'));
   return result;
 }
@@ -86,7 +88,7 @@ async function mutate(method, resource, input) {
 }
 function display(view) {
   currentView = view;
-  const labels = { overview: '运行概览', nodes: '节点管理', forwards: '转发管理', relay: 'Relay 链路', operations: '执行记录' };
+  const labels = { overview: '运行概览', nodes: '节点管理', forwards: '转发管理', relay: 'Relay 链路', probes: '受限 TCP 探测', operations: '执行记录' };
   byId('page-title').textContent = labels[view] || labels.overview;
   document.querySelectorAll('.view').forEach(node => { node.hidden = node.id !== 'view-' + view; });
   document.querySelectorAll('.nav').forEach(node => { node.classList.toggle('active', node.dataset.view === view); });
@@ -190,6 +192,7 @@ function renderForwards() {
     const group = element('div', undefined, 'cell-actions');
     group.append(button('详情', 'forward-detail', item.id, 'secondary'));
     group.append(button('编辑', 'forward-edit', item.id, 'secondary'));
+    if(!a.path && a.protocols.includes('tcp'))group.append(button('TCP 探测', 'forward-probe', item.id, 'secondary'));
     if(a.path)group.append(button('部署进度', 'forward-deployment', item.id, 'secondary'));
     group.append(button(a.enabled ? '停用' : '启用', 'forward-toggle', item.id, 'secondary'), button('删除', 'forward-delete', item.id, 'secondary'));
     action.append(group);
@@ -305,6 +308,7 @@ async function action(kind, id) {
     const forward = store.forwards.find(f => f.id === id);
     if (!forward) throw new Error('Forward 列表已更新，请刷新');
     if (kind === 'forward-edit') return forward.spec.path?await relayConsole.edit(forward):await editor(forward);
+    if (kind === 'forward-probe') return await probeConsole.open(forward);
     if (kind === 'forward-deployment') return await relayConsole.deployment(id);
     if (kind === 'forward-toggle') {
       const result = await mutate('PUT', 'forwards/' + encodeURIComponent(id), { expectedRevision: forward.revision, spec: { ...forward.spec, enabled: !forward.spec.enabled } });
@@ -338,6 +342,7 @@ async function createNode(event) {
   } catch (error) { notify(error.message, true); }
 }
 const relayConsole=initRelayConsole({request,mutate,notify,byId,candidates,load,loadOverview,loadCandidates,detail,display});
+const probeConsole=initProbeConsole({request,notify,byId,display});
 function clearConnectionData() {
   connectionVersion++;
   for (const key of Object.keys(readVersions)) readVersions[key]++;
@@ -357,7 +362,7 @@ function clearConnectionData() {
     byId(mode + '-candidate-page').textContent = '尚未查询候选';
     byId(mode + '-candidate-prev').disabled = byId(mode + '-candidate-next').disabled = true;
   }
-  relayConsole.clear(); fillNodes();
+  relayConsole.clear(); probeConsole.clear(); fillNodes();
   renderNodes(); renderForwards(); renderOperations(); updateOverview();
 }
 async function refreshDirectCandidates() {

@@ -124,10 +124,14 @@ a completed best-effort task. Each attempt has its own ID/key, waits out the ori
 reservation, records whether it connected/reported, and must open at most one socket.
 No Agent runtime retry is enabled to make that test pass. Expired/uncertain attempts
 remain recorded, not rewritten as successful measurements. Evidence contains source
-SHA/dirty state, Agent binary digest, checks and counts; uploads match only
-`evidence.json`, never private test PKI, bearer credentials or protected state.
+SHA/dirty state, Agent binary digest, checks and counts. The subsequent Console
+slice adds real desktop/mobile Chromium to the same fixture, including a lost
+committed response and explicit stable-key replay. Uploads allow only
+`evidence.json` and named Console screenshots, never browser traces/HAR, private
+test PKI, bearer credentials or protected state. The ephemeral browser's fixture-CA
+trust bypass is test-only, not proof of production certificate trust.
 
 Local work remains static-only. These tests are authored/Actions-wired, not run
 locally or accepted for this working tree. The hosted same-host topology is not
 physical multi-host, public/NAT, long-running or production evidence. Remaining
-product/telemetry/Console, audit/support and release gates are not waived.
+product/telemetry, remaining Console management, audit/support and release gates are not waived.

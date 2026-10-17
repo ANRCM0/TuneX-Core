@@ -201,7 +201,7 @@ jobs:
             .artifacts/capacity/**/failure.json
   probe-workflow:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     services:
       mysql:
         image: mysql:8.4.9
@@ -215,6 +215,7 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=30
     env:
       TUNEX_TEST_DATABASE_URL: mysql://root:ci-disposable-only@127.0.0.1:3306/tunex_probe
+      TUNEX_PROBE_BROWSER: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -230,14 +231,18 @@ jobs:
       - run: node scripts/run-go.mjs build -o ../.artifacts/tunex-agent ./cmd/tunex-agent
       - name: Verify independent native Linux OS clock synchronization
         run: node scripts/run-go.mjs run ./cmd/time-proof --check
-      - name: Real default-off Control, manager API, Agent lifecycle, mTLS, MySQL and zero-payload target
+      - name: Install Chromium only on the disposable browser acceptance runner
+        run: npx playwright install --with-deps chromium
+      - name: Real default-off Control, desktop/mobile Console, Agent lifecycle, mTLS, MySQL and zero-payload target
         run: npm run test:probe
       - name: Preserve only redacted Probe evidence, never test PKI or protected Agent state
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: probe-workflow-acceptance
-          path: .artifacts/probe/**/evidence.json
+          path: |
+            .artifacts/probe/**/evidence.json
+            .artifacts/probe/**/console-probe-*.png
   multihop:
     runs-on: ubuntu-latest
     timeout-minutes: 35

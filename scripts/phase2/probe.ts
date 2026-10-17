@@ -14,6 +14,7 @@ import { DEFAULT_POLICY, parseRuntimeMessage } from '@tunex/contracts';
 import { startControl } from '../../apps/control/src/server.ts';
 import { newToken } from '../../apps/control/src/modules/identity.ts';
 import { json, rows } from '../../apps/control/src/infrastructure/mysql.ts';
+import { issueFromConsole, verifyDisabledConsole, verifyHistoricalConsole } from './probe-console.ts';
 
 if (process.platform !== 'linux' || !process.env.GITHUB_ACTIONS || !process.env.TUNEX_TEST_DATABASE_URL)
     throw new Error('Probe combined acceptance requires disposable MySQL and a native Linux GitHub Actions runner');
@@ -28,6 +29,7 @@ databaseUrl.pathname = '/' + database;
 const token = newToken(), actor = 'probe-owner', scope = 'probe-scope', checks: string[] = [];
 const attempts: { probeId: string; connected: number; resultAccepted: boolean }[] = [];
 const policy = { ...DEFAULT_POLICY, pollIntervalSeconds: 1, leaseSeconds: 60, renewalLeadSeconds: 20, maxClockSkewSeconds: 1 };
+const browserEnabled = process.env.TUNEX_PROBE_BROWSER === '1';
 let control: Awaited<ReturnType<typeof startControl>> | undefined, agent: ChildProcess | undefined;
 let createdDatabase = false, ca: Buffer, agentArgs: string[] = [], nodeId = '', forwardId = '';
 let connections = 0, eof = 0, applicationBytes = 0;
@@ -104,6 +106,8 @@ async function evidence(status: 'passed' | 'failed') {
     await writeFile(join(directory, 'evidence.json'), JSON.stringify({ status, commit,
         workingTreeDirty: Boolean((await execute('git', ['status', '--porcelain'])).stdout.trim()),
         command: 'npm run test:probe', checks, policy, attempts, target: { connections, eof, applicationBytes },
+        browser: { enabled: browserEnabled, engine: 'Chromium', viewports: browserEnabled ? ['1440x1000', '390x844'] : [],
+            certificateTrust: 'Isolated test context ignores disposable fixture CA; not production browser trust evidence' },
         agentSHA: createHash('sha256').update(await readFile(binary)).digest('hex'),
         topology: 'Native Linux Control, real Agent process, mTLS, disposable MySQL and TCP target on one Actions host; not physical-host proof' }, null, 2));
 }
@@ -126,6 +130,10 @@ try {
     assert.equal((await rows<{ n: number }>(control.db.pool, 'SELECT COUNT(*) n FROM probe_permits'))[0]!.n, 0);
     assert.equal((await rows<{ n: number }>(control.db.pool, 'SELECT COUNT(*) n FROM idempotency'))[0]!.n, 0);
     passed('Control issuance defaults off and rolls back idempotency without creating permits');
+    if (browserEnabled) {
+        await verifyDisabledConsole({ url: `https://127.0.0.1:${control.port}`, scope, token, directory });
+        passed('Real HTTPS Chromium Console loads all modules, keeps credentials out of storage and cannot issue without selection');
+    }
     await control.close(); control = undefined; control = await startControl({ ...options, probeExecutionEnabled: true });
     await new Promise<void>(resolve => target.listen(0, '127.0.0.1', resolve));
     const targetPort = (target.address() as { port: number }).port;
@@ -144,13 +152,18 @@ try {
     assert.equal(created.status, 202); forwardId = created.body.forwardId;
     await until(async () => (await call('GET', `/api/v1/scopes/${scope}/operations/${created.body.operationId}`)).body.status === 'succeeded', 'Direct acceptance');
     await ready();
-    const disabledKey = randomUUID(), inactive = await issue(disabledKey);
+    const browserIssue = browserEnabled ? await issueFromConsole({ url: `https://127.0.0.1:${control.port}`, scope, token, directory }, forwardId) : null;
+    const disabledKey = browserIssue?.key ?? randomUUID(), inactive = browserIssue ?? await issue(disabledKey);
     assert.equal(inactive.status, 202); await sleep(2200);
     const unused = await call('GET', `/api/v1/scopes/${scope}/probes/${inactive.body.probeId}`);
-    assert.equal(unused.body.state, 'issued'); assert.equal(unused.body.result, null); assert.equal(connections, 0);
+    if (browserEnabled && unused.status === 404) assert.equal(unused.body.code, 'NOT_FOUND');
+    else { assert.equal(unused.status, 200); assert.equal(unused.body.state, browserEnabled ? 'revoked' : 'issued'); assert.equal(unused.body.result, null); }
+    assert.equal(connections, 0);
     assert.deepEqual((await issue(disabledKey)).body, inactive.body);
-    assert.equal((await call('POST', `/api/v1/scopes/${scope}/probes/${inactive.body.probeId}/revoke`, {})).status, 200);
+    const inactiveRevocation = await call('POST', `/api/v1/scopes/${scope}/probes/${inactive.body.probeId}/revoke`, {});
+    assert.ok(inactiveRevocation.status === 200 || browserEnabled && inactiveRevocation.status === 404);
     passed('Registration-only real Agent never polls, consumes, connects or reports issued tasks');
+    if (browserEnabled) passed('Real desktop/mobile Console issues once, replays a lost committed acceptance with the same key, queries/revokes and clears on disconnect');
     await cooldown(inactive.body.expiresAt);
     const [old] = await rows<{ session_epoch: number }>(control.db.pool, 'SELECT session_epoch FROM runtime_nodes WHERE node_id=?', [nodeId]);
     await stopAgent(); startAgent(true); await ready(old!.session_epoch);
@@ -179,6 +192,10 @@ try {
     assert.equal(receipt.body.health, 'unknown'); assert.equal(receipt.body.executionEnabled, false);
     assert.equal(receipt.body.result.body.source, 'agent-reported'); assert.equal(receipt.body.result.body.applicationHealth, 'unknown');
     assert.equal(receipt.body.result.body.status, 'connected'); assert.equal(receipt.body.result.historical, true);
+    if (browserEnabled) {
+        await verifyHistoricalConsole({ url: `https://127.0.0.1:${control.port}`, scope, token, directory }, successful.body.probeId);
+        passed('Real Console displays a successful actual Agent TCP receipt as historical/agent-reported with unknown application health');
+    }
     const [counts] = await rows<{ n: number }>(control.db.pool, 'SELECT COUNT(*) n FROM probe_results WHERE permit_id=?', [successful.body.probeId]);
     assert.equal(counts!.n, 1);
     const [permit] = await rows<{ instance_id: string; instance_generation: number; binding: unknown }>(control.db.pool,

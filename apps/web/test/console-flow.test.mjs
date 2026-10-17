@@ -54,7 +54,7 @@ async function harness(handler) {
     getElementById(id) { assert.ok(elements.has(id), 'unknown HTML id ' + id); return elements.get(id); },
     createElement: tag => new Element(tag), querySelectorAll: () => [], addEventListener() {},
   };
-  const context = vm.createContext({ ...model, ...relayModel, document, URLSearchParams, AbortSignal,
+  const context = vm.createContext({ ...model, ...relayModel, document, URLSearchParams, AbortSignal, AbortController, setTimeout, clearTimeout,
     crypto: { randomUUID }, console, confirm: () => true,
     fetch: async (url, options) => {
       const resource = url.split('/scope-a/')[1] ?? url.split('/scope-b/')[1];
@@ -64,8 +64,9 @@ async function harness(handler) {
     }
   });
   const relay = (await readFile(new URL('../relay.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '').replace('export function', 'function');
+  const probe = (await readFile(new URL('../probe.js', import.meta.url), 'utf8')).replace('export function', 'function');
   const app = (await readFile(new URL('../app.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '');
-  vm.runInContext(relay + '\n' + app + `
+  vm.runInContext(relay + '\n' + probe + '\n' + app + `
     globalThis.flow={load,loadOverview,editor,refreshDirectCandidates,relayConsole,request,
       connect(scope='scope-a'){clearConnectionData();auth.scope=scope;auth.token='x'.repeat(40);},
       setPage(kind,value){page[kind]=value;},setFilters(kind,value){filters[kind]=value;},
