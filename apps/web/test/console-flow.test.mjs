@@ -163,6 +163,68 @@ test('Relay copy keeps the immutable Profile lock and path but requires fresh pr
   assert.equal(Object.hasOwn(body, 'id'), false); assert.equal(Object.hasOwn(body, 'revision'), false);
   assert.equal(original.spec.enabled, true);
 });
+async function longMultihopCopy(enabled = true) {
+  const declarations = JSON.parse(await readFile(new URL('../../../packages/contracts/data/native-drivers-v1.json', import.meta.url), 'utf8'));
+  const nodes = Array.from({ length: 8 }, (_, index) => node('path-' + index));
+  for (const current of nodes) current.policy.allowedPorts.push(25566);
+  const h = await harness((resource, options) => {
+    if (resource === 'execution-capabilities') return { multihopEnabled: enabled };
+    if (resource === 'native-drivers') return { ...declarations, source: 'declared-native-implementation', authorized: false, reserved: false };
+    if (resource === 'transport-profiles') return { profiles: [{ profileId: 'locked-profile', currentRevision: 9 }] };
+    if (resource.startsWith('nodes/candidates')) return page(nodes);
+    if (resource === 'transport-profiles/locked-profile?revision=2') return { profileId: 'locked-profile', revision: 2, config: { protocols: ['tcp', 'udp'] } };
+    if (resource.endsWith('/relay-endpoint')) return { revision: 1 };
+    if (resource === 'relay-plan') return { reserved: false, executionSupported: false, runtimeEnabled: true };
+    if (resource === 'forwards' && options.method === 'POST') return { forwardId: 'new-copy', revision: 1, operationId: 'copy-create' };
+    if (resource === 'overview') return { nodes: 8, forwards: 2, activeOperations: 0, failedOperations: 0 };
+    if (resource.startsWith('forwards?') || resource.startsWith('operations?')) return page();
+    throw Error('Unexpected request ' + resource + '/' + options.method);
+  });
+  const source = { id: 'source-8', revision: 5, spec: { enabled: true, protocols: ['tcp', 'udp'],
+    ingress: { nodeId: nodes[0].id, listen: { address: '127.0.0.1', port: 25565 } }, target: { host: 'localhost', port: 8080 },
+    path: { via: nodes.slice(1).map(current => current.id) }, transport: { profileId: 'locked-profile', configRevision: 2 } } };
+  h.flow.connect(); await h.flow.relayConsole.copy(source);
+  return { ...h, source };
+}
+
+test('eight-Node copy preserves six ordered transits and invalidates its frozen preview after local reordering', async () => {
+  const h = await longMultihopCopy(), before = JSON.stringify(h.source);
+  const intermediates = () => h.elements.get('multihop-path').children.map(item => item.children[0].textContent);
+  assert.deepEqual(intermediates(), ['path-1', 'path-2', 'path-3', 'path-4', 'path-5', 'path-6']);
+  assert.equal(h.elements.get('multihop-add').disabled, true, 'The six-transit limit cannot grow');
+  assert.equal(h.elements.get('relay-listen-port').value, '');
+  assert.equal(h.calls.some(call => call.options.method !== 'GET'), false);
+  h.elements.get('relay-listen-port').value = '25566';
+  await h.elements.get('relay-preview').listeners.click(); assert.equal(h.elements.get('relay-submit').disabled, false);
+  const firstRow = h.elements.get('multihop-path').children[0];
+  await firstRow.children[2].listeners.click();
+  assert.deepEqual(intermediates(), ['path-2', 'path-1', 'path-3', 'path-4', 'path-5', 'path-6']);
+  assert.equal(h.elements.get('relay-submit').disabled, true); assert.equal(h.elements.get('relay-preview-output').hidden, true);
+  const form = h.elements.get('relay-forward-form');
+  await form.listeners.submit({ preventDefault() {} });
+  assert.equal(h.calls.some(call => call.resource === 'forwards' && call.options.method === 'POST'), false, 'Invalidated plans cannot submit');
+  await h.elements.get('multihop-path').children[1].children[1].listeners.click();
+  assert.deepEqual(intermediates(), ['path-1', 'path-2', 'path-3', 'path-4', 'path-5', 'path-6']);
+  await h.elements.get('relay-preview').listeners.click(); await form.listeners.submit({ preventDefault() {} });
+  const plans = h.calls.filter(call => call.resource === 'relay-plan'); assert.equal(plans.length, 2);
+  const writes = h.calls.filter(call => call.resource === 'forwards' && call.options.method === 'POST'); assert.equal(writes.length, 1);
+  const spec = JSON.parse(writes[0].options.body);
+  assert.deepEqual(spec, { ...h.source.spec, enabled: false, ingress: { ...h.source.spec.ingress, listen: { address: '127.0.0.1', port: 25566 } } });
+  assert.ok(plans.every(call => JSON.stringify(JSON.parse(call.options.body)) === JSON.stringify(spec)));
+  assert.ok(!h.calls.some(call => call.resource === 'transport-profiles/locked-profile?revision=9'));
+  assert.equal(JSON.stringify(h.source), before);
+});
+
+test('a retained eight-Node copy is not converted into Relay when the Control multi-hop gate is off', async () => {
+  const h = await longMultihopCopy(false);
+  h.elements.get('relay-listen-port').value = '25566';
+  assert.equal(h.elements.get('multihop-controls').hidden, true);
+  await h.elements.get('relay-preview').listeners.click();
+  assert.equal(h.elements.get('relay-submit').disabled, true);
+  assert.equal(h.calls.some(call => call.options.method !== 'GET'), false);
+  assert.equal(h.elements.get('multihop-path').children.length, 6);
+});
+
 test('late responses cannot cross connections or overwrite a newer page', async () => {
   const pending = [];
   const h = await harness(() => new Promise(resolve => pending.push(resolve)));

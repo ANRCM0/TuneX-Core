@@ -116,4 +116,5 @@ the static boundary check also guards that ordering.
 
 Local work is syntax/type/contract/boundary/docs checks only; no functional,
 MySQL/network/browser/container execution or exact-SHA Actions evidence is claimed.
-Real multihop-copy browser flow and broader B1/P1/project acceptance remain pending.
+The follow-up [real multi-hop copy flow](../testing/native-multihop-console.md)
+is authored/CI-wired, not executed; broader B1/P1/project acceptance remains pending.

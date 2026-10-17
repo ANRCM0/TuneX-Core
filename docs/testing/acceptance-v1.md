@@ -53,6 +53,11 @@ The complete Phase 2 direct milestone requires FWD-01 through FWD-10 (applicable
 
 No production-ready claims based solely on source inspection, green unit tests, cross-compilation, localhost mock Agents or unverified benchmark numbers. Before release require Linux real-node validation, upgrade/reset policy, backup and secret rotation rehearsal, network/firewall baseline, capacity limits, failure injection, license review and residual-risk documentation.
 
+The authored [native multi-hop Console flow](native-multihop-console.md) adds real
+Chromium/HTTPS Control/MySQL/3,4,8-Agent copy lifecycle wiring to the existing
+Actions matrix. It is not an executed result; same-host browser/process tests do
+not satisfy independent physical-host, public-network or long-run release gates.
+
 
 
 ## 5. 契约收口新增用例（ADR-0002 / ADP/2）

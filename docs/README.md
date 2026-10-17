@@ -58,6 +58,7 @@
 | [Phase 1](development/phase1.md) | 真实 MySQL/HTTPS/Go TCP 创建切片、启动及验收范围 |
 | [实施进度](development/progress.md) | 当前工作树证据与后续实施范围；不是目标规范 |
 | [验收规范](testing/acceptance-v1.md) | 安全、可靠性、实网测试矩阵 |
+| [Native multi-hop Console acceptance](testing/native-multihop-console.md) | 3/4/8 Agent 的真实 Chromium 复制/锁版/启停/清理接线；尚未执行 |
 
 ## 规范约定
 

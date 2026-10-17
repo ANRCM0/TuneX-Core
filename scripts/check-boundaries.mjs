@@ -320,6 +320,12 @@ const browserGuard = relayFixture.indexOf("if(tunnelBrowser&&(process.platform!=
 if (browserOptIn < 0 || browserGuard <= browserOptIn || ['await mkdir(', 'await execute(', 'await createConnection('].some(marker => {
   const effect = relayFixture.indexOf(marker); return effect < 0 || effect < browserGuard;
 })) throw new Error('Reject unsupported browser opt-in before creating PKI/artifacts or opening a fixture database');
+const multihopFixture = readFileSync(resolve(root, 'scripts/phase2/multihop.ts'), 'utf8');
+const multihopOptIn = multihopFixture.indexOf("const browserConsole=process.env.TUNEX_MULTIHOP_BROWSER==='1';");
+const multihopGuard = multihopFixture.indexOf("if(browserConsole&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'||process.argv.includes('--isolated')))throw Error('Multi-hop browser acceptance requires non-isolated Linux Actions');");
+if (multihopOptIn < 0 || multihopGuard <= multihopOptIn || ['await mkdir(', 'await execute(', 'await createConnection(', 'new NetworkLab('].some(marker => {
+  const effect = multihopFixture.indexOf(marker); return effect < 0 || effect < multihopGuard;
+})) throw new Error('Reject unsupported multi-hop browser opt-in before fixture/network/database setup');
 const observer = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-node-observation.ts'), 'utf8');
 const probeReader = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-read.ts'), 'utf8');
 const probeMachine = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-machine.ts'), 'utf8');

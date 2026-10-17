@@ -136,5 +136,7 @@ out a concurrent authorized retry or intent change.
   redacted evidence use the existing restricted artifact allowlist.
 - These tests are authored/CI-wired, not executed locally or accepted for the current
   commit. Browser CA trust remains an isolated disposable-fixture exception, not
-  production TLS proof. Real Relay/multihop copy, Profile referenced-rule editor,
-  other tunnel workflows, physical hosts and long-duration behavior remain pending.
+  production TLS proof. Subsequent real Relay copy/Profile referenced-rule flows
+  and [3/4/8-Node multi-hop copy](../testing/native-multihop-console.md) are also
+  authored and CI-wired, not executed acceptance. Other tunnel workflows,
+  physical hosts and long-duration behavior remain pending.

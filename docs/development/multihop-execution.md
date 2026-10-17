@@ -163,6 +163,21 @@ The collector verifies current Control readiness before and after real TCP/UDP
 traffic, and records this limit explicitly. Broader physical fault and soak
 acceptance remains an operator-controlled exercise.
 
+## Actions-only native Console follow-up
+
+The existing 3/4/8-Agent process matrix now opts into the real Chromium
+[copy lifecycle flow](../testing/native-multihop-console.md) with
+`TUNEX_MULTIHOP_BROWSER=1`. It preserves the original ordered path and locked
+Profile despite a newer current revision, checks disabled creation and explicit
+enable/disable/delete, actual TCP/UDP, retained disabled slots and safe cleanup.
+The isolated-network step remains separate and browser-off. Unsupported opt-in
+combinations reject before fixture setup; no local runtime test is permitted.
+
+Only the code/CI wiring and static checks are recorded so far. The same-host
+process topology is not physical acceptance, and no final exact-SHA Actions,
+production enablement or release approval is inferred. See the linked flow for
+request bounds, failure behavior, artifact allowlist and remaining gates.
+
 ## Production enablement and release
 
 Base Compose templates default to disabled. In `NODE_ENV=production`, setting

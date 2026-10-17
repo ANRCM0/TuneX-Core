@@ -119,5 +119,6 @@ both browser flows; other Relay jobs do not opt in. The trust exception is confi
 to the disposable one-day CA browser context. Upload allows only evidence.json
 and `console-tunnel-*.png`, not PKI, state, traces, HAR or broad failure bundles.
 No local functional/MySQL/network/container/browser tests were run. Exact-SHA
-Actions, real multihop-copy browser flow, long-run rotation and physical-host
-evidence remain absent; this contract is not B1/P1 or production-readiness closure.
+Actions, long-run rotation and physical-host evidence remain absent. The follow-up
+[3/4/8-Node multi-hop copy browser flow](../testing/native-multihop-console.md) is
+now authored/CI-wired, also unexecuted; this is not B1/P1 or production-readiness closure.

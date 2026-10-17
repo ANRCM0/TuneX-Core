@@ -12,9 +12,12 @@ import { newToken } from '../../apps/control/src/modules/identity.ts';
 import { DEFAULT_POLICY } from '@tunex/contracts';
 import { host, linuxPath, linux, spawnLinux, linuxBinary, topology, viaWSL } from './native-linux.ts';
 import { NetworkLab } from './network-lab.ts';
+import { verifyMultihopConsole } from './multihop-console.ts';
 
 const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
 const count=Number(process.env.TUNEX_MULTIHOP_NODES??'3');
+const browserConsole=process.env.TUNEX_MULTIHOP_BROWSER==='1';
+if(browserConsole&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'||process.argv.includes('--isolated')))throw Error('Multi-hop browser acceptance requires non-isolated Linux Actions');
 const lab=process.argv.includes('--isolated')?new NetworkLab(count):undefined;
 if(!databaseUrl||![3,4,8].includes(count))throw Error('Disposable MySQL URL and TUNEX_MULTIHOP_NODES=3,4,8 required');
 await mkdir('.artifacts/multihop',{recursive:true});const directory=await mkdtemp(resolve(`.artifacts/multihop/${count}-nodes-`));
@@ -32,6 +35,7 @@ const options={databaseUrl:url.toString(),caCert,caKey,serverKey,serverCert,open
 let control:Awaited<ReturnType<typeof startControl>>|undefined,target:ChildProcess|undefined,targetPID:number|undefined,releaseReady:(()=>void)|undefined,proxy:ChildProcess|undefined,proxyPID:number|undefined,controlURL='';
 const agents:{nodeId:string;root:string;args:string[];process:ChildProcess;errors:string}[]=[];
 let completedEvidence:Record<string,unknown>|undefined;
+let consoleEvidence:unknown;
 function pass(text:string){checks.push(text);console.log('PASS '+text);}
 async function until(action:()=>Promise<boolean>,label:string,timeout=120000){const start=Date.now();while(Date.now()-start<timeout){if(await action())return;await new Promise(r=>setTimeout(r,150));}throw Error('Multi-hop acceptance timed out: '+label);}
 async function call(method:string,path:string,input?:unknown,key=randomUUID()):Promise<{status:number;body:any}>{
@@ -71,16 +75,18 @@ try{
   const targetArgs=['--mode','target','--run-id',nativeRoot,'--target-connection-seconds','120'];
   target=lab?lab.spawn(lab.namespaces.at(-1)!,fixture,targetArgs):spawnLinux(fixture,targetArgs);
   const targetStatus=await ready(target);targetPID=targetStatus.pid;assert.equal(targetStatus.platform,'linux');
-  const listenPort=await port();
+  const usedPorts=new Set<number>([targetStatus.port]);
+  async function distinctPort(){for(let attempt=0;attempt<128;attempt++){const next=await port();if(!usedPorts.has(next)){usedPorts.add(next);return next;}}throw Error('Distinct fixture port selection exhausted');}
+  const listenPort=browserConsole?await distinctPort():await port(),copyPort=browserConsole?await distinctPort():undefined;
   const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:5,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:128};
   assert.equal((await call('PUT','transport-profiles/multihop-profile',{expectedRevision:0,config:profile})).status,202);
   for(let i=0;i<count;i++){
-    const node=await call('POST','nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:[listenPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
+    const node=await call('POST','nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:i===0&&copyPort!==undefined?[listenPort,copyPort]:[listenPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
     const root=nativeRoot+'/node-'+i;const args:string[]=['--control',controlURL,'--node',node.body.nodeId,'--ca',linuxPath(caCert),'--state',root+'/state','--journal-key',root+'/secrets/journal.key','--relay','--multihop','--diagnostics'];
     try{const enroll=[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll'];if(lab)await lab.run(lab.namespaces[i]!,'/usr/bin/env',enroll);else await linux('env',enroll);}catch{throw Error('Multi-hop enrollment failed; token redacted');}
     const process=lab?lab.spawn(lab.namespaces[i]!,binary,args):spawnLinux(binary,args);const entry:typeof agents[number]={nodeId:node.body.nodeId,root,args,process,errors:''};process.stderr!.on('data',b=>{entry.errors=(entry.errors+b.toString()).slice(-16384);});agents.push(entry);
     await until(async()=>{const [r]=await control!.db.pool.query<any[]>('SELECT session_epoch,(SELECT COUNT(*) FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE) peers FROM runtime_nodes WHERE node_id=?',[entry.nodeId,entry.nodeId]);return r[0]?.session_epoch>0&&r[0]?.peers>0;},'current Node session and peer credential');
-    if(i>0)assert.equal((await call('PUT',`nodes/${entry.nodeId}/relay-endpoint`,{expectedRevision:0,config:{listenAddress:lab?lab.address(i):'127.0.0.1',advertisedHost:lab?lab.address(i):'127.0.0.1',allowedTcpPorts:[await port(),await port()]}})).status,202);
+    if(i>0){const peerPorts=browserConsole?[await distinctPort(),await distinctPort(),await distinctPort(),await distinctPort()]:[await port(),await port()];assert.equal((await call('PUT',`nodes/${entry.nodeId}/relay-endpoint`,{expectedRevision:0,config:{listenAddress:lab?lab.address(i):'127.0.0.1',advertisedHost:lab?lab.address(i):'127.0.0.1',allowedTcpPorts:peerPorts}})).status,202);}
   }
   pass(`${count} independent Agent processes advertise the explicit execution extension`);
   const ingress=agents[0]!,spec={enabled:true,protocols:['tcp','udp'],ingress:{nodeId:ingress.nodeId,listen:{address:'127.0.0.1',port:listenPort}},target:{host:'127.0.0.1',port:targetStatus.port},path:{via:agents.slice(1).map(a=>a.nodeId)},transport:{profileId:'multihop-profile',configRevision:1}};
@@ -139,6 +145,24 @@ try{
   await until(async()=>(await call('GET','operations/'+withdrawn.body.operationIds[0])).body.status==='succeeded','middle authority withdrawal');await assert.rejects(()=>probe(listenPort));
   const restored=await call('PUT',grantPath,{expectedRevision:2,allowed:true});assert.equal(restored.status,202);await converge();assert.equal((await probe(listenPort)).tcp,true);
   pass('Intermediate grant withdrawal revokes the whole path and restoration requires fresh execution authority');
+  if(browserConsole){
+    const current=await call('GET',resource);assert.equal(current.status,200);assert.equal(current.body.desired.revision,desiredRevision);
+    consoleEvidence=await verifyMultihopConsole({url:`https://${host}:${control.port}`,scope,token,directory,sourceId:id,revision:desiredRevision,spec:current.body.desired.spec,profile:profile as import('@tunex/contracts').RelayProfileConfig,copyPort:copyPort!,
+      traffic:async listen=>{const actual=await probe(listen);assert.equal(actual.tcp,true);assert.equal(actual.udp,true);},
+      closed:async listen=>{for(const flag of ['--tcp-only','--udp-only'])await assert.rejects(()=>linux(fixture,['--mode','probe','--port',String(listen),flag]),/connection refused|i\/o timeout/);},
+      slots:async(owner,retained)=>{
+        const [rows]=await control!.db.pool.query<any[]>('SELECT node_id,protocol,port,fence FROM port_slots WHERE owner_id=? ORDER BY node_id,protocol,port',[owner]);
+        assert.equal(rows.length,retained?2*count:0);if(!retained)return;
+        for(const [index,agent] of agents.entries()){
+          const local=rows.filter(row=>row.node_id===agent.nodeId);assert.equal(local.length,2);assert.ok(local.every(row=>Number.isSafeInteger(row.fence)&&row.fence>0));
+          if(index===0){assert.deepEqual(local.map(row=>row.protocol),['tcp','udp']);assert.ok(local.every(row=>row.port===copyPort));}
+          else{assert.ok(local.every(row=>row.protocol==='tcp'));assert.notEqual(local[0].port,local[1].port);}
+        }
+      },
+      onlySourceReservations:async()=>{const [rows]=await control!.db.pool.query<any[]>('SELECT owner_id FROM port_slots WHERE owner_id IS NOT NULL');assert.equal(rows.length,2*count);assert.ok(rows.every(row=>row.owner_id===id));}
+    });
+    await converge();pass('Real Chromium ordered multi-hop copy retains locked Profile, requires fresh preview, explicitly enables/disables/deletes and verifies TCP/UDP plus safe reservations');
+  }
   await stopOwned(agents.at(-1)!.root);agents.at(-1)!.process.kill();
   const deleted=await call('DELETE',resource,{expectedRevision:desiredRevision});assert.equal(deleted.status,202);
   await until(async()=>(await call('GET','operations/'+deleted.body.operationId)).body.status==='succeeded','offline Node lease cutoff and reclamation');
@@ -146,7 +170,7 @@ try{
   pass('Deletion retains isolation through offline-node lease expiry before releasing all physical resources');
   const commit=(await execute('git',['rev-parse','HEAD'])).stdout.trim(),diff=(await execute('git',['diff','--binary','HEAD'],{maxBuffer:32*1024*1024})).stdout;
   completedEvidence={passed:true,cleanupVerified:false,commit,workingTreeDirty:Boolean((await execute('git',['status','--porcelain'])).stdout.trim()),trackedPatchSHA256:createHash('sha256').update(diff).digest('hex'),completedAt:new Date().toISOString(),checks,count,policy,synchronization,topology:`${topology}; ${lab?'independent network namespaces':'independent processes'} on the same Linux host`,physicalHosts:false,isolated:!!lab,traffic,baseline,samples,sustained,
-    agentSHA256:createHash('sha256').update(await readFile(viaWSL?'.artifacts/tunex-agent-linux':binary)).digest('hex'),fixtureSHA256:createHash('sha256').update(await readFile(viaWSL?'.artifacts/network-fixture-linux':fixture)).digest('hex'),deploymentHistory};
+    agentSHA256:createHash('sha256').update(await readFile(viaWSL?'.artifacts/tunex-agent-linux':binary)).digest('hex'),fixtureSHA256:createHash('sha256').update(await readFile(viaWSL?'.artifacts/network-fixture-linux':fixture)).digest('hex'),deploymentHistory,console:consoleEvidence??null};
   await writeFile(join(directory,'evidence.json'),JSON.stringify(completedEvidence,null,2));
   console.log('Multi-hop acceptance evidence: '+directory);
 }catch(error){
