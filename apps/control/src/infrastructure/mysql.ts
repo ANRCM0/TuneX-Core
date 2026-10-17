@@ -1,6 +1,7 @@
 import { createPool } from 'mysql2/promise';
 import type { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { readFile, readdir } from 'node:fs/promises';
+import type { TransactionBoundary } from '../application/ports.ts';
 export type Transaction = PoolConnection;
 export async function rows<T>(tx: Pool | Transaction, sql: string, args: unknown[] = []): Promise<T[]> {
     const [result] = await tx.execute<RowDataPacket[]>(sql, args);
@@ -10,7 +11,7 @@ export async function write(tx: Pool | Transaction, sql: string, args: unknown[]
     const [result] = await tx.execute<ResultSetHeader>(sql, args);
     return result.affectedRows;
 }
-export class MySqlUnitOfWork {
+export class MySqlUnitOfWork implements TransactionBoundary<Transaction> {
     readonly pool: Pool;
     guard: (()=>Promise<void>)|undefined;
     constructor(url: string) { this.pool = createPool({ uri: url, connectionLimit: 8, supportBigNumbers: true, bigNumberStrings: false, timezone: 'Z' }); }

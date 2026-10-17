@@ -75,7 +75,7 @@ try {
     catch {
         throw new Error('Linux enrollment rejected or Control interface unreachable; token is redacted');
     }
-    agent = spawnLinux(binary, args);
+    agent = spawnLinux(binary, [...args, '--probe-registration']);
     let errors = '';
     agent.stderr!.on('data', data => { errors += data.toString(); });
     await until(async () => { const [records] = await control!.db.pool.query<any[]>('SELECT session_epoch FROM runtime_nodes WHERE node_id=?', [nodeId]); return records[0].session_epoch > 0; });
@@ -90,6 +90,30 @@ try {
 
     const recoveryProfile=await call('PUT',`/api/v1/scopes/${scope}/transport-profiles/recovery-profile`,{expectedRevision:0,config:{driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:60,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:4096}});assert.equal(recoveryProfile.status,202);
     await control.db.pool.query('INSERT INTO node_relay_credentials(fingerprint,node_id,issued_at,valid_until,certificate) VALUES(?,?,?,?,?)',['a'.repeat(64),nodeId,Date.now(),Date.now()+60000,'recovery-fixture-public-certificate']);
+    await until(async () => {
+        const [current] = await control!.db.pool.query<any[]>("SELECT expires_at FROM probe_instances WHERE node_id=? AND state='registered'", [nodeId]);
+        return current.length === 1 && current[0].expires_at > Date.now();
+    });
+    const [probeRows] = await control.db.pool.query<any[]>('SELECT generation,instance_id FROM probe_instances WHERE node_id=?', [nodeId]);
+    const probeRegistration = { generation: probeRows[0].generation, instanceId: probeRows[0].instance_id };
+    passed('Probe registration: opt-in real Agent registers over mTLS while Direct TCP/UDP forwarding remains operational');
+    let recoveryPermit: { id: string; issuedAt: number } | undefined;
+    await until(async () => {
+        const [current] = await control!.db.pool.query<any[]>(
+            "SELECT generation,instance_id FROM probe_instances WHERE node_id=? AND state='registered' AND expires_at>?", [nodeId, Date.now() + 5000]);
+        if (!current[0]) return false;
+        try {
+            recoveryPermit = await control!.control.probePermits.issue(owner, scope, created.body.forwardId,
+                { version: 1, kind: 'tcp-connect', expectedRevision: 1,
+                    instanceId: current[0].instance_id, instanceGeneration: current[0].generation });
+            return true;
+        } catch (error) {
+            if ((error as { code?: string }).code === 'PROBE_PERMIT_UNAVAILABLE') return false;
+            throw error;
+        }
+    });
+    assert.ok(recoveryPermit);
+    passed('Internal Probe permit: current Actor/Forward/registered Agent binding accepted without remote execution');
     const manifest=await backupDatabase({databaseUrl:dbUrl.toString(),authority:control.authority,directory:join(directory,'backups'),mysqldump:mysqlClient('mysqldump')});
     const backupEnvelope=JSON.parse(await readFile(manifest,'utf8'));assert.equal(backupEnvelope.payload.forwardCount,1);const originalJournal=JSON.parse((await linux('/bin/cat',[`${nativeRoot}/state/journal.json`])).stdout);const originalGeneration=originalJournal.payload.generation;
     passed('Backup: actual single-transaction MySQL dump and protected MAC manifest capture the running intent');
@@ -113,6 +137,16 @@ try {
     await assert.rejects(()=>startControl({...serverOptions,initializeAuthority:false}),/binding differs/);
     const restoredAdmin=await createConnection(restored.databaseUrl);try{
         const [oldState]=await restoredAdmin.query<any[]>('SELECT snapshot_generation FROM runtime_nodes WHERE node_id=?',[nodeId]);assert.equal(oldState[0].snapshot_generation,originalGeneration);assert.ok(oldState[0].snapshot_generation<newerGeneration);
+        const [oldProbe] = await restoredAdmin.query<any[]>('SELECT generation,instance_id,state,revoked_at FROM probe_instances WHERE node_id=?', [nodeId]);
+        // The live Agent may rotate between observation and the dump's consistent snapshot.
+        assert.ok(oldProbe[0].generation >= probeRegistration.generation);
+        if (oldProbe[0].generation === probeRegistration.generation) assert.equal(oldProbe[0].instance_id, probeRegistration.instanceId);
+        assert.match(oldProbe[0].instance_id, /^[a-f0-9]{64}$/);
+        assert.equal(oldProbe[0].state, 'quarantined'); assert.ok(oldProbe[0].revoked_at > 0);
+        const [oldPermits] = await restoredAdmin.query<any[]>('SELECT id,state,closed_at FROM probe_permits WHERE id=?', [recoveryPermit.id]);
+        assert.equal(oldPermits.length, 1); assert.equal(oldPermits[0].state, 'quarantined'); assert.ok(oldPermits[0].closed_at > 0);
+        const [permitBudget] = await restoredAdmin.query<any[]>('SELECT observed_at FROM probe_permit_budget WHERE id=1');
+        assert.equal(permitBudget[0].observed_at, recoveryPermit.issuedAt);
         const [profileHistory]=await restoredAdmin.query<any[]>("SELECT COUNT(*) n FROM transport_profile_revisions WHERE profile_id='recovery-profile'");assert.equal(profileHistory[0].n,1);const [profileGrants]=await restoredAdmin.query<any[]>('SELECT COUNT(*) n FROM transport_profile_grants');assert.equal(profileGrants[0].n,0);const [retiredPeerCredentials]=await restoredAdmin.query<any[]>('SELECT COUNT(*) n FROM node_relay_credentials WHERE revoked=FALSE');assert.equal(retiredPeerCredentials[0].n,0);
         const [quarantine]=await restoredAdmin.query<any[]>('SELECT revoked FROM nodes WHERE id=?',[nodeId]);assert.equal(quarantine[0].revoked,1);const [intents]=await restoredAdmin.query<any[]>('SELECT revision,spec,recovery_suspended FROM forwards WHERE id=?',[created.body.forwardId]);assert.equal(intents[0].revision,1);assert.equal(intents[0].spec.target.port,targetStatus.port);assert.equal(intents[0].recovery_suspended,1);
     }finally{await restoredAdmin.end();}

@@ -22,3 +22,13 @@ export type { TransitNegotiationRequest, TransitNegotiationResponse } from './tr
 
 export {parseTransitDelivery} from './transit-delivery.ts';
 export type {TransitPreviewCommand,TransitDeliveryReport,TransitDeliveryAck,TransitDeliveryMessage} from './transit-delivery.ts';
+export { parseProbeNegotiation, checkProbeNegotiation } from './probe-negotiation.ts';
+export type { ProbeNegotiationRequest, ProbeNegotiationResponse } from './probe-negotiation.ts';
+export { parseProbeInstance, checkProbeInstance } from './probe-instance.ts';
+export type { ProbeInstanceRequest, ProbeInstanceResponse } from './probe-instance.ts';
+export { parseProbeClaim, checkProbeClaim } from './probe-claim.ts';
+export type { ProbeClaimBinding, ProbeClaimRequest, ProbeClaimResponse } from './probe-claim.ts';
+export { parseProbeDelivery, checkProbePoll, checkProbeStatus } from './probe-delivery.ts';
+export type { ProbeOffer, ProbePollRequest, ProbePollResponse, ProbeStatusRequest, ProbeStatusResponse } from './probe-delivery.ts';
+export { parseProbeResult, checkProbeResult, probeResultBody, probeResultDigest } from './probe-result.ts';
+export type { ProbeResultRequest, ProbeResultResponse, ProbeResultBody } from './probe-result.ts';

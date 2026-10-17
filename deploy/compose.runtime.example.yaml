@@ -17,6 +17,8 @@ services:
       TUNEX_CONTROL_PORT: "41001"
       TUNEX_AUTHORITY_INITIALIZE: "0"
       TUNEX_MULTIHOP_EXECUTION: ${TUNEX_MULTIHOP_EXECUTION:-0}
+      TUNEX_PROBE_EXECUTION: ${TUNEX_PROBE_EXECUTION:-0}
+      TUNEX_PROBE_CLOCK_SKEW_SECONDS: ${TUNEX_PROBE_CLOCK_SKEW_SECONDS:-}
     volumes:
       - type: bind
         source: ${TUNEX_CONTROL_STATE_DIR:?Existing protected Control state directory}
@@ -47,6 +49,8 @@ services:
       - --ca=/run/tunex-agent-secrets/control-ca.pem
       - --state=/var/lib/tunex-agent
       - --journal-key=/run/tunex-agent-secrets/journal.key
+      - --probe-registration=${TUNEX_PROBE_REGISTRATION:-false}
+      - --probe-execution=${TUNEX_PROBE_AGENT_EXECUTION:-false}
       - --diagnostics
     volumes:
       - type: bind

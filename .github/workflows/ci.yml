@@ -42,6 +42,60 @@ jobs:
             agent/.cache/go-build
           key: vnext-go-${{ runner.os }}-${{ hashFiles('agent/go.sum') }}
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Native execution registry and host authorization contracts
+        run: node scripts/run-go.mjs test ./internal/control -run '^TestExecution' -count=1
+      - name: Control query and Transport resolution port regressions
+        run: node --test apps/control/test/application-query-ports.test.ts apps/control/test/console-read.test.ts apps/control/test/console-diagnostics.test.ts apps/control/test/multihop-coordinator.test.ts
+      - name: Owner-owned Profile commands and Runtime grant effects
+        run: node --test apps/control/test/transport-grant-ports.test.ts
+      - name: Owner-owned member and Node Grant command ports
+        run: node --test apps/control/test/access-command-ports.test.ts
+      - name: Whole-Node policy and credential revocation command ports
+        run: node --test apps/control/test/node-management-ports.test.ts
+      - name: Forward command acceptance and native preparation ports
+        run: node --test apps/control/test/forward-command-ports.test.ts
+      - name: Static Snapshot sources, ownership and complete-merge contracts
+        run: node --test apps/control/test/snapshot-assignment-ports.test.ts
+      - name: Authorized passive observations, deadlines and admission budgets
+        run: node --test apps/control/test/node-observation-ports.test.ts
+      - name: Non-executable Forward probe preflight contracts
+        run: node --test apps/control/test/forward-probe-plan-ports.test.ts
+      - name: Independent Probe negotiation schemas and read-only machine ports
+        run: |
+          node --test packages/contracts/test/probe-negotiation.test.ts apps/control/test/probe-negotiation-ports.test.ts
+          node scripts/run-go.mjs test ./internal/probenegotiation -count=1
+      - name: Non-executable durable Probe instance ownership and generation CAS
+        run: node --test apps/control/test/probe-instance-ports.test.ts apps/control/test/upgrade-assessment.test.ts
+      - name: Remote Probe instance contract and registry authorization
+        run: |
+          node --test packages/contracts/test/probe-instance.test.ts apps/control/test/probe-instance-registry.test.ts
+          node scripts/run-go.mjs test ./internal/probeinstance -count=1
+      - name: Internal Probe permit authority, bounded delivery, consumed checks and sticky withdrawals
+        run: node --test apps/control/test/probe-permit-ports.test.ts
+      - name: Non-executable remote Probe claims, closed receipts and host verification
+        run: |
+          node --test packages/contracts/test/probe-claim.test.ts apps/control/test/probe-claims.test.ts
+          node scripts/run-go.mjs test ./internal/probeclaim -count=1
+      - name: Bounded Probe delivery and point-in-time status contracts
+        run: |
+          node --test packages/contracts/test/probe-delivery.test.ts apps/control/test/probe-delivery.test.ts
+          node scripts/run-go.mjs test ./internal/probedelivery -count=1
+      - name: Agent bounded Probe exchange and fail-closed consumed-authority monitor
+        run: node scripts/run-go.mjs test ./internal/control -run '^TestProbeDelivery' -count=1
+      - name: Short-lived Agent-reported Probe result contracts and committed receipts
+        run: |
+          node --test packages/contracts/test/probe-result.test.ts apps/control/test/probe-results.test.ts
+          node scripts/run-go.mjs test ./internal/proberesult -count=1
+      - name: One-use host Probe execution, live authority and conservative result serialization
+        run: node scripts/run-go.mjs test ./internal/control -run '^TestProbeExecution' -count=1
+      - name: Opt-in Probe manager acceptance, HTTP routes and Agent serial workflow
+        run: |
+          node --test apps/control/test/forward-probes-api.test.ts apps/control/test/probe-permit-ports.test.ts
+          node scripts/run-go.mjs test ./internal/control -run '^TestProbeWorkflow' -count=1
+      - name: Independently authorized Agent connect-only probe and live host bindings
+        run: |
+          node scripts/run-go.mjs test ./internal/probe ./internal/egress -count=1
+          node scripts/run-go.mjs test ./internal/control -run '^TestProbe' -count=1
       - run: npm run check
       - run: node scripts/run-go.mjs vet ./...
       - run: node scripts/run-go.mjs test -race ./...
@@ -84,12 +138,22 @@ jobs:
         run: node --test apps/control/test/transit-coordination.test.ts
       - name: Transit mTLS capability negotiation MySQL acceptance
         run: node --test apps/control/test/transit-negotiation.test.ts
-      - name: Multi-hop failure withdrawal and full-path capacity transactions
+      - name: Multi-hop withdrawal, command/Snapshot rollback and full-path capacity
         run: node --test apps/control/test/multihop-runtime.test.ts
       - name: Read-only upgrade assessment with SELECT-only MySQL and authenticated Agent journal
         run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
       - name: Console scoped filters, independent candidates and full-scope overview with SELECT-only MySQL
         run: node --test apps/control/test/console-mysql-acceptance.test.ts
+      - name: Passive observation API with SELECT-only MySQL and scoped provenance
+        run: node --test apps/control/test/node-observation-mysql-acceptance.test.ts
+      - name: Non-executable probe preflight with SELECT-only MySQL and current binding checks
+        run: node --test apps/control/test/forward-probe-mysql-acceptance.test.ts
+      - name: Probe permit owner transactions, bounded offers, consumed withdrawal and upgrade backfill
+        run: node --test apps/control/test/probe-permit-mysql-acceptance.test.ts
+      - name: Probe registry, claims, bounded delivery and result ingestion over real mTLS
+        run: node --test apps/control/test/probe-negotiation-mysql-acceptance.test.ts
+      - name: Probe instance persistence, concurrent replacement, rollback and recovery quarantine
+        run: node --test apps/control/test/probe-instance-mysql-acceptance.test.ts
       - run: npm run test:phase1
       - run: npm run test:phase2
       - run: npm run test:security
@@ -135,6 +199,45 @@ jobs:
             .artifacts/recovery/**/evidence.json
             .artifacts/capacity/**/evidence.json
             .artifacts/capacity/**/failure.json
+  probe-workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mysql:
+        image: mysql:8.4.9
+        env:
+          MYSQL_ROOT_PASSWORD: ci-disposable-only
+          MYSQL_DATABASE: tunex_probe
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h 127.0.0.1 -pci-disposable-only"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      TUNEX_TEST_DATABASE_URL: mysql://root:ci-disposable-only@127.0.0.1:3306/tunex_probe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: mkdir -p .artifacts
+      - run: node scripts/run-go.mjs build -o ../.artifacts/tunex-agent ./cmd/tunex-agent
+      - name: Verify independent native Linux OS clock synchronization
+        run: node scripts/run-go.mjs run ./cmd/time-proof --check
+      - name: Real default-off Control, manager API, Agent lifecycle, mTLS, MySQL and zero-payload target
+        run: npm run test:probe
+      - name: Preserve only redacted Probe evidence, never test PKI or protected Agent state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-workflow-acceptance
+          path: .artifacts/probe/**/evidence.json
   multihop:
     runs-on: ubuntu-latest
     timeout-minutes: 35

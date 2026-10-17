@@ -3,12 +3,8 @@ import type { Forward } from '@tunex/core';
 import { DEFAULT_POLICY, digest, parseRuntimeMessage, validCidr, withinLease } from '@tunex/contracts';
 import type { RuntimeAssignment as Assignment, DirectConfig, Policy, RuntimeSnapshot as Snapshot } from '@tunex/contracts';
 
-export interface AuthorizedNodeFacts {
-  readonly nodeId: string; readonly scopeId: string; readonly capabilities: readonly string[];
-  readonly allowedListenerAddresses: readonly string[]; readonly allowedPorts: readonly number[];
-  readonly egressPolicyRevision: number; readonly allowedDestinationCidrs: readonly string[];
-  readonly allowMetadataTargets: boolean;
-}
+import type { AuthorizedNodeFacts } from '../node-management-ports.ts';
+export type { AuthorizedNodeFacts } from '../node-management-ports.ts';
 export interface ReservedSlot {
   readonly nodeId: string; readonly forwardId: string; readonly protocol: 'tcp' | 'udp';
   readonly port: number; readonly bindingFence: number; readonly deploymentGeneration: number;

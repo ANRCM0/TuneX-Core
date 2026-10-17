@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:probe:result:1",
+  "title": "Bounded Agent-reported Probe result receipt, not health or authority",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "token": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 24,
+      "maxLength": 24,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "Binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "snapshotGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "assignmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardId": {
+          "$ref": "#/$defs/id"
+        },
+        "forwardRevision": {
+          "$ref": "#/$defs/counter"
+        },
+        "deploymentGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "bindingFence": {
+          "$ref": "#/$defs/counter"
+        },
+        "configDigest": {
+          "type": "string",
+          "minLength": 71,
+          "maxLength": 71,
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "egressPolicyRevision": {
+          "$ref": "#/$defs/counter"
+        }
+      },
+      "required": [
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "snapshotGeneration",
+        "assignmentId",
+        "forwardId",
+        "forwardRevision",
+        "deploymentGeneration",
+        "bindingFence",
+        "configDigest",
+        "egressPolicyRevision"
+      ]
+    },
+    "Request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "probeVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "probe-result"
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "instanceId": {
+          "$ref": "#/$defs/token"
+        },
+        "instanceGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "permitId": {
+          "$ref": "#/$defs/id"
+        },
+        "requestId": {
+          "$ref": "#/$defs/token"
+        },
+        "binding": {
+          "$ref": "#/$defs/Binding"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 2000
+        },
+        "issuedAt": {
+          "$ref": "#/$defs/time"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/time"
+        },
+        "consumedAt": {
+          "$ref": "#/$defs/time"
+        },
+        "measuredAt": {
+          "$ref": "#/$defs/time"
+        },
+        "validUntil": {
+          "$ref": "#/$defs/time"
+        },
+        "elapsedMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000
+        },
+        "point": {
+          "const": "agent-direct-egress"
+        },
+        "status": {
+          "enum": [
+            "connected",
+            "unreachable"
+          ]
+        },
+        "code": {
+          "enum": [
+            "tcp-connected",
+            "tcp-connect-failed"
+          ]
+        },
+        "applicationHealth": {
+          "const": "unknown"
+        },
+        "source": {
+          "const": "agent-reported"
+        },
+        "applicationPayloadBytes": {
+          "const": 0
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "probeVersion",
+        "kind",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "instanceId",
+        "instanceGeneration",
+        "permitId",
+        "requestId",
+        "binding",
+        "timeoutMs",
+        "issuedAt",
+        "expiresAt",
+        "consumedAt",
+        "measuredAt",
+        "validUntil",
+        "elapsedMs",
+        "point",
+        "status",
+        "code",
+        "applicationHealth",
+        "source",
+        "applicationPayloadBytes"
+      ]
+    },
+    "Response": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": {
+          "const": 3
+        },
+        "probeVersion": {
+          "const": 1
+        },
+        "kind": {
+          "const": "probe-result-ack"
+        },
+        "nodeId": {
+          "$ref": "#/$defs/id"
+        },
+        "bootId": {
+          "$ref": "#/$defs/id"
+        },
+        "sessionEpoch": {
+          "$ref": "#/$defs/counter"
+        },
+        "instanceId": {
+          "$ref": "#/$defs/token"
+        },
+        "instanceGeneration": {
+          "$ref": "#/$defs/counter"
+        },
+        "permitId": {
+          "$ref": "#/$defs/id"
+        },
+        "requestId": {
+          "$ref": "#/$defs/token"
+        },
+        "resultDigest": {
+          "type": "string",
+          "minLength": 71,
+          "maxLength": 71,
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "acceptedAt": {
+          "$ref": "#/$defs/time"
+        },
+        "serverTime": {
+          "$ref": "#/$defs/time"
+        },
+        "duplicate": {
+          "type": "boolean"
+        },
+        "health": {
+          "const": "unknown"
+        },
+        "executionEnabled": {
+          "const": false
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "probeVersion",
+        "kind",
+        "nodeId",
+        "bootId",
+        "sessionEpoch",
+        "instanceId",
+        "instanceGeneration",
+        "permitId",
+        "requestId",
+        "resultDigest",
+        "acceptedAt",
+        "serverTime",
+        "duplicate",
+        "health",
+        "executionEnabled"
+      ]
+    }
+  }
+}

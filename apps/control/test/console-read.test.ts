@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { consolePage, consolePageSql, consoleNodes, consoleForwards, consoleOperations, consoleQuery, consoleNodeCandidates, consoleOverview } from '../src/api/console-read.ts';
-import type { ControlApplication } from '../src/application/control.ts';
+import { consolePage } from '../src/application/console-query.ts';
+import { consoleQuery } from '../src/api/console-query.ts';
+import { ConsoleQueries } from '../src/application/console-queries.ts';
+import { consolePageSql, MySqlConsoleReadModels } from '../src/infrastructure/mysql-console-read.ts';
+import type { ScopeAuthorization } from '../src/application/ports.ts';
+import type { Transaction } from '../src/infrastructure/mysql.ts';
 
 test('console pagination is bounded and rejects malformed integers', () => {
   assert.deepEqual(consolePage(undefined, undefined), { page:1, limit:25, offset:0 });
@@ -40,26 +44,28 @@ function stubControl(allow: boolean) {
       throw new Error('Unexpected query: ' + sql);
     }
   };
-  const control = {
-    db:{ transaction:async (fn: (v: unknown)=>Promise<unknown>)=>fn(tx) },
-    identity:{ scope:async (_: unknown, actor:string, scope:string)=>{
+  const identity: ScopeAuthorization<Transaction> = {
+    scope:async (_: Transaction, actor:string, scope:string)=>{
       if (!allow || actor!=='viewer' || scope!=='scope-a') throw new Error('denied');
-    }}
-  } as unknown as ControlApplication;
+    }
+  };
+  const control = { identity, queries: new ConsoleQueries<Transaction>(
+    { transaction:async action=>action(tx as unknown as Transaction) }, identity, new MySqlConsoleReadModels()
+  ) };
   return { control, queries };
 }
 test('read models enforce scope before running any page SQL', async () => {
   const fixture = stubControl(false);
-  for (const read of [consoleNodes, consoleForwards, consoleOperations]) {
-    await assert.rejects(read(fixture.control,'viewer','scope-a'));
+  for (const kind of ['nodes','forwards','operations'] as const) {
+    await assert.rejects(fixture.control.queries[kind]('viewer','scope-a'));
   }
   assert.equal(fixture.queries.length,0);
 });
 test('page queries are scope bound, return no enrollment secret and separate operation status', async () => {
   const fixture = stubControl(true);
-  const nodes = await consoleNodes(fixture.control,'viewer','scope-a');
-  const forwards = await consoleForwards(fixture.control,'viewer','scope-a');
-  const operations = await consoleOperations(fixture.control,'viewer','scope-a');
+  const nodes = await fixture.control.queries.nodes('viewer','scope-a');
+  const forwards = await fixture.control.queries.forwards('viewer','scope-a');
+  const operations = await fixture.control.queries.operations('viewer','scope-a');
   assert.equal(nodes.items[0]?.id,'node-a');
   assert.equal(nodes.items[0]?.lastReportAt,null);
   assert.equal('enrollmentToken' in (nodes.items[0] ?? {}),false);
@@ -74,9 +80,9 @@ test('page queries are scope bound, return no enrollment secret and separate ope
 });
 test('all three scoped lists use bounded second-page literal offsets', async () => {
   const fixture = stubControl(true);
-  await consoleNodes(fixture.control,'viewer','scope-a','2','40');
-  await consoleForwards(fixture.control,'viewer','scope-a','2','40');
-  await consoleOperations(fixture.control,'viewer','scope-a','2','40');
+  await fixture.control.queries.nodes('viewer','scope-a','2','40');
+  await fixture.control.queries.forwards('viewer','scope-a','2','40');
+  await fixture.control.queries.operations('viewer','scope-a','2','40');
   const lists = fixture.queries.filter(q=>q.sql.includes('LIMIT 40 OFFSET 40'));
   assert.equal(lists.length,3);
   assert.ok(lists.every(q=>q.params.length===1&&q.params[0]==='scope-a'));
@@ -96,28 +102,28 @@ test('console filter contracts reject duplicate, unknown, unbounded and injectio
 });
 test('filters are bound identically into count and page SQL; prefix underscore stays literal', async () => {
   const f=stubControl(true);
-  await consoleNodes(f.control,'viewer','scope-a','2','25',{idPrefix:'node_',credential:'valid'});
+  await f.control.queries.nodes('viewer','scope-a','2','25',{idPrefix:'node_',credential:'valid'});
   assert.deepEqual(f.queries[0]!.params,f.queries[1]!.params);
   assert.equal(f.queries[0]!.params[1],'node!_');
   assert.ok(f.queries.every(q=>q.sql.includes("ESCAPE '!'")&&!q.sql.includes("'node_'")&&!q.sql.includes("'node!_'")));
   f.queries.length=0;
-  await consoleForwards(f.control,'viewer','scope-a',undefined,undefined,{enabled:'false',protocol:'both',recoverySuspended:'true'});
+  await f.control.queries.forwards('viewer','scope-a',undefined,undefined,{enabled:'false',protocol:'both',recoverySuspended:'true'});
   assert.deepEqual(f.queries[0]!.params,['scope-a','false',true,'["tcp","udp"]']);
   assert.deepEqual(f.queries[0]!.params,f.queries[1]!.params);
   f.queries.length=0;
-  await consoleOperations(f.control,'viewer','scope-a',undefined,undefined,{forwardId:'f-1',kind:'update',status:'failed'});
+  await f.control.queries.operations('viewer','scope-a',undefined,undefined,{forwardId:'f-1',kind:'update',status:'failed'});
   assert.deepEqual(f.queries[0]!.params,['scope-a','f-1','update','failed']);
   assert.deepEqual(f.queries[0]!.params,f.queries[1]!.params);
 });
 test('candidate and overview authorization precedes data SQL, including manager requirement', async () => {
   const f=stubControl(false);
-  await assert.rejects(consoleNodeCandidates(f.control,'viewer','scope-a'));
-  await assert.rejects(consoleOverview(f.control,'viewer','scope-a'));
+  await assert.rejects(f.control.queries.candidates('viewer','scope-a'));
+  await assert.rejects(f.control.queries.overview('viewer','scope-a'));
   assert.equal(f.queries.length,0);
   const permitted=stubControl(true);
   let manage=false;
   permitted.control.identity.scope=async(_tx,_actor,_scope,required)=>{manage=required===true;};
-  const candidates=await consoleNodeCandidates(permitted.control,'viewer','scope-a','2','25',{mode:'multihop',protocol:'both'});
+  const candidates=await permitted.control.queries.candidates('viewer','scope-a','2','25',{mode:'multihop',protocol:'both'});
   assert.equal(manage,true);
   assert.equal(candidates.reserved,false);
   assert.equal(candidates.fullPlanAuthorization,false);
@@ -128,18 +134,18 @@ test('candidate and overview authorization precedes data SQL, including manager 
 });
 test('overview counts are scoped, single-statement and independent of any page or filter', async () => {
   let queries=0;
-  const control={
-    db:{transaction:async(fn:(v:unknown)=>Promise<unknown>)=>fn({
+  const read = new ConsoleQueries<Transaction>(
+    {transaction:async action=>action({
       execute:async(sql:string,args:unknown[])=>{
         queries++; assert.deepEqual(args,['scope-a','scope-a','scope-a','scope-a']);
         assert.ok(sql.includes("status IN ('accepted','running')"));
         assert.ok(!sql.includes('LIMIT'));
         return [[{nodes:80,forwards:60,active:28,failed:32}],[]];
       }
-    })},
-    identity:{scope:async()=>undefined}
-  } as unknown as ControlApplication;
-  const result=await consoleOverview(control,'viewer','scope-a');
+    } as unknown as Transaction)},
+    {scope:async()=>undefined}, new MySqlConsoleReadModels()
+  );
+  const result=await read.overview('viewer','scope-a');
   assert.equal(queries,1);
   assert.equal(result.nodes,80);assert.equal(result.activeOperations,28);assert.equal(result.failedOperations,32);
   assert.equal(result.independentProbe,false);

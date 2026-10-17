@@ -3,7 +3,8 @@ import { ControlError } from '../application/errors.ts';
 import { notFound } from '../application/errors.ts';
 import { json, rows, write } from '../infrastructure/mysql.ts';
 import type { Transaction } from '../infrastructure/mysql.ts';
-export class Forwarding {
+import type { ActorForwardReferences, ForwardWriter, NodeForwardReferences, ProfileForwardReferences } from './forwarding-ports.ts';
+export class Forwarding implements ProfileForwardReferences<Transaction>, ActorForwardReferences<Transaction>, NodeForwardReferences<Transaction>, ForwardWriter<Transaction> {
     async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE forwards SET recovery_suspended=TRUE');}
     async hasLiveRelay(tx:Transaction,profileId?:string,nodeId?:string):Promise<boolean>{
         if(profileId)return (await rows(tx,"SELECT id FROM forwards WHERE recovery_suspended=FALSE AND deleting=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.transport.profileId'))=? FOR SHARE",[profileId])).length>0;

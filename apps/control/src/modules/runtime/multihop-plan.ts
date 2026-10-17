@@ -4,7 +4,7 @@ import {digest, hopPathDigest, MULTIHOP_CAPABILITY, parseRelayMessage, validateH
 import type {HopConfig, HopNode, RuntimeAssignment} from '@tunex/contracts';
 import type {RelayResource} from './relay-planner.ts';
 import type {RelayNodeExecutionFacts, RelayPreparedPlan, ReservedRelayResource} from './relay-plan.ts';
-import type {ResolvedProfile} from '../transport.ts';
+import type {ResolvedProfile} from '../transport-ports.ts';
 import type {ResolvedEndpoint} from '../relay-endpoints.ts';
 import {parseRelayEndpoint} from '../relay-endpoints.ts';
 import {compilePathTopology} from './path-topology.ts';

@@ -11,9 +11,31 @@
 | [总体架构](architecture/overview.md) | 目标、边界、数据流与组件部署 |
 | [Core v1](spec/core-v1.md) | 最小实体、值对象、规则和依赖方向 |
 | [Forward v1](spec/forward-v1.md) | 最小转发契约、并发、资源约束和生命周期 |
+| [Node observation v1](spec/node-observation-v1.md) | 被动报告观察的授权、预算、期限及来源；不是独立主动健康探测 |
+| [Forward probe v1 基础切片](spec/forward-probe-v1.md) | 授权预检、Agent 内部 TCP connect-only；默认关闭的操作链另见管理契约 |
+| [Forward probe management v1](spec/forward-probe-management-v1.md) | 幂等签发、受限单次执行、历史回执与撤销；真实组合 Actions 待对应提交 |
 | [Deployment Protocol v2](protocol/agent-deployment-v2.md) | Snapshot / Assignment / Observation / 租约与版本 |
 | [Runtime & Agent v1](spec/runtime-agent-v1.md) | 部署状态机、双节点编排、故障恢复 |
 | [模块边界](architecture/module-boundaries.md) | 模块拥有者、同步调用、持久化所有权 |
+| [Core 与兼容接入层现状](architecture/core-and-compatibility-status.md) | Core、协议兼容底座、宿主扩展接入的实际边界与缺口盘点；不是新协议 ADR |
+| [分类接入契约与原生驱动注册](decisions/0006-classified-extension-contracts.md) | 三类扩展边界；Agent 注册、Console 查询与 Transport 解析端口；授权与 Journal 保持不变 |
+| [ADR-0007](decisions/0007-bounded-agent-probe.md) | 主动 Probe 的 Agent 执行位置、独立许可、绑定/egress 与资源预算；远程协议留待后续 |
+| [ADR-0008](decisions/0008-probe-contract-negotiation.md) | 独立只读机器协商与内部单次许可门禁；协商不是发包授权 |
+| [Probe negotiation v1](protocol/probe-negotiation-v1.md) | mTLS 会话/实例绑定、共享 TS/Go Schema 与拒绝旧版；尚无远程执行许可和派发 |
+| [ADR-0009](decisions/0009-probe-instance-ownership.md) | 内部持久 Probe 实例归属、CAS 替换/撤销与恢复隔离；不是远程登记或执行许可 |
+| [ADR-0010](decisions/0010-probe-registration-lifecycle.md) | 独立远程登记、默认关闭的 Agent 门禁生命周期；不开放执行 |
+| [Probe instance v1](protocol/probe-instance-v1.md) | mTLS 查询/登记/撤销、共享 TS/Go Schema、CAS 与失败/关闭边界；登记不是许可 |
+| [ADR-0011](decisions/0011-probe-permit-authority.md) | 内部许可签发/持久单次消费、同库签发预算与恢复隔离；领取回执另见 ADR-0012 |
+| [ADR-0012](decisions/0012-probe-claim-contract.md) | 独立 mTLS 单次领取与 Agent 完整绑定校验；回执不可执行、尚无派发与持续撤权 |
+| [Probe claim v1](protocol/probe-claim-v1.md) | 已知许可 ID 的消费回执、共享 TS/Go 严格契约与不确定结果边界 |
+| [ADR-0013](decisions/0013-probe-delivery-authority.md) | 内部有界任务选择、消费后当前授权检查与持久撤销；不开放远程派发或发包 |
+| [ADR-0014](decisions/0014-probe-delivery-contract.md) | 不可执行的有界任务获取与消费后状态协议；仍未接入 Agent 主循环或持续撤权 |
+| [Probe delivery v1](protocol/probe-delivery-v1.md) | mTLS poll/status、请求关联、空/单任务、最小绑定回执与时间边界 |
+| [ADR-0015](decisions/0015-probe-agent-authority-watch.md) | Agent 内部有界请求与失败关闭观察监视器；不构造执行许可或接入生产循环 |
+| [ADR-0016](decisions/0016-probe-result-receipts.md) | 原许可 owner 同事务接收有界上报结果，单份记录/重复回执，不更新健康或接入执行 |
+| [Probe result v1](protocol/probe-result-v1.md) | 独立 mTLS 结果契约、TS/Go 内容摘要、去重与接收时间边界 |
+| [ADR-0017](decisions/0017-probe-host-execution.md) | 内部单次宿主执行准入、持续检查与保守结果序列化；尚未接入生产调度或回传 |
+| [ADR-0018](decisions/0018-probe-production-workflow.md) | 默认关闭的管理入口与 Agent 串行闭环；保留原权威、预算、失权关闭与不确定结果不重试 |
 | [ADR-0001](decisions/0001-vnext-clean-slate.md) | 与历史 V2 脱钩及清理范围 |
 | [ADR-0002](decisions/0002-runtime-contract-closure.md) | 租约、会话、切换与实施依赖收口 |
 | [Control API / Operation v1](spec/control-api-v1.md) | 幂等、事务、连续修改、终态及状态查询 |
@@ -24,6 +46,7 @@
 | [Docker / 1Panel 部署手册](../deploy/README.md) | 分主机 Control/Agent、首次初始化与 Enrollment、真实 TCP/UDP、Relay 与恢复测试 |
 | [下一阶段开发目标](development/next-milestones.md) | 多跳代码交付后的部署/升级、诊断审计、证据流程、Console、集中验收与发布排期 |
 | [ForwardX 经验吸收计划](development/forwardx-gap-closure.md) | 功能差距、独立实现顺序、产品 UI/运维与验收 |
+| [转发平台四主线适配方案](development/forwarding-platform-plan.md) | 基础转发、加密隧道、拓扑切换、监控探测的模块设计、迁移边界与 Actions 交付顺序 |
 | [Forward-first Web Alpha](development/forward-first-web.md) | 节点、Direct、Operation 的可视化界面及安全边界 |
 | [Relay Web 与节点诊断](development/relay-console.md) | 双节点 Relay 引导、只读诊断和安全安装手册 |
 | [Multi-hop implementation and acceptance](development/multihop-execution.md) | Default-off execution, unified acceptance commands, physical inventory and release evidence |

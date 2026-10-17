@@ -2,7 +2,7 @@ import { deepFreeze, isCounter, parseForward } from '@tunex/core';
 import type { Forward } from '@tunex/core';
 import { digest, parseRelayAssignment, parseRelayMessage, validateTime } from '@tunex/contracts';
 import type { RelayBinding, RelayConfig, RuntimeAssignment } from '@tunex/contracts';
-import type { ResolvedProfile } from '../transport.ts';
+import type { ResolvedProfile } from '../transport-ports.ts';
 import type { ResolvedEndpoint } from '../relay-endpoints.ts';
 import type { AuthorizedNodeFacts } from './planner.ts';
 import { compileRelayResources } from './relay-planner.ts';

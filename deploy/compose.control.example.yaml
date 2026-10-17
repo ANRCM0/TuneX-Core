@@ -18,6 +18,8 @@ services:
       TUNEX_CONTROL_PORT: "41001"
       TUNEX_AUTHORITY_INITIALIZE: "0"
       TUNEX_MULTIHOP_EXECUTION: ${TUNEX_MULTIHOP_EXECUTION:-0}
+      TUNEX_PROBE_EXECUTION: ${TUNEX_PROBE_EXECUTION:-0}
+      TUNEX_PROBE_CLOCK_SKEW_SECONDS: ${TUNEX_PROBE_CLOCK_SKEW_SECONDS:-}
     volumes:
       - type: bind
         source: ${TUNEX_CONTROL_STATE_DIR:?Pre-create protected Control state directory}

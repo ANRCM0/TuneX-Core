@@ -60,6 +60,14 @@ TUNEX_AGENT_SECRETS_DIR=/srv/tunex/agent/secrets
 
 `docker compose --env-file` 用于**Compose 变量插值**。Shell 中临时导出的变量不会自动传入容器，除非在 Compose 的 `environment:` 明确声明，或在 `docker compose run -e NAME` 中显式透传。仓库的角色独立模板已经声明常驻服务所需变量。不要对任何生产日志打印数据库 URL、Owner Token 或私钥。
 
+实验性 Direct TCP Probe 默认关闭。单独试验需 Control 的 `TUNEX_PROBE_EXECUTION=1` 与
+`TUNEX_PROBE_CLOCK_SKEW_SECONDS=1`，以及 Agent 的 `TUNEX_PROBE_REGISTRATION=true` 与
+`TUNEX_PROBE_AGENT_EXECUTION=true`。仅登记不执行；仅启用 Control 签发不保证节点执行。
+这会明确选择更严格的一秒集群 ADP 时钟策略，须独立核验所有 Agent 的 OS 时间并重新协商，
+不是自动修时钟或实时撤权承诺。保持开关关闭不影响既有 native 服务。
+签发、历史回执、撤销及不确定结果边界见 [Probe 管理契约](../docs/spec/forward-probe-management-v1.md)。
+当前组合验收仅已接入 Actions，尚无本工作树对应 SHA 的通过声明，不据此建议生产启用。
+
 ### 分角色只读预检
 
 在对应 Linux 主机使用仓库指定的 Node 版本，检查该角色环境文件。Control

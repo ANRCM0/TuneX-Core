@@ -1,0 +1,185 @@
+{
+  "description": "Parser recognition only, never Probe authorization",
+  "cases": [
+    {
+      "name": "valid-request",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": true
+    },
+    {
+      "name": "valid-response",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0,\"serverTime\":\"2026-10-17T00:00:00.000Z\",\"state\":\"contract-only\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "valid-exact-integer-exponent",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2e0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": true
+    },
+    {
+      "name": "valid-maximum-counter",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":9007199254740991,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": true
+    },
+    {
+      "name": "downgrade",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":0,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "future-version",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":2,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "wrong-adp",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":2,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "foreign-capability",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"native.direct.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "payload",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":1}",
+      "valid": false
+    },
+    {
+      "name": "retry",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":2,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "unbounded-timeout",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2001,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "nonce-too-short",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"a\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "nonce-uppercase",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "newline-id",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\\n\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "zero-epoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "unsafe-epoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":9007199254740992,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "epoch-string",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":\"2\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "arbitrary-target",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0,\"host\":\"169.254.169.254\"}",
+      "valid": false
+    },
+    {
+      "name": "grant-in-request",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0,\"permit\":{\"executable\":true}}",
+      "valid": false
+    },
+    {
+      "name": "enabled-ack",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0,\"serverTime\":\"2026-10-17T00:00:00.000Z\",\"state\":\"contract-only\",\"executionEnabled\":true}",
+      "valid": false
+    },
+    {
+      "name": "active-ack",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0,\"serverTime\":\"2026-10-17T00:00:00.000Z\",\"state\":\"active\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "lease-in-ack",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0,\"serverTime\":\"2026-10-17T00:00:00.000Z\",\"state\":\"contract-only\",\"executionEnabled\":false,\"until\":\"2099-01-01T00:00:00.000Z\"}",
+      "valid": false
+    },
+    {
+      "name": "timezone-offset",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0,\"serverTime\":\"2026-10-17T00:00:00.000+00:00\",\"state\":\"contract-only\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "invalid-calendar",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0,\"serverTime\":\"2026-02-30T00:00:00.000Z\",\"state\":\"contract-only\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "submillisecond-time",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0,\"serverTime\":\"2026-10-17T00:00:00.0001Z\",\"state\":\"contract-only\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "duplicate-field",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "trailing-data",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}{}",
+      "valid": false
+    },
+    {
+      "name": "lone-surrogate",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"\\ud800\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "null-message",
+      "message": "Request",
+      "raw": "null",
+      "valid": false
+    },
+    {
+      "name": "oversized-message",
+      "message": "Request",
+      "raw": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 {\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-hello\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"capability\":\"probe.tcp-connect.v1\",\"point\":\"agent-direct-egress\",\"maxTimeoutMs\":2000,\"maxAttempts\":1,\"applicationPayloadBytes\":0}",
+      "valid": false
+    }
+  ]
+}

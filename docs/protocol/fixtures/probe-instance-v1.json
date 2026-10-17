@@ -1,0 +1,227 @@
+{
+  "description": "Non-executable ownership; no permit authority",
+  "cases": [
+    {
+      "name": "valid-register",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": true
+    },
+    {
+      "name": "valid-registered",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"registered\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "valid-inspect",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"inspect\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": true
+    },
+    {
+      "name": "valid-absent",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"inspect\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":0,\"state\":\"absent\",\"currentInstanceId\":null,\"registeredAt\":null,\"expiresAt\":null,\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "valid-stale-inspection",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"inspect\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"stale\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "valid-revoked",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"revoke\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":1,\"generation\":1,\"state\":\"revoked\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "valid-quarantine",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"revoke\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":1,\"generation\":1,\"state\":\"quarantined\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "valid-exponent",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2e0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": true
+    },
+    {
+      "name": "valid-max-generation",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":9007199254740991}",
+      "valid": true
+    },
+    {
+      "name": "old-version",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":0,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": false
+    },
+    {
+      "name": "wrong-adp",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":2,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": false
+    },
+    {
+      "name": "unknown-action",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"renew\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": false
+    },
+    {
+      "name": "caller-target",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"target\":\"169.254.169.254\"}",
+      "valid": false
+    },
+    {
+      "name": "permit",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"permitId\":\"forged\"}",
+      "valid": false
+    },
+    {
+      "name": "nonce-short",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"a\",\"expectedGeneration\":0}",
+      "valid": false
+    },
+    {
+      "name": "newline-id",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\\n\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": false
+    },
+    {
+      "name": "zero-epoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": false
+    },
+    {
+      "name": "unsafe-generation",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":9007199254740992}",
+      "valid": false
+    },
+    {
+      "name": "negative-generation",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":-1}",
+      "valid": false
+    },
+    {
+      "name": "string-generation",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":\"0\"}",
+      "valid": false
+    },
+    {
+      "name": "inspect-nonzero",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"inspect\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":1}",
+      "valid": false
+    },
+    {
+      "name": "enabled",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"registered\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":true}",
+      "valid": false
+    },
+    {
+      "name": "bad-register-state",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"stale\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "wrong-generation",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":2,\"state\":\"registered\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "foreign-current",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"registered\",\"currentInstanceId\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "null-expiry",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"registered\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":null,\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "overlong-registration",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"registered\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.001Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "reversed-registration",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"registered\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:00.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "invalid-calendar",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"registered\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-02-30T00:00:00.000Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "ack-permit",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"registered\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false,\"permit\":\"fake\"}",
+      "valid": false
+    },
+    {
+      "name": "absent-with-history",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"inspect\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0,\"generation\":1,\"state\":\"absent\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "revoke-live",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance-ack\",\"action\":\"revoke\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":1,\"generation\":1,\"state\":\"registered\",\"currentInstanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"registeredAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:30.000Z\",\"serverTime\":\"2026-10-17T00:00:00.010Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "duplicate",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": false
+    },
+    {
+      "name": "trailing",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}{}",
+      "valid": false
+    },
+    {
+      "name": "surrogate",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"action\":\"register\",\"nodeId\":\"\\ud800\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expectedGeneration\":0}",
+      "valid": false
+    },
+    {
+      "name": "oversize",
+      "message": "Request",
+      "raw": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ",
+      "valid": false
+    },
+    {
+      "name": "null",
+      "message": "Response",
+      "raw": "null",
+      "valid": false
+    }
+  ]
+}

@@ -151,7 +151,12 @@ test('plan parsing rejects duplicates, unknown fields, unsafe counters, legacy p
 });
 test('known migration footprints cover tables, multi-column DDL and superseded enums', async () => {
     const catalog = await upgradeSchemaCatalog();
-    assert.equal(catalog.files.length, 13);
+    assert.equal(catalog.files.length, 17);
+    assert.ok(catalog.markers.some(m => m.migration === '0017-probe-results.sql' && m.table === 'probe_results'));
+    assert.ok(catalog.markers.some(m => m.migration === '0015-probe-permits.sql' && m.table === 'probe_permits'));
+    assert.ok(catalog.markers.some(m => m.migration === '0015-probe-permits.sql' && m.table === 'probe_permit_budget'));
+    assert.ok(catalog.markers.some(m => m.migration === '0016-probe-permit-withdrawals.sql' && m.table === 'probe_permit_withdrawals'));
+    assert.ok(catalog.markers.some(m => m.migration === '0014-probe-instances.sql' && m.table === 'probe_instances'));
     assert.ok(catalog.markers.some(m => m.column === 'activated_count'));
     const migration = '0002-example.sql';
     const markers = schemaMarkers(migration,
@@ -167,6 +172,95 @@ test('known migration footprints cover tables, multi-column DDL and superseded e
     assert.deepEqual(inspectSchema([migration, newer], all, columns), []);
     assert.deepEqual(inspectSchema([migration], all, columns), [migration]);
 });
+test('Probe registry DDL has an explicit Control-only reader ceiling and cannot silently downgrade', () => {
+    const f = fixture(), migration = '0014-probe-instances.sql';
+    f.inspection.schemaFiles.push({ name: migration, sha256: 'c'.repeat(64) });
+    f.plan.target.control.profile = 'adp3-probe-registry-v1';
+    let report = assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection);
+    assert.equal(report.decision, 'review-required');
+    assert.deepEqual(report.database.pendingMigrations, [migration]);
+    f.inspection.database.migrations.push(migration);
+    f.plan.source.control.profile = 'adp3-probe-registry-v1';
+    f.plan.controlMultihop = true;
+    report = assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection);
+    assert.equal(report.decision, 'compatible');
+    for (const operation of ['upgrade', 'rollback', 'recover'] as const) {
+        f.plan.operation = operation; f.plan.target.control.profile = 'adp3-multihop-v1';
+        report = assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection);
+        assert.equal(report.decision, 'blocked');
+        assert.ok(report.checks.some(c => c.code === 'CONTROL_SCHEMA_READER' && c.subject === 'target' && c.status === 'block'));
+    }
+    f.plan.target.agent.profile = 'adp3-probe-registry-v1';
+    assert.throws(() => parseUpgradePlan(JSON.stringify(f.plan)));
+    const markers = schemaMarkers(migration, 'CREATE TABLE probe_instances (node_id INT);');
+    assert.deepEqual(inspectSchema([], markers, [{ table: 'probe_instances', column: 'node_id', type: 'int' }]), [migration]);
+    assert.deepEqual(inspectSchema([migration], markers, []), [migration]);
+});
+test('Probe permit DDL has a distinct Control-only ceiling and detects partial ownership tables', () => {
+    const f = fixture(), migration = '0015-probe-permits.sql';
+    f.inspection.schemaFiles.push({ name: '0014-probe-instances.sql', sha256: 'c'.repeat(64) }, { name: migration, sha256: 'd'.repeat(64) });
+    f.inspection.database.migrations.push('0014-probe-instances.sql', migration);
+    f.plan.source.control.profile = 'adp3-probe-permits-v1'; f.plan.target.control.profile = 'adp3-probe-permits-v1';
+    f.plan.controlMultihop = true;
+    assert.equal(assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection).decision, 'compatible');
+    for (const profile of ['adp3-runtime-v1', 'adp3-multihop-v1', 'adp3-probe-registry-v1'] as const) {
+        f.plan.target.control.profile = profile;
+        const report = assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection);
+        assert.ok(report.checks.some(c => c.code === 'CONTROL_SCHEMA_READER' && c.subject === 'target' && c.status === 'block'));
+    }
+    f.plan.target.agent.profile = 'adp3-probe-permits-v1';
+    assert.throws(() => parseUpgradePlan(JSON.stringify(f.plan)));
+    const markers = schemaMarkers(migration, 'CREATE TABLE probe_permit_budget (id INT); CREATE TABLE probe_permits (id INT);');
+    const columns = [{ table: 'probe_permit_budget', column: 'id', type: 'int' }];
+    assert.deepEqual(inspectSchema([], markers, columns), [migration]);
+    assert.deepEqual(inspectSchema([migration], markers, columns), [migration]);
+});
+
+test('Probe withdrawals have an independent Control-only ceiling and partial migration/backfill requires review', async () => {
+    const f = fixture(), migration = '0016-probe-permit-withdrawals.sql';
+    for (const name of ['0014-probe-instances.sql', '0015-probe-permits.sql', migration]) {
+        f.inspection.schemaFiles.push({ name, sha256: 'd'.repeat(64) }); f.inspection.database.migrations.push(name);
+    }
+    f.plan.source.control.profile = 'adp3-probe-withdrawals-v1'; f.plan.target.control.profile = 'adp3-probe-withdrawals-v1';
+    f.plan.controlMultihop = true;
+    assert.equal(assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection).decision, 'compatible');
+    for (const profile of ['adp3-runtime-v1', 'adp3-multihop-v1', 'adp3-probe-registry-v1', 'adp3-probe-permits-v1'] as const) {
+        f.plan.target.control.profile = profile;
+        assert.ok(assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection).checks.some(c =>
+            c.code === 'CONTROL_SCHEMA_READER' && c.subject === 'target' && c.status === 'block'));
+    }
+    f.plan.target.agent.profile = 'adp3-probe-withdrawals-v1'; assert.throws(() => parseUpgradePlan(JSON.stringify(f.plan)));
+    const sql = await readFile(new URL('../migrations/' + migration, import.meta.url), 'utf8');
+    assert.ok(!/--[^\r\n]*;/.test(sql), 'migration runner splits semicolons including comments');
+    assert.match(sql, /SELECT id,closed_at FROM probe_permits WHERE state='consumed'/);
+    assert.match(sql, /ON DELETE CASCADE/);
+    const markers = schemaMarkers(migration, sql), columns = [{ table: 'probe_permit_withdrawals', column: 'permit_id', type: 'varchar(128)' }];
+    assert.deepEqual(inspectSchema([], markers, columns), [migration]);
+    assert.deepEqual(inspectSchema([migration], markers, []), [migration]);
+    assert.deepEqual(inspectSchema([migration], markers, columns), []);
+});
+
+test('short-lived Probe results require a new Control-only reader ceiling and reject partial DDL', async () => {
+    const f = fixture(), migration = '0017-probe-results.sql';
+    for (const name of ['0014-probe-instances.sql', '0015-probe-permits.sql', '0016-probe-permit-withdrawals.sql', migration]) {
+        f.inspection.schemaFiles.push({ name, sha256: 'd'.repeat(64) }); f.inspection.database.migrations.push(name);
+    }
+    f.plan.source.control.profile = 'adp3-probe-results-v1'; f.plan.target.control.profile = 'adp3-probe-results-v1';
+    f.plan.controlMultihop = true;
+    assert.equal(assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection).decision, 'compatible');
+    for (const profile of ['adp3-runtime-v1', 'adp3-multihop-v1', 'adp3-probe-registry-v1', 'adp3-probe-permits-v1', 'adp3-probe-withdrawals-v1'] as const) {
+        f.plan.target.control.profile = profile;
+        assert.ok(assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection).checks.some(c =>
+            c.code === 'CONTROL_SCHEMA_READER' && c.subject === 'target' && c.status === 'block'));
+    }
+    f.plan.target.agent.profile = 'adp3-probe-results-v1'; assert.throws(() => parseUpgradePlan(JSON.stringify(f.plan)));
+    const sql = await readFile(new URL('../migrations/' + migration, import.meta.url), 'utf8');
+    assert.ok(!/--[^\r\n]*;/.test(sql)); assert.match(sql, /ON DELETE CASCADE/);
+    const markers = schemaMarkers(migration, sql), columns = [{ table: 'probe_results', column: 'permit_id', type: 'varchar(128)' }];
+    assert.deepEqual(inspectSchema([], markers, columns), [migration]); assert.deepEqual(inspectSchema([migration], markers, []), [migration]);
+    assert.deepEqual(inspectSchema([migration], markers, columns), []);
+});
+
 test('CLI dispatch and CI wiring keep assessment read-only and separate real MySQL acceptance', async () => {
     const cli = await readFile(new URL('../../../scripts/ops/cli.ts', import.meta.url), 'utf8');
     assert.ok(cli.indexOf("command==='assess-upgrade'") < cli.indexOf('const authority=new AuthorityStore'));

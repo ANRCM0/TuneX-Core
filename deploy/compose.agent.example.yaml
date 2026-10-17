@@ -17,6 +17,8 @@ services:
       - --journal-key=/run/tunex-agent-secrets/journal.key
       - --relay
       - --multihop=${TUNEX_MULTIHOP_AGENT:-false}
+      - --probe-registration=${TUNEX_PROBE_REGISTRATION:-false}
+      - --probe-execution=${TUNEX_PROBE_AGENT_EXECUTION:-false}
       - --diagnostics
     volumes:
       - type: bind

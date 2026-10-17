@@ -3,9 +3,9 @@ import type { HttpBindings } from '@hono/node-server';
 import { TLSSocket } from 'node:tls';
 import { readFile } from 'node:fs/promises';
 import { rows } from '../infrastructure/mysql.ts';
-import { consoleNodes, consoleForwards, consoleOperations, consoleNodeDiagnostics, consoleQuery, consoleNodeCandidates, consoleOverview } from './console-read.ts';
+import { consoleQuery } from './console-query.ts';
 import { randomUUID } from 'node:crypto';
-import { parseJson, parseRuntimeMessage, parseTransitNegotiation, parseTransitDelivery } from '@tunex/contracts';
+import { parseJson, parseRuntimeMessage, parseTransitNegotiation, parseTransitDelivery, parseProbeNegotiation, parseProbeInstance, parseProbeClaim, parseProbeDelivery, parseProbeResult } from '@tunex/contracts';
 import { TransitNegotiator } from '../modules/runtime/transit-negotiation.ts';
 import { TransitDeliveryService } from '../modules/runtime/transit-delivery.ts';
 import { isId, isCounter } from '@tunex/core';
@@ -109,7 +109,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.post('/api/v1/scopes/:scope/relay-plan',async c=>c.json(await control.planRelay(c.get('actor'),scope(c.req.param('scope')),parseJson(await body(c.req.raw,32768)))));
     app.get('/api/v1/scopes/:scope/execution-capabilities',async c=>{
         await control.db.transaction(tx=>control.identity.scope(tx,c.get('actor'),scope(c.req.param('scope'))));
-        return c.json({multihopEnabled:control.relay.multihopEnabled,maxPathNodes:8,executionExtension:1});
+        return c.json({multihopEnabled:control.relay.multihopEnabled,maxPathNodes:8,executionExtension:1,probeIssuanceEnabled:control.probes.enabled});
     });
     app.get('/api/v1/scopes/:scope/forwards/:id/deployment',async c=>c.json(await control.db.transaction(async tx=>{
         const scopeId=scope(c.req.param('scope'));await control.identity.scope(tx,c.get('actor'),scopeId);
@@ -121,7 +121,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         return {revisions:await rows(tx,'SELECT revision,spec FROM forward_revisions WHERE forward_id=? ORDER BY revision DESC LIMIT 25',[forward.id])};
     })));
     app.get('/api/v1/scopes/:scope/transport-profiles/:profile/grants',async c=>c.json(await control.transport.grants(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'))));
-    app.put('/api/v1/scopes/:scope/transport-profiles/:profile/grants/:actor',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='allowed,expectedRevision'||!isCounter(input.expectedRevision)||typeof input.allowed!=='boolean')invalid('Profile grant fields required');const result=await control.transport.changeGrant(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),c.req.param('actor'),c.req.header('idempotency-key'),input.expectedRevision,input.allowed);return c.json(result.body,result.status);});
+    app.put('/api/v1/scopes/:scope/transport-profiles/:profile/grants/:actor',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='allowed,expectedRevision'||!isCounter(input.expectedRevision)||typeof input.allowed!=='boolean')invalid('Profile grant fields required');const result=await control.profileGrants.change(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),c.req.param('actor'),c.req.header('idempotency-key'),input.expectedRevision,input.allowed);return c.json(result.body,result.status);});
     app.get('/api/v1/scopes/:scope/nodes/:node/relay-endpoint',async c=>c.json(await control.relayEndpoints.get(c.get('actor'),scope(c.req.param('scope')),c.req.param('node'))));
     app.put('/api/v1/scopes/:scope/nodes/:node/relay-endpoint',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='config,expectedRevision'||!isCounter(input.expectedRevision,true))invalid('Relay endpoint config and expectedRevision required');const result=await control.relayEndpoints.change(c.get('actor'),scope(c.req.param('scope')),c.req.param('node'),c.req.header('idempotency-key'),input.expectedRevision,input.config);return c.json(result.body,result.status);});
     app.get('/api/v1/scopes/:scope/transport-profiles',async c=>c.json(await control.transport.list(c.get('actor'),scope(c.req.param('scope')))));
@@ -143,15 +143,15 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         const response = await control.changeNodeGrant(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.param('actor'), c.req.header('idempotency-key'), input.expectedRevision, input.allowed);
         return c.json(response.body, response.status);
     });
-    for (const [kind, read] of [['nodes', consoleNodes], ['forwards', consoleForwards], ['operations', consoleOperations], ['candidates', consoleNodeCandidates]] as const) {
+    for (const kind of ['nodes', 'forwards', 'operations', 'candidates'] as const) {
         app.get('/api/v1/scopes/:scope/' + (kind === 'candidates' ? 'nodes/candidates' : kind), async c => {
             const query = consoleQuery(kind, new URL(c.req.url).searchParams);
-            return c.json(await read(control, c.get('actor'), scope(c.req.param('scope')!), query.page, query.limit, query.filters));
+            return c.json(await control.queries[kind](c.get('actor'), scope(c.req.param('scope')!), query.page, query.limit, query.filters));
         });
     }
     app.get('/api/v1/scopes/:scope/overview', async c => {
         if (new URL(c.req.url).search) invalid('Overview does not accept list filters');
-        return c.json(await consoleOverview(control, c.get('actor'), scope(c.req.param('scope'))));
+        return c.json(await control.queries.overview(c.get('actor'), scope(c.req.param('scope'))));
     });
     app.post('/api/v1/scopes/:scope/nodes', async (c) => c.json(await control.nodes.provision(c.get('actor'), scope(c.req.param('scope')), parseJson(await body(c.req.raw)) as NodePolicy), 201));
     app.post('/enrollment/v1', async (c) => {
@@ -197,7 +197,32 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         const result = await control.retry(c.get('actor'), scope(c.req.param('scope')), c.req.header('idempotency-key'), c.req.param('id'), input.expectedRevision);
         return c.json(result.body, result.status);
     });
-    app.get('/api/v1/scopes/:scope/nodes/:id/diagnostics', async c => c.json(await consoleNodeDiagnostics(control, c.get('actor'), scope(c.req.param('scope')), c.req.param('id'))));
+    app.get('/api/v1/scopes/:scope/nodes/:id/diagnostics', async c => c.json(await control.queries.diagnostics(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'))));
+    app.post('/api/v1/scopes/:scope/nodes/:id/observations', async c => {
+        const input = parseJson(await body(c.req.raw, 1024));
+        return c.json(await control.observations.observe(c.get('actor'), scope(c.req.param('scope')),
+            c.req.param('id'), input, c.req.raw.signal));
+    });
+    app.post('/api/v1/scopes/:scope/forwards/:id/probe-plan', async c => c.json(
+        await control.probePlans.plan(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'),
+            parseJson(await body(c.req.raw, 1024)))));
+    app.post('/api/v1/scopes/:scope/forwards/:id/probes', async c => {
+        const result = await control.probes.create(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'),
+            c.req.header('idempotency-key'), parseJson(await body(c.req.raw, 1024)));
+        return c.json(result.body, result.status);
+    });
+    app.get('/api/v1/scopes/:scope/probes/:id', async c => {
+        if (new URL(c.req.url).search) invalid('Probe receipt does not accept query parameters');
+        return c.json(await control.probes.inspect(c.get('actor'), scope(c.req.param('scope')), c.req.param('id')));
+    });
+    app.post('/api/v1/scopes/:scope/probes/:id/revoke', async c => {
+        const input = parseJson(await body(c.req.raw, 1024));
+        if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length)
+            invalid('Empty Probe revocation object required');
+        const result = await control.probes.revoke(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'));
+        return c.json({ probeId: result.id, state: result.state, executionEnabled: false,
+            withdrawnAt: 'withdrawnAt' in result && typeof result.withdrawnAt === 'number' ? new Date(result.withdrawnAt).toISOString() : null });
+    });
     app.get('/api/v1/scopes/:scope/nodes/:id', async (c) => c.json(await control.nodes.view(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'))));
     app.put('/api/v1/scopes/:scope/nodes/:id/policy', async (c) => {
         const input = parseJson(await body(c.req.raw)) as Record<string, unknown>;
@@ -220,6 +245,24 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         return c.json(await control.nodes.rotate(c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')), input.requestId, input.csr));
     });
     app.post('/agent/v3/relay-credential',async c=>{const input=parseJson(await body(c.req.raw,32768)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='csr,requestId'||!isId(input.requestId)||typeof input.csr!=='string')invalid('Relay credential request ID and CSR required');return c.json(await control.nodes.relayCredential(c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),input.requestId,input.csr));});
+    app.post('/agent/v3/probe/hello', async c => c.json(await control.probeNegotiation.hello(
+        c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')),
+        parseProbeNegotiation('Request', await body(c.req.raw, 4096)))));
+    app.post('/agent/v3/probe/instance', async c => c.json(await control.probeRegistry.handle(
+        c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')),
+        parseProbeInstance('Request', await body(c.req.raw, 4096)))));
+    app.post('/agent/v3/probe/claim', async c => c.json(await control.probeClaims.handle(
+        c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')),
+        parseProbeClaim('Request', await body(c.req.raw, 4096)))));
+    app.post('/agent/v3/probe/poll', async c => c.json(await control.probeDelivery.poll(
+        c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')),
+        parseProbeDelivery('PollRequest', await body(c.req.raw, 4096)))));
+    app.post('/agent/v3/probe/status', async c => c.json(await control.probeDelivery.status(
+        c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')),
+        parseProbeDelivery('StatusRequest', await body(c.req.raw, 4096)))));
+    app.post('/agent/v3/probe/result', async c => c.json(await control.probeResults.handle(
+        c.get('node'), c.get('fingerprint'), epoch(c.req.header('x-tunex-session-epoch')),
+        parseProbeResult('Request', await body(c.req.raw, 4096)))));
     const transitNegotiator=new TransitNegotiator(control.db);
     // Read-only mTLS session/feature negotiation; never dispatches a Transit job.
     const transitDelivery=new TransitDeliveryService(control.db);

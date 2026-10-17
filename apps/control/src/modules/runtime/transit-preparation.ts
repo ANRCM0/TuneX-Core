@@ -4,7 +4,7 @@ import { digest, parseRelayMessage, parseTransitIntent, validCidr, validateTime 
 import type { TransitIntent } from '@tunex/contracts';
 import { parseRelayEndpoint } from '../relay-endpoints.ts';
 import type { ResolvedEndpoint } from '../relay-endpoints.ts';
-import type { ResolvedProfile } from '../transport.ts';
+import type { ResolvedProfile } from '../transport-ports.ts';
 import { targetAllowed } from '../target-policy.ts';
 import type { RelayNodeExecutionFacts } from './relay-plan.ts';
 import { compilePathTopology } from './path-topology.ts';

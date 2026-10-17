@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/egress"
 )
 
 // MaxTCPConnections bounds live client streams, including streams still
@@ -166,27 +167,8 @@ func (slot *tcpListenerSlot) accept() {
 	}
 }
 
-var sensitivePrefixes = []string{"169.254.0.0/16", "100.100.100.200/32", "fd00:ec2::254/128", "fe80::/10"}
-
 func Allowed(addr netip.Addr, config contracts.DirectConfig) bool {
-	addr = addr.Unmap()
-	if !addr.IsValid() || addr.IsUnspecified() || addr.IsMulticast() {
-		return false
-	}
-	if !config.AllowMetadataTargets {
-		for _, text := range sensitivePrefixes {
-			if netip.MustParsePrefix(text).Contains(addr) {
-				return false
-			}
-		}
-	}
-	for _, text := range config.AllowedDestinationCidrs {
-		prefix, err := netip.ParsePrefix(text)
-		if err == nil && prefix.Addr().BitLen() == addr.BitLen() && prefix.Contains(addr) {
-			return true
-		}
-	}
-	return false
+	return egress.Allowed(addr, config.AllowedDestinationCidrs, config.AllowMetadataTargets)
 }
 
 func (stream *TCP) copy(client net.Conn) {

@@ -1,22 +1,11 @@
 import { ControlError } from '../application/errors.ts';
 import { json, rows, write } from '../infrastructure/mysql.ts';
 import type { Transaction } from '../infrastructure/mysql.ts';
-export interface Accepted {
-    status: 200 | 202;
-    body: {
-        forwardId: string;
-        revision: number;
-        operationId: string | null;
-        sourceOperationId?: string;
-    };
-}
-export interface RequestIdentity {
-    scopeId: string;
-    actorId: string;
-    key: string;
-    digest: string;
-}
-export class Idempotency {
+import type { IdempotentRequests, RequestIdentity } from '../application/ports.ts';
+import type { ForwardAccepted as Accepted } from '../application/forward-commands.ts';
+export type { RequestIdentity } from '../application/ports.ts';
+export type { ForwardAccepted as Accepted } from '../application/forward-commands.ts';
+export class Idempotency implements IdempotentRequests<Transaction> {
     async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE idempotency SET recovery_invalidated=TRUE');}
     async claim<R extends {
         status: 200 | 202;

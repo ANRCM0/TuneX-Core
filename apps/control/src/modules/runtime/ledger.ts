@@ -15,6 +15,8 @@ import type { Forwarding } from '../forwarding.ts';
 import { targetAllowed } from '../target-policy.ts';
 import type { RelayResource } from './relay-planner.ts';
 import type { ReservedRelayResource } from './relay-plan.ts';
+import type { ForwardOperationCommands, ForwardResourceHost } from './forward-command-ports.ts';
+import type { SnapshotAssignmentCollector } from './snapshot-assignment-ports.ts';
 type ReportRequest=RuntimeMessages['ReportRequest'];
 export interface Operation {
     id: string;
@@ -46,8 +48,7 @@ interface Retirement {
     retirement_generation: number;
     safe: number;
 }
-export class RuntimeLedger {
-    additionalAssignments: ((tx:Transaction,nodeId:string,includeAccepted:boolean)=>Promise<Assignment[]>)|undefined;
+export class RuntimeLedger implements ForwardOperationCommands<Transaction>, ForwardResourceHost<Transaction> {
     async quarantineRecovery(tx:Transaction):Promise<void>{
         await write(tx,'UPDATE operations SET recovery_invalidated=TRUE,claim_token=NULL,claim_until=NULL');
         await write(tx,'UPDATE retirements SET safe=TRUE');
@@ -59,13 +60,17 @@ export class RuntimeLedger {
     private readonly authorization: {
         canExecute(tx: Transaction, actor: string, forward: Forward): Promise<boolean>;
     } | undefined;
-    constructor(policy: Policy = { ...DEFAULT_POLICY }, authorization?: {
+    private readonly assignmentSources: SnapshotAssignmentCollector<Transaction>;
+    constructor(policy: Policy | undefined, authorization: {
         canExecute(tx: Transaction, actor: string, forward: Forward): Promise<boolean>;
-    }) { this.policy = { ...policy }; this.authorization = authorization; }
+    } | undefined, assignmentSources: SnapshotAssignmentCollector<Transaction>) {
+        if (!assignmentSources || typeof assignmentSources.merge !== 'function') throw new Error('Snapshot assignment collector is required');
+        this.policy = { ...(policy ?? DEFAULT_POLICY) }; this.authorization = authorization; this.assignmentSources = assignmentSources;
+    }
     async assignments(tx: Transaction, forwarding: Forwarding, facts: AuthorizedNodeFacts, includeAccepted = false): Promise<Assignment[]> {
         const forwards = (await forwarding.forNode(tx, facts.nodeId)).filter(forward=>!forward.spec.path);
         if (!forwards.length)
-            return this.additionalAssignments?(await this.additionalAssignments(tx,facts.nodeId,includeAccepted)).sort((a,b)=>a.assignmentId<b.assignmentId?-1:a.assignmentId>b.assignmentId?1:0):[];
+            return this.assignmentSources.merge(tx, { nodeId: facts.nodeId, includeAccepted }, []);
         const placeholders = forwards.map(() => '?').join(',');
         const operations = await rows<Operation>(tx, `SELECT * FROM operations WHERE forward_id IN (${placeholders}) ORDER BY created_at DESC,id DESC FOR UPDATE`, forwards.map(forward => forward.id));
         const slots = await rows<{
@@ -92,8 +97,7 @@ export class RuntimeLedger {
             const reservations: ReservedSlot[] = slots.filter(slot => slot.owner_id === forward.id).map(slot => ({ nodeId: facts.nodeId, forwardId: forward.id, protocol: slot.protocol, port: slot.port, bindingFence: slot.fence, deploymentGeneration: slot.deployment_generation }));
             assignments.push(...compileDirect(forward, facts, reservations.filter(slot => slot.port === forward.spec.ingress.listen.port)));
         }
-        if(this.additionalAssignments)assignments.push(...await this.additionalAssignments(tx,facts.nodeId,includeAccepted));
-        return assignments.sort((a, b) => a.assignmentId < b.assignmentId ? -1 : 1);
+        return this.assignmentSources.merge(tx, { nodeId: facts.nodeId, includeAccepted }, assignments);
     }
     async assertCapacity(tx: Transaction, forwarding: Forwarding, facts: AuthorizedNodeFacts): Promise<void> {
         const now = Date.now();

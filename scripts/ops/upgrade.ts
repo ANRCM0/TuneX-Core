@@ -2,7 +2,7 @@ import { isId, MAX_COUNTER } from '@tunex/core';
 import { parseJson } from '@tunex/contracts';
 import type { AuthorityRecord } from '../../apps/control/src/infrastructure/authority.ts';
 
-export type CompatibilityProfile = 'adp3-runtime-v1' | 'adp3-multihop-v1';
+export type CompatibilityProfile = 'adp3-runtime-v1' | 'adp3-multihop-v1' | 'adp3-probe-registry-v1' | 'adp3-probe-permits-v1' | 'adp3-probe-withdrawals-v1' | 'adp3-probe-results-v1';
 interface Build {
     revision: string;
     imageDigest: string;
@@ -52,7 +52,13 @@ export interface UpgradeInspection {
 type Check = { code: string; status: 'pass' | 'block' | 'review'; subject: string };
 const sha = /^[a-f0-9]{40}$/;
 const digest = /^sha256:[a-f0-9]{64}$/;
-const profiles = new Set<CompatibilityProfile>(['adp3-runtime-v1', 'adp3-multihop-v1']);
+const profiles = new Set<CompatibilityProfile>(['adp3-runtime-v1', 'adp3-multihop-v1', 'adp3-probe-registry-v1', 'adp3-probe-permits-v1', 'adp3-probe-withdrawals-v1', 'adp3-probe-results-v1']);
+const controlSchemaCeiling: Record<CompatibilityProfile, string> = {
+    'adp3-runtime-v1': '0012-', 'adp3-multihop-v1': '0013-', 'adp3-probe-registry-v1': '0014-',
+    'adp3-probe-permits-v1': '0015-',
+    'adp3-probe-withdrawals-v1': '0016-',
+    'adp3-probe-results-v1': '0017-',
+};
 const migrationName = /^[0-9]{4}-[a-z0-9-]+\.sql$/;
 const invalid = (): never => { throw new Error('INVALID_UPGRADE_PLAN'); };
 function object(value: unknown, keys: string[]): Record<string, unknown> {
@@ -72,7 +78,9 @@ function build(value: unknown): Build {
 }
 function release(value: unknown): Release {
     const v = object(value, ['control', 'agent']);
-    return { control: build(v.control), agent: build(v.agent) };
+    const control = build(v.control), agent = build(v.agent);
+    if (agent.profile !== 'adp3-runtime-v1' && agent.profile !== 'adp3-multihop-v1') invalid();
+    return { control, agent };
 }
 export function parseUpgradePlan(raw: string): UpgradePlan {
     const v = object(parseJson(raw, 1048576), ['version', 'operation', 'source', 'target',
@@ -145,13 +153,13 @@ export function assessUpgrade(plan: UpgradePlan, inspection: UpgradeInspection) 
     add('AUTHORIZATION_UPPER_BOUND', (db.latestLeaseUntil ?? 0) <= (a.latestValidUntil ?? 0) ? 'pass' : 'block', 'authority');
     add('PERSISTED_PROTOCOL', db.unsupportedSnapshots ? 'block' : 'pass', 'database');
     for (const [side, build] of [['source', plan.source.control], ['target', plan.target.control]] as const) {
-        const ceiling = build.profile === 'adp3-runtime-v1' ? '0012-' : '0013-';
+        const ceiling = controlSchemaCeiling[build.profile];
         add('CONTROL_SCHEMA_READER', applied.some(m => m.slice(0, 5) > ceiling) ? 'block' : 'pass', side);
     }
-    const targetMigration = plan.target.control.profile === 'adp3-runtime-v1' ? '0012-' : '0013-';
+    const targetMigration = controlSchemaCeiling[plan.target.control.profile];
     const pending = prefix ? known.filter(m => m.slice(0, 5) <= targetMigration && !applied.includes(m)) : [];
     if (pending.length) add('DDL_MAINTENANCE_REQUIRED', 'review', 'database');
-    if (plan.controlMultihop && (plan.target.control.profile !== 'adp3-multihop-v1' ||
+    if (plan.controlMultihop && (plan.target.control.profile === 'adp3-runtime-v1' ||
         plan.target.agent.profile !== 'adp3-multihop-v1' || !plan.agentMultihop))
         add('MULTIHOP_EXECUTOR_REQUIRED', 'block');
     if (!plan.controlMultihop && (db.multihopDeployments > 0 || db.enabledMultihopForwards > 0))

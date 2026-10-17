@@ -1,0 +1,824 @@
+{
+  "version": 1,
+  "request": {
+    "protocolVersion": 3,
+    "probeVersion": 1,
+    "nodeId": "node-a",
+    "bootId": "boot-a",
+    "sessionEpoch": 2,
+    "instanceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "instanceGeneration": 1,
+    "permitId": "permit-a",
+    "requestId": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "kind": "probe-result",
+    "binding": {
+      "nodeId": "node-a",
+      "bootId": "boot-a",
+      "sessionEpoch": 2,
+      "snapshotGeneration": 3,
+      "assignmentId": "assignment-a",
+      "forwardId": "forward-a",
+      "forwardRevision": 1,
+      "deploymentGeneration": 4,
+      "bindingFence": 5,
+      "configDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "egressPolicyRevision": 1
+    },
+    "timeoutMs": 1000,
+    "issuedAt": "2026-10-17T00:00:00.000Z",
+    "expiresAt": "2026-10-17T00:00:02.000Z",
+    "consumedAt": "2026-10-17T00:00:00.050Z",
+    "measuredAt": "2026-10-17T00:00:00.100Z",
+    "validUntil": "2026-10-17T00:00:02.000Z",
+    "elapsedMs": 10,
+    "point": "agent-direct-egress",
+    "status": "connected",
+    "code": "tcp-connected",
+    "applicationHealth": "unknown",
+    "source": "agent-reported",
+    "applicationPayloadBytes": 0
+  },
+  "response": {
+    "protocolVersion": 3,
+    "probeVersion": 1,
+    "nodeId": "node-a",
+    "bootId": "boot-a",
+    "sessionEpoch": 2,
+    "instanceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "instanceGeneration": 1,
+    "permitId": "permit-a",
+    "requestId": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "kind": "probe-result-ack",
+    "resultDigest": "sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911",
+    "acceptedAt": "2026-10-17T00:00:00.110Z",
+    "serverTime": "2026-10-17T00:00:00.120Z",
+    "duplicate": false,
+    "health": "unknown",
+    "executionEnabled": false
+  },
+  "resultDigest": "sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911",
+  "cases": [
+    {
+      "name": "connected",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": true
+    },
+    {
+      "name": "accepted",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "unreachable",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"unreachable\",\"code\":\"tcp-connect-failed\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": true
+    },
+    {
+      "name": "duplicate",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":true,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "zero-elapsed",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":0,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": true
+    },
+    {
+      "name": "integer-exponent",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2e0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": true
+    },
+    {
+      "name": "Request-missing-protocolVersion",
+      "message": "Request",
+      "raw": "{\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-probeVersion",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-nodeId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-bootId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-sessionEpoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-instanceId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-instanceGeneration",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-permitId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-requestId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-kind",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-binding",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-timeoutMs",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-issuedAt",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-expiresAt",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-consumedAt",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-measuredAt",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-validUntil",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-elapsedMs",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-point",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-status",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-code",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-applicationHealth",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-source",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-missing-applicationPayloadBytes",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\"}",
+      "valid": false
+    },
+    {
+      "name": "Request-old",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":0,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-adp",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":2,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-kind",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-actor",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0,\"actorId\":\"owner\"}",
+      "valid": false
+    },
+    {
+      "name": "Request-target",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0,\"target\":\"169.254.169.254\"}",
+      "valid": false
+    },
+    {
+      "name": "Request-fingerprint",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0,\"fingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}",
+      "valid": false
+    },
+    {
+      "name": "Request-newline-id",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\\n\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-zero",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-unsafe",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":9007199254740992,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-string",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":\"1\",\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-token",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"a\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-correlation",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-duplicate",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-rounded",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2.0000000000000001,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "Request-null",
+      "message": "Request",
+      "raw": "null",
+      "valid": false
+    },
+    {
+      "name": "Request-array",
+      "message": "Request",
+      "raw": "[]",
+      "valid": false
+    },
+    {
+      "name": "Request-trailing",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}{}",
+      "valid": false
+    },
+    {
+      "name": "Request-oversize",
+      "message": "Request",
+      "raw": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-protocolVersion",
+      "message": "Response",
+      "raw": "{\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-probeVersion",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-nodeId",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-bootId",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-sessionEpoch",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-instanceId",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-instanceGeneration",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-permitId",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-requestId",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-kind",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-resultDigest",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-acceptedAt",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-serverTime",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-duplicate",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-health",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-missing-executionEnabled",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\"}",
+      "valid": false
+    },
+    {
+      "name": "Response-old",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":0,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-adp",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":2,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-kind",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-actor",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false,\"actorId\":\"owner\"}",
+      "valid": false
+    },
+    {
+      "name": "Response-target",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false,\"target\":\"169.254.169.254\"}",
+      "valid": false
+    },
+    {
+      "name": "Response-fingerprint",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false,\"fingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}",
+      "valid": false
+    },
+    {
+      "name": "Response-newline-id",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\\n\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-zero",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-unsafe",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":9007199254740992,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-string",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":\"1\",\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-token",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"a\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-correlation",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-duplicate",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-rounded",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2.0000000000000001,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "Response-null",
+      "message": "Response",
+      "raw": "null",
+      "valid": false
+    },
+    {
+      "name": "Response-array",
+      "message": "Response",
+      "raw": "[]",
+      "valid": false
+    },
+    {
+      "name": "Response-trailing",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}{}",
+      "valid": false
+    },
+    {
+      "name": "Response-oversize",
+      "message": "Response",
+      "raw": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ",
+      "valid": false
+    },
+    {
+      "name": "before-epoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"1969-12-31T23:59:59.999Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "before-issued",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"1969-12-31T23:59:59.999Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "before-consume",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.049Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "empty-validity",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:00.100Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "extends-permit",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.001Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "long-permit",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.001Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "elapsed-over-timeout",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":1001,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "negative",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":-1,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "fraction",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":1.1,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "elapsed-string",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":\"1\",\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "status-code",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connect-failed\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "unknown-status",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"timeout\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "healthy",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"healthy\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "independent",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0,\"independentProbe\":true}",
+      "valid": false
+    },
+    {
+      "name": "source",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"control-verified\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "point",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"ingress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "payload",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":1}",
+      "valid": false
+    },
+    {
+      "name": "small-timeout",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":99,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "large-timeout",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":2001,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "utc-offset",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100+00:00\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "calendar",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-02-30T00:00:00.000Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "nano",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.1001Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-nodeId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-bootId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-sessionEpoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-snapshotGeneration",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-assignmentId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-forwardId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-forwardRevision",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-deploymentGeneration",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-bindingFence",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-configDigest",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding-egressPolicyRevision",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "binding-node",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"foreign\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "binding-boot",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"foreign\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "binding-epoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":3,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "binding-assignment",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"bad\\n\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "binding-fence",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":0,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "binding-digest",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "binding-unknown",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1,\"target\":\"127.0.0.1\"},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"measuredAt\":\"2026-10-17T00:00:00.100Z\",\"validUntil\":\"2026-10-17T00:00:02.000Z\",\"elapsedMs\":10,\"point\":\"agent-direct-egress\",\"status\":\"connected\",\"code\":\"tcp-connected\",\"applicationHealth\":\"unknown\",\"source\":\"agent-reported\",\"applicationPayloadBytes\":0}",
+      "valid": false
+    },
+    {
+      "name": "ack-enabled",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":true}",
+      "valid": false
+    },
+    {
+      "name": "ack-health",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"healthy\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "ack-digest",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"x\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "ack-time",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"2026-10-17T00:00:00.110Z\",\"serverTime\":\"2026-10-17T00:00:00.109Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "ack-pre-epoch",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-result-ack\",\"resultDigest\":\"sha256:2295abfdf315cfffdbdaf2cb599e073ee83cdce0683d4e02536e2cfe57cfb911\",\"acceptedAt\":\"1969-12-31T23:59:59.999Z\",\"serverTime\":\"2026-10-17T00:00:00.120Z\",\"duplicate\":false,\"health\":\"unknown\",\"executionEnabled\":false}",
+      "valid": false
+    }
+  ]
+}

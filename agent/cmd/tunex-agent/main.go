@@ -44,6 +44,8 @@ func run() error {
 	enroll := flag.Bool("enroll", false, "Exchange TUNEX_ENROLLMENT_TOKEN, then initialize state")
 	rotate := flag.Bool("rotate", false, "Rotate Node key/certificate after online Hello without resetting execution state")
 	relayEnabled := flag.Bool("relay", false, "Enable authenticated Relay execution with a dedicated Node peer credential")
+	probeRegistration := flag.Bool("probe-registration", false, "Maintain experimental Probe instance registration")
+	probeExecution := flag.Bool("probe-execution", false, "Opt in to bounded connect-only Probe tasks; requires --probe-registration")
 	multihopEnabled := flag.Bool("multihop", false, "Opt in to execution extension 1 and upgrade the protected journal; requires --relay")
 	importTransit := flag.String("import-transit-journal", "", "Explicit legacy offline Transit journal to import as retired high-water; requires --multihop")
 	timeProof := flag.String("time-proof", "", "Optional supervisor OS synchronization proof")
@@ -51,7 +53,7 @@ func run() error {
 	diagnostics := flag.Bool("diagnostics", false, "Write protected local resource samples for operator measurements")
 	inspectJournal := flag.Bool("inspect-journal", false, "Read-only authenticated journal summary; requires node, state and journal-key, no Control connection")
 	flag.Parse()
-	if *inspectJournal && (*enroll || *rotate || *multihopEnabled || *importTransit != "" || *diagnostics) {
+	if *inspectJournal && (*enroll || *rotate || *multihopEnabled || *importTransit != "" || *diagnostics || *probeRegistration || *probeExecution) {
 		return fmt.Errorf("Journal inspection cannot be combined with state-changing flags")
 	}
 	if (*timeProof == "") != (*timeProofKey == "") {
@@ -104,7 +106,7 @@ func run() error {
 	if *diagnostics {
 		diagnosticsPath = filepath.Join(root, "diagnostics", "status.json")
 	}
-	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath, Rotate: *rotate, Relay: *relayEnabled, Multihop: *multihopEnabled, ImportTransitJournal: *importTransit, TimeProof: *timeProof, TimeProofKey: *timeProofKey, Diagnostics: diagnosticsPath})
+	runner, err := control.New(control.Options{URL: *url, NodeID: *node, BootID: hex.EncodeToString(boot), CA: *ca, Certificate: certificate, PrivateKey: privateKey, Journal: journal, JournalKey: keyPath, Rotate: *rotate, Relay: *relayEnabled, Multihop: *multihopEnabled, ProbeRegistration: *probeRegistration, ProbeExecution: *probeExecution, ImportTransitJournal: *importTransit, TimeProof: *timeProof, TimeProofKey: *timeProofKey, Diagnostics: diagnosticsPath})
 	if err != nil {
 		return err
 	}

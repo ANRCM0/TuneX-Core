@@ -46,4 +46,9 @@ generate('docs/protocol/schemas/adp-v3-relay.schema.json', 'agent/internal/adp3r
 generate('docs/protocol/schemas/adp-v3-execution.schema.json', 'agent/internal/adp3/', 'adp3', true);
 // Generate the superset types separately; both parsers share these Go value types.
 generate('docs/protocol/schemas/adp-v3-execution.schema.json', 'agent/internal/adp3execution/', 'adp3execution');
-console.log('Go schemas and types match ADP/2, ADP/3 Runtime execution extension 1, Relay resources and Relay v1.');
+generate('docs/protocol/schemas/probe-negotiation-v1.schema.json', 'agent/internal/probenegotiation/', 'probenegotiation');
+generate('docs/protocol/schemas/probe-instance-v1.schema.json', 'agent/internal/probeinstance/', 'probeinstance');
+generate('docs/protocol/schemas/probe-claim-v1.schema.json', 'agent/internal/probeclaim/', 'probeclaim');
+generate('docs/protocol/schemas/probe-delivery-v1.schema.json', 'agent/internal/probedelivery/', 'probedelivery');
+generate('docs/protocol/schemas/probe-result-v1.schema.json', 'agent/internal/proberesult/', 'proberesult');
+console.log('Go schemas and types match ADP/2, ADP/3 Runtime execution extension 1, Relay and independent Probe negotiation/instance/claim/delivery/result contracts.');

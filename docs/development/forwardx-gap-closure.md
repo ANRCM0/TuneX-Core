@@ -2,10 +2,13 @@
 
 状态：**Planned / incremental delivery**。建立于 2026-10-14 的 VNext ADP/3 基线之上。本文只定义差距、优先级、验收门槛；没有真实代码和带 commit 的实网证据时，不把功能标记为已实现。
 
-2026-10-16 排期说明：本文保留产品方向及原始切片，当前交付顺序以
-[下一阶段开发目标](next-milestones.md) 为准。固定 3–8 Node 路径已按
+2026-10-16 排期说明：本文保留产品方向及原始切片，近期基线收口以
+[下一阶段开发目标](next-milestones.md) 为准；后续功能主线以
+[转发平台四主线适配方案](forwarding-platform-plan.md) 为准。
+固定 3–8 Node 路径已按
 [ADR-0005](../decisions/0005-mixed-multihop-execution.md) 实现且默认关闭，
-运行验收仍待执行；下文 Link/Path 的历史先后顺序不再作为多跳前置要求。
+运行证据按对应 SHA 的交付台账及 Actions 核对，物理主机与生产门槛单独验收；
+下文 Link/Path 的历史先后顺序不再作为多跳前置要求。
 
 参考产品：[ForwardX](https://github.com/poouo/Forwardx)；仅借鉴其公开产品设计思路、用户工作流和对转发资源的分类。**不得复制 AGPL-3.0-only 源码、资产、组件实现、文档段落或未经许可的衍生代码**。历史 V2 许可证审查继续以 [legal/NOTICE.md](../../legal/NOTICE.md) 为准。
 

@@ -1,17 +1,22 @@
 import { randomUUID } from 'node:crypto';
-import { isId, isCounter, isPort, normalizeIp } from '@tunex/core';
+import { isId, isCounter } from '@tunex/core';
 import type { Forward } from '@tunex/core';
-import { digest, validCidr } from '@tunex/contracts';
+import { digest } from '@tunex/contracts';
 import { ControlError, invalid, notFound } from '../application/errors.ts';
 import { json, rows, write } from '../infrastructure/mysql.ts';
 import type { MySqlUnitOfWork, Transaction } from '../infrastructure/mysql.ts';
 import type { NodeCertificateAuthority } from '../infrastructure/pki.ts';
 import { newToken, tokenHash } from './identity.ts';
 import type { Identity } from './identity.ts';
-import type { AuthorizedNodeFacts } from './runtime/planner.ts';
+import type { AuthorizedNodeFacts, NodeManagementChange, NodeManagementCommand, NodeManagementWriter, NodePolicy } from './node-management-ports.ts';
 import { targetAllowed } from './target-policy.ts';
 import { RuntimeLedger } from './runtime/ledger.ts';
-export type NodePolicy = Omit<AuthorizedNodeFacts, 'nodeId' | 'scopeId' | 'capabilities'>;
+import { SnapshotAssignmentRegistry } from './runtime/snapshot-assignments.ts';
+import type { NodeGrantWriter } from './node-grant-ports.ts';
+import type { ForwardNodeAuthorization } from './node-execution-ports.ts';
+import { validatePolicy } from './node-policy.ts';
+export { validatePolicy } from './node-policy.ts';
+export type { NodePolicy } from './node-management-ports.ts';
 export interface NodeRecord {
     id: string;
     scope_id: string;
@@ -19,14 +24,14 @@ export interface NodeRecord {
     facts: unknown;
     revoked: number;
 }
-export class Nodes {
+export class Nodes implements NodeGrantWriter<Transaction>, NodeManagementWriter<Transaction>, ForwardNodeAuthorization<Transaction> {
     static async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE nodes SET revoked=TRUE');await write(tx,'UPDATE node_credentials SET revoked=TRUE');await write(tx,'UPDATE node_relay_credentials SET revoked=TRUE');}
     private readonly db: MySqlUnitOfWork;
     private readonly identity: Identity;
     private readonly ca: NodeCertificateAuthority;
     private readonly overlapSeconds: number;
     private readonly relayCredentialSeconds: number;
-    private readonly runtime = new RuntimeLedger();
+    private readonly runtime = new RuntimeLedger(undefined, undefined, new SnapshotAssignmentRegistry([]));
     constructor(db: MySqlUnitOfWork, identity: Identity, ca: NodeCertificateAuthority, overlapSeconds = 120, relayCredentialSeconds = 86400) {
         if (!Number.isInteger(overlapSeconds) || overlapSeconds < 1 || overlapSeconds > 300)
             throw new Error('Credential overlap must be 1..300 seconds');
@@ -214,6 +219,16 @@ export class Nodes {
         await write(tx, 'UPDATE nodes SET facts=? WHERE id=?', [JSON.stringify(facts), nodeId]);
         return facts;
     }
+    async applyManagement(tx: Transaction, actor: string, scopeId: string, nodeId: string,
+        command: NodeManagementCommand): Promise<NodeManagementChange> {
+        if (!isId(nodeId) || !command || !['policy', 'revoke'].includes(command.kind))
+            invalid('Valid Node management command required');
+        const node = await this.management(tx, actor, scopeId, nodeId);
+        let facts = json<AuthorizedNodeFacts>(node.facts);
+        if (command.kind === 'policy') facts = await this.storePolicy(tx, nodeId, command.policy, command.expectedRevision);
+        else await this.markRevoked(tx, nodeId);
+        return { nodeId, kind: command.kind, facts };
+    }
     async markRevoked(tx: Transaction, nodeId: string): Promise<void> { await write(tx, 'UPDATE nodes SET revoked=TRUE WHERE id=?', [nodeId]); await write(tx, 'UPDATE node_credentials SET revoked=TRUE WHERE node_id=?', [nodeId]);await write(tx,'UPDATE node_relay_credentials SET revoked=TRUE WHERE node_id=?',[nodeId]); }
     async audit(tx: Transaction, nodeId: string, actor: string | null, kind: 'credential_rotation' | 'policy_update' | 'node_revocation' | 'relay_endpoint_update' | 'relay_credential_issue', details: unknown): Promise<void> { await write(tx, 'INSERT INTO node_security_events(id,node_id,actor_id,kind,created_at,details) VALUES(?,?,?,?,?,?)', [randomUUID(), nodeId, actor, kind, Date.now(), JSON.stringify(details)]); }
     async view(actor: string, scope: string, nodeId: string) {
@@ -287,8 +302,4 @@ export class Nodes {
             return response;
         });
     }
-}
-export function validatePolicy(policy: NodePolicy): void {
-    if (!policy || typeof policy !== 'object' || Array.isArray(policy) || Object.keys(policy).sort().join(',') !== ['allowedDestinationCidrs', 'allowedListenerAddresses', 'allowedPorts', 'allowMetadataTargets', 'egressPolicyRevision'].sort().join(',') || !Array.isArray(policy.allowedListenerAddresses) || policy.allowedListenerAddresses.length === 0 || policy.allowedListenerAddresses.length > 256 || policy.allowedListenerAddresses.some(a => typeof a !== 'string' || normalizeIp(a) !== a) || new Set(policy.allowedListenerAddresses).size !== policy.allowedListenerAddresses.length || !Array.isArray(policy.allowedPorts) || policy.allowedPorts.length === 0 || policy.allowedPorts.length > 65535 || policy.allowedPorts.some(p => !isPort(p)) || new Set(policy.allowedPorts).size !== policy.allowedPorts.length || !isCounter(policy.egressPolicyRevision) || !Array.isArray(policy.allowedDestinationCidrs) || policy.allowedDestinationCidrs.length === 0 || policy.allowedDestinationCidrs.length > 256 || policy.allowedDestinationCidrs.some(c => typeof c !== 'string' || !validCidr(c)) || new Set(policy.allowedDestinationCidrs).size !== policy.allowedDestinationCidrs.length || typeof policy.allowMetadataTargets !== 'boolean')
-        invalid('Invalid Node policy');
 }

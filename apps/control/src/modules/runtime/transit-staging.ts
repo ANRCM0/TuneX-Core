@@ -1,11 +1,11 @@
 import { deepFreeze, isCounter, MAX_COUNTER } from '@tunex/core';
 import { digest } from '@tunex/contracts';
-import type { MySqlUnitOfWork } from '../../infrastructure/mysql.ts';
+import type { MySqlUnitOfWork, Transaction } from '../../infrastructure/mysql.ts';
 import { json, rows, write } from '../../infrastructure/mysql.ts';
 import { ControlError } from '../../application/errors.ts';
 import type { Nodes } from '../nodes.ts';
 import type { Forwarding } from '../forwarding.ts';
-import type { Transport } from '../transport.ts';
+import type { TransportProfileResolver } from '../transport-ports.ts';
 import type { RelayEndpoints, ResolvedEndpoint } from '../relay-endpoints.ts';
 import type { RelayNodeExecutionFacts } from './relay-plan.ts';
 import { compilePathTopology } from './path-topology.ts';
@@ -58,10 +58,10 @@ export class TransitStagingCoordinator {
   private readonly db: MySqlUnitOfWork;
   private readonly nodes: Nodes;
   private readonly forwarding: Forwarding;
-  private readonly transport: Transport;
+  private readonly transport: TransportProfileResolver<Transaction>;
   private readonly endpoints: RelayEndpoints;
   constructor(db: MySqlUnitOfWork,nodes: Nodes,forwarding: Forwarding,
-    transport: Transport,endpoints: RelayEndpoints) {
+    transport: TransportProfileResolver<Transaction>,endpoints: RelayEndpoints) {
     this.db=db;this.nodes=nodes;this.forwarding=forwarding;
     this.transport=transport;this.endpoints=endpoints;
   }

@@ -15,7 +15,10 @@ import { Identity } from '../../apps/control/src/modules/identity.ts';
 import { Nodes } from '../../apps/control/src/modules/nodes.ts';
 import { Forwarding } from '../../apps/control/src/modules/forwarding.ts';
 import { RuntimeLedger } from '../../apps/control/src/modules/runtime/ledger.ts';
+import { SnapshotAssignmentRegistry } from '../../apps/control/src/modules/runtime/snapshot-assignments.ts';
 import { Idempotency } from '../../apps/control/src/modules/idempotency.ts';
+import { MySqlProbeInstances } from '../../apps/control/src/infrastructure/mysql-probe-instances.ts';
+import { MySqlProbePermits } from '../../apps/control/src/infrastructure/mysql-probe-permits.ts';
 
 const execute=promisify(execFile);
 async function durableFile(path:string,content:string):Promise<void>{
@@ -72,7 +75,7 @@ export async function restoreDatabase(options:{sourceDatabaseUrl:string;targetDa
   const completed=new Promise<void>((resolve,reject)=>{child.once('error',()=>reject(new Error('MySQL restore process failed')));child.once('exit',code=>code===0?resolve():reject(new Error('MySQL restore rejected the protected dump')));});await Promise.all([pipeline(createReadStream(path),child.stdin),completed]);
   const db=new MySqlUnitOfWork(databaseUrl);let accounts:{actorId:string;token:string;owner:boolean}[]=[];
   try{await db.migrate();const [bounds]=await db.pool.query<any[]>('SELECT MAX(valid_until) until FROM execution_leases');if(bounds[0].until!==null&&bounds[0].until>(authority.latestValidUntil??0))throw new Error('Restored authorization exceeds independently recorded bounds');
-   await db.transaction(async tx=>{accounts=await new Identity(db).quarantineRecovery(tx);await Transport.quarantineRecovery(tx);await RelayCoordinator.quarantineRecovery(tx);await Nodes.quarantineRecovery(tx);await new Forwarding().quarantineRecovery(tx);await new RuntimeLedger().quarantineRecovery(tx);await new Idempotency().quarantineRecovery(tx);await write(tx,'INSERT INTO recovery_events(id,created_at,details) VALUES(?,?,?)',[recoveryId,Date.now(),JSON.stringify({backupId:manifest.id,sourceDatabase:manifest.database,oldTrust:manifest.trustDigest,newTrust:options.newTrustDigest,authorizationCutoff:authority.latestValidUntil,reviewRequired:true})]);});
+   await db.transaction(async tx=>{accounts=await new Identity(db).quarantineRecovery(tx);await Transport.quarantineRecovery(tx);await RelayCoordinator.quarantineRecovery(tx);await Nodes.quarantineRecovery(tx);await MySqlProbeInstances.quarantineRecovery(tx);await MySqlProbePermits.quarantineRecovery(tx);await new Forwarding().quarantineRecovery(tx);await new RuntimeLedger(undefined,undefined,new SnapshotAssignmentRegistry([])).quarantineRecovery(tx);await new Idempotency().quarantineRecovery(tx);await write(tx,'INSERT INTO recovery_events(id,created_at,details) VALUES(?,?,?)',[recoveryId,Date.now(),JSON.stringify({backupId:manifest.id,sourceDatabase:manifest.database,oldTrust:manifest.trustDigest,newTrust:options.newTrustDigest,authorizationCutoff:authority.latestValidUntil,reviewRequired:true})]);});
    const [binding]=await db.pool.query<any[]>("SELECT CONCAT(@@server_uuid,':',DATABASE()) binding");const credentials=resolve(directory,`${recoveryId}-credentials.json`);await durableFile(credentials,JSON.stringify({recoveryId,accounts,owners:accounts.filter(account=>account.owner)},null,2));
    // Independent state remains in maintenance until the operator reviews this recovery ID.
    await options.authority.rebind(binding[0].binding,options.newTrustDigest,recoveryId);return {recoveryId,databaseUrl,ownerCredentials:credentials};

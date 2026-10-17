@@ -98,9 +98,10 @@ test('upgrade assessment preserves MySQL, authenticated journals and Authority; 
             assert.equal(summary.snapshotDigest, snapshot.snapshotDigest);
             assert.deepEqual(await fileInventory(directory), beforeInspect);
             const build = { revision: 'a'.repeat(40), imageDigest: 'sha256:' + 'b'.repeat(64), profile: 'adp3-multihop-v1' };
+            const controlBuild = { ...build, profile: 'adp3-probe-results-v1' };
             const plan = parseUpgradePlan(JSON.stringify({
-                version: 1, operation: 'upgrade', source: { control: build, agent: build },
-                target: { control: build, agent: build }, controlMultihop: false, agentMultihop: false, journals: [summary],
+                version: 1, operation: 'upgrade', source: { control: controlBuild, agent: build },
+                target: { control: controlBuild, agent: build }, controlMultihop: false, agentMultihop: false, journals: [summary],
             }));
             const planPath = join(directory, 'plan.json');
             await writeFile(planPath, JSON.stringify(plan));

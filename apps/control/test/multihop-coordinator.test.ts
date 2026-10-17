@@ -4,11 +4,12 @@ import type { Transaction } from '../src/infrastructure/mysql.ts';
 import { Forwarding } from '../src/modules/forwarding.ts';
 import type { Nodes } from '../src/modules/nodes.ts';
 import type { RelayEndpoints } from '../src/modules/relay-endpoints.ts';
-import type { Transport } from '../src/modules/transport.ts';
+import type { TransportProfileResolver } from '../src/modules/transport-ports.ts';
 import type { RuntimeLedger } from '../src/modules/runtime/ledger.ts';
 import { compileMultihopResources } from '../src/modules/runtime/multihop-plan.ts';
 import { RelayCoordinator } from '../src/modules/runtime/relay-coordinator.ts';
 import { multihopFixture } from './fixtures/multihop.ts';
+import { ControlError } from '../src/application/errors.ts';
 
 for (const count of [3, 4, 8]) test(`${count}-Node coordinator extracts domain intent from stored Forward metadata`, async () => {
   const input = multihopFixture(count), before = JSON.stringify(input);
@@ -37,15 +38,16 @@ for (const count of [3, 4, 8]) test(`${count}-Node coordinator extracts domain i
     facts: async (_tx: Transaction, id: string) => ({ credentialUntil: input.nodes.find(node => node.facts.nodeId === id)!.credentialUntil }),
     relayCredentialFacts: async (_tx: Transaction, id: string) => input.nodes.find(node => node.facts.nodeId === id)!.peers,
   } as unknown as Nodes;
-  const transport = {
+  const transport: TransportProfileResolver<Transaction> = {
     resolve: async (_tx: Transaction, actor: string, scope: string, id: string, revision: number) => {
+      assert.equal(_tx, tx);
       assert.equal(actor, 'owner');
       assert.equal(scope, input.forward.scopeId);
       assert.equal(id, input.profile.profileId);
       assert.equal(revision, input.profile.revision);
       return input.profile;
     },
-  } as unknown as Transport;
+  };
   const endpoints = {
     resolve: async (_tx: Transaction, id: string) => input.endpoints.find(endpoint => endpoint.nodeId === id)!,
   } as unknown as RelayEndpoints;
@@ -63,6 +65,17 @@ for (const count of [3, 4, 8]) test(`${count}-Node coordinator extracts domain i
   assert.equal(preview.reserved, false);
   const disabled = new RelayCoordinator(nodes, forwarding, transport, endpoints, ledger, undefined, false);
   assert.equal(await disabled.canExecute(tx, 'owner', stored), false);
+  const denial = new ControlError('AUTHORIZATION_DENIED', 403, 'Profile grant denied');
+  const deniedProfile: TransportProfileResolver<Transaction> = {
+    resolve: async (current, actor, scope, id, revision) => {
+      assert.equal(current, tx); assert.equal(actor, 'owner'); assert.equal(scope, stored.scopeId);
+      assert.equal(id, input.profile.profileId); assert.equal(revision, input.profile.revision);
+      throw denial;
+    },
+  };
+  const rejected = new RelayCoordinator(nodes, forwarding, deniedProfile, endpoints, ledger, undefined, true);
+  assert.equal(await rejected.canExecute(tx, 'owner', stored), false);
+  await assert.rejects(rejected.preview(tx, 'owner', stored), error => error === denial);
   assert.equal(JSON.stringify(stored), storedBefore);
   assert.equal(JSON.stringify(input), before);
 });

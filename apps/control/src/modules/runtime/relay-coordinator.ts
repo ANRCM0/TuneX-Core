@@ -7,7 +7,7 @@ import { json, rows, write } from '../../infrastructure/mysql.ts';
 import type { Transaction } from '../../infrastructure/mysql.ts';
 import type { Nodes } from '../nodes.ts';
 import type { Forwarding } from '../forwarding.ts';
-import type { Transport } from '../transport.ts';
+import type { TransportProfileResolver } from '../transport-ports.ts';
 import type { RelayEndpoints } from '../relay-endpoints.ts';
 import { compileRelayResources } from './relay-planner.ts';
 import { compileRelayPlan, relayPeerPinsChanged } from './relay-plan.ts';
@@ -15,6 +15,7 @@ import type { RelayNodeExecutionFacts, RelayPreparedPlan } from './relay-plan.ts
 import type { RuntimeLedger, Operation } from './ledger.ts';
 import { compileMultihopPlan, compileMultihopResources } from './multihop-plan.ts';
 import type { MultihopPlanInput } from './multihop-plan.ts';
+import type { RelayAssignmentReader } from './snapshot-assignment-ports.ts';
 
 interface Deployment {
   forward_id: string; generation: number; target_revision: number;
@@ -25,11 +26,11 @@ interface Deployment {
 type Report = RuntimeMessages['ReportRequest'];
 interface RuntimeView { node_id:string; session_epoch:number; snapshot_generation:number; last_report:unknown; received_at:number|null }
 
-export class RelayCoordinator {
-  private readonly nodes:Nodes; private readonly forwarding:Forwarding; private readonly transport:Transport;
+export class RelayCoordinator implements RelayAssignmentReader<Transaction> {
+  private readonly nodes:Nodes; private readonly forwarding:Forwarding; private readonly transport:TransportProfileResolver<Transaction>;
   private readonly endpoints:RelayEndpoints; private readonly ledger:RuntimeLedger; private readonly policy:Policy;
   readonly multihopEnabled:boolean;
-  constructor(nodes:Nodes,forwarding:Forwarding,transport:Transport,endpoints:RelayEndpoints,ledger:RuntimeLedger,policy:Policy={...DEFAULT_POLICY},multihopEnabled=false){
+  constructor(nodes:Nodes,forwarding:Forwarding,transport:TransportProfileResolver<Transaction>,endpoints:RelayEndpoints,ledger:RuntimeLedger,policy:Policy={...DEFAULT_POLICY},multihopEnabled=false){
     this.nodes=nodes;this.forwarding=forwarding;this.transport=transport;this.endpoints=endpoints;this.ledger=ledger;this.policy={...policy};this.multihopEnabled=multihopEnabled;
   }
   static async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,"UPDATE relay_deployments SET stage='withdrawn',updated_at=?",[Date.now()]);}

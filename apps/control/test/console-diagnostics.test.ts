@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { consoleNodeDiagnostics } from '../src/api/console-read.ts';
-import type { ControlApplication } from '../src/application/control.ts';
+import { ConsoleQueries } from '../src/application/console-queries.ts';
+import { MySqlConsoleReadModels } from '../src/infrastructure/mysql-console-read.ts';
+import type { Transaction } from '../src/infrastructure/mysql.ts';
 
 function fixture(permit: boolean, returned = true) {
   const statements:{sql:string;args:unknown[]}[]=[];
@@ -20,24 +21,24 @@ function fixture(permit: boolean, returned = true) {
       }]:[])],[]];
     }
   };
-  const control={
-    db:{transaction:async (call:(v:unknown)=>Promise<unknown>)=>call(tx)},
-    identity:{scope:async (_tx:unknown,actor:string,scope:string)=>{
+  const queries=new ConsoleQueries<Transaction>(
+    {transaction:async action=>action(tx as unknown as Transaction)},
+    {scope:async (_tx:Transaction,actor:string,scope:string)=>{
       if(!permit||actor!=='viewer'||scope!=='allowed-scope')throw Error('Denied');
-    }}
-  } as unknown as ControlApplication;
-  return {control,statements};
+    }}, new MySqlConsoleReadModels()
+  );
+  return {queries,statements};
 }
 test('Node diagnostics authorizes scope before querying any Node state',async()=>{
   const f=fixture(false);
-  await assert.rejects(consoleNodeDiagnostics(f.control,'viewer','other-scope','node-1'));
+  await assert.rejects(f.queries.diagnostics('viewer','other-scope','node-1'));
   assert.equal(f.statements.length,0);
-  await assert.rejects(consoleNodeDiagnostics(f.control,'viewer','allowed-scope','../bad'));
+  await assert.rejects(f.queries.diagnostics('viewer','allowed-scope','../bad'));
   assert.equal(f.statements.length,0);
 });
 test('Node diagnostics is read-only, scoped, sanitized and never claims probe health',async()=>{
   const f=fixture(true);
-  const result=await consoleNodeDiagnostics(f.control,'viewer','allowed-scope','node-1');
+  const result=await f.queries.diagnostics('viewer','allowed-scope','node-1');
   assert.equal(result.nodeId,'node-1');
   assert.equal(result.independentProbe,false);
   assert.equal(result.source,'persisted-control-state');
@@ -50,7 +51,7 @@ test('Node diagnostics is read-only, scoped, sanitized and never claims probe he
 });
 test('Node diagnostics returns 404 for out-of-scope or missing Node',async()=>{
   const f=fixture(true,false);
-  await assert.rejects(consoleNodeDiagnostics(f.control,'viewer','allowed-scope','node-1'),(error:unknown)=>
+  await assert.rejects(f.queries.diagnostics('viewer','allowed-scope','node-1'),(error:unknown)=>
     typeof error==='object'&&error!==null&&'code' in error&&error.code==='NOT_FOUND'
   );
 });

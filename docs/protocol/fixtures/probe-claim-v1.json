@@ -1,0 +1,335 @@
+{
+  "description": "Single-use consumed receipt; never an executable grant",
+  "cases": [
+    {
+      "name": "valid-claim",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": true
+    },
+    {
+      "name": "valid-receipt",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "valid-exponent",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2e0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": true
+    },
+    {
+      "name": "valid-safe-maximum",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":9007199254740991,\"permitId\":\"permit-a\"}",
+      "valid": true
+    },
+    {
+      "name": "valid-short-window",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:00.111Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "old-version",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":0,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "wrong-adp",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":2,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "wrong-kind",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-instance\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "caller-target",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"target\":\"169.254.169.254\"}",
+      "valid": false
+    },
+    {
+      "name": "caller-binding",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1}}",
+      "valid": false
+    },
+    {
+      "name": "caller-fingerprint",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"fingerprint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "valid": false
+    },
+    {
+      "name": "caller-actor",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"actorId\":\"owner\"}",
+      "valid": false
+    },
+    {
+      "name": "caller-timeout",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"timeoutMs\":2000}",
+      "valid": false
+    },
+    {
+      "name": "short-instance",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"a\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "zero-generation",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":0,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "unsafe-generation",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":9007199254740992,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "string-epoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":\"2\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "newline-permit",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\\n\"}",
+      "valid": false
+    },
+    {
+      "name": "zero-epoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "enabled",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":true}",
+      "valid": false
+    },
+    {
+      "name": "unspent",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"issued\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "response-target",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false,\"target\":\"127.0.0.1\"}",
+      "valid": false
+    },
+    {
+      "name": "foreign-node",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"foreign\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "foreign-boot",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"foreign\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "foreign-epoch",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":3,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "unknown-binding-field",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1,\"host\":\"127.0.0.1\"},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "newline-assignment",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\\n\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "bad-digest",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\n\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "zero-fence",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":0,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "unsafe-snapshot",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":9007199254740992,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "long-window",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.001Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "empty-window",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:00.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "pre-issue-consumption",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-16T23:59:59.999Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "future-consumption",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.111Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "expired-receipt",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:02.000Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "invalid-calendar",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-02-30T00:00:00.000Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "pre-epoch-issue",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"1969-12-31T23:59:59.000Z\",\"expiresAt\":\"1970-01-01T00:00:00.500Z\",\"consumedAt\":\"1970-01-01T00:00:00.000Z\",\"serverTime\":\"1970-01-01T00:00:00.100Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "small-timeout",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":99,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "large-timeout",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":2001,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "missing-protocolVersion",
+      "message": "Request",
+      "raw": "{\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "missing-probeVersion",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "missing-kind",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "missing-nodeId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "missing-bootId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "missing-sessionEpoch",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "missing-instanceId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "missing-instanceGeneration",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "missing-permitId",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1}",
+      "valid": false
+    },
+    {
+      "name": "missing-binding",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "duplicate-root",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "duplicate-binding",
+      "message": "Response",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim-ack\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "trailing",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}{}",
+      "valid": false
+    },
+    {
+      "name": "surrogate",
+      "message": "Request",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"kind\":\"probe-claim\",\"nodeId\":\"\\ud800\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "oversize",
+      "message": "Response",
+      "raw": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ",
+      "valid": false
+    },
+    {
+      "name": "null",
+      "message": "Response",
+      "raw": "null",
+      "valid": false
+    }
+  ]
+}

@@ -1,12 +1,13 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { isId, isCounter, MAX_COUNTER } from '@tunex/core';
 import { ControlError, invalid, notFound } from '../application/errors.ts';
 import { rows, write } from '../infrastructure/mysql.ts';
 import type { MySqlUnitOfWork, Transaction } from '../infrastructure/mysql.ts';
-export function tokenHash(token: string): string { return createHash('sha256').update(token).digest('hex'); }
+import { tokenHash, validBearerToken } from './identity-credentials.ts';
+import type { MemberWriter } from './identity-ports.ts';
+export { tokenHash, validBearerToken } from './identity-credentials.ts';
 export function newToken(): string { return randomBytes(32).toString('base64url'); }
-export function validBearerToken(value: unknown): value is string { return typeof value === 'string' && value.length >= 32 && value.length <= 128 && !/[\r\n]/.test(value) && /^[A-Za-z0-9_-]+$/.test(value); }
-export class Identity {
+export class Identity implements MemberWriter<Transaction> {
     async quarantineRecovery(tx:Transaction):Promise<{actorId:string;token:string;owner:boolean}[]>{
         const accounts=await rows<{id:string;owner:number}>(tx,'SELECT a.id,EXISTS(SELECT 1 FROM scopes s WHERE s.owner_id=a.id) owner FROM accounts a ORDER BY a.id FOR UPDATE');const credentials:{actorId:string;token:string;owner:boolean}[]=[];
         for(const account of accounts){const token=newToken();await write(tx,'UPDATE accounts SET token_hash=? WHERE id=?',[tokenHash(token),account.id]);credentials.push({actorId:account.id,token,owner:Boolean(account.owner)});}

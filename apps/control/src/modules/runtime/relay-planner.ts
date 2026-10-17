@@ -2,7 +2,7 @@ import { digest,parseRelayMessage } from '@tunex/contracts';
 import { parseRelayEndpoint } from '../relay-endpoints.ts';
 import { deepFreeze,parseForward,isCounter,isPort } from '@tunex/core';
 import type { Forward } from '@tunex/core';
-import type { ResolvedProfile } from '../transport.ts';
+import type { ResolvedProfile } from '../transport-ports.ts';
 import type { ResolvedEndpoint } from '../relay-endpoints.ts';
 import type { AuthorizedNodeFacts } from './planner.ts';
 import { targetAllowed } from '../target-policy.ts';

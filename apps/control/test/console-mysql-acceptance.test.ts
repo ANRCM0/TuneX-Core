@@ -9,6 +9,8 @@ import type { AuthorityStore } from '../src/infrastructure/authority.ts';
 import { MySqlUnitOfWork } from '../src/infrastructure/mysql.ts';
 import { Identity, tokenHash } from '../src/modules/identity.ts';
 import type { RuntimeController } from '../src/modules/runtime/controller.ts';
+import { ConsoleQueries } from '../src/application/console-queries.ts';
+import { MySqlConsoleReadModels } from '../src/infrastructure/mysql-console-read.ts';
 
 const databaseUrl = process.env.TUNEX_TEST_DATABASE_URL;
 async function databaseDigest(db: Connection): Promise<string> {
@@ -77,7 +79,8 @@ test('console queries preserve bounded pages, independent candidates, full-scope
             const readUrl = new URL(url); readUrl.username = user; readUrl.password = password;
             reader = new MySqlUnitOfWork(readUrl.toString());
             await assert.rejects(reader.pool.query("UPDATE nodes SET revoked=TRUE"));
-            const control = { db: reader, identity: new Identity(reader) } as unknown as ControlApplication;
+            const readIdentity = new Identity(reader);
+            const control = { db: reader, identity: readIdentity, queries: new ConsoleQueries(reader, readIdentity, new MySqlConsoleReadModels()) } as unknown as ControlApplication;
             const authority = { allow: async () => undefined } as unknown as AuthorityStore;
             const app = createApp(control, {} as RuntimeController, authority);
             async function get<T>(resource: string, actor = 'manager', expected = 200, scope = 'scope-a'): Promise<T> {

@@ -1,7 +1,7 @@
 import {parseRelayEndpoint} from '../src/modules/relay-endpoints.ts';
 import {digest} from '@tunex/contracts';
 import assert from 'node:assert/strict';import {test} from 'node:test';
-import type {Forward} from '@tunex/core';import type {AuthorizedNodeFacts} from '../src/modules/runtime/planner.ts';import type {ResolvedProfile} from '../src/modules/transport.ts';import {compileRelayResources} from '../src/modules/runtime/relay-planner.ts';
+import type {Forward} from '@tunex/core';import type {AuthorizedNodeFacts} from '../src/modules/runtime/planner.ts';import type {ResolvedProfile} from '../src/modules/transport-ports.ts';import {compileRelayResources} from '../src/modules/runtime/relay-planner.ts';
 const forward:Forward={id:'forward-a',scopeId:'scope-a',revision:1,spec:{enabled:true,protocols:['tcp','udp'],ingress:{nodeId:'node-a',listen:{address:'127.0.0.1',port:32001}},target:{host:'127.0.0.1',port:32002},path:{via:['node-b']},transport:{profileId:'profile-a',configRevision:1}}};
 const facts=(id:string):AuthorizedNodeFacts=>({nodeId:id,scopeId:'scope-a',capabilities:['adp.3','tcp','udp','native.relay.v1','adp.3','relay.wire.1'],allowedListenerAddresses:['127.0.0.1'],allowedPorts:[32001],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false});
 const profile:ResolvedProfile={profileId:'profile-a',revision:1,configDigest:'sha256:'+'1'.repeat(64),config:{driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:60,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:4096}};

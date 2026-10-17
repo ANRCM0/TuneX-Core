@@ -1,7 +1,106 @@
 # TuneX VNext · 下一阶段开发目标
 
-更新：2026-10-16（Asia/Shanghai）。本轮源码基线：
+更新：2026-10-17（Asia/Shanghai）。初次排期源码基线：
 `11b95451464c5adb0068a09cb976492850479b4e`。
+
+后续产品方向已聚焦基础转发、加密隧道、拓扑与切换、监控与探测，
+详见 [四主线适配方案](forwarding-platform-plan.md)。
+本文继续负责近期基线收口与验收队列；新主线不把已交付功能重新列为从零开发，
+也不把现有缺失的生产门槛视为已通过。
+
+架构收口优先切片（2026-10-16）：先按
+[ADR-0006](../decisions/0006-classified-extension-contracts.md)
+整理既有 native 的接入边界，再继续扩展产品能力。首批 Agent 静态驱动注册、
+能力声明与生命周期适配，以及 Console 授权查询/只读投影与 Transport
+锁版解析端口已在工作树编写。2026-10-17 又完成首个 owner-owned
+Profile Grant 写用例与 Runtime 撤权/恢复效果端口，移除可变授权回调，
+共用既有事务、幂等记录和执行台账；新增 7 组端口与 3 项 MySQL 回归。
+同日继续适配成员与 Node Grant 写用例，保留原 Control 委托入口，
+共用受限 Runtime 宿主端口，新增 11 组端口与 4 项 MySQL 回归。
+同日第五批适配整节点策略/吊销，保留 Scope 管理权限、原执行主体、
+策略拒绝意图与两类凭据失效的独立规则，新增 10 组端口与 6 项 MySQL 回归。
+同日第六批将 Forward 创建/更新/删除/重试收口为应用命令与原生准备端口，
+保留重放可见性、无变化授权、删除容量检查和失败重试规则，
+新增 14 组端口与 6 项 MySQL 回归。
+同日第七批移除 `additionalAssignments` 可变回调，改为必选快照 collector、
+不可变静态来源集合和窄 Relay reader，保留容量/发布差异与单一执行权威，
+新增 10 组端口与 5 项 MySQL 回归；离线恢复仅显式装配无发布来源的 helper。
+同日第八批接入独立被动观察宿主、授权只读来源及节点观察 API，
+补充并发/频率/期限/取消和报告来源、新鲜度规则，不开放任意目标网络探测，
+不把已存上报当独立健康，新增 14 组端口与 3 项 SELECT-only MySQL/API 回归；
+契约见 [Node observation v1](../spec/node-observation-v1.md)。
+同日第九批按 [ADR-0007](../decisions/0007-bounded-agent-probe.md) 接入不可执行的 Forward
+探测预检与 Agent 内部 connect-only 执行器，绑定当前会话/快照/执行和目标策略，
+要求独立 Probe 许可，补并发/冷却/取消/零应用数据规则；新增 7 组 Control 端口、
+2 项 SELECT-only MySQL/API 与 11 组 Go 回归。远程协议、签发、防重放、派发及结果接收未实现，
+生产尚不能从 Control 触发真实探测，详见 [Probe 基础契约](../spec/forward-probe-v1.md)。
+同日第十批按 [ADR-0008](../decisions/0008-probe-contract-negotiation.md) 编写独立只读 mTLS
+协商、TS/Go 严格契约与 30 份共享向量、Agent 单次许可/实例门禁及 HTTPS 协商钩子。
+响应强制 `executionEnabled:false`，不写协商状态或签发许可；尚未接入 Runner 主循环。
+新增 2 组 TS 契约、5 组端口、9 组 Go 及 2 项真实 HTTPS/mTLS SELECT-only MySQL 回归。
+同日第十一批按 [ADR-0009](../decisions/0009-probe-instance-ownership.md) 编写内部持久实例归属，
+同事务机器校验、首登/替换 CAS、不续期重试、撤销与恢复隔离；新增迁移 0014，
+同步只读升级评估及 Control-only 兼容 Profile。没有新增远程登记接口或执行许可，
+`executionEnabled:false`，不改已有只读握手。新增 9 组端口、1 组升级矩阵与
+4 项真实 MySQL 回归，既有备份/恢复脚本另加隔离断言。
+同日第十二批按 [ADR-0010](../decisions/0010-probe-registration-lifecycle.md) 编写独立远程登记协议，
+共享 TS/Go 严格解析与 37 份向量，机器 adapter 仍委托原事务实例 owner。
+Agent 新增默认关闭的 `--probe-registration`，登记前关闭旧门禁，支持 CAS 轮换、
+单调时钟新鲜度、身份/凭据/授权失效及停机关闭；正常退出尽力远程撤销。
+原握手保持只读、所有响应仍不可执行，无新迁移或 Journal 变化。
+新增 5 组 TS、9 组 Go 和 2 项真实 mTLS/MySQL 回归；真实 Agent 恢复验收启用登记选项。
+同日第十三批按 [ADR-0011](../decisions/0011-probe-permit-authority.md) 编写 Control 内部许可权威：
+同事务锁定授权、完整绑定与当前实例，最多两秒签发，消费重查原始 Actor 并持久单次关闭，
+同库共享 Actor/Node/集群签发预算，不因消费/撤销/轮换提前退款。
+新增迁移 0015 与 Control-only 兼容 Profile，恢复隔离 issued 许可并保留预算时间下界；
+没有远程签发/消费接口或发包，内部视图仍不可执行。新增 11 组端口、1 组事务复用、
+1 组升级矩阵与 6 项真实 MySQL 回归，并扩充真实 Agent 备份/恢复断言。
+同日第十四批按 [ADR-0012](../decisions/0012-probe-claim-contract.md) 编写已知 ID 的独立 mTLS 单次领取，
+共享 TS/Go 严格契约与 55 份向量；原许可 owner 同事务重查并消费，提交后才构造最小回执。
+Agent 新增尚未接入生产循环的校验钩子，请求前烧录 ID、不重试不确定结果、缓存不淘汰，
+前后重查当前实例/完整执行绑定，校验 Guard 时钟与保守单调截止；回执不转换为执行授权。
+新增 6 组 TS、6 组 Go 与 4 项真实 mTLS/MySQL 回归，接入 Actions；无新迁移、无发包。
+同日第十五批按 [ADR-0013](../decisions/0013-probe-delivery-authority.md) 补齐投递前的内部权威端口：
+当前实例最多选择一个 issued 许可，消费后可重新核对原始权限、完整绑定和时限；两者都是不可执行观察，
+不创建/续期许可或修改消费状态。新增独立持久撤销，关闭已消费许可的后续资格而不覆盖消费事实或退款。
+迁移 0016 回填旧 consumed 的撤销标记，新增 Control-only 兼容 Profile；恢复隔离 issued 并撤销 consumed，
+保留已消费记录、旧撤销、ID 和预算。新增 9 组端口、5 项真实 MySQL 与 1 组升级矩阵回归，接入 Actions。
+本批没有新增机器消息、Agent 轮询、持续监视器或发包入口，不把内部 check 当持续授权租约。
+同日第十六批按 [ADR-0014](../decisions/0014-probe-delivery-contract.md) 接入不可执行的 mTLS poll/status：
+机器 adapter 只委托原 offer/check，空任务也验证当前实例；返回最小化绑定、原时限与请求关联标识，
+提交后超过 250 ms 的观察或过期结果拒绝，不写状态、续期或清除撤销。共享 TS/Go 严格解析与 184 份向量，
+新增 2 组 TS 契约、6 组 Control adapter、2 组 Go 和 5 项真实 mTLS/MySQL 回归，接入 Actions；
+只读接口验收账号使用 SELECT 加 LOCK TABLES，不赋予 DML，另以独立账号准备/消费许可并核对全表摘要。
+未改 Core、原协议、Journal、迁移或 Agent 生产循环；服务端 250 ms 观察年龄不等于网络撤权时限或执行租约。
+同日第十七批按 [ADR-0015](../decisions/0015-probe-agent-authority-watch.md) 编写 Agent 内部有界 poll 请求与消费后观察监视器：
+200 ms 请求、4 KiB、随机关联、HTTPS/禁止跳转；新鲜度从请求前单调起点扣减服务器观察年龄，
+只接受原消费回执的完整绑定/原时间/超时，先成功再可用，过期、拒绝或本地失权永久关闭。
+同一回执只尝试启动一次，共享进程 4/Node 1/最多跟踪 128 Node 与发现冷却；监视串行、成功后间隔 50 ms、最多 40 次，
+固定截止只能缩短，取消后等 HTTP/监督协程真正结束才释放槽位。25 ms 本地检查/250 ms 失鲜是合作式限制，不冒充实时撤权 SLA。
+新增 11 组 Go 回归并显式接入 Actions/race；未接生产调用、自动领取/发包或结果接收，不构造 Grant/Permit。
+同日第十八批按 [ADR-0016](../decisions/0016-probe-result-receipts.md) 编写独立结果协议与 mTLS 接收：
+原许可 owner 同事务重查已消费/未撤销许可、原 Actor、完整绑定和原时限，单许可只存一份结果，
+JCS 摘要仅排除随机关联 ID，相同内容返回原回执、不同内容冲突；结果不消费、续期、退款或更新健康。
+新增迁移 0017，结果随原许可清理，最多沿用 256 条保留上限；同步 Control-only 兼容 Profile 和恢复边界。
+新增 127 份 TS/Go 向量、2 组 TS/2 组 Go 契约、5 组 adapter、9 组 owner、5 项真实 mTLS/MySQL 及 1 组升级回归，接入 Actions。
+结果来源仅标记 agent-reported；本批无 Agent 上报调用、一次性执行接线、生产调度或健康聚合。
+同日第十九批按 [ADR-0017](../decisions/0017-probe-host-execution.md) 编写内部单次宿主执行准入与结果序列化：
+原回执监视器先校验成功，再经原实例 Gate 单次发包；失败不清除回执/Gate 防重放记录，不构造新的执行实例或目标。
+结果句柄保留监视器，导出固定上报前再次检查失权/过期/截止收缩；消费回执增加私有服务端时间及本地单调锚点，
+保守映射并向下取毫秒截止、向上取耗时，异常证据拒绝而不钳制成有效结果。没有上报 HTTP 调用、生产入口或新迁移。
+新增 9 组 Go 回归，覆盖真实回环零应用数据、并发单次执行、撤权/超时、取消后持槽到退出和结果失效/时间边界，接入 Actions/race。
+同日第二十批按 [ADR-0018](../decisions/0018-probe-production-workflow.md) 接入默认关闭的管理签发/查询/撤销和 Agent 串行闭环。
+签发幂等记录与原 owner 许可在同一事务，实例只由锁定事实选择；重复键只返回旧接受，不续期或重建。
+Control 显式选择一秒最大时钟偏差策略，Agent 分别 opt-in 登记与执行；注册本身仍不发包。
+生产流程复用原有界 poll/领取/监视器/Gate/结果句柄和 200 ms HTTPS 上报；领取/上报不确定不重试，退出先等工作与监视器排空。
+新增 5 组 owner/管理、2 组 HTTP、6 组 Go 回归，以及独立 `probe-workflow` Actions 的真实 Agent/Control/mTLS/MySQL/零负载 TCP 组合脚本。
+保留原两秒许可、一秒发现冷却与失败关闭；任务可能到期而没有结果，不把 202 当送达保证。
+本批没有新增 Core、机器 Schema、迁移、Journal、长期历史或健康聚合，契约见 [Probe 管理 v1](../spec/forward-probe-management-v1.md)。
+这些工作树变更均待对应提交的 Actions；下一步核对真实组合验收并接 Console 操作/剩余原生能力与遥测切片，
+内部门禁与实例表不冒充完整远程防重放或执行撤权；
+并继续盘点剩余 API 读写及原生适配验收，不宣布统一框架完成。
+此调整不取消下方
+审计/支持包、证据与集中验收缺口，也不表示统一模块框架已经完成。
 
 后续核验：`6e9586d340e12cf3d7adce68f3286b440ae82321` 的主 CI
 `38831559895`（7 个 job）、容器 `38831559907`、Dev 发布 `38831559896`
@@ -139,7 +238,7 @@ Agent Runtime Journal 增加只读升级评估，不另建一套恢复系统：
 并加入分页外记录、SELECT-only 全表只读性和轻量 DOM 数据流回归。
 等待本切片 SHA 的 Actions；这不表示完成真实浏览器或所有关联诊断的集中验收。
 
-从已有 `console-read.ts`、Forward/Operation 查询和部署状态投影扩展：
+从已有 Console 查询服务/MySQL 投影、Forward/Operation 查询和部署状态投影扩展：
 
 - 建立 Node → Forward → Operation → Deployment/Assignment 的查询关联，
   展示 generation、session、Fence、当前阶段、错误码和发生时间。

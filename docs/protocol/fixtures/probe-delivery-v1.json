@@ -1,0 +1,1109 @@
+{
+  "description": "Bounded non-executable discovery and point-in-time current authority observations",
+  "cases": [
+    {
+      "name": "valid-poll",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": true
+    },
+    {
+      "name": "valid-offer",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": true
+    },
+    {
+      "name": "valid-status",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": true
+    },
+    {
+      "name": "valid-observation",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "valid-empty",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":null}",
+      "valid": true
+    },
+    {
+      "name": "valid-freshness-boundary",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.350Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": true
+    },
+    {
+      "name": "valid-exponent",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2e0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": true
+    },
+    {
+      "name": "valid-safe-maximum",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":9007199254740991,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": true
+    },
+    {
+      "name": "PollRequest-missing-protocolVersion",
+      "message": "PollRequest",
+      "raw": "{\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-missing-probeVersion",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-missing-nodeId",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-missing-bootId",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-missing-sessionEpoch",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-missing-instanceId",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-missing-instanceGeneration",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-missing-requestId",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-missing-kind",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-old-version",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":0,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-wrong-adp",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":2,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-wrong-kind",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-claim\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-target",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\",\"target\":\"169.254.169.254\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-actor",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\",\"actorId\":\"owner\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-fingerprint",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\",\"fingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-short-instance",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"a\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-zero-generation",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":0,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-unsafe-counter",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":9007199254740992,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-newline-node",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\\n\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-string-epoch",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":\"2\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-zero-epoch",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-bad-request-id",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-duplicate",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-rounded-number",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2.0000000000000001,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-null",
+      "message": "PollRequest",
+      "raw": "null",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-trailing",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}{}",
+      "valid": false
+    },
+    {
+      "name": "PollRequest-oversize",
+      "message": "PollRequest",
+      "raw": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-protocolVersion",
+      "message": "PollResponse",
+      "raw": "{\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-probeVersion",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-nodeId",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-bootId",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-sessionEpoch",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-instanceId",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-instanceGeneration",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-requestId",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-kind",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-observedAt",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-serverTime",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-executionEnabled",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-missing-offer",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-old-version",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":0,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-wrong-adp",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":2,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-wrong-kind",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-claim\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-target",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"},\"target\":\"169.254.169.254\"}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-actor",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"},\"actorId\":\"owner\"}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-fingerprint",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"},\"fingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-short-instance",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"a\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-zero-generation",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":0,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-unsafe-counter",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":9007199254740992,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-newline-node",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\\n\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-string-epoch",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":\"2\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-zero-epoch",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-bad-request-id",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-duplicate",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-rounded-number",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2.0000000000000001,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-null",
+      "message": "PollResponse",
+      "raw": "null",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-trailing",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}{}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-oversize",
+      "message": "PollResponse",
+      "raw": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-protocolVersion",
+      "message": "StatusRequest",
+      "raw": "{\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-probeVersion",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-nodeId",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-bootId",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-sessionEpoch",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-instanceId",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-instanceGeneration",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-requestId",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-kind",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-missing-permitId",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-old-version",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":0,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-wrong-adp",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":2,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-wrong-kind",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-claim\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-target",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\",\"target\":\"169.254.169.254\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-actor",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\",\"actorId\":\"owner\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-fingerprint",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\",\"fingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-short-instance",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"a\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-zero-generation",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":0,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-unsafe-counter",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":9007199254740992,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-newline-node",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\\n\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-string-epoch",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":\"2\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-zero-epoch",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-bad-request-id",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-duplicate",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-rounded-number",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2.0000000000000001,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-null",
+      "message": "StatusRequest",
+      "raw": "null",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-trailing",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\"}{}",
+      "valid": false
+    },
+    {
+      "name": "StatusRequest-oversize",
+      "message": "StatusRequest",
+      "raw": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-protocolVersion",
+      "message": "StatusResponse",
+      "raw": "{\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-probeVersion",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-nodeId",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-bootId",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-sessionEpoch",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-instanceId",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-instanceGeneration",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-requestId",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-kind",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-permitId",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-binding",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-timeoutMs",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-issuedAt",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-expiresAt",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-consumedAt",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-checkedAt",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-serverTime",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-state",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-missing-executionEnabled",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-old-version",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":0,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-wrong-adp",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":2,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-wrong-kind",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-claim\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-target",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false,\"target\":\"169.254.169.254\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-actor",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false,\"actorId\":\"owner\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-fingerprint",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false,\"fingerprint\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-short-instance",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"a\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-zero-generation",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":0,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-unsafe-counter",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":9007199254740992,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-newline-node",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\\n\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-string-epoch",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":\"2\",\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-zero-epoch",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":0,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-bad-request-id",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-duplicate",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-rounded-number",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2.0000000000000001,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-null",
+      "message": "StatusResponse",
+      "raw": "null",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-trailing",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}{}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-oversize",
+      "message": "StatusResponse",
+      "raw": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ",
+      "valid": false
+    },
+    {
+      "name": "caller-permit",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\",\"permitId\":\"permit-a\"}",
+      "valid": false
+    },
+    {
+      "name": "caller-binding",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1}}",
+      "valid": false
+    },
+    {
+      "name": "caller-timeout",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\",\"timeoutMs\":1000}",
+      "valid": false
+    },
+    {
+      "name": "status-caller-binding",
+      "message": "StatusRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-enabled",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":true,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-future-observation",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.111Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-stale",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.351Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-expired",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:02.000Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-calendar",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-02-30T00:00:00.000Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "PollResponse-fractional-time",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.1101Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-enabled",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":true}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-future-observation",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.111Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-stale",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.351Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-expired",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:02.000Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-calendar",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-02-30T00:00:00.000Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "StatusResponse-fractional-time",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.1101Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-long-window",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.001Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-long-window",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.001Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-empty-window",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:00.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-empty-window",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:00.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-pre-issue-observation",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.101Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-pre-issue-observation",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.101Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-expired-observation",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:00.100Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-expired-observation",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:00.100Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-small-timeout",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":99,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-small-timeout",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":99,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-large-timeout",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":2001,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-large-timeout",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":2001,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-foreign-node",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"foreign\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-foreign-node",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"foreign\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-foreign-boot",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"foreign\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-foreign-boot",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"foreign\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-foreign-epoch",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":3,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-foreign-epoch",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":3,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-zero-fence",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":0,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-zero-fence",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":0,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-newline-assignment",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\\n\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-newline-assignment",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\\n\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-unsafe-binding",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":9007199254740992,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-unsafe-binding",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":9007199254740992,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-unknown-binding",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1,\"target\":\"127.0.0.1\"},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-unknown-binding",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1,\"target\":\"127.0.0.1\"},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "offer-bad-digest",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "status-bad-digest",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "more-than-one-offer",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":[{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"},{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}]}",
+      "valid": false
+    },
+    {
+      "name": "unknown-offer-field",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"scopeId\":\"scope-a\"}}",
+      "valid": false
+    },
+    {
+      "name": "empty-offer-object",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{}}",
+      "valid": false
+    },
+    {
+      "name": "empty-pre-epoch",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"1969-12-31T23:59:59.999Z\",\"serverTime\":\"1970-01-01T00:00:00.000Z\",\"executionEnabled\":false,\"offer\":null}",
+      "valid": false
+    },
+    {
+      "name": "pre-issue-consumed",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-16T23:59:59.999Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "future-consumed",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.101Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"consumed\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "not-consumed",
+      "message": "StatusResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-status-ack\",\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\",\"consumedAt\":\"2026-10-17T00:00:00.050Z\",\"checkedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"state\":\"issued\",\"executionEnabled\":false}",
+      "valid": false
+    },
+    {
+      "name": "duplicate-offer-binding",
+      "message": "PollResponse",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll-ack\",\"observedAt\":\"2026-10-17T00:00:00.100Z\",\"serverTime\":\"2026-10-17T00:00:00.110Z\",\"executionEnabled\":false,\"offer\":{\"permitId\":\"permit-a\",\"binding\":{\"nodeId\":\"node-a\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"snapshotGeneration\":3,\"assignmentId\":\"assignment-a\",\"forwardId\":\"forward-a\",\"forwardRevision\":1,\"deploymentGeneration\":4,\"bindingFence\":5,\"bindingFence\":5,\"configDigest\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"egressPolicyRevision\":1},\"timeoutMs\":1000,\"issuedAt\":\"2026-10-17T00:00:00.000Z\",\"expiresAt\":\"2026-10-17T00:00:02.000Z\"}}",
+      "valid": false
+    },
+    {
+      "name": "surrogate",
+      "message": "PollRequest",
+      "raw": "{\"protocolVersion\":3,\"probeVersion\":1,\"nodeId\":\"\\ud800\",\"bootId\":\"boot-a\",\"sessionEpoch\":2,\"instanceId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"instanceGeneration\":1,\"requestId\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"kind\":\"probe-poll\"}",
+      "valid": false
+    }
+  ]
+}

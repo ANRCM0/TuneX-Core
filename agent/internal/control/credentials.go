@@ -111,6 +111,9 @@ func (runner *Runner) reloadCredential() error {
 	hash := sha256.Sum256(leaf.Raw)
 	runner.mutex.Lock()
 	changed := runner.credentialFingerprint != hash
+	if changed {
+		runner.closeProbeLocked()
+	}
 	runner.certificate = certificate
 	runner.credentialUntil = leaf.NotAfter
 	runner.credentialFingerprint = hash
