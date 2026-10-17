@@ -46,6 +46,8 @@ jobs:
         run: node scripts/run-go.mjs test ./internal/control -run '^TestExecution' -count=1
       - name: Control query and Transport resolution port regressions
         run: node --test apps/control/test/application-query-ports.test.ts apps/control/test/console-read.test.ts apps/control/test/console-diagnostics.test.ts apps/control/test/transport-query-ports.test.ts apps/control/test/multihop-coordinator.test.ts
+      - name: Bounded native TLS metadata and desired adjacency read ports
+        run: node --test apps/control/test/tunnel-query-ports.test.ts
       - name: Owner-owned Profile commands and Runtime grant effects
         run: node --test apps/control/test/transport-grant-ports.test.ts
       - name: Owner-owned member and Node Grant command ports
@@ -146,6 +148,8 @@ jobs:
         run: node --test apps/control/test/console-mysql-acceptance.test.ts
       - name: Native capability declarations and immutable Profile reference impact with SELECT-only MySQL
         run: node --test apps/control/test/transport-query-mysql-acceptance.test.ts
+      - name: Native TLS metadata, exact scoped adjacency and no writes with SELECT-only MySQL
+        run: node --test apps/control/test/tunnel-query-mysql-acceptance.test.ts
       - name: Passive observation API with SELECT-only MySQL and scoped provenance
         run: node --test apps/control/test/node-observation-mysql-acceptance.test.ts
       - name: Non-executable probe preflight with SELECT-only MySQL and current binding checks
@@ -203,7 +207,7 @@ jobs:
             .artifacts/capacity/**/failure.json
   probe-workflow:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       mysql:
         image: mysql:8.4.9
@@ -233,11 +237,17 @@ jobs:
       - run: node scripts/run-go.mjs build -o ../.artifacts/tunex-agent ./cmd/tunex-agent
       - name: Verify independent native Linux OS clock synchronization
         run: node scripts/run-go.mjs run ./cmd/time-proof --check
+      - run: node scripts/run-go.mjs build -o ../.artifacts/time-proof ./cmd/time-proof
+      - run: node scripts/run-go.mjs build -o ../.artifacts/network-fixture ./cmd/network-fixture
       - name: Install Chromium only on the disposable browser acceptance runner
         run: npx playwright install --with-deps chromium
       - name: Real default-off Probe, native rule Console/CAS/retry, Agent lifecycle, mTLS, MySQL and bounded TCP fixtures
         run: npm run test:probe
-      - name: Preserve only redacted Probe evidence, never test PKI or protected Agent state
+      - name: Real Relay TLS metadata, referenced Profile switch, disabled copy and actual TCP/UDP through Chromium
+        run: npm run test:relay
+        env:
+          TUNEX_TUNNEL_BROWSER: '1'
+      - name: Preserve only redacted Console evidence, never test PKI or protected Agent state
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -245,6 +255,8 @@ jobs:
           path: |
             .artifacts/probe/**/evidence.json
             .artifacts/probe/**/console-probe-*.png
+            .artifacts/relay/**/evidence.json
+            .artifacts/relay/**/console-tunnel-*.png
   multihop:
     runs-on: ubuntu-latest
     timeout-minutes: 35

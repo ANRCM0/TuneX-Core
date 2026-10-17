@@ -90,4 +90,16 @@ require explicit consent and retain original keys/bodies. Operation detail expos
 only its already-scope-authorized Forward identity. No durable Batch, new Agent
 command, Core selector, generic plugin interface or recovery authority is introduced.
 
+## 9. Native TLS Tunnel Read Model
+
+[ADR-0021](../decisions/0021-native-tunnel-read-model.md) introduces `TunnelQueries<Tx>`
+and a deliberate SELECT-only `TunnelReadPort` projection. Scope membership and exact
+Node ownership precede all Endpoint/peer/desired-reference reads in one supplied
+transaction. Only bounded fingerprints, times, counters and current adjacency are
+returned, never certificates, issuance responses, raw Reports or runtime authority.
+The owner-defined pure Endpoint parser is shared without importing its write module.
+Recorded windows are not TLS/session/network/health evidence or deletion safety.
+Console delegates deployment inspection and explicit Profile/copy commands to the
+original entrypoints; no new write authority, Runtime ledger or Agent protocol exists.
+
 

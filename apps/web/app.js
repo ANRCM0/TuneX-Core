@@ -3,6 +3,7 @@ import { initRelayConsole } from './relay.js';
 import { initProbeConsole } from './probe.js';
 import { initTransportConsole } from './transport-console.js';
 import { initRuleConsole } from './rule-console.js';
+import { initTunnelConsole } from './tunnel-console.js';
 
 const byId = id => document.getElementById(id);
 const auth = { scope: '', token: '' };
@@ -174,7 +175,7 @@ function renderNodes() {
     cell(tr, element('span', (node.policy?.capabilities ?? []).join(', ') || '等待 Agent 上报', 'mono'));
     const actionCell=cell(tr);
     const actionGroup=element('div',undefined,'cell-actions');
-    actionGroup.append(button('详情','node-detail',node.id,'secondary'),button('诊断','node-diagnostics',node.id,'secondary'));
+    actionGroup.append(button('详情','node-detail',node.id,'secondary'),button('诊断','node-diagnostics',node.id,'secondary'),button('TLS Tunnel','node-tunnel',node.id,'secondary'));
     actionCell.append(actionGroup);
     tbody.append(tr);
   }
@@ -312,6 +313,7 @@ async function action(kind, id) {
   try {
     if (kind === 'node-detail') return detail('Node · ' + shortId(id), await request('GET', 'nodes/' + encodeURIComponent(id)));
     if (kind === 'node-diagnostics') return detail('Node · 运行与租约诊断（非链路探测）', await request('GET', 'nodes/' + encodeURIComponent(id) + '/diagnostics'));
+    if (kind === 'node-tunnel') return tunnelConsole.open(id);
     if (kind === 'forward-detail') {
       const record = await request('GET', 'forwards/' + encodeURIComponent(id));
       return detail('Forward · 期望 / 应用 / 健康', record);
@@ -356,10 +358,11 @@ async function createNode(event) {
   } catch (error) { notify(error.message, true); }
 }
 const relayConsole=initRelayConsole({request,mutate,notify,byId,candidates,load,loadOverview,loadCandidates,detail,display,
-  inspectProfile:profile=>transportConsole.open(profile),loadCatalog:()=>transportConsole.catalog()});
+  inspectProfile:profile=>transportConsole.open(profile),loadCatalog:()=>transportConsole.catalog(),inspectTunnel:id=>tunnelConsole.open(id)});
 const probeConsole=initProbeConsole({request,notify,byId,display});
 const transportConsole=initTransportConsole({request,notify,byId,detail,edit:item=>relayConsole.edit(item)});
 const ruleConsole=initRuleConsole({request,notify,byId,refresh:()=>Promise.all([load('forwards'),load('operations'),loadOverview()])});
+const tunnelConsole=initTunnelConsole({request,notify,byId,deployment:id=>relayConsole.deployment(id)});
 function clearConnectionData() {
   connectionVersion++;
   for (const key of Object.keys(readVersions)) readVersions[key]++;
@@ -379,7 +382,7 @@ function clearConnectionData() {
     byId(mode + '-candidate-page').textContent = '尚未查询候选';
     byId(mode + '-candidate-prev').disabled = byId(mode + '-candidate-next').disabled = true;
   }
-  relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); ruleConsole.clear(); fillNodes();
+  relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); ruleConsole.clear(); tunnelConsole.clear(); fillNodes();
   renderNodes(); renderForwards(); renderOperations(); updateOverview();
 }
 async function refreshDirectCandidates() {

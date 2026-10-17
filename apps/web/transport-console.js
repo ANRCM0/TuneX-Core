@@ -104,6 +104,18 @@ export function initTransportConsole({ request, notify, byId, detail, edit, conf
     if (!el('references-dialog').open) el('references-dialog').showModal();
     await references();
   }
+  async function inspectRevision() {
+    if (!profile) return;
+    const id = profile, version = referenceVersion, connection = epoch;
+    try {
+      const revision = positiveRevision(el('target-revision').value.trim());
+      const record = await request('GET', 'transport-profiles/' + encodeURIComponent(id) + '?revision=' + revision,
+        undefined, undefined, { signal: reads.signal });
+      if (version !== referenceVersion || connection !== epoch) return;
+      if (record.profileId !== id || record.revision !== revision || !/^sha256:[a-f0-9]{64}$/.test(record.configDigest)) throw Error('Invalid immutable Profile revision.');
+      detail('Immutable Profile configuration / ' + id + ' / r' + revision + ' / not deployment evidence', record);
+    } catch (error) { if (version === referenceVersion && connection === epoch) notify(error.message, true); }
+  }
   function clear() {
     epoch++; catalogVersion++; session.abort(); session = new AbortController();
     invalidate(); profile = null; page = 1; preview = false;
@@ -112,10 +124,11 @@ export function initTransportConsole({ request, notify, byId, detail, edit, conf
   }
   el('references-query').addEventListener('click', () => references(false, 1));
   el('references-preview').addEventListener('click', () => references(true, 1));
+  el('revision-inspect').addEventListener('click', inspectRevision);
   el('references-prev').addEventListener('click', () => references(preview, page - 1));
   el('references-next').addEventListener('click', () => references(preview, page + 1));
   el('references-close').addEventListener('click', () => el('references-dialog').close());
-  el('references-dialog').addEventListener('close', invalidate);
+  el('references-dialog').addEventListener('close', () => { if (!el('references-dialog').open) invalidate(); });
   for (const name of ['from-revision', 'target-revision']) el(name).addEventListener('input', invalidate);
   clear();
   return { catalog, references, open, clear };

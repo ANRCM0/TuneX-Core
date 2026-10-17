@@ -95,6 +95,9 @@ await unitOfWork.transaction(async (tx) => {
 
 ## 6. Read model 与用户操作
 
+Node 的有界原生 TLS 状态与相邻期望引用见 [隧道管理只读契约](native-tunnel-management-v1.md)：
+同事务 Scope/Node 校验，SELECT-only 元数据，不签发凭据、不证明健康、执行授权或删除安全。
+
 GET 返回 desired `{revision,spec,deleting}`；applied 按 protocol/role 展示 deploymentGeneration、phase、condition、errorCode；health 包含 observedAt、receivedAt、freshUntil，过期 unknown；lastOperation 包含 id/status/cleanupPending。更新失败且旧配置仍获明确授权时，应显示“新配置失败，旧版本仍在运行”，不得仅显示一个绿色 enabled。
 
 每个失败必须给出稳定错误码、是否可重试和下一步操作。最小 UI/CLI 要支持创建、查看 Operation、更新、启停、删除和查看节点授权截止；复杂监控看板可以推迟，基本故障诊断不能推迟到产品化阶段。

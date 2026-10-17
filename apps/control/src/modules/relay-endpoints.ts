@@ -1,5 +1,5 @@
 import type { Forwarding } from './forwarding.ts';
-import { isId,isCounter,isPort,ipBytes,normalizeIp,normalizeTargetHost,MAX_COUNTER } from '@tunex/core';
+import { isId,isCounter,MAX_COUNTER } from '@tunex/core';
 import { digest } from '@tunex/contracts';
 import { ControlError,invalid,notFound } from '../application/errors.ts';
 import { rows,write,json } from '../infrastructure/mysql.ts';
@@ -7,15 +7,10 @@ import type { MySqlUnitOfWork,Transaction } from '../infrastructure/mysql.ts';
 import type { Identity } from './identity.ts';
 import type { Nodes } from './nodes.ts';
 import { Idempotency } from './idempotency.ts';
-export interface RelayEndpoint {listenAddress:string;advertisedHost:string;allowedTcpPorts:number[]}
-export interface ResolvedEndpoint {nodeId:string;revision:number;config:RelayEndpoint}
-export function parseRelayEndpoint(input:unknown):RelayEndpoint{
- if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).sort().join(',')!=='advertisedHost,allowedTcpPorts,listenAddress')invalid('Explicit Relay endpoint fields required');
- const value=input as Record<string,unknown>;const address=typeof value.listenAddress==='string'?normalizeIp(value.listenAddress):undefined,host=typeof value.advertisedHost==='string'?normalizeTargetHost(value.advertisedHost):undefined;
- const bytes=host?ipBytes(host):undefined;if(bytes&&(bytes.every(byte=>byte===0)||bytes.length===4&&bytes[0]!>=224||bytes.length===16&&bytes[0]===255))invalid('Relay endpoint must identify a unicast host');
- if(!address||!host||!Array.isArray(value.allowedTcpPorts)||value.allowedTcpPorts.length<1||value.allowedTcpPorts.length>256||value.allowedTcpPorts.some(p=>!isPort(p))||new Set(value.allowedTcpPorts).size!==value.allowedTcpPorts.length)invalid('Canonical IP listener, reachable host and bounded unique TCP ports required');
- return {listenAddress:address,advertisedHost:host,allowedTcpPorts:[...value.allowedTcpPorts as number[]].sort((a,b)=>a-b)};
-}
+import { parseRelayEndpoint } from './relay-endpoint-contract.ts';
+import type { ResolvedEndpoint } from './relay-endpoint-contract.ts';
+export { parseRelayEndpoint } from './relay-endpoint-contract.ts';
+export type { RelayEndpoint, ResolvedEndpoint } from './relay-endpoint-contract.ts';
 export class RelayEndpoints {
  private readonly db:MySqlUnitOfWork;private readonly identity:Identity;private readonly nodes:Nodes;private readonly idempotency:Idempotency;private readonly forwarding:Forwarding;
  constructor(db:MySqlUnitOfWork,identity:Identity,nodes:Nodes,idempotency:Idempotency,forwarding:Forwarding){this.db=db;this.identity=identity;this.nodes=nodes;this.idempotency=idempotency;this.forwarding=forwarding;}

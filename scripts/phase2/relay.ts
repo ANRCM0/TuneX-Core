@@ -13,6 +13,7 @@ import { DEFAULT_POLICY } from '@tunex/contracts';
 import { host,linuxPath,linux,spawnLinux,linuxBinary,topology,viaWSL } from './native-linux.ts';
 import { relaySwitchFaults } from './relay-scenarios.ts';
 import { reportsDuringIntentLock } from './runtime-intent-lock.ts';
+import { verifyTunnelConsole } from './tunnel-console.ts';
 
 const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
 if(!databaseUrl)throw new Error('Disposable MySQL URL required');
@@ -28,6 +29,8 @@ const token=newToken(),scope='relay-scope',owner='relay-owner',ca=await readFile
 const binary=linuxBinary('tunex-agent'),fixture=linuxBinary('network-fixture'),collector=linuxBinary('time-proof');
 const nativeRoot=`/tmp/tunex-relay-${randomUUID()}`;
 const switchFaults=process.argv.includes('--switch-faults'),tag=switchFaults?'A':'';
+const tunnelBrowser=process.env.TUNEX_TUNNEL_BROWSER==='1';
+if(tunnelBrowser&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'))throw Error('Tunnel browser acceptance is Actions-only');
 const policy={...DEFAULT_POLICY,pollIntervalSeconds:1,leaseSeconds:switchFaults?45:30,renewalLeadSeconds:switchFaults?18:12,observationFreshnessSeconds:5,drainTimeoutSeconds:switchFaults?20:2,udpIdleTimeoutSeconds:2};
 const options={databaseUrl:dbUrl.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,worker:false};
 let control:Awaited<ReturnType<typeof startControl>>|undefined,target:ChildProcess|undefined,targetPID:number|undefined;
@@ -43,6 +46,7 @@ try{
  control=await startControl(options);await control.control.identity.bootstrap(scope,owner,token);
  target=spawnLinux(fixture,['--mode','target','--tag',tag,'--run-id',nativeRoot]);const targetStatus=JSON.parse(await new Promise<string>((resolve,reject)=>{target!.stdout!.once('data',chunk=>resolve(chunk.toString()));target!.once('error',reject)}));assert.equal(targetStatus.platform,'linux');assert.equal(targetStatus.runId,nativeRoot);targetPID=targetStatus.pid;
  const listenPort=await port(),movedPort=await port(),peerPorts=[await port(),await port()];assert.notEqual(peerPorts[0],peerPorts[1]);
+ if(tunnelBrowser){while(peerPorts.length<4){const next=await port();if(![listenPort,movedPort,...peerPorts].includes(next))peerPorts.push(next);}}
  const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:2,idleTimeoutSeconds:2,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:32};
  assert.equal((await call('PUT',`/api/v1/scopes/${scope}/transport-profiles/secure-relay`,{expectedRevision:0,config:profile})).status,202);
  for(const role of ['ingress','egress']){
@@ -55,7 +59,7 @@ try{
  const [ingress,egress]=agents;
  assert.equal((await call('PUT',`/api/v1/scopes/${scope}/nodes/${egress!.nodeId}/relay-endpoint`,{expectedRevision:0,config:{listenAddress:'127.0.0.1',advertisedHost:'127.0.0.1',allowedTcpPorts:peerPorts}})).status,202);
  pass('Relay identities: two independent Linux Agents use dedicated current-session peer credentials and a locked secure Profile');
- const spec={enabled:true,protocols:['tcp','udp'],ingress:{nodeId:ingress!.nodeId,listen:{address:'127.0.0.1',port:listenPort}},target:{host:'127.0.0.1',port:targetStatus.port},path:{via:[egress!.nodeId]},transport:{profileId:'secure-relay',configRevision:1}};
+ const spec={enabled:true,protocols:['tcp','udp'] as const,ingress:{nodeId:ingress!.nodeId,listen:{address:'127.0.0.1',port:listenPort}},target:{host:'127.0.0.1',port:targetStatus.port},path:{via:[egress!.nodeId]},transport:{profileId:'secure-relay',configRevision:1}};
  const respond=control.control.idempotency.respond.bind(control.control.idempotency);control.control.idempotency.respond=async()=>{throw new Error('Injected final response failure');};assert.equal((await call('POST',`/api/v1/scopes/${scope}/forwards`,spec)).status,503);control.control.idempotency.respond=respond;
  const [rolled]=await control.db.pool.query<any[]>('SELECT (SELECT COUNT(*) FROM forwards) forwards,(SELECT COUNT(*) FROM relay_deployments) deployments,(SELECT COUNT(*) FROM port_slots WHERE owner_id IS NOT NULL) slots');assert.equal(rolled[0].forwards,0);assert.equal(rolled[0].deployments,0);assert.equal(rolled[0].slots,0);
  pass('Relay transaction: failure after allocation/plan/Operation rolls all intent and physical ownership back');
@@ -127,8 +131,11 @@ try{
  await until(async()=>{await control!.runtime.tick();const [latest]=await control!.db.pool.query<any[]>('SELECT generation,stage FROM relay_deployments WHERE forward_id=? ORDER BY generation DESC LIMIT 1',[created.body.forwardId]);const resource=await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`);return latest[0].generation>beforeBoot[0].generation&&latest[0].stage==='active'&&resource.body.lastOperation.status==='succeeded';},'fresh egress session and historical lease',60000);
  const reconnected=JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort),'--tag',tag])).stdout);assert.equal(reconnected.tcp,true);assert.equal(reconnected.udp,true);
  pass('Relay restart: new egress session creates a higher immutable deployment while old-session authorization remains in the retirement ledger');
- let desiredRevision=4,scenarioDetails:unknown;
- if(switchFaults){const result=await relaySwitchFaults({control:()=>control!,call,until,pass,agents,scope,forwardId:created.body.forwardId,spec:movedSpec,revision:4,nativeRoot,binary,fixture,caPath:caCert,freePort:port,unusedListenPort:listenPort});desiredRevision=result.revision;scenarioDetails=result.details;}
+ let desiredRevision=4,scenarioDetails:unknown,tunnelConsole:unknown,currentSpec:import('@tunex/core').ForwardSpec=movedSpec;
+ if(tunnelBrowser){const result=await verifyTunnelConsole({url:`https://${host}:${control.port}`,scope,token,directory,sourceId:created.body.forwardId,revision:desiredRevision,spec:currentSpec,profile:profile as import('@tunex/contracts').RelayProfileConfig,unusedListenPort:listenPort,
+  traffic:async listen=>{const actual=JSON.parse((await linux(fixture,['--mode','probe','--port',String(listen),'--tag',tag])).stdout);assert.equal(actual.tcp,true);assert.equal(actual.udp,true);},
+  closed:async listen=>{let refused=false;try{await linux(fixture,['--mode','probe','--port',String(listen)]);}catch{refused=true;}assert.equal(refused,true,'Disabled or removed browser copy accepted traffic');}});desiredRevision=result.revision;currentSpec=result.spec;tunnelConsole=result.evidence;pass('Real Chromium Relay Console: scoped TLS metadata, exact Profile inspection, referenced revision switch with fresh preview/CAS, disabled copy, real TCP/UDP and cleanup');}
+ if(switchFaults){const result=await relaySwitchFaults({control:()=>control!,call,until,pass,agents,scope,forwardId:created.body.forwardId,spec:currentSpec as Parameters<typeof relaySwitchFaults>[0]['spec'],revision:desiredRevision,nativeRoot,binary,fixture,caPath:caCert,freePort:port,unusedListenPort:listenPort});desiredRevision=result.revision;scenarioDetails=result.details;}
  await stopNative(egress!.root);egress!.process.kill();
  await until(async()=>{const status=await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`);return status.body.health.condition!=='ready';},'downstream loss observable');
  assert.equal((await call('GET',`/api/v1/scopes/${scope}/operations/${created.body.operationId}`)).body.status,'succeeded');
@@ -137,7 +144,7 @@ try{
  await until(async()=>{await control!.runtime.tick();return (await call('GET',`/api/v1/scopes/${scope}/operations/${deleted.body.operationId}`)).body.status==='succeeded';},'offline egress safe deletion',60000);
  const [remaining]=await control.db.pool.query<any[]>('SELECT COUNT(*) n FROM port_slots WHERE owner_id=?',[created.body.forwardId]);assert.equal(remaining[0].n,0);assert.equal((await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`)).status,404);
  pass('Relay deletion: both Nodes retain historical lease/fence facts until safe reclamation, including an offline egress');
- const commit=(await execute('git',['rev-parse','HEAD'])).stdout.trim();await writeFile(join(directory,'evidence.json'),JSON.stringify({commit,workingTreeDirty:Boolean((await execute('git',['status','--porcelain'])).stdout.trim()),command:switchFaults?'npm run test:relay-switch':'npm run test:relay',checks,policy,synchronization,agentSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/tunex-agent-linux':binary)).digest('hex'),fixtureSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/network-fixture-linux':fixture)).digest('hex'),kernel:(await linux('/bin/uname',['-a'])).stdout.trim(),topology:`${topology}; ${agents.length} independent Agents; same Linux host`,deploymentGeneration:generation,protocolVersion:3,scenarioDetails},null,2));console.log(`Relay acceptance passed: ${checks.length} checks. Evidence ${directory}`);
+ const commit=(await execute('git',['rev-parse','HEAD'])).stdout.trim();await writeFile(join(directory,'evidence.json'),JSON.stringify({commit,workingTreeDirty:Boolean((await execute('git',['status','--porcelain'])).stdout.trim()),command:(tunnelBrowser?'TUNEX_TUNNEL_BROWSER=1 ':'')+(switchFaults?'npm run test:relay-switch':'npm run test:relay'),checks,policy,synchronization,agentSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/tunex-agent-linux':binary)).digest('hex'),fixtureSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/network-fixture-linux':fixture)).digest('hex'),kernel:(await linux('/bin/uname',['-a'])).stdout.trim(),topology:`${topology}; ${agents.length} independent Agents; same Linux host`,deploymentGeneration:generation,protocolVersion:3,scenarioDetails,tunnelConsole},null,2));console.log(`Relay acceptance passed: ${checks.length} checks. Evidence ${directory}`);
 }catch(error){
  if(control){const [operations]=await control.db.pool.query<any[]>('SELECT id,forward_id,target_revision,kind,status,cleanup_pending,last_error FROM operations');const [runtime]=await control.db.pool.query<any[]>('SELECT node_id,session_epoch,snapshot_generation,last_report FROM runtime_nodes');const [deployments]=await control.db.pool.query<any[]>('SELECT * FROM relay_deployments');await writeFile(join(directory,'failure.json'),JSON.stringify({error:error instanceof Error?error.message:'Relay failed',operations,runtime,deployments,agents:agents.map(agent=>({nodeId:agent.nodeId,errors:agent.errors??'',exitCode:agent.process.exitCode}))},null,2));console.error(`Failure evidence: ${directory}`);}
  throw error;

@@ -1,10 +1,11 @@
 import { relayCapable, multihopCapable, multihopSpec, relayProfile, relayEndpoint, relaySpec } from './relay-model.js';
 
-export function initRelayConsole({ request, mutate, notify, byId, candidates, load, loadOverview, loadCandidates, detail, display, inspectProfile, loadCatalog }) {
+export function initRelayConsole({ request, mutate, notify, byId, candidates, load, loadOverview, loadCandidates, detail, display, inspectProfile, loadCatalog, inspectTunnel }) {
   const knownProfiles = new Map();
   let profileList = [];
   let previewed = null;
-  let multihopEnabled=false, intermediates=[],editing=null,pinnedProfileRevision=null,deploymentId=null,editVersion=0;
+  let planVersion = 0;
+  let multihopEnabled=false, intermediates=[],editing=null,pinnedProfileRevision=null,deploymentId=null,editVersion=0,deploymentVersion=0;
   const el = byId;
   const formValue = (form, name) => form.elements.namedItem(name).value;
   const check = (form, name) => form.elements.namedItem(name).checked;
@@ -23,6 +24,7 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
     select.disabled = !items.length;
   }
   function invalidate() {
+    planVersion++;
     previewed = null;
     el('relay-submit').disabled = true;
     el('relay-preview-output').hidden = true;
@@ -141,8 +143,7 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
     try{
       const id=el('relay-endpoint-node').value;
       if(!id)throw Error('请选择出口节点');
-      const response=await request('GET','nodes/'+encodeURIComponent(id)+'/relay-endpoint');
-      detail('Relay Endpoint · '+shortId(id),response);
+      await inspectTunnel(id);
     }catch(e){notify(e.message,true);}
   }
   async function saveEndpoint(event) {
@@ -177,11 +178,15 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
   }
   async function preview() {
     invalidate();
+    const version=planVersion;
     try {
       const spec=await buildSpec();
+      if(version!==planVersion)return;
       // Presence is necessary, not sufficient; the server preview checks use grants and policy.
-      for(const nodeId of spec.path.via)await request('GET','nodes/'+encodeURIComponent(nodeId)+'/relay-endpoint');
+      for(const nodeId of spec.path.via){if(version!==planVersion)return;await request('GET','nodes/'+encodeURIComponent(nodeId)+'/relay-endpoint');}
+      if(version!==planVersion)return;
       const response=await request('POST','relay-plan',spec);
+      if(version!==planVersion)return;
       previewed=JSON.stringify(spec);
       el('relay-preview-output').hidden=false;
       el('relay-preview-output').textContent=JSON.stringify({
@@ -193,15 +198,18 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
       },null,2);
       el('relay-submit').disabled=false;
       notify('Relay 计划检查通过；尚未部署、授权续期或进行实际链路探测。');
-    }catch(e){notify(e.message,true);}
+    }catch(e){if(version===planVersion)notify(e.message,true);}
   }
   async function submit(event) {
     event.preventDefault();
+    const version=planVersion,selected=editing?{...editing}:null;
     try {
       const spec=await buildSpec();
+      if(version!==planVersion)return;
       if(!previewed||JSON.stringify(spec)!==previewed)throw Error('表单已变化，请重新执行计划预览');
       el('relay-submit').disabled=true;
-      const result=editing?await mutate('PUT','forwards/'+encodeURIComponent(editing.id),{expectedRevision:editing.revision,spec}):await mutate('POST','forwards',spec);
+      const result=selected?await mutate('PUT','forwards/'+encodeURIComponent(selected.id),{expectedRevision:selected.revision,spec}):await mutate('POST','forwards',spec);
+      if(version!==planVersion)return;
       cancelEdit();
       previewed=null;
       await Promise.all([load('forwards'),load('operations'),loadOverview()]);
@@ -239,9 +247,12 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
     invalidate();display('relay');
   }
   el('deployment-close').addEventListener('click',()=>el('deployment-dialog').close());
+  el('deployment-dialog').addEventListener('close',()=>{if(!el('deployment-dialog').open){deploymentVersion++;deploymentId=null;}});
   el('deployment-refresh').addEventListener('click',()=>deployment(deploymentId).catch(e=>notify(e.message,true)));
   async function deployment(id){
+    const version=++deploymentVersion;
     deploymentId=id;const [response,forward,history]=await Promise.all([request('GET','forwards/'+encodeURIComponent(id)+'/deployment'),request('GET','forwards/'+encodeURIComponent(id)),request('GET','forwards/'+encodeURIComponent(id)+'/revisions')]);
+    if(version!==deploymentVersion||deploymentId!==id)return;
     const d=response.deployment;if(!d)throw Error('尚无持久化部署计划');
     el('deployment-state').textContent='部署 g'+d.generation+' / '+d.stage+'；Control 续租：'+(d.renewalAllowed?'允许':'已停止或尚未授权')+'；已准备 '+(d.preparedCount??'—')+'，已请求激活 '+(d.activatedCount??'—')+'；隔离资源 '+d.isolation.length+'。流量验收尚无证据。';
     el('deployment-topology').replaceChildren();el('deployment-nodes').replaceChildren();
@@ -258,6 +269,7 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
       for(const r of revisions){const option=document.createElement('option');option.value=String(r.revision);option.textContent='r'+r.revision;select.append(option);}label.append(select);
       const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='部署所选配置';
       button.addEventListener('click',async()=>{try{
+        if(version!==deploymentVersion||deploymentId!==id)return;
         const selected=revisions.find(r=>String(r.revision)===select.value);if(!confirm('将 r'+selected.revision+' 的配置作为新 revision 部署，重新检查权限与端口。继续？'))return;
         button.disabled=true;const result=await mutate('PUT','forwards/'+encodeURIComponent(id),{expectedRevision:forward.desired.revision,spec:selected.spec});
         el('deployment-dialog').close();await Promise.all([load('forwards'),load('operations'),loadOverview()]);notify('历史配置已提交，Operation '+(result.operationId??'无变更'));
@@ -289,7 +301,7 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
     return true;
   }
   function clear() {
-    multihopEnabled=false;deploymentId=null;cancelEdit();
+    multihopEnabled=false;deploymentVersion++;deploymentId=null;cancelEdit();
     el('deployment-nodes').replaceChildren();el('deployment-topology').replaceChildren();el('deployment-state').textContent='';
     profileList=[];
     knownProfiles.clear();

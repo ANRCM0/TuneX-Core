@@ -83,6 +83,24 @@ test('canonical revision checks reject ambiguous or injected fields before reque
   assert.equal(h.calls.length, 1); assert.equal(h.edits.length, 0);
 });
 
+test('immutable Profile inspection requests the explicitly typed revision, never the latest alias', async () => {
+  const h = harness(async (_, resource) => resource.includes('/references?') ? referencePage(resource) :
+    { profileId: 'profile-a', revision: 1, configDigest: 'sha256:' + 'a'.repeat(64), config: { driver: 'native.relay.v1' } });
+  await h.api.open(profile); h.el('target-revision').value = '1'; h.el('target-revision').listeners.input();
+  await h.el('revision-inspect').listeners.click();
+  assert.equal(h.calls.at(-1)[1], 'transport-profiles/profile-a?revision=1'); assert.equal(h.details.length, 1); assert.equal(h.edits.length, 0);
+  h.el('target-revision').value = '01'; await h.el('revision-inspect').listeners.click(); assert.equal(h.calls.length, 2);
+});
+
+test('editing an inspected revision or disconnecting ignores its late response', async () => {
+  let finish;
+  const h = harness(async (_, resource) => resource.includes('/references?') ? referencePage(resource) : new Promise(resolve => { finish = resolve; }));
+  await h.api.open(profile); const pending = h.el('revision-inspect').listeners.click(); h.el('target-revision').listeners.input();
+  assert.equal(h.calls.at(-1)[4].signal.aborted, true);
+  finish({ profileId: 'profile-a', revision: 2, configDigest: 'sha256:' + 'a'.repeat(64) }); await pending;
+  assert.equal(h.details.length, 0);
+});
+
 test('native declarations show business UDP as Relay TCP carrier and never infer Node proof from Control gates', async () => {
   const catalog = JSON.parse(await readFile(new URL('../../../packages/contracts/data/native-drivers-v1.json', import.meta.url), 'utf8'));
   const h = harness(async () => ({ ...catalog, source: 'declared-native-implementation', authorized: false, reserved: false,

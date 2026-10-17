@@ -189,6 +189,10 @@ const portImports = new Map([
   ['application/console-queries.ts', ['./console-query.ts', './errors.ts', './ports.ts']],
   ['application/native-drivers.ts', ['@tunex/core', '@tunex/contracts', './ports.ts']],
   ['application/transport-queries.ts', ['@tunex/core', './console-query.ts', './errors.ts', './ports.ts', '../modules/transport-ports.ts']],
+  ['application/tunnel-queries.ts', ['@tunex/core', '../modules/relay-endpoint-contract.ts', './console-query.ts', './errors.ts', './ports.ts']],
+  ['modules/relay-endpoint-contract.ts', ['@tunex/core', '../application/errors.ts']],
+  ['api/tunnel-query.ts', ['../application/console-query.ts', '../application/tunnel-queries.ts', '../application/errors.ts']],
+  ['infrastructure/mysql-tunnel-read.ts', ['@tunex/core', '../application/console-query.ts', '../application/tunnel-queries.ts', './mysql-console-read.ts', './mysql.ts']],
   ['api/transport-query.ts', ['@tunex/core', '../application/console-query.ts', '../application/transport-queries.ts', '../application/errors.ts']],
   ['infrastructure/mysql-transport-read.ts', ['@tunex/core', '../application/transport-queries.ts', '../application/console-query.ts', './mysql-console-read.ts', './mysql.ts']],
   ['application/node-observations.ts', ['@tunex/core', './errors.ts', '../modules/node-report-observation.ts',
@@ -305,6 +309,10 @@ if (/\bControlApplication\b|\b(?:write|createPool|createConnection)\s*\(/.test(p
 const transportProjection = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-transport-read.ts'), 'utf8');
 if (/\b(?:write|createPool|createConnection|fetch)\s*\(|\b(?:INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\b/.test(transportProjection)) {
   throw new Error('Transport reference projections must remain SELECT-only in the supplied transaction');
+}
+const tunnelProjection = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-tunnel-read.ts'), 'utf8');
+if (/\b(?:write|createPool|createConnection|fetch)\s*\(|\b(?:INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\b|\b(?:certificate|response|source_fingerprint)\b|SELECT\s+\*/.test(tunnelProjection)) {
+  throw new Error('Tunnel metadata must remain SELECT-only and must not select certificates, issuance responses or whole rows');
 }
 const observer = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-node-observation.ts'), 'utf8');
 const probeReader = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-read.ts'), 'utf8');

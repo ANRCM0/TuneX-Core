@@ -120,7 +120,16 @@ Console 可从 Profile 行查看引用/影响并显式载入原 Relay 编辑器�
 实际 TCP 字节、已提交响应丢失同键重放、注入终态失败后的显式重试和 390px 布局接线。
 本机只做静态检查，尚无本批 exact-SHA Actions；没有新批次持久实体、Core、迁移、机器协议或 Journal 变化。
 契约见 [原生规则管理](../spec/native-rule-management-v1.md)；Relay/多跳复制与真实引用规则编辑浏览器证据仍待补齐。
-下一步核对真实组合验收并推进剩余隧道管理和后续拓扑/遥测切片，
+同日第二十四批按 [ADR-0021](../decisions/0021-native-tunnel-read-model.md) 补原生 TLS 隧道只读状态与当前期望引用。
+Scope/精确 Node 校验与 SELECT-only 投影共用事务；最多四项 Peer 指纹/时间元数据，窗口受 Node 撤销和机器凭据截止约束，
+不读取 PEM/签发响应/原始 Report，不签发、不测网络，健康始终 unknown；引用包括停用/恢复挂起并推导有序相邻角色，
+不覆盖历史租约或证明可删除。Console 的 Node/Endpoint 入口、分页/失效取消、原部署入口和 Profile 精确修订查看均接好。
+新增 7 组端口、1 项 SELECT-only MySQL/API、7 组隧道 UI 及 4 组精确修订/失效回归，扩展资产/CSP/匿名拒绝测试。
+真实 Relay Chromium→HTTPS Control/MySQL→双 native Agent→TCP/UDP 脚本补引用规则 r1→r2 的原预检/CAS 更新，
+以及默认停用复制、另选端口、启用/删除和安全清理；只接线未执行，仅上传脱敏 evidence/指定截图，不上传 PKI/受保护状态。
+前一批规则管理已存本地 `5d68f1f`；本批仍仅静态检查，均待授权推送后的 exact-SHA Actions。
+本批契约见 [原生 TLS 隧道管理](../spec/native-tunnel-management-v1.md)；显式多规则 Profile 批次发布、真实多跳复制浏览器及长期轮换仍待补，未关闭 B1/P1。
+下一步核对真实组合验收并推进显式 Profile 批次发布和后续拓扑/遥测切片，
 内部门禁与实例表不冒充完整远程防重放或执行撤权；
 并继续盘点剩余 API 读写及原生适配验收，不宣布统一框架完成。
 此调整不取消下方

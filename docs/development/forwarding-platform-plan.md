@@ -395,5 +395,11 @@ Agent 注册表一致性回归、Scope 授权能力视图，以及 SELECT-only P
 当前页最多十条串行启停；固定原配置/revision/幂等键，逐条结果，不确定提交停止并需手动同键重放。
 新增队列/复制/HTTP 回归及真实 Direct Chromium→Control→Agent→TCP、并发 CAS 部分失败、已提交响应丢失与注入失败重试接线。
 没有 durable Batch、跨规则事务或自动回滚；本机仅静态检查，Relay/多跳复制浏览器和其余隧道管理继续待补。
+随后按 [ADR-0021](../decisions/0021-native-tunnel-read-model.md) 编写原生 TLS 隧道同事务授权/SELECT-only 只读元数据，
+有界 Peer 窗口、Endpoint、规则相邻引用分页、Console 原部署入口与精确 Profile 修订查看。
+元数据不签发凭据、不验证网络/证书，不证明健康或历史资源可回收；没有新 Core/迁移/机器协议/Journal。
+真实 Relay 浏览器接线补引用 Profile 影响→原编辑器→重新预检/CAS，以及停用复制/另选端口/显式启删/实际 TCP+UDP。
+所有新增回归仍只编写/接线，本机仅静态检查；对应提交 Actions、显式多规则 Profile 批次发布、
+多跳复制浏览器和长期轮换未完成，不能据此关闭 B1/P1 或宣称已实现物理隧道复用。
 此调整不取消审计与产品验收缺口；首批实现等待对应提交的 Actions，
 不自动发布或启用新能力。

@@ -156,7 +156,7 @@
             <label>内部 TLS 监听端口 <input name="ports" value="34001,34002" required></label>
           </div>
           <p class="hint">TCP 与 UDP Relay 都使用出口侧 TLS/TCP 资源；同时选两种协议至少需要两个不同的内部 TCP 端口。已被活动 Relay 引用的 Endpoint 可能禁止直接修改。</p>
-          <div class="actions"><button type="submit">保存 Endpoint</button><button id="relay-endpoint-view" type="button" class="secondary">查看现有 Endpoint</button></div>
+          <div class="actions"><button type="submit">保存 Endpoint</button><button id="relay-endpoint-view" type="button" class="secondary">查看 Endpoint / TLS 元数据</button></div>
         </form>
       </section>
       <section class="panel">
@@ -232,11 +232,22 @@
   <div class="dialog-title"><h2 id="transport-reference-title">Profile 引用与影响预览</h2><button id="transport-references-close" type="button" class="secondary">关闭</button></div>
   <p class="hint">仅列当前未删除规则的期望引用，含停用/恢复挂起规则；不扫描旧 Snapshot/租约，不证明可安全删除 Profile。列表不是全库快照。发布 Profile 不自动更新任何规则；逐条载入编辑器后仍需重新预检并显式 CAS 更新。</p>
   <div class="query-controls"><label>当前锁定 Profile Revision（可空）<input id="transport-from-revision" maxlength="16" inputmode="numeric" autocomplete="off" placeholder="空表示全部引用"></label><label>预览目标 Profile Revision<input id="transport-target-revision" maxlength="16" inputmode="numeric" autocomplete="off" placeholder="明确的不可变修订"></label></div>
-  <div class="actions"><button id="transport-references-query" type="button" class="secondary">只查引用</button><button id="transport-references-preview" type="button">预览配置影响（不部署）</button></div>
+  <div class="actions"><button id="transport-references-query" type="button" class="secondary">只查引用</button><button id="transport-references-preview" type="button">预览配置影响（不部署）</button><button id="transport-revision-inspect" type="button" class="secondary">Inspect Exact Revision</button></div>
   <p id="transport-references-meta" class="hint" role="status"></p>
   <div class="table-wrap inner-table"><table><thead><tr><th>Forward / Revision</th><th>当前 Profile 锁定</th><th>配置影响（非就绪）</th><th>操作</th></tr></thead><tbody id="transport-reference-rows"></tbody></table></div>
   <div class="pagination"><button id="transport-references-prev" type="button" class="secondary" disabled>上一页</button><button id="transport-references-next" type="button" class="secondary" disabled>下一页</button></div>
   <p class="hint">影响预览需 Scope 管理权限与显式 Profile Grant；不代替每个 Node Grant、目标策略、Endpoint、端口和运行状态检查，不提供跨规则原子发布或自动回滚。</p>
+</dialog>
+<dialog id="tunnel-dialog" aria-labelledby="tunnel-title">
+  <div class="dialog-title"><h2 id="tunnel-title">Native TLS tunnel metadata</h2><button id="tunnel-close" type="button" class="secondary">关闭</button></div>
+  <p class="hint">只读持久记录，不签发凭据，不验证网络、证书或当前 TLS Session。凭据时间窗口不代表握手成功，健康始终 unknown；最多显示 4 项 Peer 指纹和有效期元数据，不显示 PEM、私钥、原始 Report 或签发响应。</p>
+  <p id="tunnel-state" class="hint" role="status" aria-live="polite"></p>
+  <pre id="tunnel-status" aria-label="Persisted tunnel metadata only"></pre>
+  <div class="actions"><button id="tunnel-refresh" type="button" class="secondary">刷新只读元数据</button></div>
+  <p id="tunnel-references-meta" class="hint" role="status"></p>
+  <div class="table-wrap inner-table"><table><thead><tr><th>Forward / CAS</th><th>有序路径 / 相邻节点</th><th>不可变 Profile 锁定</th><th>操作</th></tr></thead><tbody id="tunnel-reference-rows"></tbody></table></div>
+  <div class="pagination"><button id="tunnel-prev" type="button" class="secondary" disabled>上一页</button><button id="tunnel-next" type="button" class="secondary" disabled>下一页</button></div>
+  <p class="hint">每页 25 项，仅当前未删除的 Relay / multihop 期望引用，含停用与恢复挂起规则。不是全库快照，不扫描历史租约，不证明可删除 Node / Endpoint / Profile，也不预留资源或授权部署。部署入口复用原有管理流程。</p>
 </dialog>
 <dialog id="rule-command-dialog" aria-labelledby="rule-command-title">
   <div class="dialog-title"><h2 id="rule-command-title">Explicit Rule Commands</h2><button id="rule-command-close" type="button" class="secondary">关闭本地批次</button></div>

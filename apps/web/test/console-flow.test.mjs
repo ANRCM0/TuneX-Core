@@ -67,8 +67,9 @@ async function harness(handler) {
   const probe = (await readFile(new URL('../probe.js', import.meta.url), 'utf8')).replace('export function', 'function');
   const transport = (await readFile(new URL('../transport-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
   const rules = (await readFile(new URL('../rule-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
+  const tunnels = (await readFile(new URL('../tunnel-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
   const app = (await readFile(new URL('../app.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '');
-  vm.runInContext(relay + '\n' + probe + '\n' + transport + '\n' + rules + '\n' + app + `
+  vm.runInContext(relay + '\n' + probe + '\n' + transport + '\n' + rules + '\n' + tunnels + '\n' + app + `
     globalThis.flow={load,loadOverview,editor,saveForward,action,refreshDirectCandidates,relayConsole,request,
       connect(scope='scope-a'){clearConnectionData();auth.scope=scope;auth.token='x'.repeat(40);},
       setPage(kind,value){page[kind]=value;},setFilters(kind,value){filters[kind]=value;},
@@ -217,4 +218,34 @@ test('Relay selections survive independent candidate searches and fail closed af
   assert.equal(h.elements.get('relay-preview').disabled, true);
   assert.equal(h.elements.get('relay-submit').disabled, true);
   assert.ok(!h.flow.candidates.relay.some(n => n.id === 'relay-a'));
+});
+
+test('disconnect discards a late deployment view without opening a dialog or creating historical restore actions', async () => {
+  const pending = [];
+  const h = await harness(resource => new Promise(resolve => pending.push(() => resolve(resource.endsWith('/deployment') ?
+    { deployment: { stage: 'active', nodes: [], isolation: [] } } : resource.endsWith('/revisions') ? { revisions: [{ revision: 1 }] } : { desired: { revision: 2 } }))));
+  h.flow.connect(); const old = h.flow.relayConsole.deployment('f1'); h.flow.clearConnectionData();
+  for (const complete of pending) complete(); await assert.rejects(old, /连接已变化/);
+  assert.equal(h.elements.get('deployment-dialog').open, false); assert.equal(h.elements.get('deployment-nodes').children.length, 0);
+});
+
+test('a changed Relay form cannot enable submit from a late previous plan response', async () => {
+  const declarations = JSON.parse(await readFile(new URL('../../../packages/contracts/data/native-drivers-v1.json', import.meta.url), 'utf8'));
+  const entered = Promise.withResolvers(), reply = Promise.withResolvers();
+  const h = await harness(resource => {
+    if (resource === 'execution-capabilities') return { multihopEnabled: false };
+    if (resource === 'native-drivers') return { ...declarations, source: 'declared-native-implementation', authorized: false, reserved: false };
+    if (resource === 'transport-profiles') return { profiles: [{ profileId: 'p1', currentRevision: 1 }] };
+    if (resource.startsWith('nodes/candidates')) return page([node('relay-a'), node('relay-b')]);
+    if (resource === 'transport-profiles/p1?revision=1') return { profileId: 'p1', revision: 1, config: { driver: 'native.relay.v1', protocols: ['tcp'] } };
+    if (resource.endsWith('/relay-endpoint')) return { revision: 1 };
+    if (resource === 'relay-plan') { entered.resolve(); return reply.promise; }
+    throw Error(resource);
+  });
+  h.flow.connect(); await h.flow.relayConsole.edit({ id: 'f1', revision: 3, spec: { enabled: true, protocols: ['tcp'],
+    ingress: { nodeId: 'relay-a', listen: { address: '127.0.0.1', port: 25565 } }, target: { host: '127.0.0.1', port: 80 }, path: { via: ['relay-b'] }, transport: { profileId: 'p1', configRevision: 1 } } });
+  const pending = h.elements.get('relay-preview').listeners.click(); await entered.promise;
+  h.elements.get('relay-forward-form').listeners.input(); reply.resolve({ reserved: false }); await pending;
+  assert.equal(h.elements.get('relay-submit').disabled, true); assert.equal(h.elements.get('relay-preview-output').hidden, true);
+  assert.equal(h.calls.filter(call => call.options.method !== 'GET').length, 1, 'Only the original read-only plan POST was sent');
 });

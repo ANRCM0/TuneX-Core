@@ -14,6 +14,7 @@
 | [Node observation v1](spec/node-observation-v1.md) | 被动报告观察的授权、预算、期限及来源；不是独立主动健康探测 |
 | [Forward probe v1 基础切片](spec/forward-probe-v1.md) | 授权预检、Agent 内部 TCP connect-only；默认关闭的操作链另见管理契约 |
 | [Forward probe management v1](spec/forward-probe-management-v1.md) | 幂等签发、受限单次执行、历史回执与撤销；真实组合 Actions 待对应提交 |
+| [Native TLS tunnel management v1](spec/native-tunnel-management-v1.md) | 有界只读 Endpoint/凭据窗口/相邻规则，原 Profile/CAS 流程与真实 Relay 浏览器接线；非网络或删除安全证明 |
 | [Deployment Protocol v2](protocol/agent-deployment-v2.md) | Snapshot / Assignment / Observation / 租约与版本 |
 | [Runtime & Agent v1](spec/runtime-agent-v1.md) | 部署状态机、双节点编排、故障恢复 |
 | [模块边界](architecture/module-boundaries.md) | 模块拥有者、同步调用、持久化所有权 |

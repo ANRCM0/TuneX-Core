@@ -50,6 +50,8 @@ import { ForwardProbes } from './forward-probes.ts';
 import { NativeDrivers } from './native-drivers.ts';
 import { TransportQueries } from './transport-queries.ts';
 import { MySqlTransportReader } from '../infrastructure/mysql-transport-read.ts';
+import { TunnelQueries } from './tunnel-queries.ts';
+import { MySqlTunnelReader } from '../infrastructure/mysql-tunnel-read.ts';
 /** Coordinates owner-owned commands inside one durable acceptance transaction. */
 export class ControlApplication {
     readonly forwarding = new Forwarding();
@@ -64,6 +66,7 @@ export class ControlApplication {
     readonly queries: ConsoleQueries<Transaction>;
     readonly nativeDrivers: NativeDrivers<Transaction>;
     readonly transportQueries: TransportQueries<Transaction>;
+    readonly tunnelQueries: TunnelQueries<Transaction>;
     readonly observations: NodeObservations;
     readonly probePlans: ForwardProbePlans<Transaction>;
     readonly probeNegotiation: ProbeNegotiator<Transaction>;
@@ -82,6 +85,7 @@ export class ControlApplication {
         this.db=db;this.identity=identity;this.nodes=nodes;
         this.queries=new ConsoleQueries(db,identity,new MySqlConsoleReadModels());
         this.nativeDrivers=new NativeDrivers(db,identity,multihopEnabled,probeExecutionEnabled);
+        this.tunnelQueries=new TunnelQueries(db,identity,new MySqlTunnelReader());
         const observationPolicy=policy??DEFAULT_POLICY;
         this.observations=new NodeObservations(new MySqlNodeObservationReader(db,identity),{
             freshnessMs:observationPolicy.observationFreshnessSeconds*1000,
