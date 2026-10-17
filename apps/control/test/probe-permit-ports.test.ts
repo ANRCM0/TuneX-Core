@@ -114,7 +114,7 @@ function fixture() {
     const consume = (id: string) => host.consume('node-a', fingerprint, 2, claim(id));
     const offer = () => host.offer('node-a', fingerprint, 2, { bootId: 'boot-a', instanceId: input.instanceId, instanceGeneration: 1 });
     const status = (id: string) => host.check('node-a', fingerprint, 2, claim(id));
-    return { state, calls, host, issue, consume, claim, assemble, offer, status, management };
+    return { state, calls, host, issue, consume, claim, assemble, offer, status, management, store };
 }
 
 const managementInput = { version: 1, kind: 'tcp-connect', expectedRevision: 1 };
@@ -303,6 +303,8 @@ test('corrupt persisted results fail closed instead of being repaired or overwri
         const f = await resultFixture(); await f.receive(); const r = f.state.results[0]!;
         f.state.results[0] = mode === 'body' ? { ...r, body: null as never } : mode === 'digest' ? { ...r, resultDigest: 'sha256:' + '0'.repeat(64) } :
             mode === 'time' ? { ...r, acceptedAt: f.state.now + 1 } : { ...r, body: { ...r.body, requestId: 'd'.repeat(64) } as never };
+        // A persisted row is selected by its key, even when its JSON body is corrupt.
+        f.store.result = async (_tx, id) => { assert.equal(id, f.permit.id); return structuredClone(f.state.results[0]); };
         await assert.rejects(f.receive(), { code: 'PROBE_RESULT_CORRUPT' });
     }
 });

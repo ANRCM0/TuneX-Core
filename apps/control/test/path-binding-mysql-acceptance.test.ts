@@ -114,7 +114,7 @@ test('path binding uses real original owner transactions: immutable expanded pro
             // Failure after original revision/Operation acceptance must roll back both owners and the claimed key.
             const append = control.pathBindings.accept.bind(control.pathBindings);
             control.pathBindings.accept = async () => { throw Error('deliberate binding append failure'); };
-            before = await inventory(connection); await call('PUT', 'forwards/main/path-binding', input(2, 1), 500); assert.equal(await inventory(connection), before);
+            before = await inventory(connection); await call('PUT', 'forwards/main/path-binding', input(2, 1), 503); assert.equal(await inventory(connection), before);
             control.pathBindings.accept = append;
             async function race(target: number) {
                 return app.request('/api/v1/scopes/scope-a/forwards/race/path-binding', { method: 'PUT', headers: { authorization: 'Bearer ' + tokens.manager,
