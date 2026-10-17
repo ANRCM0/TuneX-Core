@@ -757,3 +757,14 @@ Control/mTLS、MySQL 与零应用字节目标的组合验收，显式记录有�
 只上传脱敏 evidence.json，不上传测试 PKI 或受保护状态。当前只有本地静态检查，功能与匹配 SHA 的
 Actions 尚未执行/通过；同宿主机组合不是物理多主机、长期容量或生产就绪证据。
 下一步核对组合验收与 Console 操作、剩余原生能力/遥测及既有审计/交付缺口，不将全项目标成完成。
+
+## 28. 第二十七批：不可变路径元数据，不是执行绑定
+
+2026-10-17 按 [ADR-0023](../decisions/0023-immutable-native-path-metadata.md) 增加 Control 应用层路径模板，
+2-8 个有序 Node、精确 Endpoint/Profile、原授权与不可变摘要、CAS/幂等/配额、终态归档和独立 Console 面板。
+它没有 Core 字段、Runtime 写入、资源预留、机器协议或 Agent Journal 变更，不授予执行、探测或物理端口共享。
+迁移 0018 与 Control-only `adp3-path-templates-v1` 扩展读者上界，不能再把当前 Control 声明成 0017 读者；
+Agent 仍只使用原两种 Journal Profile。完整 SQL 备份保留模板/修订/归档/审计，恢复隔离原键且不展开绑定。
+原 Node/Profile 授权在发布事务复核；历史查询只校验 Scope 与完整性，不冒充当前授权。
+端口、UI、真实 MySQL 并发/SELECT-only、3/4/8 Agent Chromium 元数据流均仅编写/接线，本机只静态检查。
+C1 规则绑定、引用影响、同事务原 Forward 发布和手动切换仍未实现，无匹配 SHA 的 Actions 或项目完成结论。

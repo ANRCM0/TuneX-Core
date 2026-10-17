@@ -130,6 +130,28 @@
         <p class="hint">候选已按当前管理权限、显式 Node Grant、凭据和能力初筛；翻页保留仍有权限的已选节点。中继还须支持多跳能力，预览会重新检查完整路径。</p>
       </section>
       <section class="panel">
+        <div class="panel-head"><h3>版本化原生路径模板</h3></div>
+        <p class="hint">只保存有序路径与精确引用，不绑定或切换 Forward，不预留资源、不授予执行。每 Scope 最多 128 个标识（含归档），每模板最多 64 个不可变修订。归档永久保留历史。</p>
+        <div id="path-template-form">
+          <div class="form-grid">
+            <label>Template ID <input id="path-template-id" autocomplete="off" maxlength="128"></label>
+            <label>Expected current revision <input id="path-template-expected" type="number" min="0" max="64" value="0"></label>
+            <label>Business protocols <select id="path-template-protocol"><option value="both">TCP + UDP</option><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
+            <label>Transport Profile ID <input id="path-template-profile" autocomplete="off" maxlength="128"></label>
+            <label>Locked Profile revision <input id="path-template-profile-revision" type="number" min="1"></label>
+            <label>Inspect exact revision (blank = current) <input id="path-template-read-revision" type="number" min="1" max="64"></label>
+          </div>
+          <label>Ordered Nodes, ingress first and egress last (one per line, 2-8)<textarea id="path-template-nodes" rows="4" maxlength="1040" spellcheck="false"></textarea></label>
+          <div class="actions"><button id="path-template-capture" type="button" class="secondary">Capture Endpoint Revisions</button><button id="path-template-inspect" type="button" class="secondary">Inspect Revision</button></div>
+          <pre id="path-template-endpoints" class="plan-output" aria-label="Captured Endpoint revisions"></pre>
+          <div class="actions"><button id="path-template-publish" type="button">Publish Immutable Revision</button><button id="path-template-archive" type="button" class="secondary">Archive Template</button><button id="path-template-discard" type="button" class="secondary" disabled>Discard Local Command</button></div>
+        </div>
+        <p id="path-template-state" class="hint" role="status"></p><pre id="path-template-record" class="plan-output" aria-label="Inspected template metadata"></pre>
+        <div class="query-controls"><label>Template ID prefix <input id="path-template-prefix" autocomplete="off" maxlength="128"></label><button id="path-template-query" type="button" class="secondary">Query Templates</button></div>
+        <div class="table-wrap inner-table"><table><thead><tr><th>Template ID</th><th>Current Revision</th><th>Read-only Action</th></tr></thead><tbody id="path-template-rows"></tbody></table></div>
+        <div class="pagination"><button id="path-template-prev" type="button" class="secondary" disabled>Previous</button><span id="path-template-page"></span><button id="path-template-next" type="button" class="secondary" disabled>Next</button></div>
+      </section>
+      <section class="panel">
         <div class="panel-head"><h3>第 1 步 · 发布 Transport Profile</h3></div>
         <form id="relay-profile-form">
           <div class="form-grid">

@@ -190,6 +190,12 @@ const portImports = new Map([
   ['application/native-drivers.ts', ['@tunex/core', '@tunex/contracts', './ports.ts']],
   ['application/transport-queries.ts', ['@tunex/core', './console-query.ts', './errors.ts', './ports.ts', '../modules/transport-ports.ts']],
   ['application/tunnel-queries.ts', ['@tunex/core', '../modules/relay-endpoint-contract.ts', './console-query.ts', './errors.ts', './ports.ts']],
+  ['application/path-templates.ts', ['@tunex/core', '@tunex/contracts', './console-query.ts', './errors.ts', './ports.ts', '../modules/path-template-contract.ts', '../modules/path-template-ports.ts']],
+  ['modules/path-template-contract.ts', ['@tunex/core', '../application/errors.ts']],
+  ['modules/path-template-ports.ts', ['../application/console-query.ts', './path-template-contract.ts']],
+  ['modules/native-path-references.ts', ['../application/errors.ts', './node-execution-ports.ts', './transport-ports.ts', './relay-endpoint-contract.ts', './path-template-ports.ts', './path-template-contract.ts']],
+  ['infrastructure/mysql-path-templates.ts', ['node:crypto', './mysql-console-read.ts', '../application/console-query.ts', '../modules/path-template-ports.ts', './mysql.ts']],
+  ['api/path-template-query.ts', ['@tunex/core', '../application/errors.ts', '../application/console-query.ts']],
   ['modules/relay-endpoint-contract.ts', ['@tunex/core', '../application/errors.ts']],
   ['api/tunnel-query.ts', ['../application/console-query.ts', '../application/tunnel-queries.ts', '../application/errors.ts']],
   ['infrastructure/mysql-tunnel-read.ts', ['@tunex/core', '../application/console-query.ts', '../application/tunnel-queries.ts', './mysql-console-read.ts', './mysql.ts']],
@@ -315,6 +321,14 @@ if (/\b(?:write|createPool|createConnection|fetch)\s*\(|\b(?:INSERT|UPDATE|DELET
   throw new Error('Tunnel metadata must remain SELECT-only and must not select certificates, issuance responses or whole rows');
 }
 const relayFixture = readFileSync(resolve(root, 'scripts/phase2/relay.ts'), 'utf8');
+const pathStore = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-path-templates.ts'), 'utf8');
+if (/\b(?:createPool|createConnection|fetch)\s*\(/.test(pathStore) ||
+    /\b(?:ALTER|CREATE|DROP|TRUNCATE|REPLACE)\b/.test(pathStore) ||
+    /\b(?:INTO|UPDATE|DELETE\s+FROM)\s+scopes\b/.test(pathStore) ||
+    [...pathStore.matchAll(/\b(?:INTO|UPDATE|FROM)\s+([a-z_]+)\b(?!\s*=)/g)].some(([, table]) =>
+      !['path_templates', 'path_template_revisions', 'path_template_events', 'scopes'].includes(table))) {
+  throw new Error('PathTemplate metadata owner may access only its supplied transaction/tables and Scope quota lock, never execution state');
+}
 const browserOptIn = relayFixture.indexOf("const tunnelBrowser=process.env.TUNEX_TUNNEL_BROWSER==='1';");
 const browserGuard = relayFixture.indexOf("if(tunnelBrowser&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'))throw Error('Tunnel browser acceptance is Actions-only');");
 if (browserOptIn < 0 || browserGuard <= browserOptIn || ['await mkdir(', 'await execute(', 'await createConnection('].some(marker => {

@@ -6,6 +6,7 @@ import { rows } from '../infrastructure/mysql.ts';
 import { consoleQuery } from './console-query.ts';
 import { transportReferenceQuery } from './transport-query.ts';
 import { tunnelReferenceQuery } from './tunnel-query.ts';
+import { pathTemplateListQuery, pathTemplateRevisionQuery } from './path-template-query.ts';
 import { randomUUID } from 'node:crypto';
 import { parseJson, parseRuntimeMessage, parseTransitNegotiation, parseTransitDelivery, parseProbeNegotiation, parseProbeInstance, parseProbeClaim, parseProbeDelivery, parseProbeResult } from '@tunex/contracts';
 import { TransitNegotiator } from '../modules/runtime/transit-negotiation.ts';
@@ -110,6 +111,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.get('/console/transport-console.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/transport-console.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/rule-console.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/rule-console.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/tunnel-console.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/tunnel-console.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/path-templates.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/path-templates.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/style.css', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/style.css', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/css; charset=utf-8' }); });
     app.get('/api/v1/scopes/:scope/native-drivers', async c => {
         if (new URL(c.req.url).search) invalid('Native catalog does not accept query parameters');
@@ -140,6 +142,22 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.get('/api/v1/scopes/:scope/nodes/:node/tunnel/references', async c => c.json(await control.tunnelQueries.references(
         c.get('actor'), scope(c.req.param('scope')), c.req.param('node'), tunnelReferenceQuery(new URL(c.req.url).searchParams))));
     app.put('/api/v1/scopes/:scope/nodes/:node/relay-endpoint',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='config,expectedRevision'||!isCounter(input.expectedRevision,true))invalid('Relay endpoint config and expectedRevision required');const result=await control.relayEndpoints.change(c.get('actor'),scope(c.req.param('scope')),c.req.param('node'),c.req.header('idempotency-key'),input.expectedRevision,input.config);return c.json(result.body,result.status);});
+    app.get('/api/v1/scopes/:scope/path-templates', async c => c.json(await control.pathTemplateQueries.list(c.get('actor'), scope(c.req.param('scope')), pathTemplateListQuery(new URL(c.req.url).searchParams))));
+    app.get('/api/v1/scopes/:scope/path-templates/:template', async c => c.json(await control.pathTemplateQueries.get(c.get('actor'), scope(c.req.param('scope')), c.req.param('template'), pathTemplateRevisionQuery(new URL(c.req.url).searchParams))));
+    app.put('/api/v1/scopes/:scope/path-templates/:template', async c => {
+        if (new URL(c.req.url).search) invalid('PathTemplate mutation does not accept query parameters');
+        const input = parseJson(await body(c.req.raw, 8192)) as Record<string, unknown>;
+        if (!input || Object.keys(input).sort().join(',') !== 'config,expectedRevision' || !isCounter(input.expectedRevision, true)) invalid('Template config and expectedRevision required');
+        const result = await control.pathTemplates.publish(c.get('actor'), scope(c.req.param('scope')), c.req.param('template'), c.req.header('idempotency-key'), input.expectedRevision, input.config);
+        return c.json(result.body, result.status);
+    });
+    app.delete('/api/v1/scopes/:scope/path-templates/:template', async c => {
+        if (new URL(c.req.url).search) invalid('PathTemplate mutation does not accept query parameters');
+        const input = parseJson(await body(c.req.raw, 8192)) as Record<string, unknown>;
+        if (!input || Object.keys(input).join(',') !== 'expectedRevision' || !isCounter(input.expectedRevision)) invalid('Template archive expectedRevision required');
+        const result = await control.pathTemplates.archive(c.get('actor'), scope(c.req.param('scope')), c.req.param('template'), c.req.header('idempotency-key'), input.expectedRevision);
+        return c.json(result.body, result.status);
+    });
     app.get('/api/v1/scopes/:scope/transport-profiles',async c=>c.json(await control.transport.list(c.get('actor'),scope(c.req.param('scope')))));
     app.get('/api/v1/scopes/:scope/transport-profiles/:profile/references', async c => c.json(await control.transportQueries.references(
         c.get('actor'), scope(c.req.param('scope')), c.req.param('profile'), transportReferenceQuery(new URL(c.req.url).searchParams))));

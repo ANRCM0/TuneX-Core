@@ -112,4 +112,19 @@ Preflight failure proves no write was started; an uncertain write requires exact
 original replay, not a new plan/key/CAS. A denied replay cannot erase uncertainty
 about the original acceptance. Cross-rule atomicity and automatic rollback remain absent.
 
+## 11. Native PathTemplate Metadata
+
+[ADR-0023](../decisions/0023-immutable-native-path-metadata.md) adds the separate
+`PathTemplateCommands/Queries<Tx>` application owner and supplied-transaction
+metadata reader/writer. Only its three tables are writable; the Scope row is a
+quota lock. Native references delegate to original Node grants/current facts,
+immutable Profile resolver and exact Endpoint locks. No pool, Forward mutation,
+Runtime, machine protocol, credential issuer or lease authority is imported.
+Queries check Scope access and stored integrity without claiming fresh reference
+authorization. Immutable revisions and terminal archives survive backup/recovery;
+restored request keys retain existing quarantine. Future bindings must enter
+the original Forward acceptance in the same transaction, not grow a second
+executor or add template IDs to Core. Binding/impact/manual-switch APIs remain
+unimplemented in this first metadata-only slice.
+
 

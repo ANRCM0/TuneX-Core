@@ -16,6 +16,8 @@
 | [Forward probe management v1](spec/forward-probe-management-v1.md) | 幂等签发、受限单次执行、历史回执与撤销；真实组合 Actions 待对应提交 |
 | [Native TLS tunnel management v1](spec/native-tunnel-management-v1.md) | 有界只读 Endpoint/凭据窗口/相邻规则，原 Profile/CAS 流程与真实 Relay 浏览器接线；非网络或删除安全证明 |
 | [Explicit Profile publication v1](spec/profile-publication-v1.md) | 当前影响页最多十条固定修订，逐条新预检与原 CAS/幂等更新；部分失败与不确定重放，非原子发布 |
+| [Native PathTemplate metadata v1](spec/native-path-templates-v1.md) | C1 首片不可变路径/精确 Endpoint 与 Profile 锁版、CAS 配额/归档；不创建绑定或切换，待 Actions |
+| [ADR-0023](decisions/0023-immutable-native-path-metadata.md) | 路径元数据归属、原引用授权、升级恢复和后续同事务 Forward 绑定边界 |
 | [Deployment Protocol v2](protocol/agent-deployment-v2.md) | Snapshot / Assignment / Observation / 租约与版本 |
 | [Runtime & Agent v1](spec/runtime-agent-v1.md) | 部署状态机、双节点编排、故障恢复 |
 | [模块边界](architecture/module-boundaries.md) | 模块拥有者、同步调用、持久化所有权 |

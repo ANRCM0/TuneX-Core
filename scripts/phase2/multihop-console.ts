@@ -4,6 +4,7 @@ import type { ForwardSpec } from '@tunex/core';
 import type { RelayProfileConfig } from '@tunex/contracts';
 import { withBrowser } from './probe-console.ts';
 import type { ConsoleFixture } from './probe-console.ts';
+import { verifyPathTemplateConsole } from './path-template-console.ts';
 
 interface MultihopConsoleFixture extends ConsoleFixture {
     sourceId: string; revision: number; spec: ForwardSpec; profile: RelayProfileConfig; copyPort: number;
@@ -190,10 +191,17 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         assert.equal(writes, 5); assert.equal(previews, 2); assert.equal(commands.some(command => command.path === sourcePath), false);
         assert.ok(commands.every(command => command.key)); assert.equal(new Set(commands.map(command => command.key)).size, 5);
         assert.deepEqual(commands.map(command => command.method), ['PUT', 'POST', 'PUT', 'PUT', 'DELETE']);
+        const templates = await verifyPathTemplateConsole(page, context, fixture, path, profileId);
+        await fixture.onlySourceReservations(); await fixture.traffic(fixture.spec.ingress.listen.port);
+        const afterTemplates = await get(source);
+        assert.equal(afterTemplates.desired.revision, fixture.revision); assert.deepEqual(afterTemplates.desired.spec, fixture.spec);
+        assert.equal((await get('transport-profiles/' + profileId)).revision, 2);
+        assert.equal(writes, 10); assert.equal(previews, 2); assert.equal(new Set(commands.map(command => command.key)).size, 9);
+        assert.equal(commands.some(command => command.path === sourcePath), false);
         return { browser: 'Chromium', nodeCount: path.length, topology: 'independent real Linux Agent processes on one host',
             physicalHostAcceptance: false, defaultOffOptIn: true, profileCurrentRevision: 2, retainedProfileRevision: 1,
             sourceUnchanged: true, orderedPathRetained: true, draftInvalidation: path.length > 3 ? 'transit-reorder-and-restore' : 'target-edit-and-restore',
             freshPlanChecks: previews, explicitIntentAttempts: writes, disabledCopy: true, disabledResourcesRetained: true,
-            tcpUdpVerifiedForSourceAndCopy: true, copyCleanupVerified: true };
+            tcpUdpVerifiedForSourceAndCopy: true, copyCleanupVerified: true, templates };
     });
 }

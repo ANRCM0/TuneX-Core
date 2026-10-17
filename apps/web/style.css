@@ -6,3 +6,4 @@
 #transport-reference-title{overflow-wrap:anywhere;min-width:0}
 #rule-command-dialog{width:min(1040px,calc(100vw - 32px))}#rule-command-dialog .actions,#view-forwards>.panel>.actions{flex-wrap:wrap}#rule-command-title{overflow-wrap:anywhere;min-width:0}#rule-command-rows td{overflow-wrap:anywhere;max-width:400px}
 #tunnel-dialog{width:min(1080px,calc(100vw - 32px))}#tunnel-title{overflow-wrap:anywhere;min-width:0}#tunnel-reference-rows td{overflow-wrap:anywhere;max-width:400px}#tunnel-dialog .actions{flex-wrap:wrap}
+#path-template-nodes{font:inherit;max-width:100%;border:1px solid #d5dfeb;border-radius:8px;padding:9px 11px;resize:vertical}#path-template-nodes:focus-visible{outline:3px solid #90b7ff;outline-offset:2px}#path-template-nodes:disabled{background:#f3f5f8}#path-template-form .actions{flex-wrap:wrap}#path-template-state{overflow-wrap:anywhere}

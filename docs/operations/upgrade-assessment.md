@@ -83,14 +83,16 @@ Profile 是保守的显式兼容契约，不从 `0.1.0`、tag 或 SHA 大小推�
 | `adp3-probe-permits-v1` | `0015-probe-permits.sql` | 仅 Control Profile；增加内部许可/签发预算，Agent Journal 未变 |
 | `adp3-probe-withdrawals-v1` | `0016-probe-permit-withdrawals.sql` | 仅 Control Profile；保留消费事实并增加独立撤销标记，Agent Journal 未变 |
 | `adp3-probe-results-v1` | `0017-probe-results.sql` | 仅 Control Profile；增加有界 Agent 上报结果回执，Agent Journal 未变 |
+| `adp3-path-templates-v1` | `0018-path-templates.sql` | 仅 Control Profile；增加不可变路径模板元数据/归档/审计，Agent Journal 未变 |
 
-当前 Control 源码启动迁移目录已包含 0017，不能将它声明为旧 Profile 来绕过
-回退拒绝。新 Profile 增加结果回执表读取范围，不代表远程派发或执行可用。
-后续 [默认关闭的 Probe 操作链](../decisions/0018-probe-production-workflow.md) 沿用该 Profile，
-不增加迁移或 Journal 格式。显式启用时需审阅一秒集群时钟策略并让 Agent 重新协商；
+当前 Control 源码启动迁移目录已包含 0018，不能将它声明为旧 Profile 来绕过
+回退拒绝。新 Profile 增加路径元数据读取范围，不代表模板绑定、切换或执行可用。
+既有 [默认关闭的 Probe 操作链](../decisions/0018-probe-production-workflow.md) 原先沿用 `adp3-probe-results-v1`，
+该操作链本身不增加 0017 之后的迁移或 Journal 格式；本次 0018 来自独立路径元数据。
+显式启用 Probe 时需审阅一秒集群时钟策略并让 Agent 重新协商；
 关闭签发不是删除旧许可、立即撤销所有已接受任务或允许降级的理由。
-旧库升至 0014/0015/0016/0017 要求维护/备份/DDL 审阅；应用后即使 Probe 没有启用，
-低于相应 Schema 上界的旧 Control Profile 仍被评估器拒绝。示例计划展示 0015 来源升级至 0017 目标；
+旧库升至 0014/0015/0016/0017/0018 要求维护/备份/DDL 审阅；应用后即使 Probe/多跳没有启用，
+低于相应 Schema 上界的旧 Control Profile 仍被评估器拒绝。示例计划展示 0015 来源升级至 0018 目标；
 source/target 必须根据实际部署分别核验，不能照抄。
 
 0016 为旧 consumed 记录补写撤销标记，保留原 closed_at，并将其作为撤销时间的保守下界；
@@ -102,6 +104,12 @@ CREATE/backfill 中断后不得自动重建或清空表来绕过；只读评估�
 每个保留许可最多一份上报结果，随许可清理级联删除；不是历史监控表或健康权威。
 既有恢复隔离继续撤销 consumed 资格，结果行可以保留，但不能据此恢复许可、健康或派发。
 新表 DDL 中断同样要求审阅，不得清空 Authority/Journal 来绕过版本拒绝。
+
+0018 增加 `path_templates`、`path_template_revisions`、`path_template_events`，
+只保存 Scope 内不可变配置、终态归档与审计，不写 Forward、Runtime 或执行授权。
+三表任意部分足迹与迁移记录不一致均拒绝；不能因功能未使用而删除历史或伪造迁移记录。
+恢复保留所有模板/历史/归档事实，原幂等键仍由既有流程隔离；保留元数据不等于重新授权引用，
+不得恢复为新绑定或自动展开规则。Agent 仍仅使用前两种 Journal Profile，新路径 Profile 不适用于 Agent。
 
 新增 SQL 迁移必须审阅此矩阵与目录校验后再接入。当前工具拒绝未知迁移、
 历史空洞、旧 V2 库和未经本基线验证的 MySQL 系列；支持的 MySQL 基线为 8.4.x。
@@ -130,11 +138,13 @@ DDL 检查覆盖本仓库已知 CREATE/ADD COLUMN/ENUM 变更足迹，不能证�
 
 - 数据库操作者保存受保护的 SQL 与原有 MAC 备份清单，包含完整 Runtime、
   Relay/多跳部署、Transit staging/coordination/delivery、预留、租约、退役、
-  Operation、幂等历史、`probe_instances`、`probe_permits`、`probe_permit_budget` 和 `probe_permit_withdrawals`；
+  Operation、幂等历史、`probe_instances`、`probe_permits`、`probe_permit_budget`、`probe_permit_withdrawals`、`probe_results`，
+  以及三张 `path_templates` / `path_template_revisions` / `path_template_events` 表；
   使用既有 `backup`，不另造第二套恢复格式。恢复隔离 issued 许可，为 consumed 补写独立撤销，
   保留原消费状态/时间、已有撤销时间、许可 ID 与预算时间下界，不重开或退款。
   实例表是非执行归属状态，恢复事务将其隔离并保留恢复出的标识/代数，
   不降低或重建独立 Authority 水位，也不把 SQL 代数冒充防回滚授权。
+  路径元数据归档/修订不删除重写，不以恢复旧模板代替当前 Node/Profile Grant 或 Forward 接受事务。
 - Control 操作者独立保管 Authority 状态、MAC 密钥和 CA/私钥，不与可回滚的 SQL
   混为一个授权来源，也不为旧系统重新初始化空 Authority。
 - Agent 操作者保留每个原始 Runtime/Transit Journal、独立 MAC key、身份材料及高水位；

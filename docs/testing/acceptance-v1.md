@@ -123,3 +123,12 @@ not satisfy independent physical-host, public-network or long-run release gates.
 [Relay rotation](../development/relay-rotation.md)。证据的实际 commit/dirty 字段
 决定被测版本；短期限的有效执行授权不等于已演练生产叶证书完整生命周期。
 完整发布矩阵与远程 CI 结果仍需独立核验。
+
+## 8. 不可变路径元数据首片
+
+[PathTemplate v1](../spec/native-path-templates-v1.md) 的端口回归、真实 MySQL/API 并发 CAS/配额、
+终态归档、SELECT-only 全库摘要不变及 Console 回归已编写，接入原 contracts/phase1 作业。
+现有 [3/4/8 Agent Chromium](native-multihop-console.md) 延伸模板元数据表单、真实提交后丢响应/原键重放、
+无变化、新修订和历史归档，并独立复查源规则、资源和实际 TCP/UDP 不变。
+迁移 0018/Control-only Profile/部分 DDL 拒绝有升级评估回归；Agent/Core/Journal 不变。
+以上待 exact-SHA Actions，不是已经执行的证据；C1 的模板规则绑定、引用影响与手动切换仍未实现。

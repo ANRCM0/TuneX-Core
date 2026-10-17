@@ -48,6 +48,8 @@ jobs:
         run: node --test apps/control/test/application-query-ports.test.ts apps/control/test/console-read.test.ts apps/control/test/console-diagnostics.test.ts apps/control/test/transport-query-ports.test.ts apps/control/test/multihop-coordinator.test.ts
       - name: Bounded native TLS metadata and desired adjacency read ports
         run: node --test apps/control/test/tunnel-query-ports.test.ts
+      - name: Immutable native PathTemplate authoring, scope CAS, quota and original reference ports
+        run: node --test apps/control/test/path-template-ports.test.ts
       - name: Owner-owned Profile commands and Runtime grant effects
         run: node --test apps/control/test/transport-grant-ports.test.ts
       - name: Owner-owned member and Node Grant command ports
@@ -150,6 +152,8 @@ jobs:
         run: node --test apps/control/test/transport-query-mysql-acceptance.test.ts
       - name: Native TLS metadata, exact scoped adjacency and no writes with SELECT-only MySQL
         run: node --test apps/control/test/tunnel-query-mysql-acceptance.test.ts
+      - name: PathTemplate native grants, concurrent CAS and quota, archive and SELECT-only history
+        run: node --test apps/control/test/path-template-mysql-acceptance.test.ts
       - name: Passive observation API with SELECT-only MySQL and scoped provenance
         run: node --test apps/control/test/node-observation-mysql-acceptance.test.ts
       - name: Non-executable probe preflight with SELECT-only MySQL and current binding checks
@@ -297,7 +301,7 @@ jobs:
       - run: node scripts/run-go.mjs build -o ../.artifacts/network-fixture ./cmd/network-fixture
       - name: Install Chromium only on the disposable multi-hop acceptance runner
         run: npx playwright install --with-deps chromium
-      - name: Real Control, 3/4/8 Agent lifecycle and ordered multi-hop Console copy through Chromium
+      - name: Real Control, 3/4/8 Agent lifecycle, ordered Console copy and immutable path metadata through Chromium
         run: npm run test:multihop
         env:
           TUNEX_MULTIHOP_BROWSER: '1'

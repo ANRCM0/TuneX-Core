@@ -27,7 +27,7 @@ export async function upgradeSchemaCatalog() {
     const root = new URL('../../apps/control/migrations/', import.meta.url);
     const names = (await readdir(root)).filter(n => n.endsWith('.sql')).sort();
     // New migrations require a deliberate compatibility-profile review.
-    if (names.length !== 17 || names.at(-1) !== '0017-probe-results.sql')
+    if (names.length !== 18 || names.at(-1) !== '0018-path-templates.sql')
         throw new Error('UNREVIEWED_UPGRADE_SCHEMA');
     const files = await Promise.all(names.map(async name => {
         const sql = await readUpgradeInput(new URL(name, root));

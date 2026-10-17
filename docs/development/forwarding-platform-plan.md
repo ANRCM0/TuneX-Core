@@ -151,6 +151,10 @@ QUIC、逐跳混合承载、UDP 混淆、透明代理延后；现有多跳仍使
 
 ### C1. 保存路径、预览与手动切换
 
+2026-10-17 首片实现见 [路径模板元数据 v1](../spec/native-path-templates-v1.md) / [ADR-0023](../decisions/0023-immutable-native-path-metadata.md)：
+独立元数据命令、不可变修订、精确 Endpoint/Profile、原授权、配额/CAS/幂等、归档与 Console 已编写；
+功能/MySQL/浏览器 Actions 已接线未执行。以下规则绑定、引用影响与手动切换仍是后续目标，不是当前能力。
+
 新增应用层 `PathTemplate` 及不可变 revision：有序 Node、Endpoint/Profile 引用、
 能力要求、摘要；规则绑定明确的模板 revision，同时保存展开后的实际 ForwardSpec。
 模板修改不隐式改变正在运行的规则；提供引用列表、影响分析和逐条发布。
@@ -411,5 +415,11 @@ Agent 注册表一致性回归、Scope 授权能力视图，以及 SELECT-only P
 默认停用复制/另选端口/显式启停删，以及实际 TCP/UDP、停用保留资源和删除安全清理。
 新增最大六中继与门禁关闭两组轻 DOM 回归；现有多跳 Actions 进程矩阵接 Chromium，隔离步骤保持关闭浏览器。
 这只补此前缺失的验收工具与受限截图接线，本机仅静态检查，无 exact-SHA Actions；不能关闭 B1/P1、长期/物理门槛或项目目标。
+随后按 [ADR-0023](../decisions/0023-immutable-native-path-metadata.md) 实现 C1 首片路径元数据与独立 Console：
+2-8 有序 Node、精确 Endpoint/Profile 锁版、不可变配置摘要、同事务原授权、128 标识/64 修订配额、CAS/幂等与终态归档。
+Scope 授权查询不复核历史引用权限，不证明执行；模板命令不写 Forward/Runtime 或资源。
+迁移 0018/Control-only Profile/部分 DDL 拒绝/备份恢复责任同步，Agent/Core/Journal 不变。
+端口、UI、真实 MySQL 并发和 SELECT-only、3/4/8 Agent Chromium 模板丢响应重放/无变化/新修订/归档流程均仅编写接线。
+C1 绑定、引用影响、同事务原 Forward 展开接受和手动切换仍待实现，本机仅静态检查，不能关闭 C1 或借用旧 SHA 验收。
 此调整不取消审计与产品验收缺口；首批实现等待对应提交的 Actions，
 不自动发布或启用新能力。

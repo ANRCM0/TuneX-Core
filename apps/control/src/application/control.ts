@@ -52,6 +52,9 @@ import { TransportQueries } from './transport-queries.ts';
 import { MySqlTransportReader } from '../infrastructure/mysql-transport-read.ts';
 import { TunnelQueries } from './tunnel-queries.ts';
 import { MySqlTunnelReader } from '../infrastructure/mysql-tunnel-read.ts';
+import { PathTemplateCommands, PathTemplateQueries } from './path-templates.ts';
+import { MySqlPathTemplates } from '../infrastructure/mysql-path-templates.ts';
+import { NativePathReferences } from '../modules/native-path-references.ts';
 /** Coordinates owner-owned commands inside one durable acceptance transaction. */
 export class ControlApplication {
     readonly forwarding = new Forwarding();
@@ -67,6 +70,8 @@ export class ControlApplication {
     readonly nativeDrivers: NativeDrivers<Transaction>;
     readonly transportQueries: TransportQueries<Transaction>;
     readonly tunnelQueries: TunnelQueries<Transaction>;
+    readonly pathTemplates: PathTemplateCommands<Transaction>;
+    readonly pathTemplateQueries: PathTemplateQueries<Transaction>;
     readonly observations: NodeObservations;
     readonly probePlans: ForwardProbePlans<Transaction>;
     readonly probeNegotiation: ProbeNegotiator<Transaction>;
@@ -112,6 +117,9 @@ export class ControlApplication {
         this.transport=new Transport(db,identity,this.idempotency,this.forwarding);
         this.transportQueries=new TransportQueries(db,identity,new MySqlTransportReader(),this.transport);
         this.relayEndpoints=new RelayEndpoints(db,identity,nodes,this.idempotency,this.forwarding);
+        const pathStore=new MySqlPathTemplates();
+        this.pathTemplates=new PathTemplateCommands(db,identity,this.idempotency,pathStore,new NativePathReferences(nodes,this.transport,this.relayEndpoints));
+        this.pathTemplateQueries=new PathTemplateQueries(db,identity,pathStore);
         this.relay=new RelayCoordinator(nodes,this.forwarding,this.transport,this.relayEndpoints,this.ledger,policy,multihopEnabled);
         const execution:ForwardAuthorizationExecution<Transaction>={
             lock:(tx,forward)=>this.lockExecution(tx,forward),

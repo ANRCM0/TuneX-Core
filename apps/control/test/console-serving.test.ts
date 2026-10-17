@@ -23,6 +23,7 @@ test('same-origin console assets retain content types, no-store and strict CSP',
     ['/console/transport-console.js','text/javascript'],
     ['/console/rule-console.js','text/javascript'],
     ['/console/tunnel-console.js','text/javascript'],
+    ['/console/path-templates.js','text/javascript'],
     ['/console/relay-model.js','text/javascript'],
     ['/console/style.css','text/css']
   ] as const)) {
@@ -38,7 +39,7 @@ test('same-origin console assets retain content types, no-store and strict CSP',
 });
 test('console API refuses anonymous scoped list access', async () => {
   const app=consoleApp();
-  for(const collection of ['nodes','forwards','operations','nodes/candidates','overview','nodes/any/tunnel','nodes/any/tunnel/references']) {
+  for(const collection of ['nodes','forwards','operations','nodes/candidates','overview','nodes/any/tunnel','nodes/any/tunnel/references','path-templates','path-templates/any']) {
     const response=await app.request('/api/v1/scopes/test-scope/'+collection);
     assert.equal(response.status,401,collection);
     assert.equal((await response.json() as {code:string}).code,'UNAUTHENTICATED');

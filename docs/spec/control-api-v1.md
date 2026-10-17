@@ -95,6 +95,12 @@ await unitOfWork.transaction(async (tx) => {
 
 ## 6. Read model 与用户操作
 
+Scope 内的 [原生 PathTemplate 元数据](native-path-templates-v1.md) 提供独立的
+`GET /path-templates[/:id]`、精确 revision 查询、幂等 CAS `PUT /path-templates/:id`
+与终态归档 `DELETE /path-templates/:id`。只接受元数据，不返回 Operation 或创建绑定，
+不改变本文 Forward/Runtime 命令语义。模板读取不复核 Node/Profile 授权，显式显示
+`executionAuthorized:false` / `reserved:false` / `bindingCreated:false`；不能拿它替代原计划和发布。
+
 Node 的有界原生 TLS 状态与相邻期望引用见 [隧道管理只读契约](native-tunnel-management-v1.md)：
 同事务 Scope/Node 校验，SELECT-only 元数据，不签发凭据、不证明健康、执行授权或删除安全。
 
