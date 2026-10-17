@@ -243,7 +243,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Real default-off Probe, native rule Console/CAS/retry, Agent lifecycle, mTLS, MySQL and bounded TCP fixtures
         run: npm run test:probe
-      - name: Real Relay TLS metadata, referenced Profile switch, disabled copy and actual TCP/UDP through Chromium
+      - name: Real Relay TLS metadata, Profile batches with CAS and lost-response replay, copy and TCP/UDP through Chromium
         run: npm run test:relay
         env:
           TUNEX_TUNNEL_BROWSER: '1'

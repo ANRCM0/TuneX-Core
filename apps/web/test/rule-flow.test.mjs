@@ -149,3 +149,125 @@ test('late retry reads cannot reopen a dialog after connection changes', async (
   release({ id: 'source-a', forwardId: 'rule-a', targetRevision: 3, status: 'failed', recoveryInvalidated: false }); await pending;
   assert.equal(h.calls.length, 1); assert.equal(h.el('command-dialog').open, false);
 });
+
+const profileDigest = 'sha256:' + 'a'.repeat(64);
+function profileProposal(count = 2) {
+  return { profileId: 'p1', targetRevision: 2, configDigest: profileDigest, items: Array.from({ length: count }, (_, index) => {
+    const original = { ...item('rule-' + index, index % 2 === 0).spec, target: { host: '127.0.0.1', port: 80 + index }, path: { via: ['node-b'] }, transport: { profileId: 'p1', configRevision: 1 } };
+    return { forwardId: 'rule-' + index, revision: 3, expectedRevision: 3, configRevision: 1, changed: true, recoverySuspended: false, spec: original,
+      proposedSpec: { ...original, transport: { profileId: 'p1', configRevision: 2 } } };
+  }) };
+}
+const freshProfilePlan = () => ({ reserved: false, executionSupported: false, runtimeEnabled: true, profile: { profileId: 'p1', revision: 2, configDigest: profileDigest } });
+
+test('Profile batch freezes at most ten independent CAS proposals, preserves enabled/path/target and checks each before its first write', async () => {
+  const h = harness(async (_, resource, input) => resource === 'relay-plan' ? freshProfilePlan() : accepted(resource, input));
+  const proposal = profileProposal(10); assert.equal(h.api.profileBatch(proposal), true);
+  proposal.items[0].proposedSpec.target.port = 999; proposal.items[0].spec.target.port = 999; proposal.targetRevision = 99;
+  assert.equal(h.calls.length, 0); assert.equal(h.el('command-start').disabled, true);
+  h.consent(); await h.send(); assert.equal(h.calls.length, 20); assert.deepEqual(states(h), Array(10).fill('accepted'));
+  for (let index = 0; index < 10; index++) {
+    const [check, put] = h.calls.slice(index * 2, index * 2 + 2);
+    assert.deepEqual(check.slice(0, 2), ['POST', 'relay-plan']); assert.equal(check[3], undefined);
+    assert.deepEqual(put.slice(0, 2), ['PUT', 'forwards/rule-' + index]); assert.equal(put[2].expectedRevision, 3);
+    assert.deepEqual(check[2], put[2].spec); assert.equal(check[2].transport.configRevision, 2);
+    assert.equal(check[2].target.port, 80 + index); assert.equal(check[2].enabled, index % 2 === 0);
+    assert.deepEqual(check[2].path.via, ['node-b']); assert.equal(check[4].timeoutMs, 5000); assert.equal(put[4].timeoutMs, 5000);
+  }
+  assert.equal(new Set(h.calls.filter(call => call[0] === 'PUT').map(call => call[3])).size, 10);
+});
+
+test('invalid/mixed/recovered Profile impacts cannot prepare commands or smuggle target/path/enabled changes', () => {
+  const patches = [p => { p.items = []; }, p => { p.items.push(p.items[0]); }, p => { p.configDigest = 'unknown'; },
+    p => { p.items[0].recoverySuspended = true; }, p => { p.items[0].changed = false; }, p => { p.items[0].expectedRevision = 4; },
+    p => { p.items[0].proposedSpec.target = { host: 'different.invalid', port: 80 }; }, p => { p.items[0].proposedSpec.enabled = false; },
+    p => { p.items[0].proposedSpec.path = { via: ['foreign'] }; }, p => { p.items[0].spec.transport.profileId = 'another'; }];
+  for (const patch of patches) { const h = harness(), proposal = profileProposal(); patch(proposal); assert.equal(h.api.profileBatch(proposal), false); assert.equal(h.calls.length, 0); }
+  assert.equal(harness().api.profileBatch(profileProposal(11)), false);
+});
+
+test('fresh plan authorization rejection sends no intent for that row but independent later rows can still publish', async () => {
+  const h = harness(async (_, resource, input) => {
+    if (resource === 'relay-plan') { if (input.target.port === 80) throw Object.assign(Error('Profile or Node grant withdrawn'), { httpStatus: 403 }); return freshProfilePlan(); }
+    return accepted(resource, input);
+  });
+  h.api.profileBatch(profileProposal()); h.consent(); await h.send();
+  assert.deepEqual(states(h), ['rejected', 'accepted']); assert.equal(h.calls.length, 3);
+  assert.deepEqual(h.calls.map(call => call[1]), ['relay-plan', 'relay-plan', 'forwards/rule-1']);
+  assert.match(h.el('command-rows').children[0].children[2].textContent, /No intent sent/);
+});
+
+test('fresh preview is not a CAS lease: a changed rule rejects independently after its successful check', async () => {
+  const h = harness(async (_, resource, input) => {
+    if (resource === 'relay-plan') return freshProfilePlan();
+    if (resource.endsWith('rule-0')) throw Object.assign(Error('REVISION_CONFLICT'), { httpStatus: 409 });
+    return accepted(resource, input);
+  });
+  h.api.profileBatch(profileProposal()); h.consent(); await h.send();
+  assert.deepEqual(states(h), ['rejected', 'accepted']); assert.equal(h.calls.length, 4);
+  assert.equal(h.calls[1][2].expectedRevision, 3); assert.equal(h.calls[3][2].expectedRevision, 3);
+});
+
+test('unknown, disabled or mismatched preflight stops unsent tail and needs explicit same-proposal recheck, never write replay', async () => {
+  for (const mode of ['network', 'revision', 'digest', 'disabled', 'reserved']) {
+    let first = true;
+    const h = harness(async (_, resource, input) => {
+      if (resource !== 'relay-plan') return accepted(resource, input);
+      if (!first) return freshProfilePlan(); first = false;
+      if (mode === 'network') throw Error('Lost read-only plan response');
+      const result = freshProfilePlan();
+      if (mode === 'revision') result.profile.revision = 3;
+      if (mode === 'digest') result.profile.configDigest = 'sha256:' + 'b'.repeat(64);
+      if (mode === 'disabled') result.runtimeEnabled = false;
+      if (mode === 'reserved') result.reserved = true;
+      return result;
+    });
+    h.api.profileBatch(profileProposal()); h.consent(); await h.send();
+    assert.deepEqual(states(h), ['preflight-failed', 'pending']); assert.equal(h.calls.length, 1);
+    assert.equal(replay(h).textContent, 'Recheck Same Proposal'); assert.equal(replay(h).disabled, true);
+    h.consent(); await replay(h).listeners.click(); assert.deepEqual(states(h), ['accepted', 'pending']); assert.equal(h.calls.length, 3);
+    assert.equal(h.calls[1][1], 'relay-plan'); assert.equal(h.calls[2][3], 'key-1');
+    assert.equal(h.el('command-start').disabled, true, 'Tail requires another consent');
+  }
+});
+
+test('stop or disconnect during Profile check cannot send an intent after the late read completes', async () => {
+  for (const disconnect of [false, true]) {
+    let finish;
+    const h = harness(() => new Promise(resolve => { finish = () => resolve(freshProfilePlan()); }));
+    h.api.profileBatch(profileProposal()); h.consent(); const pending = h.send();
+    assert.deepEqual(states(h), ['checking', 'pending']);
+    if (disconnect) h.api.clear(); else h.el('command-stop').listeners.click();
+    assert.equal(h.calls[0][4].signal.aborted, true); finish(); await pending; assert.equal(h.calls.length, 1);
+    if (disconnect) { assert.equal(h.el('command-dialog').open, false); assert.equal(h.refreshes(), 0); }
+    else { assert.deepEqual(states(h), ['preflight-failed', 'pending']); assert.match(h.el('command-rows').children[0].children[2].textContent, /No intent sent/); }
+  }
+});
+
+test('unknown Profile write replays only the original key/body without another plan or automatic tail', async () => {
+  let lost = true;
+  const h = harness(async (_, resource, input) => {
+    if (resource === 'relay-plan') return freshProfilePlan();
+    if (lost) { lost = false; throw Error('Commit succeeded but response lost'); }
+    return accepted(resource, input);
+  });
+  h.api.profileBatch(profileProposal()); h.consent(); await h.send(); assert.deepEqual(states(h), ['uncertain', 'pending']); assert.equal(h.calls.length, 2);
+  h.consent(); await replay(h).listeners.click(); assert.equal(h.calls.length, 3);
+  assert.deepEqual(h.calls[1].slice(0, 4), h.calls[2].slice(0, 4)); assert.deepEqual(states(h), ['accepted', 'pending']);
+  assert.equal(h.calls.filter(call => call[1] === 'relay-plan').length, 1); assert.equal(h.el('command-start').disabled, true);
+});
+
+test('a rejected replay cannot erase uncertainty about the original committed-or-not command', async () => {
+  for (const profile of [false, true]) {
+    let first = true;
+    const h = harness(async (_, resource) => {
+      if (resource === 'relay-plan') return freshProfilePlan();
+      if (first) { first = false; throw Error('Original outcome unknown'); }
+      throw Object.assign(Error('Current authorization no longer allows replay'), { httpStatus: 403 });
+    });
+    if (profile) h.api.profileBatch(profileProposal()); else { h.select(item()); h.select(item('tail')); h.api.batch(false); }
+    h.consent(); await h.send(); h.consent(); await replay(h).listeners.click();
+    assert.deepEqual(states(h), ['uncertain', 'pending']); assert.equal(h.el('command-start').disabled, true);
+    assert.match(h.el('command-rows').children[0].children[2].textContent, /Original outcome remains unknown/);
+  }
+});

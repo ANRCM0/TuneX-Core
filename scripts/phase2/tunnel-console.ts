@@ -4,6 +4,7 @@ import type { ForwardSpec } from '@tunex/core';
 import type { RelayProfileConfig } from '@tunex/contracts';
 import { withBrowser } from './probe-console.ts';
 import type { ConsoleFixture } from './probe-console.ts';
+import { verifyProfileBatchConsole } from './profile-batch-console.ts';
 
 interface TunnelFixture extends ConsoleFixture {
     sourceId: string; revision: number; spec: ForwardSpec; profile: RelayProfileConfig; unusedListenPort: number;
@@ -148,20 +149,24 @@ export async function verifyTunnelConsole(fixture: TunnelFixture) {
         ]);
         assert.equal(enabled.status(), 202); assert.equal(enabled.request().postDataJSON().expectedRevision, 1);
         await succeeded((await enabled.json()).operationId); await fixture.traffic(fixture.unusedListenPort);
+        const batches = await verifyProfileBatchConsole(page, context, { ...fixture, profileId, sourceId: fixture.sourceId,
+            sourceRevision: fixture.revision + 1, copyId: copy.forwardId, copyRevision: 2, idleTimeoutSeconds: fixture.profile.idleTimeoutSeconds,
+            verifySourceTraffic: () => fixture.traffic(fixture.spec.ingress.listen.port) });
+        await page.locator('[data-view="forwards"]').click();
         // Do not click a stale list row while the preceding request handler still refreshes it.
-        await page.waitForFunction(id => document.querySelector('[data-action="forward-toggle"][data-id="' + id + '"]')?.textContent === '停用', copy.forwardId);
+        await page.waitForFunction(id => document.querySelector('[data-action="forward-toggle"][data-id="' + id + '"]')?.textContent === '启用', copy.forwardId);
         const [deleted] = await Promise.all([
             page.waitForResponse(response => new URL(response.url()).pathname === copyPath && response.request().method() === 'DELETE'),
             page.locator('[data-action="forward-delete"][data-id="' + copy.forwardId + '"]').click()
         ]);
-        assert.equal(deleted.status(), 202); assert.equal(deleted.request().postDataJSON().expectedRevision, 2);
+        assert.equal(deleted.status(), 202); assert.equal(deleted.request().postDataJSON().expectedRevision, batches.copyRevision);
         await succeeded((await deleted.json()).operationId); await fixture.closed(fixture.unusedListenPort);
         const final = await get('forwards/' + fixture.sourceId);
-        assert.equal(final.desired.revision, fixture.revision + 1); assert.equal(final.desired.spec.transport.configRevision, 2);
-        assert.equal(writes, 5); assert.equal(previews, 2, 'No hidden plan or command replay');
+        assert.equal(final.desired.revision, fixture.revision + 3); assert.equal(final.desired.spec.transport.configRevision, 4);
+        assert.equal(writes, 11); assert.equal(previews, 5, 'No hidden plan or command replay');
         return { revision: final.desired.revision as number, spec: final.desired.spec as ForwardSpec,
-            evidence: { browser: 'Chromium', topology: 'two real Linux Relay Agents on one host', metadataOnly: true,
-                immutableInspection: 1, referencedProfileSwitch: true, freshPlanChecks: previews, explicitIntentWrites: writes,
+            evidence: { browser: 'Chromium', topology: 'two real Linux Relay Agents on one host', tunnelQueryMetadataOnly: true,
+                immutableInspection: 1, referencedProfileSwitch: true, freshPlanChecks: previews, explicitIntentAttempts: writes, profileBatches: batches.evidence,
                 disabledCopy: true, tcpUdpVerifiedAfterSwitchAndCopy: true, cleanupVerified: true, physicalHostAcceptance: false } };
     });
 }

@@ -6,10 +6,15 @@ function positiveRevision(value, optional = false) {
   return Number(value);
 }
 
-export function initTransportConsole({ request, notify, byId, detail, edit, confirm = globalThis.confirm, document = globalThis.document }) {
+export function initTransportConsole({ request, notify, byId, detail, edit, prepareProfileBatch, confirm = globalThis.confirm, document = globalThis.document }) {
   const el = name => byId('transport-' + name);
   let epoch = 0, catalogVersion = 0, referenceVersion = 0, profile = null, page = 1, total = 0, preview = false;
   let session = new AbortController(), reads = new AbortController();
+  const selection = new Map(); let impactTarget = null;
+  function selectionState() {
+    el('batch-selection').textContent = selection.size + ' / 10 selected from this impact page';
+    el('batch-prepare').disabled = !selection.size || impactTarget === null;
+  }
   function cell(row, text) { const td = document.createElement('td'); td.textContent = text; row.append(td); return td; }
   function empty(id, text, columns) {
     const tbody = el(id); tbody.replaceChildren(); const row = document.createElement('tr');
@@ -17,6 +22,7 @@ export function initTransportConsole({ request, notify, byId, detail, edit, conf
   }
   function invalidate() {
     referenceVersion++; reads.abort(); reads = new AbortController(); total = 0;
+    selection.clear(); impactTarget = null; selectionState();
     el('references-prev').disabled = el('references-next').disabled = true;
     el('references-meta').textContent = 'No current preview. Query again after changing revisions.';
     empty('reference-rows', 'No current reference page.', 4);
@@ -58,20 +64,33 @@ export function initTransportConsole({ request, notify, byId, detail, edit, conf
       if (version !== referenceVersion || connection !== epoch) return;
       if (data.profileId !== id || data.page !== nextPage || data.limit !== 25 || data.previewOnly !== true || data.reserved !== false ||
           data.fullPlanAuthorization !== false || !Number.isSafeInteger(data.total) || data.total < 0 ||
-          !Array.isArray(data.items) || data.items.length > 25 || (usePreview ? data.target?.revision !== targetRevision : data.target !== null))
+          !Array.isArray(data.items) || data.items.length > 25 || (usePreview ? data.target?.revision !== targetRevision || !/^sha256:[a-f0-9]{64}$/.test(data.target.configDigest) : data.target !== null))
         throw Error('Invalid read-only Profile reference page.');
       if (data.items.some(item => !transportId(item.forwardId) || !transportRevision(item.revision) || item.expectedRevision !== item.revision ||
           item.spec?.transport?.profileId !== id || item.spec.transport.configRevision !== item.configRevision || !item.spec.path ||
           (usePreview ? typeof item.changed !== 'boolean' || item.proposedSpec?.transport?.profileId !== id || item.proposedSpec.transport.configRevision !== targetRevision :
             item.changed !== null || item.proposedSpec !== null))) throw Error('Invalid Profile impact association.');
       page = nextPage; total = data.total; preview = usePreview;
+      impactTarget = usePreview ? { profileId: id, targetRevision, configDigest: data.target.configDigest } : null;
       el('references-meta').textContent = 'Profile ' + id + ' / current r' + data.currentRevision + ' / page ' + page +
         ' / total ' + total + ' / target ' + (targetRevision ?? 'none') + '. Read-only configuration impact, NOT deployment authorization or resource reservation.';
       if (!data.items.length) empty('reference-rows', 'No retained current-intent references on this page.', 4);
       else el('reference-rows').replaceChildren();
       for (const item of data.items) {
         const row = document.createElement('tr');
-        cell(row, item.forwardId + ' / Forward r' + item.revision);
+        const identity = cell(row, item.forwardId + ' / Forward r' + item.revision);
+        if (usePreview) {
+          const input = document.createElement('input'); input.type = 'checkbox';
+          input.setAttribute('aria-label', 'Select Profile Impact Forward ' + item.forwardId);
+          input.disabled = item.changed !== true || item.recoverySuspended !== false;
+          input.addEventListener('change', () => {
+            if (version !== referenceVersion || connection !== epoch || input.disabled) { input.checked = false; return; }
+            if (!input.checked) selection.delete(item.forwardId);
+            else if (selection.size >= 10) { input.checked = false; notify('Select at most 10 changed rules from this current impact page.', true); }
+            else selection.set(item.forwardId, JSON.parse(JSON.stringify(item)));
+            selectionState();
+          }); identity.append(input);
+        }
         cell(row, 'Profile r' + item.configRevision + (item.recoverySuspended ? ' / recovery suspended' : ''));
         cell(row, item.changed === null ? 'Not previewed' : item.changed ? 'Explicit revision change required' : 'Already locked to target');
         const actions = cell(row, ''), info = document.createElement('button');
@@ -116,6 +135,15 @@ export function initTransportConsole({ request, notify, byId, detail, edit, conf
       detail('Immutable Profile configuration / ' + id + ' / r' + revision + ' / not deployment evidence', record);
     } catch (error) { if (version === referenceVersion && connection === epoch) notify(error.message, true); }
   }
+  async function prepareBatch() {
+    if (!impactTarget || !selection.size || typeof prepareProfileBatch !== 'function') return;
+    const version = referenceVersion, connection = epoch;
+    const proposal = JSON.parse(JSON.stringify({ ...impactTarget, items: [...selection.values()] }));
+    try {
+      const prepared = await prepareProfileBatch(proposal);
+      if (prepared && version === referenceVersion && connection === epoch) { invalidate(); el('references-dialog').close(); }
+    } catch (error) { if (version === referenceVersion && connection === epoch) notify(error.message, true); }
+  }
   function clear() {
     epoch++; catalogVersion++; session.abort(); session = new AbortController();
     invalidate(); profile = null; page = 1; preview = false;
@@ -125,6 +153,7 @@ export function initTransportConsole({ request, notify, byId, detail, edit, conf
   el('references-query').addEventListener('click', () => references(false, 1));
   el('references-preview').addEventListener('click', () => references(true, 1));
   el('revision-inspect').addEventListener('click', inspectRevision);
+  el('batch-prepare').addEventListener('click', prepareBatch);
   el('references-prev').addEventListener('click', () => references(preview, page - 1));
   el('references-next').addEventListener('click', () => references(preview, page + 1));
   el('references-close').addEventListener('click', () => el('references-dialog').close());

@@ -102,4 +102,14 @@ Recorded windows are not TLS/session/network/health evidence or deletion safety.
 Console delegates deployment inspection and explicit Profile/copy commands to the
 original entrypoints; no new write authority, Runtime ledger or Agent protocol exists.
 
+## 10. Explicit Profile Publication
+
+[ADR-0022](../decisions/0022-explicit-profile-batches.md) extends only the Console's
+bounded command queue: immutable impact proposals first call the original read-only
+Relay compiler, then the original individually authorized Forward CAS command.
+There is no server Bulk endpoint, second ledger or plan-issued execution authority.
+Preflight failure proves no write was started; an uncertain write requires exact
+original replay, not a new plan/key/CAS. A denied replay cannot erase uncertainty
+about the original acceptance. Cross-rule atomicity and automatic rollback remain absent.
+
 

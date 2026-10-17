@@ -4,6 +4,9 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
   const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
   const revision = value => Number.isSafeInteger(value) && value >= 1;
   const clone = value => JSON.parse(JSON.stringify(value));
+  const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ?
+    Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])])) : value;
+  const completeRejection = error => [400, 401, 403, 404, 409, 413, 422, 429].includes(error.httpStatus);
   const node = (tag, value) => { const n = dom.createElement(tag); if (value !== undefined) n.textContent = String(value); return n; };
 
   function selectionState() {
@@ -32,7 +35,7 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
       input: { expectedRevision: forward.revision, spec: { ...clone(forward.spec), enabled } },
       key: newKey(), state: 'pending', result: null, error: '' };
   }
-  function unfinished() { return plan?.rows.some(row => ['pending', 'uncertain'].includes(row.state)); }
+  function unfinished() { return plan?.rows.some(row => ['pending', 'uncertain', 'preflight-failed'].includes(row.state)); }
   function discard() {
     if (active) throw Error('Stop local dispatch before closing or preparing another command.');
     if (unfinished() && !ask('Discard this local command list? An uncertain command may already be accepted remotely. This does not revoke, roll back or cancel any remote operation.')) return false;
@@ -44,24 +47,28 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
     const body = el('rule-command-rows'); body.replaceChildren();
     for (const row of plan.rows) {
       const tr = node('tr'), expected = node('td', row.forwardId + ' / expected r' + row.expectedRevision);
-      const frozen = node('details'), summary = node('summary', row.method + ' / ' + (row.input.spec ? 'desired enabled=' + row.input.spec.enabled : 'explicit retry'));
+      const frozen = node('details'), summary = node('summary', row.method + ' / ' + (row.preflight ? 'Profile ' + row.preflight.profileId + ' -> locked r' + row.preflight.revision : row.input.spec ? 'desired enabled=' + row.input.spec.enabled : 'explicit retry'));
       frozen.append(summary, node('pre', JSON.stringify(row.input, null, 2))); expected.append(frozen);
+      if (row.preflight) expected.append(node('p', row.check ? 'Fresh plan checked / NOT reserved or authorization for this later update: ' + JSON.stringify(row.check) :
+        'Fresh per-rule plan required before the first write. Unknown write replay retains the original key/body, without substituting another plan.'));
       const state = node('td', row.state), result = node('td', row.result ? JSON.stringify(row.result) : row.error || 'Not sent');
       result.className = 'mono';
       const action = node('td');
-      if (row.state === 'uncertain') {
-        const replay = node('button', 'Replay Same Command'); replay.type = 'button'; replay.className = 'secondary'; replay.disabled = active || !el('rule-command-consent').checked;
+      if (['uncertain', 'preflight-failed'].includes(row.state)) {
+        const replay = node('button', row.state === 'uncertain' ? 'Replay Same Command' : 'Recheck Same Proposal'); replay.type = 'button'; replay.className = 'secondary'; replay.disabled = active || !el('rule-command-consent').checked;
         const current = plan;
         replay.addEventListener('click', () => { if (plan === current) return dispatch(row); }); action.append(replay);
       }
       tr.append(expected, state, result, action); body.append(tr);
     }
-    const counts = ['pending', 'sending', 'accepted', 'unchanged', 'rejected', 'uncertain'].map(state => state + ': ' + plan.rows.filter(row => row.state === state).length).join(' / ');
+    const states = plan.rows.some(row => row.preflight) ? ['pending', 'checking', 'sending', 'accepted', 'unchanged', 'rejected', 'preflight-failed', 'uncertain'] :
+      ['pending', 'sending', 'accepted', 'unchanged', 'rejected', 'uncertain'];
+    const counts = states.map(state => state + ': ' + plan.rows.filter(row => row.state === state).length).join(' / ');
     el('rule-command-state').textContent = counts + '. Accepted is not applied or healthy; each rule is independent.';
     const sent = plan.rows.some(row => row.state !== 'pending');
     el('rule-command-start').textContent = sent ? 'Continue Unsent Commands' : 'Send Explicit Commands';
     el('rule-command-start').disabled = active || !el('rule-command-consent').checked ||
-      plan.rows.some(row => row.state === 'uncertain') || !plan.rows.some(row => row.state === 'pending');
+      plan.rows.some(row => ['uncertain', 'preflight-failed'].includes(row.state)) || !plan.rows.some(row => row.state === 'pending');
     el('rule-command-consent').disabled = active;
     el('rule-command-stop').disabled = !active;
     el('rule-command-close').disabled = active;
@@ -77,6 +84,25 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
       if (!discard()) return;
       show(enabled ? 'Enable Selected Rules' : 'Disable Selected Rules', rows);
     } catch (error) { notify(error.message, true); }
+  }
+  function profileBatch(proposal) {
+    try {
+      if (!proposal || !id(proposal.profileId) || !revision(proposal.targetRevision) || !/^sha256:[a-f0-9]{64}$/.test(proposal.configDigest) ||
+          !Array.isArray(proposal.items) || proposal.items.length < 1 || proposal.items.length > 10 ||
+          new Set(proposal.items.map(item => item.forwardId)).size !== proposal.items.length) throw Error('Select 1 to 10 changed rules from one current Profile impact page.');
+      const target = Object.freeze({ profileId: proposal.profileId, revision: proposal.targetRevision, configDigest: proposal.configDigest });
+      const rows = proposal.items.map(item => {
+        if (!id(item.forwardId) || !revision(item.expectedRevision) || item.expectedRevision !== item.revision || item.changed !== true || item.recoverySuspended !== false ||
+            !revision(item.configRevision) || item.configRevision === target.revision || item.spec?.transport?.profileId !== target.profileId ||
+            item.spec.transport.configRevision !== item.configRevision || !Array.isArray(item.spec.path?.via) || !item.spec.path.via.length || !item.proposedSpec)
+          throw Error('Invalid or recovery-suspended Profile impact; query a fresh page.');
+        const expected = { ...clone(item.spec), transport: { profileId: target.profileId, configRevision: target.revision } };
+        if (JSON.stringify(ordered(expected)) !== JSON.stringify(ordered(item.proposedSpec))) throw Error('Profile batch may change only the explicit locked Profile revision.');
+        return { ...command({ id: item.forwardId, revision: item.expectedRevision, recoverySuspended: false, spec: expected }, expected.enabled), preflight: target, check: null };
+      });
+      if (!discard()) return false;
+      show('Explicit Profile ' + target.profileId + ' -> r' + target.revision + ' / Independent Rule Updates', rows); return true;
+    } catch (error) { notify(error.message, true); return false; }
   }
   async function retry(operationId) {
     let version = generation;
@@ -110,7 +136,7 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
   }
   async function dispatch(onlyRow) {
     if (active || !plan || !el('rule-command-consent').checked) return;
-    if (onlyRow ? onlyRow.state !== 'uncertain' || !plan.rows.includes(onlyRow) : plan.rows.some(row => row.state === 'uncertain')) return;
+    if (onlyRow ? !['uncertain', 'preflight-failed'].includes(onlyRow.state) || !plan.rows.includes(onlyRow) : plan.rows.some(row => ['uncertain', 'preflight-failed'].includes(row.state))) return;
     const current = plan, version = generation;
     const rows = onlyRow ? [onlyRow] : plan.rows.filter(row => row.state === 'pending');
     if (!rows.length) return;
@@ -118,8 +144,24 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
     try {
       for (const row of rows) {
         if (stopped || version !== generation) break;
-        const abort = controller = new AbortController(); row.state = 'sending'; row.error = ''; render();
+        const replay = row.state === 'uncertain', abort = controller = new AbortController();
+        let writeStarted = false;
+        if (row.preflight && !replay) row.check = null;
+        row.state = row.preflight && !replay ? 'checking' : 'sending'; row.error = ''; render();
         try {
+          if (row.preflight && !replay) {
+            const checked = await request('POST', 'relay-plan', clone(row.input.spec), undefined, { signal: abort.signal, timeoutMs: 5000 });
+            if (version !== generation || current !== plan) return;
+            abort.signal.throwIfAborted();
+            if (checked?.reserved !== false || checked.executionSupported !== false || checked.runtimeEnabled !== true || checked.profile?.profileId !== row.preflight.profileId ||
+                checked.profile.revision !== row.preflight.revision || checked.profile.configDigest !== row.preflight.configDigest)
+              throw Error('Unrecognized fresh Profile plan; no intent sent. Recheck the same proposal explicitly.');
+            row.check = { profileId: checked.profile.profileId, revision: checked.profile.revision, configDigest: checked.profile.configDigest,
+              checkedAt: new Date().toISOString(), reserved: false, executionAuthorized: false };
+          }
+          abort.signal.throwIfAborted();
+          if (stopped) throw Error('Local dispatch stopped');
+          row.state = 'sending'; render(); writeStarted = true;
           const result = await request(row.method, row.resource, clone(row.input), row.key, { signal: abort.signal, timeoutMs: 5000 });
           if (version !== generation || current !== plan) return;
           abort.signal.throwIfAborted();
@@ -127,11 +169,11 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
         } catch (error) {
           if (version !== generation || current !== plan) return;
           // Only complete, recognized client rejection responses establish a definite non-acceptance.
-          row.state = !abort.signal.aborted && [400, 401, 403, 404, 409, 413, 422, 429].includes(error.httpStatus) ? 'rejected' : 'uncertain';
-          row.error = String(error.message ?? 'Request outcome unknown').slice(0, 300);
+          row.state = !replay && !abort.signal.aborted && completeRejection(error) ? 'rejected' : writeStarted || replay ? 'uncertain' : 'preflight-failed';
+          row.error = (replay ? 'Original outcome remains unknown. ' : writeStarted ? '' : 'No intent sent. ') + String(error.message ?? 'Request outcome unknown').slice(0, 260);
         }
         render();
-        if (row.state === 'uncertain') break;
+        if (['uncertain', 'preflight-failed'].includes(row.state)) break;
       }
     } finally {
       if (version === generation && current === plan) {
@@ -160,5 +202,5 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
   el('rule-command-close').addEventListener('click', close);
   el('rule-command-dialog').addEventListener('cancel', close);
   selectionState();
-  return { page, checkbox, batch, retry, clear };
+  return { page, checkbox, batch, profileBatch, retry, clear };
 }

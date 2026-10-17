@@ -7,6 +7,7 @@ class Element {
   constructor() { this.children = []; this.listeners = {}; this.value = ''; this.textContent = ''; this.disabled = false; this.open = false; }
   append(...items) { this.children.push(...items); }
   replaceChildren(...items) { this.children = [...items]; }
+  setAttribute(name, value) { this[name] = value; }
   addEventListener(event, fn) { this.listeners[event] = fn; }
   close() { if (this.open) { this.open = false; this.listeners.close?.(); } }
   showModal() { this.open = true; }
@@ -17,17 +18,17 @@ const spec = { enabled: true, protocols: ['udp'], ingress: { nodeId: 'n1', liste
 function referencePage(resource) {
   const query = new URLSearchParams(resource.split('?')[1]), preview = query.has('targetRevision');
   return { profileId: 'profile-a', currentRevision: 2, page: Number(query.get('page')), limit: 25, total: 26,
-    previewOnly: true, reserved: false, fullPlanAuthorization: false, target: preview ? { revision: Number(query.get('targetRevision')) } : null,
+    previewOnly: true, reserved: false, fullPlanAuthorization: false, target: preview ? { revision: Number(query.get('targetRevision')), configDigest: 'sha256:' + 'a'.repeat(64) } : null,
     items: [{ forwardId: 'f1', revision: 7, expectedRevision: 7, configRevision: 1, recoverySuspended: false, spec,
       changed: preview ? true : null, proposedSpec: preview ? { ...spec, transport: { ...spec.transport, configRevision: Number(query.get('targetRevision')) } } : null }] };
 }
 function harness(handler = async (_, resource) => referencePage(resource), confirm = () => true) {
-  const elements = new Map(), calls = [], edits = [], details = [], notices = [];
+  const elements = new Map(), calls = [], edits = [], details = [], notices = [], batches = [];
   const byId = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   const api = initTransportConsole({ byId, confirm, document: { createElement: () => new Element() },
     request: async (...args) => { calls.push(args); return handler(...args); }, notify: (...args) => notices.push(args),
-    detail: (...args) => details.push(args), edit: async item => edits.push(item) });
-  return { api, calls, edits, details, notices, el: name => byId('transport-' + name) };
+    detail: (...args) => details.push(args), edit: async item => edits.push(item), prepareProfileBatch: async proposal => { batches.push(proposal); return true; } });
+  return { api, calls, edits, details, notices, batches, el: name => byId('transport-' + name) };
 }
 function buttons(element) { return element.children.flatMap(child => [child, ...buttons(child)]).filter(child => child.listeners.click); }
 
@@ -99,6 +100,45 @@ test('editing an inspected revision or disconnecting ignores its late response',
   assert.equal(h.calls.at(-1)[4].signal.aborted, true);
   finish({ profileId: 'profile-a', revision: 2, configDigest: 'sha256:' + 'a'.repeat(64) }); await pending;
   assert.equal(h.details.length, 0);
+});
+
+function impactInputs(element) { return element.children.flatMap(child => [child, ...impactInputs(child)]).filter(child => child.type === 'checkbox'); }
+function selectImpact(input) { input.checked = true; input.listeners.change(); }
+
+test('Profile batch selection is bounded to ten changed current-page impacts and preparing hands off detached proposals without requests', async () => {
+  const h = harness(async (_, resource) => { const data = referencePage(resource); data.total = 11;
+    data.items = Array.from({ length: 11 }, (_, index) => ({ ...data.items[0], forwardId: 'f' + index })); return data; });
+  await h.api.open(profile); await h.api.references(true);
+  const inputs = impactInputs(h.el('reference-rows')); assert.equal(inputs.length, 11);
+  inputs.forEach(selectImpact); assert.equal(inputs[10].checked, false); assert.match(h.el('batch-selection').textContent, /^10 \/ 10/);
+  assert.equal(h.calls.length, 2); await h.el('batch-prepare').listeners.click(); assert.equal(h.batches.length, 1);
+  assert.equal(h.batches[0].profileId, 'profile-a'); assert.equal(h.batches[0].targetRevision, 2);
+  assert.equal(h.batches[0].configDigest, 'sha256:' + 'a'.repeat(64)); assert.equal(h.batches[0].items.length, 10);
+  assert.equal(h.batches[0].items[0].expectedRevision, 7); assert.equal(h.el('references-dialog').open, false);
+  assert.ok(h.calls.every(call => call[0] === 'GET')); assert.equal(h.edits.length, 0);
+});
+
+test('editing revisions, paging, closing and disconnecting clear Profile batch selection and detached checkbox actions', async () => {
+  for (const invalidate of [h => h.el('target-revision').listeners.input(), h => h.api.references(true, 2), h => h.el('references-dialog').close(), h => h.api.clear()]) {
+    const h = harness(); await h.api.open(profile); await h.api.references(true);
+    const old = impactInputs(h.el('reference-rows'))[0]; selectImpact(old);
+    await invalidate(h); selectImpact(old); await h.el('batch-prepare').listeners.click();
+    assert.equal(old.checked, false); assert.equal(h.el('batch-prepare').disabled, true); assert.equal(h.batches.length, 0);
+  }
+});
+
+test('unchanged and recovery-suspended impacts cannot be selected for publication', async () => {
+  const h = harness(async (_, resource) => { const data = referencePage(resource);
+    if (data.target) data.items = [{ ...data.items[0], changed: false }, { ...data.items[0], forwardId: 'suspended', recoverySuspended: true }]; return data; });
+  await h.api.open(profile); await h.api.references(true); const inputs = impactInputs(h.el('reference-rows'));
+  assert.equal(inputs.length, 2); inputs.forEach(selectImpact);
+  assert.ok(inputs.every(input => input.disabled && !input.checked)); assert.equal(h.el('batch-prepare').disabled, true);
+});
+
+test('invalid target digest leaves neither batch selection nor editor actions available', async () => {
+  const h = harness(async (_, resource) => { const data = referencePage(resource); if (data.target) data.target.configDigest = 'unknown'; return data; });
+  await h.api.open(profile); await h.api.references(true); assert.equal(impactInputs(h.el('reference-rows')).length, 0);
+  assert.equal(buttons(h.el('reference-rows')).length, 0); assert.equal(h.el('batch-prepare').disabled, true);
 });
 
 test('native declarations show business UDP as Relay TCP carrier and never infer Node proof from Control gates', async () => {

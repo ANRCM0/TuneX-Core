@@ -360,7 +360,7 @@ async function createNode(event) {
 const relayConsole=initRelayConsole({request,mutate,notify,byId,candidates,load,loadOverview,loadCandidates,detail,display,
   inspectProfile:profile=>transportConsole.open(profile),loadCatalog:()=>transportConsole.catalog(),inspectTunnel:id=>tunnelConsole.open(id)});
 const probeConsole=initProbeConsole({request,notify,byId,display});
-const transportConsole=initTransportConsole({request,notify,byId,detail,edit:item=>relayConsole.edit(item)});
+const transportConsole=initTransportConsole({request,notify,byId,detail,edit:item=>relayConsole.edit(item),prepareProfileBatch:proposal=>ruleConsole.profileBatch(proposal)});
 const ruleConsole=initRuleConsole({request,notify,byId,refresh:()=>Promise.all([load('forwards'),load('operations'),loadOverview()])});
 const tunnelConsole=initTunnelConsole({request,notify,byId,deployment:id=>relayConsole.deployment(id)});
 function clearConnectionData() {

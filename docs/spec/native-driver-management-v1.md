@@ -6,6 +6,11 @@ The shared declarations are in
 `packages/contracts/data/native-drivers-v1.json`; this is not an ADP message or
 dynamic plugin manifest.
 
+The follow-up [Profile publication](profile-publication-v1.md) consumes only explicit
+current-page impacts, freezing at most ten per-rule proposals and independently
+using the original fresh plan/CAS commands. It is not an atomic rollout or plan-issued
+execution authority; its exact-SHA functional acceptance also remains pending.
+
 ## Native declarations
 
 `GET /api/v1/scopes/:scope/native-drivers` accepts no query parameters. It requires

@@ -16,6 +16,8 @@ import { reportsDuringIntentLock } from './runtime-intent-lock.ts';
 import { verifyTunnelConsole } from './tunnel-console.ts';
 
 const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
+const tunnelBrowser=process.env.TUNEX_TUNNEL_BROWSER==='1';
+if(tunnelBrowser&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'))throw Error('Tunnel browser acceptance is Actions-only');
 if(!databaseUrl)throw new Error('Disposable MySQL URL required');
 await mkdir('.artifacts/relay',{recursive:true});const directory=await mkdtemp(resolve('.artifacts/relay/run-'));
 const caKey=join(directory,'ca.key'),caCert=join(directory,'ca.pem'),serverKey=join(directory,'server.key'),serverCert=join(directory,'server.pem');
@@ -29,8 +31,6 @@ const token=newToken(),scope='relay-scope',owner='relay-owner',ca=await readFile
 const binary=linuxBinary('tunex-agent'),fixture=linuxBinary('network-fixture'),collector=linuxBinary('time-proof');
 const nativeRoot=`/tmp/tunex-relay-${randomUUID()}`;
 const switchFaults=process.argv.includes('--switch-faults'),tag=switchFaults?'A':'';
-const tunnelBrowser=process.env.TUNEX_TUNNEL_BROWSER==='1';
-if(tunnelBrowser&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'))throw Error('Tunnel browser acceptance is Actions-only');
 const policy={...DEFAULT_POLICY,pollIntervalSeconds:1,leaseSeconds:switchFaults?45:30,renewalLeadSeconds:switchFaults?18:12,observationFreshnessSeconds:5,drainTimeoutSeconds:switchFaults?20:2,udpIdleTimeoutSeconds:2};
 const options={databaseUrl:dbUrl.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,worker:false};
 let control:Awaited<ReturnType<typeof startControl>>|undefined,target:ChildProcess|undefined,targetPID:number|undefined;

@@ -234,9 +234,10 @@
   <div class="query-controls"><label>当前锁定 Profile Revision（可空）<input id="transport-from-revision" maxlength="16" inputmode="numeric" autocomplete="off" placeholder="空表示全部引用"></label><label>预览目标 Profile Revision<input id="transport-target-revision" maxlength="16" inputmode="numeric" autocomplete="off" placeholder="明确的不可变修订"></label></div>
   <div class="actions"><button id="transport-references-query" type="button" class="secondary">只查引用</button><button id="transport-references-preview" type="button">预览配置影响（不部署）</button><button id="transport-revision-inspect" type="button" class="secondary">Inspect Exact Revision</button></div>
   <p id="transport-references-meta" class="hint" role="status"></p>
+  <div class="actions"><span id="transport-batch-selection" class="hint">0 / 10 selected from this impact page</span><button id="transport-batch-prepare" type="button" class="secondary" disabled>Prepare Explicit Profile Batch</button></div>
   <div class="table-wrap inner-table"><table><thead><tr><th>Forward / Revision</th><th>当前 Profile 锁定</th><th>配置影响（非就绪）</th><th>操作</th></tr></thead><tbody id="transport-reference-rows"></tbody></table></div>
   <div class="pagination"><button id="transport-references-prev" type="button" class="secondary" disabled>上一页</button><button id="transport-references-next" type="button" class="secondary" disabled>下一页</button></div>
-  <p class="hint">影响预览需 Scope 管理权限与显式 Profile Grant；不代替每个 Node Grant、目标策略、Endpoint、端口和运行状态检查，不提供跨规则原子发布或自动回滚。</p>
+  <p class="hint">影响预览需 Scope 管理权限与显式 Profile Grant；最多选择当前预览页十项已变化且未恢复挂起的规则，准备批次不发请求。确认后逐条重新检查计划并走原 CAS 更新；不代替提交时的每个 Node Grant、策略、Endpoint、资源与容量检查，不提供跨规则原子发布或自动回滚。</p>
 </dialog>
 <dialog id="tunnel-dialog" aria-labelledby="tunnel-title">
   <div class="dialog-title"><h2 id="tunnel-title">Native TLS tunnel metadata</h2><button id="tunnel-close" type="button" class="secondary">关闭</button></div>
@@ -256,7 +257,7 @@
   <p id="rule-command-state" class="hint" role="status" aria-live="polite"></p>
   <label class="check"><input id="rule-command-consent" type="checkbox">我确认提交本次固定命令；接受逐项结果与部分失败。不确定结果仅重放原键 / 原请求，不自动刷新 revision 或换键。</label>
   <div class="actions"><button id="rule-command-start" type="button" disabled>Send Explicit Commands</button><button id="rule-command-stop" type="button" class="secondary" disabled>停止本地派发</button></div>
-  <p class="hint">单请求最多 5 秒；网络/服务端不确定响应停止后续派发，需另行确认后重放原命令。停止/关闭/断开只影响本地，可能已有远程提交，不能取消、回滚或撤销执行。失败重试还须最新失败 Operation 与当前修订匹配；Control 最终裁决。</p>
+  <p class="hint">单请求最多 5 秒；Profile 批次每项先做只读计划检查，再独立更新。预检不确定尚未发送意图，停止尾部并需显式重查原方案；更新响应不确定可能已提交，只能确认后重放原键/原请求，不重查并替换命令。停止/关闭/断开只影响本地，不能取消、回滚或撤销远程执行。Control 最终裁决。</p>
 </dialog>
 </body>
 </html>

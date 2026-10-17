@@ -314,6 +314,12 @@ const tunnelProjection = readFileSync(resolve(root, 'apps/control/src/infrastruc
 if (/\b(?:write|createPool|createConnection|fetch)\s*\(|\b(?:INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\b|\b(?:certificate|response|source_fingerprint)\b|SELECT\s+\*/.test(tunnelProjection)) {
   throw new Error('Tunnel metadata must remain SELECT-only and must not select certificates, issuance responses or whole rows');
 }
+const relayFixture = readFileSync(resolve(root, 'scripts/phase2/relay.ts'), 'utf8');
+const browserOptIn = relayFixture.indexOf("const tunnelBrowser=process.env.TUNEX_TUNNEL_BROWSER==='1';");
+const browserGuard = relayFixture.indexOf("if(tunnelBrowser&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'))throw Error('Tunnel browser acceptance is Actions-only');");
+if (browserOptIn < 0 || browserGuard <= browserOptIn || ['await mkdir(', 'await execute(', 'await createConnection('].some(marker => {
+  const effect = relayFixture.indexOf(marker); return effect < 0 || effect < browserGuard;
+})) throw new Error('Reject unsupported browser opt-in before creating PKI/artifacts or opening a fixture database');
 const observer = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-node-observation.ts'), 'utf8');
 const probeReader = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-read.ts'), 'utf8');
 const probeMachine = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-machine.ts'), 'utf8');

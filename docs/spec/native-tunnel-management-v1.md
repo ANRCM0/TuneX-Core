@@ -93,7 +93,8 @@ Late plan/deployment responses cannot recreate actions after invalidation.
 Relay copy remains the [original disabled-copy proposal](native-rule-management-v1.md),
 with blank required listener port, ordered path and locked Profile revision.
 No new mutation endpoint, atomic rollout, automatic rollback or shared physical
-tunnel is implied. Explicit multi-rule Profile publication is still pending.
+tunnel is implied. The follow-up [explicit Profile publication](profile-publication-v1.md)
+adds a bounded current-impact-page command queue, still pending exact-SHA Actions.
 
 ## 5. Authored Acceptance, Not Executed Evidence
 

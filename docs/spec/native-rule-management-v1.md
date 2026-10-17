@@ -69,7 +69,7 @@ five-second deadline. The state of each row is:
 | sending | One original command currently in flight |
 | accepted | Validated acceptance IDs/revision; Operation is not yet necessarily applied |
 | unchanged | Original PUT returned current revision and `operationId:null` |
-| rejected | Complete client rejection (400/401/403/404/409/413/422/429); no automatic replacement |
+| rejected | Complete initial client rejection (400/401/403/404/409/413/422/429); uncertain replay denial stays uncertain |
 | uncertain | Network/abort/JSON/server error or invalid acceptance; may already have committed |
 
 Definite rejections are preserved and the serial loop can continue to independent
@@ -85,6 +85,12 @@ explicit discard warning. Disconnect clears/aborts all local state and discards
 late callbacks; it cannot revoke committed work. Keys/plans exist only in tab memory,
 with no storage, service-worker queue, export of credentials or cross-session replay
 promise. The authoritative history remains the existing server idempotency/ledger.
+
+Profile revision publication reuses this queue with a separate first-write
+read-only plan stage and explicit same-proposal recheck; see
+[Profile publication](profile-publication-v1.md). An uncertain write replay that is
+currently rejected still cannot establish whether the original committed, so it
+remains uncertain and does not release the unsent tail.
 
 ## 5. Explicit Failed Operation Retry
 
