@@ -67,4 +67,16 @@ Forwarding owns `desired.enabled` and `revision`. Runtime owns `deployment.statu
 
 Every resource and query explicitly carries scope; cross-tenant authorization is checked at module public interfaces and database write boundaries. Do not rely on frontend filtering or Redis key prefixes as the only isolation mechanism. Operational machine endpoints use independent Node credentials, never user session cookies by accident.
 
+## 7. Native declarations and Profile configuration impact
+
+[ADR-0019](../decisions/0019-native-catalog-and-profile-impact.md) adds a closed
+product catalog, not a new Agent driver registration path or Core selector.
+`NativeDrivers` separates static declarations/process gates from Node evidence
+and execution authorization. `TransportQueries` owns the read use case; its
+`TransportReferenceReader` is a deliberate SELECT-only current-intent projection,
+and the existing `TransportProfileResolver` resolves an explicitly chosen immutable
+revision inside the same authorized transaction. Impact output is a proposal only;
+it never writes Forward intent, resources or the Runtime ledger. Console loading
+continues through the original editor, plan check and owner-owned CAS command.
+
 

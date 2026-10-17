@@ -1,6 +1,6 @@
 import { relayCapable, multihopCapable, multihopSpec, relayProfile, relayEndpoint, relaySpec } from './relay-model.js';
 
-export function initRelayConsole({ request, mutate, notify, byId, candidates, load, loadOverview, loadCandidates, detail, display }) {
+export function initRelayConsole({ request, mutate, notify, byId, candidates, load, loadOverview, loadCandidates, detail, display, inspectProfile, loadCatalog }) {
   const knownProfiles = new Map();
   let profileList = [];
   let previewed = null;
@@ -102,6 +102,8 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
         catch(e) { notify(e.message,true); }
       });
       action.append(button);row.append(action);body.append(row);
+      const references=document.createElement('button');references.type='button';references.className='secondary';references.textContent='引用 / 影响';
+      references.addEventListener('click',()=>inspectProfile(p).catch(e=>notify(e.message,true)));action.append(references);
     }
     options('relay-profile-select',profileList.map(p=>({value:p.profileId,label:p.profileId+' · r'+p.currentRevision})));
     invalidate();
@@ -282,8 +284,8 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
   }
   async function refresh(pinnedIds){
     const features=await request('GET','execution-capabilities');multihopEnabled=features.multihopEnabled===true;
+    await Promise.all([loadCatalog(),refreshProfiles()]);
     if (!await refreshCandidates(pinnedIds)) return false;
-    await refreshProfiles();
     return true;
   }
   function clear() {

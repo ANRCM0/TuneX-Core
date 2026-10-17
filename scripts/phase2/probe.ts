@@ -132,7 +132,7 @@ try {
     passed('Control issuance defaults off and rolls back idempotency without creating permits');
     if (browserEnabled) {
         await verifyDisabledConsole({ url: `https://127.0.0.1:${control.port}`, scope, token, directory });
-        passed('Real HTTPS Chromium Console loads all modules, keeps credentials out of storage and cannot issue without selection');
+        passed('Real HTTPS Chromium Console keeps credentials out of storage, respects disabled selection, reads native declarations and publishes/previews an unreferenced immutable Profile without deployment');
     }
     await control.close(); control = undefined; control = await startControl({ ...options, probeExecutionEnabled: true });
     await new Promise<void>(resolve => target.listen(0, '127.0.0.1', resolve));

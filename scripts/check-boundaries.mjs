@@ -187,6 +187,10 @@ const portImports = new Map([
   ['application/command-request.ts', ['@tunex/core', '@tunex/contracts', './errors.ts', './ports.ts']],
   ['application/console-query.ts', ['./errors.ts']],
   ['application/console-queries.ts', ['./console-query.ts', './errors.ts', './ports.ts']],
+  ['application/native-drivers.ts', ['@tunex/core', '@tunex/contracts', './ports.ts']],
+  ['application/transport-queries.ts', ['@tunex/core', './console-query.ts', './errors.ts', './ports.ts', '../modules/transport-ports.ts']],
+  ['api/transport-query.ts', ['@tunex/core', '../application/console-query.ts', '../application/transport-queries.ts', '../application/errors.ts']],
+  ['infrastructure/mysql-transport-read.ts', ['@tunex/core', '../application/transport-queries.ts', '../application/console-query.ts', './mysql-console-read.ts', './mysql.ts']],
   ['application/node-observations.ts', ['@tunex/core', './errors.ts', '../modules/node-report-observation.ts',
     '../modules/observation-ports.ts']],
   ['modules/observation-ports.ts', []],
@@ -297,6 +301,10 @@ for (const file of files(resolve(root, 'apps/control/src/modules/runtime'))) {
 const projection = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-console-read.ts'), 'utf8');
 if (/\bControlApplication\b|\b(?:write|createPool|createConnection)\s*\(/.test(projection)) {
   throw new Error('Console projections must use the supplied read transaction, not Control or write/connection helpers');
+}
+const transportProjection = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-transport-read.ts'), 'utf8');
+if (/\b(?:write|createPool|createConnection|fetch)\s*\(|\b(?:INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\b/.test(transportProjection)) {
+  throw new Error('Transport reference projections must remain SELECT-only in the supplied transaction');
 }
 const observer = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-node-observation.ts'), 'utf8');
 const probeReader = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-read.ts'), 'utf8');

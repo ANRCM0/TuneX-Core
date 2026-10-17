@@ -4,6 +4,7 @@ import { TLSSocket } from 'node:tls';
 import { readFile } from 'node:fs/promises';
 import { rows } from '../infrastructure/mysql.ts';
 import { consoleQuery } from './console-query.ts';
+import { transportReferenceQuery } from './transport-query.ts';
 import { randomUUID } from 'node:crypto';
 import { parseJson, parseRuntimeMessage, parseTransitNegotiation, parseTransitDelivery, parseProbeNegotiation, parseProbeInstance, parseProbeClaim, parseProbeDelivery, parseProbeResult } from '@tunex/contracts';
 import { TransitNegotiator } from '../modules/runtime/transit-negotiation.ts';
@@ -105,7 +106,12 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.get('/console/relay-model.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/relay-model.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/relay.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/relay.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/probe.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/probe.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/transport-console.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/transport-console.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/style.css', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/style.css', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/css; charset=utf-8' }); });
+    app.get('/api/v1/scopes/:scope/native-drivers', async c => {
+        if (new URL(c.req.url).search) invalid('Native catalog does not accept query parameters');
+        return c.json(await control.nativeDrivers.list(c.get('actor'), scope(c.req.param('scope'))));
+    });
     app.get('/health',async c=>c.json({status:(await authority.read()).maintenance?'maintenance':'ok',protocolVersion:3}));
     app.post('/api/v1/scopes/:scope/relay-plan',async c=>c.json(await control.planRelay(c.get('actor'),scope(c.req.param('scope')),parseJson(await body(c.req.raw,32768)))));
     app.get('/api/v1/scopes/:scope/execution-capabilities',async c=>{
@@ -126,6 +132,8 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.get('/api/v1/scopes/:scope/nodes/:node/relay-endpoint',async c=>c.json(await control.relayEndpoints.get(c.get('actor'),scope(c.req.param('scope')),c.req.param('node'))));
     app.put('/api/v1/scopes/:scope/nodes/:node/relay-endpoint',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='config,expectedRevision'||!isCounter(input.expectedRevision,true))invalid('Relay endpoint config and expectedRevision required');const result=await control.relayEndpoints.change(c.get('actor'),scope(c.req.param('scope')),c.req.param('node'),c.req.header('idempotency-key'),input.expectedRevision,input.config);return c.json(result.body,result.status);});
     app.get('/api/v1/scopes/:scope/transport-profiles',async c=>c.json(await control.transport.list(c.get('actor'),scope(c.req.param('scope')))));
+    app.get('/api/v1/scopes/:scope/transport-profiles/:profile/references', async c => c.json(await control.transportQueries.references(
+        c.get('actor'), scope(c.req.param('scope')), c.req.param('profile'), transportReferenceQuery(new URL(c.req.url).searchParams))));
     app.get('/api/v1/scopes/:scope/transport-profiles/:profile',async c=>{const revision=c.req.query('revision');if(revision!==undefined&&!/^[1-9][0-9]*$/.test(revision))invalid('Canonical Profile revision required');return c.json(await control.transport.get(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),revision===undefined?undefined:Number(revision)));});
     app.put('/api/v1/scopes/:scope/transport-profiles/:profile',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='config,expectedRevision'||!isCounter(input.expectedRevision,true))invalid('Profile config and expectedRevision required');const result=await control.transport.publish(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),c.req.header('idempotency-key'),input.expectedRevision,input.config);return c.json(result.body,result.status);});
     app.get('/api/v1/scopes/:scope/members', async (c) => c.json(await control.identity.listMembers(c.get('actor'), scope(c.req.param('scope')))));

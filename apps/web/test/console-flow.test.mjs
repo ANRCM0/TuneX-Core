@@ -65,8 +65,9 @@ async function harness(handler) {
   });
   const relay = (await readFile(new URL('../relay.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '').replace('export function', 'function');
   const probe = (await readFile(new URL('../probe.js', import.meta.url), 'utf8')).replace('export function', 'function');
+  const transport = (await readFile(new URL('../transport-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
   const app = (await readFile(new URL('../app.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '');
-  vm.runInContext(relay + '\n' + probe + '\n' + app + `
+  vm.runInContext(relay + '\n' + probe + '\n' + transport + '\n' + app + `
     globalThis.flow={load,loadOverview,editor,refreshDirectCandidates,relayConsole,request,
       connect(scope='scope-a'){clearConnectionData();auth.scope=scope;auth.token='x'.repeat(40);},
       setPage(kind,value){page[kind]=value;},setFilters(kind,value){filters[kind]=value;},

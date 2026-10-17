@@ -1,6 +1,7 @@
 import { validScope, parsePorts, parseCidrs, directCapable, allowedProtocols, directSpec, stateTone, pageCount, listResource, candidateChoices } from './model.js';
 import { initRelayConsole } from './relay.js';
 import { initProbeConsole } from './probe.js';
+import { initTransportConsole } from './transport-console.js';
 
 const byId = id => document.getElementById(id);
 const auth = { scope: '', token: '' };
@@ -341,8 +342,10 @@ async function createNode(event) {
     notify('节点已创建；请使用受信任的 Agent 安装流程完成 Enrollment。');
   } catch (error) { notify(error.message, true); }
 }
-const relayConsole=initRelayConsole({request,mutate,notify,byId,candidates,load,loadOverview,loadCandidates,detail,display});
+const relayConsole=initRelayConsole({request,mutate,notify,byId,candidates,load,loadOverview,loadCandidates,detail,display,
+  inspectProfile:profile=>transportConsole.open(profile),loadCatalog:()=>transportConsole.catalog()});
 const probeConsole=initProbeConsole({request,notify,byId,display});
+const transportConsole=initTransportConsole({request,notify,byId,detail,edit:item=>relayConsole.edit(item)});
 function clearConnectionData() {
   connectionVersion++;
   for (const key of Object.keys(readVersions)) readVersions[key]++;
@@ -362,7 +365,7 @@ function clearConnectionData() {
     byId(mode + '-candidate-page').textContent = '尚未查询候选';
     byId(mode + '-candidate-prev').disabled = byId(mode + '-candidate-next').disabled = true;
   }
-  relayConsole.clear(); probeConsole.clear(); fillNodes();
+  relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); fillNodes();
   renderNodes(); renderForwards(); renderOperations(); updateOverview();
 }
 async function refreshDirectCandidates() {

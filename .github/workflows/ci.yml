@@ -45,7 +45,7 @@ jobs:
       - name: Native execution registry and host authorization contracts
         run: node scripts/run-go.mjs test ./internal/control -run '^TestExecution' -count=1
       - name: Control query and Transport resolution port regressions
-        run: node --test apps/control/test/application-query-ports.test.ts apps/control/test/console-read.test.ts apps/control/test/console-diagnostics.test.ts apps/control/test/multihop-coordinator.test.ts
+        run: node --test apps/control/test/application-query-ports.test.ts apps/control/test/console-read.test.ts apps/control/test/console-diagnostics.test.ts apps/control/test/transport-query-ports.test.ts apps/control/test/multihop-coordinator.test.ts
       - name: Owner-owned Profile commands and Runtime grant effects
         run: node --test apps/control/test/transport-grant-ports.test.ts
       - name: Owner-owned member and Node Grant command ports
@@ -144,6 +144,8 @@ jobs:
         run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
       - name: Console scoped filters, independent candidates and full-scope overview with SELECT-only MySQL
         run: node --test apps/control/test/console-mysql-acceptance.test.ts
+      - name: Native capability declarations and immutable Profile reference impact with SELECT-only MySQL
+        run: node --test apps/control/test/transport-query-mysql-acceptance.test.ts
       - name: Passive observation API with SELECT-only MySQL and scoped provenance
         run: node --test apps/control/test/node-observation-mysql-acceptance.test.ts
       - name: Non-executable probe preflight with SELECT-only MySQL and current binding checks

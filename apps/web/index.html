@@ -110,6 +110,11 @@
 
     <section id="view-relay" class="view" hidden>
       <div class="panel-head section-actions"><div><h2>节点链路部署</h2><p class="hint">按顺序选择路径，逐跳双向认证。执行状态和实际流量验收分别展示。</p></div><button id="relay-reload" type="button" class="secondary">刷新配置</button></div>
+      <section class="panel" aria-labelledby="transport-catalog-title">
+        <h3 id="transport-catalog-title">原生驱动能力声明</h3>
+        <p class="hint">目录只描述代码内建能力与 Control 开关，不是当前 Node 实测、授权、可用端口或部署/物理主机验收。Relay/多跳的节点间 UDP 承载仍占 TCP；面向用户的入口仍按业务 TCP/UDP 绑定。低端口服从 OS 权限；目录不会启用驱动或续期租约。</p>
+        <div class="table-wrap inner-table"><table><thead><tr><th>驱动 / 描述版本</th><th>业务 → 物理承载</th><th>进程开关（非就绪）</th><th>声明与限制</th></tr></thead><tbody id="transport-catalog-rows"><tr><td colspan="4" class="empty">连接后加载原生声明</td></tr></tbody></table></div>
+      </section>
       <section class="panel" aria-label="Relay 独立节点候选">
         <div class="query-controls">
           <label>Relay 节点候选 · ID 前缀<input id="relay-candidate-prefix" maxlength="128" autocomplete="off" placeholder="搜索其他页的节点"></label>
@@ -219,5 +224,15 @@
 </div>
 <dialog id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-title"><h2 id="detail-title">详细信息</h2><button id="close-detail" type="button" class="secondary">关闭</button></div><pre id="detail-content"></pre><div id="detail-secret" hidden><p class="danger-text">仅在本次创建后显示一次，请妥善保存。关闭窗口即清除当前页面中的明文凭据。</p><button id="copy-secret" type="button">复制一次性 Token</button></div></dialog>
 <dialog id="deployment-dialog" aria-labelledby="deployment-title"><div class="dialog-title"><h2 id="deployment-title">链路部署</h2><button id="deployment-close" type="button" class="secondary">关闭</button></div><p id="deployment-state" class="hint" role="status"></p><ol id="deployment-topology" class="topology"></ol><div id="deployment-nodes"></div><p class="hint">Agent 就绪报告不代表端到端流量验收通过；历史租约未确认回收的资源继续隔离。</p><div class="actions"><button id="deployment-refresh" type="button">刷新状态</button></div></dialog>
+<dialog id="transport-references-dialog" aria-labelledby="transport-reference-title">
+  <div class="dialog-title"><h2 id="transport-reference-title">Profile 引用与影响预览</h2><button id="transport-references-close" type="button" class="secondary">关闭</button></div>
+  <p class="hint">仅列当前未删除规则的期望引用，含停用/恢复挂起规则；不扫描旧 Snapshot/租约，不证明可安全删除 Profile。列表不是全库快照。发布 Profile 不自动更新任何规则；逐条载入编辑器后仍需重新预检并显式 CAS 更新。</p>
+  <div class="query-controls"><label>当前锁定 Profile Revision（可空）<input id="transport-from-revision" maxlength="16" inputmode="numeric" autocomplete="off" placeholder="空表示全部引用"></label><label>预览目标 Profile Revision<input id="transport-target-revision" maxlength="16" inputmode="numeric" autocomplete="off" placeholder="明确的不可变修订"></label></div>
+  <div class="actions"><button id="transport-references-query" type="button" class="secondary">只查引用</button><button id="transport-references-preview" type="button">预览配置影响（不部署）</button></div>
+  <p id="transport-references-meta" class="hint" role="status"></p>
+  <div class="table-wrap inner-table"><table><thead><tr><th>Forward / Revision</th><th>当前 Profile 锁定</th><th>配置影响（非就绪）</th><th>操作</th></tr></thead><tbody id="transport-reference-rows"></tbody></table></div>
+  <div class="pagination"><button id="transport-references-prev" type="button" class="secondary" disabled>上一页</button><button id="transport-references-next" type="button" class="secondary" disabled>下一页</button></div>
+  <p class="hint">影响预览需 Scope 管理权限与显式 Profile Grant；不代替每个 Node Grant、目标策略、Endpoint、端口和运行状态检查，不提供跨规则原子发布或自动回滚。</p>
+</dialog>
 </body>
 </html>

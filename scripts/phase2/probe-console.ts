@@ -40,7 +40,7 @@ async function withBrowser<T>(fixture: ConsoleFixture, action: (page: Page, cont
 
 export async function verifyDisabledConsole(fixture: ConsoleFixture) {
     await withBrowser(fixture, async page => {
-        let posts = 0; page.on('request', request => { if (request.method() === 'POST') posts++; });
+        let posts = 0; page.on('request', request => { if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method())) posts++; });
         await page.locator('[data-view="probes"]').click();
         assert.equal(await page.locator('#probe-issue').isDisabled(), true);
         await page.locator('#probe-id').fill('unknown-receipt');
@@ -49,6 +49,32 @@ export async function verifyDisabledConsole(fixture: ConsoleFixture) {
         assert.equal(await page.locator('#probe-receipt').textContent(), '');
         assert.equal(await page.locator('#probe-revoke').isDisabled(), true);
         assert.equal(posts, 0);
+        await page.locator('[data-view="relay"]').click();
+        await page.waitForFunction(() => document.getElementById('transport-catalog-rows')?.children.length === 3);
+        const native = await page.locator('#transport-catalog-rows').textContent();
+        assert.match(native!, /UDP -> TCP/); assert.match(native!, /Control gate OFF/);
+        assert.equal(posts, 0, 'Reading the native catalog unexpectedly performed a mutation');
+        await page.screenshot({ path: fixture.directory + '/console-probe-native-capabilities.png', fullPage: true });
+        const profile = 'console-profile', profilePath = `/api/v1/scopes/${fixture.scope}/transport-profiles/${profile}`;
+        await page.locator('#relay-profile-id').fill(profile);
+        const [published] = await Promise.all([
+            page.waitForResponse(response => new URL(response.url()).pathname === profilePath && response.request().method() === 'PUT'),
+            page.locator('#relay-profile-form button[type="submit"]').click()
+        ]);
+        assert.equal(published.status(), 202);
+        await page.locator('#relay-profile-rows tr').filter({ hasText: profile }).locator('button').nth(1).click();
+        await page.waitForFunction(() => document.getElementById('transport-references-meta')?.textContent?.includes('total 0'));
+        const [impact] = await Promise.all([
+            page.waitForResponse(response => new URL(response.url()).pathname === profilePath + '/references' && new URL(response.url()).searchParams.has('targetRevision')),
+            page.locator('#transport-references-preview').click()
+        ]);
+        assert.equal(impact.status(), 200);
+        const preview = await impact.json();
+        assert.equal(preview.target.revision, 1); assert.equal(preview.total, 0);
+        assert.equal(preview.reserved, false); assert.equal(preview.fullPlanAuthorization, false);
+        assert.equal(posts, 1, 'Profile publication is the only intentional mutation in this browser slice');
+        await page.screenshot({ path: fixture.directory + '/console-probe-profile-impact-empty.png', fullPage: true });
+        await page.locator('#transport-references-close').click();
     });
 }
 

@@ -32,3 +32,5 @@ export { parseProbeDelivery, checkProbePoll, checkProbeStatus } from './probe-de
 export type { ProbeOffer, ProbePollRequest, ProbePollResponse, ProbeStatusRequest, ProbeStatusResponse } from './probe-delivery.ts';
 export { parseProbeResult, checkProbeResult, probeResultBody, probeResultDigest } from './probe-result.ts';
 export type { ProbeResultRequest, ProbeResultResponse, ProbeResultBody } from './probe-result.ts';
+export { NATIVE_DRIVER_CATALOG, NATIVE_DRIVER_CATALOG_DIGEST, parseNativeDriverCatalog } from './native-drivers.ts';
+export type { NativeDriverDescriptor, NativeDriverCatalog } from './native-drivers.ts';

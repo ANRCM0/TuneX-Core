@@ -47,6 +47,9 @@ import { ProbeResults } from './probe-results.ts';
 import { MySqlProbePermits } from '../infrastructure/mysql-probe-permits.ts';
 import { MySqlProbePermitIntents } from '../infrastructure/mysql-probe-permit-intents.ts';
 import { ForwardProbes } from './forward-probes.ts';
+import { NativeDrivers } from './native-drivers.ts';
+import { TransportQueries } from './transport-queries.ts';
+import { MySqlTransportReader } from '../infrastructure/mysql-transport-read.ts';
 /** Coordinates owner-owned commands inside one durable acceptance transaction. */
 export class ControlApplication {
     readonly forwarding = new Forwarding();
@@ -59,6 +62,8 @@ export class ControlApplication {
     readonly nodes: Nodes;
     readonly relay: RelayCoordinator;
     readonly queries: ConsoleQueries<Transaction>;
+    readonly nativeDrivers: NativeDrivers<Transaction>;
+    readonly transportQueries: TransportQueries<Transaction>;
     readonly observations: NodeObservations;
     readonly probePlans: ForwardProbePlans<Transaction>;
     readonly probeNegotiation: ProbeNegotiator<Transaction>;
@@ -76,6 +81,7 @@ export class ControlApplication {
     constructor(db: MySqlUnitOfWork, identity: Identity, nodes: Nodes, policy?: Policy, multihopEnabled=false, probeExecutionEnabled=false) {
         this.db=db;this.identity=identity;this.nodes=nodes;
         this.queries=new ConsoleQueries(db,identity,new MySqlConsoleReadModels());
+        this.nativeDrivers=new NativeDrivers(db,identity,multihopEnabled,probeExecutionEnabled);
         const observationPolicy=policy??DEFAULT_POLICY;
         this.observations=new NodeObservations(new MySqlNodeObservationReader(db,identity),{
             freshnessMs:observationPolicy.observationFreshnessSeconds*1000,
@@ -100,6 +106,7 @@ export class ControlApplication {
         ]);
         this.ledger=new RuntimeLedger(policy,nodes,assignments);
         this.transport=new Transport(db,identity,this.idempotency,this.forwarding);
+        this.transportQueries=new TransportQueries(db,identity,new MySqlTransportReader(),this.transport);
         this.relayEndpoints=new RelayEndpoints(db,identity,nodes,this.idempotency,this.forwarding);
         this.relay=new RelayCoordinator(nodes,this.forwarding,this.transport,this.relayEndpoints,this.ledger,policy,multihopEnabled);
         const execution:ForwardAuthorizationExecution<Transaction>={

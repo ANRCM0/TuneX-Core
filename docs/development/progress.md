@@ -17,6 +17,13 @@ commit 字段是测试时 HEAD；另记录 Agent SHA 和测试命令，明确未
 本机仅静态检查，未运行浏览器、网络或数据库测试；对应 SHA 的 Actions 仍未取得。
 后续继续剩余原生能力、规则/隧道/拓扑、遥测、审计/支持包与交付，不能将本批当项目完成。
 
+2026-10-17 后续：Probe Console 已存本地 `724b9bd`，同样尚未推送。当前增量按
+[ADR-0019](../decisions/0019-native-catalog-and-profile-impact.md) 接入既有 native 版本化目录、
+Profile 期望引用/锁版配置影响与 Console 载入原编辑器流程。共用授权事务、只读投影与
+原 Transport resolver；只预览配置，不建立第二执行台账或自动发布。
+契约、Go 注册表一致性、端口、UI、SELECT-only MySQL/API 回归已编写并接 Actions，
+本机未运行功能或真实 MySQL/浏览器验收。目录中的 OS/能力声明不冒充该平台验收。
+
 2026-10-16 后续核验：`cdb67a8` 的主 CI `38837400564`（7 个 job）、
 容器 `38837400557`、Dev 发布 `38837400575` 全部成功，上一切片的只读升级/
 恢复评估完成该 SHA 的 Actions 回归，不等于真实升级、备份或生产恢复演练。

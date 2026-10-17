@@ -384,7 +384,12 @@ CAS/不续期重试/撤销和恢复隔离，并同步迁移与 Control 兼容矩
 领取、持续检查、单次零应用数据连接及保守结果回传；幂等接受与许可同事务，实例从当前锁定事实选择。
 保留原权威、全部预算、两秒许可和不确定结果不重试；需要明确的一秒集群时钟策略和 Agent 双重 opt-in。
 管理回执只作短期 agent-reported 历史，不更新健康；新独立组合 Actions 使用真实 Agent/Control/MySQL/mTLS 与 TCP 目标，
-目前仅编写/接线，未取得对应提交通过。Console、持久历史、其他 API 读写与遥测仍待后续切片，
+目前仅编写/接线，未取得对应提交通过。后续已补一次性 Probe Console、同键重放、已知 ID 查询/有界等待/撤销，
+以及同一真实 HTTPS Chromium/Agent/Control/MySQL 夹具的桌面/390px 接线；历史结果不更新健康。
+随后按 [ADR-0019](../decisions/0019-native-catalog-and-profile-impact.md) 编写共享 native 声明目录、
+Agent 注册表一致性回归、Scope 授权能力视图，以及 SELECT-only Profile 引用/锁版配置影响与原编辑器接线。
+影响预览不做 Node/端口授权或发布，仍需原计划检查与 CAS。原生目录与无引用 Profile 发布/预览也已接真实浏览器夹具，
+引用规则编辑仍需独立浏览器证据。以上均待对应提交 Actions；持久历史、其他 API 读写与遥测仍待后续切片，
 不扩展 Core 或新增驱动。
 此调整不取消审计与产品验收缺口；首批实现等待对应提交的 Actions，
 不自动发布或启用新能力。

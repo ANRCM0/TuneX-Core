@@ -20,6 +20,7 @@ test('same-origin console assets retain content types, no-store and strict CSP',
     ['/console/model.js','text/javascript'],
     ['/console/relay.js','text/javascript'],
     ['/console/probe.js','text/javascript'],
+    ['/console/transport-console.js','text/javascript'],
     ['/console/relay-model.js','text/javascript'],
     ['/console/style.css','text/css']
   ] as const)) {
