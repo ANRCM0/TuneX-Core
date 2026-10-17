@@ -167,6 +167,8 @@
         <p id="path-switch-state" class="hint" role="status"></p><pre id="path-switch-record" class="plan-output" aria-label="Historical provenance or durable acceptance; not deployment success"></pre>
         <p class="hint">路径展开不变时可只接受来源绑定而不创建 Operation；每规则最多 64 条不可变绑定记录，普通停用/删除不消耗该配额。未知提交仅显式重放原键与原请求，不替换 CAS/修订、不重新预检后自动发新命令。丢弃只清理标签页记忆，不能撤销远端提交。</p>
         <div class="actions"><button id="path-switch-references" type="button" class="secondary">Preview Current References</button></div>
+        <div class="actions"><span id="path-switch-batch-selection" class="hint">0 / 10 selected from this path impact page</span><button id="path-switch-batch-prepare" type="button" class="secondary" disabled>Prepare Explicit Path Batch</button></div>
+        <p class="hint">只选当前影响页最多十条变化；固定模板修订、摘要、配置和每条 CAS。批次逐条独立接受，可能中断、部分失败或不确定，不是跨规则原子切换。</p>
         <div class="table-wrap inner-table"><table><thead><tr><th>Forward / CAS</th><th>Current Binding</th><th>Exact Target Impact</th><th>Explicit Selection</th></tr></thead><tbody id="path-switch-rows"></tbody></table></div>
         <div class="pagination"><button id="path-switch-prev" type="button" class="secondary" disabled>Previous References</button><span id="path-switch-page"></span><button id="path-switch-next" type="button" class="secondary" disabled>Next References</button></div>
       </section>
@@ -298,7 +300,7 @@
   <p id="rule-command-state" class="hint" role="status" aria-live="polite"></p>
   <label class="check"><input id="rule-command-consent" type="checkbox">我确认提交本次固定命令；接受逐项结果与部分失败。不确定结果仅重放原键 / 原请求，不自动刷新 revision 或换键。</label>
   <div class="actions"><button id="rule-command-start" type="button" disabled>Send Explicit Commands</button><button id="rule-command-stop" type="button" class="secondary" disabled>停止本地派发</button></div>
-  <p class="hint">单请求最多 5 秒；Profile 批次每项先做只读计划检查，再独立更新。预检不确定尚未发送意图，停止尾部并需显式重查原方案；更新响应不确定可能已提交，只能确认后重放原键/原请求，不重查并替换命令。停止/关闭/断开只影响本地，不能取消、回滚或撤销远程执行。Control 最终裁决。</p>
+  <p class="hint">单请求最多 5 秒；Profile / 路径批次每项先做只读计划检查，再独立更新。路径批次还重新核对原路径提案；只改变路径/Profile，保留目标、监听和启用意图。可能中断、TCP 有界排空、UDP 丢包。预检不确定尚未发送意图，停止尾部并需显式重查原方案；更新响应不确定可能已提交，只能确认后重放原键/原请求，不重查并替换命令。停止/关闭/断开只影响本地，不能取消、回滚或撤销远程执行。Control 最终裁决。</p>
 </dialog>
 </body>
 </html>

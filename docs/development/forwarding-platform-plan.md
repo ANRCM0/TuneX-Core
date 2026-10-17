@@ -159,7 +159,11 @@ QUIC、逐跳混合承载、UDP 混淆、透明代理延后；现有多跳仍使
 模板展开与原 Forward CAS/原执行准备/资源/Operation/来源记录同事务提交，展开不变可只绑定不重启。
 普通拓扑变化解除当前来源指针并留历史，模板发布/归档不隐式改规则；Console 逐条显式确认原预检/命令。
 新增迁移 0019 与独立 Control-only 兼容 Profile；本批仅静态检查，无 exact-SHA Actions。
-**C1 仍未验收完成**：多规则路径显式逐条发布和冻结源码验收仍待后续；切换中断时长未实测。
+随后按 [ADR-0025](../decisions/0025-explicit-path-batches.md) 补
+[有界多规则显式路径发布](../spec/path-publication-v1.md)：当前影响页最多十条固定目标/配置/CAS，
+复用原队列逐条重查路径提案和原 Relay 计划，再独立提交原绑定命令；未知写入仅同键重放，不重查替换或自动继续尾部。
+新增队列/选择回归和同一 3/4/8 Agent 浏览器部分失败/真实切换/丢回执重放接线，仍仅静态检查。
+**C1 仍未验收完成**：冻结源码 exact-SHA Actions 和组合复核待执行；切换中断时长/UDP 损失未实测。
 
 新增应用层 `PathTemplate` 及不可变 revision：有序 Node、Endpoint/Profile 引用、
 能力要求、摘要；规则绑定明确的模板 revision，同时保存展开后的实际 ForwardSpec。

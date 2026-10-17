@@ -6,12 +6,13 @@ import { withBrowser } from './probe-console.ts';
 import type { ConsoleFixture } from './probe-console.ts';
 import { verifyPathTemplateConsole } from './path-template-console.ts';
 import { verifyPathSwitchConsole } from './path-switch-console.ts';
+import { verifyPathBatchConsole } from './path-batch-console.ts';
 
 interface MultihopConsoleFixture extends ConsoleFixture {
-    sourceId: string; revision: number; spec: ForwardSpec; profile: RelayProfileConfig; copyPort: number;
+    sourceId: string; revision: number; spec: ForwardSpec; profile: RelayProfileConfig; copyPort: number; batchPort: number;
     traffic(port: number): Promise<void>;
     closed(port: number): Promise<void>;
-    slots(id: string, retained: boolean): Promise<void>;
+    slots(id: string, retained: boolean, businessPort?: number): Promise<void>;
     onlySourceReservations(): Promise<void>;
 }
 
@@ -175,6 +176,8 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
 
         const pathSwitch = await verifyPathSwitchConsole(page, context, { ...fixture, copyId: copy.forwardId,
             revision: enable.revision, spec: { ...expected, enabled: true }, succeeded });
+        const pathBatch = await verifyPathBatchConsole(page, context, { ...fixture, copyId: copy.forwardId,
+            revision: pathSwitch.revision, spec: { ...expected, enabled: true }, succeeded });
         await fixture.slots(copy.forwardId, true); await fixture.traffic(fixture.spec.ingress.listen.port);
         await page.locator('[data-view="forwards"]').click();
 
@@ -182,8 +185,8 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         const [disabled] = await Promise.all([
             page.waitForResponse(response => new URL(response.url()).pathname === copyPath && response.request().method() === 'PUT'), rowToggle.click()
         ]);
-        assert.equal(disabled.status(), 202); assert.deepEqual(disabled.request().postDataJSON(), { expectedRevision: pathSwitch.revision, spec: expected });
-        const disable = await disabled.json(); assert.equal(disable.revision, pathSwitch.revision + 1); await succeeded(disable.operationId);
+        assert.equal(disabled.status(), 202); assert.deepEqual(disabled.request().postDataJSON(), { expectedRevision: pathBatch.revision, spec: expected });
+        const disable = await disabled.json(); assert.equal(disable.revision, pathBatch.revision + 1); await succeeded(disable.operationId);
         await fixture.closed(fixture.copyPort); await fixture.slots(copy.forwardId, true);
         await page.waitForFunction(id => document.querySelector('[data-action="forward-toggle"][data-id="' + id + '"]')?.textContent === '\u542f\u7528', copy.forwardId);
         const [deleted] = await Promise.all([
@@ -195,20 +198,20 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         await fixture.slots(copy.forwardId, false); await fixture.onlySourceReservations(); await fixture.traffic(fixture.spec.ingress.listen.port);
         const final = await get(source); assert.equal(final.desired.revision, fixture.revision); assert.deepEqual(final.desired.spec, fixture.spec);
         assert.equal((await get('transport-profiles/' + profileId)).revision, 2);
-        assert.equal(writes, 12); assert.equal(previews, 5); assert.equal(pathPreviews, 3); assert.equal(commands.some(command => command.path === sourcePath), false);
-        assert.ok(commands.every(command => command.key)); assert.equal(new Set(commands.map(command => command.key)).size, 11);
+        assert.equal(writes, 16); assert.equal(previews, 8); assert.equal(pathPreviews, 7); assert.equal(commands.some(command => command.path === sourcePath), false);
+        assert.ok(commands.every(command => command.key)); assert.equal(new Set(commands.map(command => command.key)).size, 14);
         assert.deepEqual(commands.filter(command => command.path === sourcePath || command.path === copyPath || command.path === base+'forwards' || command.path === base+'transport-profiles/'+profileId).map(command => command.method), ['PUT', 'POST', 'PUT', 'PUT', 'DELETE']);
         const templates = await verifyPathTemplateConsole(page, context, fixture, path, profileId);
         await fixture.onlySourceReservations(); await fixture.traffic(fixture.spec.ingress.listen.port);
         const afterTemplates = await get(source);
         assert.equal(afterTemplates.desired.revision, fixture.revision); assert.deepEqual(afterTemplates.desired.spec, fixture.spec);
         assert.equal((await get('transport-profiles/' + profileId)).revision, 2);
-        assert.equal(writes, 17); assert.equal(previews, 5); assert.equal(pathPreviews, 3); assert.equal(new Set(commands.map(command => command.key)).size, 15);
+        assert.equal(writes, 21); assert.equal(previews, 8); assert.equal(pathPreviews, 7); assert.equal(new Set(commands.map(command => command.key)).size, 18);
         assert.equal(commands.some(command => command.path === sourcePath), false);
         return { browser: 'Chromium', nodeCount: path.length, topology: 'independent real Linux Agent processes on one host',
             physicalHostAcceptance: false, defaultOffOptIn: true, profileCurrentRevision: 2, retainedProfileRevision: 1,
             sourceUnchanged: true, orderedPathRetained: true, draftInvalidation: path.length > 3 ? 'transit-reorder-and-restore' : 'target-edit-and-restore',
             freshPlanChecks: previews, pathProposals: pathPreviews, explicitIntentAttempts: writes, disabledCopy: true, disabledResourcesRetained: true,
-            tcpUdpVerifiedForSourceAndCopy: true, copyCleanupVerified: true, pathSwitch: pathSwitch.evidence, templates };
+            tcpUdpVerifiedForSourceAndCopy: true, copyCleanupVerified: true, pathSwitch: pathSwitch.evidence, pathBatch: pathBatch.evidence, templates };
     });
 }

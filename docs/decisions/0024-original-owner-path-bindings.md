@@ -107,4 +107,5 @@ same key/body, verifies real TCP/UDP, explicitly restores the original path and
 archives without changing its expanded rule. Source intent/resources are checked
 independently. Local validation is static only; no exact-SHA acceptance, physical
 host proof, measured interruption bound, C1 acceptance or project completion is
-claimed. Multi-rule path publication remains a separate bounded follow-up.
+claimed. The bounded multi-rule follow-up is implemented separately in
+[ADR-0025](0025-explicit-path-batches.md), still awaiting exact-SHA acceptance.

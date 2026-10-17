@@ -271,3 +271,112 @@ test('a rejected replay cannot erase uncertainty about the original committed-or
     assert.match(h.el('command-rows').children[0].children[2].textContent, /Original outcome remains unknown/);
   }
 });
+
+function pathProposal(count=2){
+  return {templateId:'saved',targetRevision:2,configDigest:'sha256:'+'c'.repeat(64),profileDigest,
+    config:{version:1,nodes:['node-a','node-b'],protocols:['tcp'],endpoints:[{nodeId:'node-b',revision:1}],transport:{profileId:'p1',configRevision:2}},
+    items:profileProposal(count).items.map(row=>{
+      const spec={...row.spec,path:{via:['middle','node-b']}};
+      return {forwardId:row.forwardId,expectedRevision:row.expectedRevision,recoverySuspended:false,unavailableReason:null,changed:true,
+        binding:{templateId:'saved',revision:1,configDigest:'sha256:'+'b'.repeat(64)},spec,
+        proposedSpec:{...structuredClone(spec),path:{via:['node-b']},transport:{profileId:'p1',configRevision:2}}};
+    })};
+}
+function pathReply(proposal,method,resource,input){
+  if(resource==='relay-plan')return freshProfilePlan();
+  const row=proposal.items.find(row=>row.forwardId===resource.split('/')[1]);assert.ok(row);
+  const changed=JSON.stringify(row.spec)!==JSON.stringify(row.proposedSpec),target={templateId:proposal.templateId,revision:proposal.targetRevision,configDigest:proposal.configDigest};
+  if(resource.endsWith('/path-preview'))return {forwardId:row.forwardId,expectedRevision:row.expectedRevision,template:target,spec:structuredClone(row.spec),
+    proposedSpec:structuredClone(row.proposedSpec),changed,previewOnly:true,reserved:false,executionAuthorized:false,fullPlanAuthorization:false};
+  assert.equal(method,'PUT');assert.ok(resource.endsWith('/path-binding'));assert.deepEqual(input,{expectedRevision:row.expectedRevision,template:target});
+  return {forwardId:row.forwardId,revision:row.expectedRevision+(changed?1:0),operationId:changed?'operation-'+row.forwardId:null,
+    pathBinding:{...target,sequence:2,forwardRevision:row.expectedRevision+(changed?1:0),changed:true}};
+}
+
+test('ten exact path commands freeze source/target/CAS and use serial proposal + Relay plan + original binding, never ordinary PUT or a bulk API',async()=>{
+  const original=pathProposal(10),fixed=structuredClone(original),h=harness((...args)=>pathReply(fixed,...args));
+  assert.equal(h.api.pathBatch(original),true);original.targetRevision=9;original.items[0].proposedSpec.target.port=1;original.config.nodes.reverse();
+  assert.equal(h.calls.length,0);await h.send();assert.equal(h.calls.length,0);h.consent();await h.send();
+  assert.deepEqual(states(h),Array(10).fill('accepted'));assert.equal(h.calls.length,30);
+  for(let index=0;index<10;index++){
+    const [preview,plan,put]=h.calls.slice(index*3,index*3+3);
+    assert.deepEqual(preview.slice(0,2),['POST','forwards/rule-'+index+'/path-preview']);assert.equal(plan[1],'relay-plan');
+    assert.deepEqual(plan[2],fixed.items[index].proposedSpec);assert.equal(put[1],'forwards/rule-'+index+'/path-binding');
+    assert.deepEqual(preview[2],put[2]);assert.equal(put[3],'key-'+(index+1));assert.equal(Object.hasOwn(put[2],'spec'),false);
+    assert.equal(JSON.parse(h.el('command-rows').children[index].children[2].textContent).pathBinding.revision,2);
+  }
+  assert.ok(h.calls.every(call=>call[4].timeoutMs===5000));
+});
+
+test('path batch rejects mixed/unavailable/duplicate targets and any expansion changing listener, target, enabled or protocols',()=>{
+  const mutations=[p=>{p.items=[];},p=>{p.items.push(p.items[0]);},p=>{p.targetRevision=65;},p=>{p.profileDigest='unknown';},p=>{p.config.nodes.push('node-a');},
+    p=>{p.items[0].changed=false;},p=>{p.items[0].recoverySuspended=true;},p=>{p.items[0].unavailableReason='TEMPLATE_ARCHIVED';},p=>{p.items[0].binding.templateId='other';},
+    p=>{p.items[0].proposedSpec.target.port=99;},p=>{p.items[0].proposedSpec.ingress={...p.items[0].spec.ingress,listen:{port:99}};},
+    p=>{p.items[0].proposedSpec.enabled=false;},p=>{p.items[0].proposedSpec.protocols=['udp'];},p=>{p.items[0].spec.ingress.nodeId='other';},
+    p=>{p.items[0].proposedSpec.path.via=['other'];},p=>{p.items[0].proposedSpec.transport.configRevision=3;}];
+  for(const mutate of mutations){const h=harness(),p=pathProposal();mutate(p);assert.equal(h.api.pathBatch(p),false);assert.equal(h.calls.length,0);}
+  assert.equal(harness().api.pathBatch(pathProposal(11)),false);
+});
+
+test('new path provenance with equivalent expansion returns unchanged spec and retains the original no-Operation receipt',async()=>{
+  const p=pathProposal(1);p.items[0].spec=structuredClone(p.items[0].proposedSpec);
+  const h=harness((...args)=>pathReply(p,...args));assert.equal(h.api.pathBatch(p),true);h.consent();await h.send();
+  assert.deepEqual(states(h),['unchanged']);assert.equal(h.calls.length,3);
+  const receipt=JSON.parse(h.el('command-rows').children[0].children[2].textContent);assert.equal(receipt.revision,3);assert.equal(receipt.operationId,null);assert.equal(receipt.pathBinding.changed,true);
+});
+
+test('stale CAS or withdrawn authority rejects one fresh path proposal without a binding write and permits independent later rows',async()=>{
+  for(const status of [403,409,429]){
+    const p=pathProposal(),h=harness((method,resource,...args)=>{if(resource==='forwards/rule-0/path-preview')throw Object.assign(Error('Original reference or CAS denied'),{httpStatus:status});return pathReply(p,method,resource,...args);});
+    h.api.pathBatch(p);h.consent();await h.send();assert.deepEqual(states(h),['rejected','accepted']);assert.equal(h.calls.length,4);
+    assert.equal(h.calls.filter(call=>call[1]==='forwards/rule-0/path-binding').length,0);
+  }
+});
+
+test('unknown or mismatched path proposals stop before Relay planning/writing and need explicit same-proposal recheck without changing keys',async()=>{
+  for(const mode of ['network','source','proposed','selection','flags','changed']){
+    const p=pathProposal();let first=true;
+    const h=harness((...args)=>{const value=pathReply(p,...args);if(!args[1].endsWith('/path-preview')||!first)return value;first=false;
+      if(mode==='network')throw Error('Unknown read-only proposal');if(mode==='source')value.spec.target.port=99;
+      if(mode==='proposed')value.proposedSpec.enabled=false;if(mode==='selection')value.template.revision=3;
+      if(mode==='flags')value.reserved=true;if(mode==='changed')value.changed=false;return value;});
+    h.api.pathBatch(p);h.consent();await h.send();assert.deepEqual(states(h),['preflight-failed','pending']);assert.equal(h.calls.length,1);
+    h.consent();await replay(h).listeners.click();assert.deepEqual(states(h),['accepted','pending']);assert.equal(h.calls.length,4);assert.equal(h.calls.at(-1)[3],'key-1');
+    assert.equal(h.el('command-start').disabled,true);
+  }
+});
+
+test('unknown Relay plan after a valid path proposal still writes nothing and a recheck repeats both frozen reads',async()=>{
+  const p=pathProposal();let fail=true;
+  const h=harness((...args)=>{if(args[1]==='relay-plan'&&fail){fail=false;throw Error('Plan lost');}return pathReply(p,...args);});
+  h.api.pathBatch(p);h.consent();await h.send();assert.equal(h.calls.length,2);assert.deepEqual(states(h),['preflight-failed','pending']);
+  h.consent();await replay(h).listeners.click();assert.deepEqual(h.calls.map(call=>call[1]),['forwards/rule-0/path-preview','relay-plan','forwards/rule-0/path-preview','relay-plan','forwards/rule-0/path-binding']);
+});
+
+test('lost path write and current replay denial keep uncertainty; only the exact original binding request replays without either preview',async()=>{
+  const p=pathProposal();let writes=0;
+  const h=harness((...args)=>{if(args[0]==='PUT'){writes++;if(writes===1)throw Error('Committed response lost');if(writes===2)throw Object.assign(Error('Current scope denied'),{httpStatus:403});}return pathReply(p,...args);});
+  h.api.pathBatch(p);h.consent();await h.send();assert.deepEqual(states(h),['uncertain','pending']);
+  h.consent();await replay(h).listeners.click();assert.deepEqual(states(h),['uncertain','pending']);h.consent();await replay(h).listeners.click();
+  assert.deepEqual(states(h),['accepted','pending']);assert.equal(h.calls.length,5);for(const call of h.calls.slice(3))assert.deepEqual(call.slice(0,4),h.calls[2].slice(0,4));
+  assert.equal(h.el('command-start').disabled,true);h.consent();await h.send();assert.deepEqual(states(h),['accepted','accepted']);assert.equal(h.calls.at(-1)[3],'key-2');
+});
+
+test('malformed path binding receipts, wrong target or unexpected Operation stay uncertain rather than becoming a substitute update',async()=>{
+  for(const mutate of [r=>{delete r.pathBinding;},r=>{r.pathBinding.sequence=65;},r=>{r.pathBinding.revision=3;},r=>{r.pathBinding.configDigest='unknown';},
+    r=>{r.pathBinding.forwardRevision=99;},r=>{r.revision=3;r.operationId=null;}]){
+    const p=pathProposal(1),h=harness((...args)=>{const value=pathReply(p,...args);if(args[0]==='PUT')mutate(value);return value;});
+    h.api.pathBatch(p);h.consent();await h.send();assert.deepEqual(states(h),['uncertain']);assert.equal(h.calls.length,3);
+  }
+});
+
+test('stop/disconnect during either path preflight cannot dispatch late writes; stop during binding retains uncertainty and blocks tail',async()=>{
+  for(const phase of ['forwards/rule-0/path-preview','relay-plan','forwards/rule-0/path-binding'])for(const disconnect of [false,true]){
+    const p=pathProposal();let release;
+    const h=harness((...args)=>args[1]===phase?new Promise(resolve=>{release=()=>resolve(pathReply(p,...args));}):pathReply(p,...args));
+    h.api.pathBatch(p);h.consent();const sending=h.send();while(!release)await new Promise(resolve=>setImmediate(resolve));
+    if(disconnect)h.api.clear();else h.el('command-stop').listeners.click();const count=h.calls.length;
+    assert.equal(h.calls.at(-1)[4].signal.aborted,true);release();await sending;assert.equal(h.calls.length,count);
+    if(disconnect)assert.equal(h.el('command-dialog').open,false);else assert.deepEqual(states(h),[phase.endsWith('/path-binding')?'uncertain':'preflight-failed','pending']);
+  }
+});

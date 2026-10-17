@@ -34,5 +34,7 @@ Native path metadata authoring (immutable revisions, exact references and archiv
 is implemented separately from executable rules:
 [PathTemplate v1](docs/spec/native-path-templates-v1.md).
 [Exact bindings, bounded reference impact and explicit single-rule switching](docs/spec/native-path-bindings-v1.md)
-now enter the original Forward acceptance transaction. Multi-rule path
-publication and exact-commit Actions acceptance remain pending.
+now enter the original Forward acceptance transaction.
+[Bounded explicit multi-rule path publication](docs/spec/path-publication-v1.md)
+reuses the original independent per-rule queue. Exact-commit Actions acceptance
+and measured switching interruption remain pending.

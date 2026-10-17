@@ -169,4 +169,6 @@ independent and cleanup still uses original CAS/Operations.
 All new functional scenarios are authored, not executed locally or exact-SHA
 acceptance. Single-host Agent processes do not prove physical-host/public NAT,
 long-run or measured interruption bounds. Multi-rule explicit path publication
-is still a bounded follow-up; C1 acceptance and whole-project delivery remain open.
+is now authored through the [bounded original queue](path-publication-v1.md),
+still pending exact-SHA functional acceptance. C1 acceptance and whole-project
+delivery remain open.

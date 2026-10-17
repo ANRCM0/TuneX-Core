@@ -158,7 +158,7 @@ export function initPathTemplates({request,byId,notify,document=globalThis.docum
   clear();return {list,inspect,capture,clear};
 }
 
-export function initPathSwitch({request,byId,notify,document=globalThis.document,confirm=globalThis.confirm,randomUUID=()=>crypto.randomUUID()}) {
+export function initPathSwitch({request,byId,notify,preparePathBatch,document=globalThis.document,confirm=globalThis.confirm,randomUUID=()=>crypto.randomUUID()}) {
   const el=name=>byId('path-switch-'+name),fields=['forward','expected','template','revision'];
   const counter=value=>/^[1-9][0-9]*$/.test(value)&&Number.isSafeInteger(Number(value));
   const clone=value=>JSON.parse(JSON.stringify(value));
@@ -166,6 +166,7 @@ export function initPathSwitch({request,byId,notify,document=globalThis.document
     Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(canonical(value[k]))]))):value);
   const equal=(a,b)=>canonical(a)===canonical(b);
   let epoch=0,version=0,listVersion=0,page=1,total=0,locked=null,proposal=null,pending=null,sending=false;
+  const selected=new Map(),checkboxes=new Set();let batchTarget=null;
   const controllers=new Set();
   async function call(method,path,body,key) {
     const controller=new AbortController();controllers.add(controller);
@@ -173,15 +174,21 @@ export function initPathSwitch({request,byId,notify,document=globalThis.document
   }
   const state=message=>{el('state').textContent=message;};
   const resource=forward=>'forwards/'+encodeURIComponent(forward);
+  function selectionState(){
+    el('batch-selection').textContent=selected.size+' / 10 selected from this path impact page';
+    el('batch-prepare').disabled=Boolean(pending)||!selected.size||!batchTarget||typeof preparePathBatch!=='function';
+  }
+  function clearSelection(){selected.clear();for(const box of checkboxes)box.checked=false;selectionState();}
   function controls() {
     for(const name of fields)el(name).disabled=Boolean(pending);
     for(const name of ['lock','current','prepare','references'])el(name).disabled=Boolean(pending);
     el('submit').disabled=sending||(!proposal&&!pending);el('discard').disabled=!pending;
     el('submit').textContent=pending?'Replay Same Path Command':'Apply Explicit Path';
+    selectionState();
   }
-  function clearRows() {listVersion++;el('rows').replaceChildren();el('page').textContent='';el('prev').disabled=el('next').disabled=true;}
+  function clearRows() {listVersion++;batchTarget=null;clearSelection();checkboxes.clear();el('rows').replaceChildren();el('page').textContent='';el('prev').disabled=el('next').disabled=true;}
   function invalidate(target=false) {
-    if(pending)return;version++;proposal=null;el('proposal').textContent='';el('record').textContent='';
+    if(pending)return;version++;proposal=null;clearSelection();el('proposal').textContent='';el('record').textContent='';
     if(target){locked=null;el('digest').value='';clearRows();}
     state('Prepare an exact, non-reserving path proposal. No automatic publication or switch.');controls();
   }
@@ -245,7 +252,7 @@ export function initPathSwitch({request,byId,notify,document=globalThis.document
     try {
       if(!confirm(replay?'Replay only the original path key/body, without replacing CAS, template or plan? A current denial cannot disprove the original commit.':
         'Apply this exact template through the original Forward update? Interruption is possible, TCP drain is bounded, UDP may lose associations/datagrams. No automatic rollback.'))return;
-      if(!pending){pending={...clone(proposal),key:randomUUID(),sent:false};version++;listVersion++;}
+      if(!pending){pending={...clone(proposal),key:randomUUID(),sent:false};version++;clearRows();}
       const original=pending;sending=true;controls();
       if(!replay){
         state('Checking the fresh original Relay plan; no path command sent yet.');
@@ -276,22 +283,32 @@ export function initPathSwitch({request,byId,notify,document=globalThis.document
     }}
   }
   async function references() {
-    if(pending)return;const connection=epoch,token=++listVersion,requestedPage=page;
-    el('rows').replaceChildren();el('prev').disabled=el('next').disabled=true;
+    if(pending)return;clearRows();const connection=epoch,token=listVersion,requestedPage=page;
     try {
       const target=selection(),value=await call('GET','path-templates/'+encodeURIComponent(target.templateId)+'/references?page='+page+'&limit=25&targetRevision='+target.revision);
       if(connection!==epoch||token!==listVersion||pending)return;
       if(value.templateId!==target.templateId||value.page!==requestedPage||value.limit!==25||value.reserved!==false||value.executionAuthorized!==false||
           value.fullPlanAuthorization!==false||!Number.isSafeInteger(value.total)||value.total<0||!Array.isArray(value.items)||value.items.length>25||
+          value.previewOnly!==true||typeof value.archived!=='boolean'||!equal(value.target?.config,locked.config)||
           !equal({templateId:value.target?.templateId,revision:value.target?.revision,configDigest:value.target?.configDigest},target)||
           new Set(value.items.map(item=>item.forwardId)).size!==value.items.length||value.items.some(item=>!id(item.forwardId)||
             !Number.isSafeInteger(item.expectedRevision)||item.expectedRevision<1||typeof item.recoverySuspended!=='boolean'||
             !number(String(item.binding?.revision))||item.binding.templateId!==target.templateId||!hash(item.binding.configDigest)))throw Error('Invalid bounded current reference page.');
-      total=value.total;el('rows').replaceChildren();
+      total=value.total;batchTarget=value.archived?null:{...target,targetRevision:target.revision,profileDigest:locked.profileDigest,config:clone(locked.config)};el('rows').replaceChildren();
       for(const item of value.items){
         const row=document.createElement('tr');
         for(const text of [item.forwardId+' @ '+item.expectedRevision,'template r'+item.binding.revision,
           item.unavailableReason??(item.changed?'explicit change available':'unchanged path/provenance')]){const cell=document.createElement('td');cell.textContent=text;row.append(cell);}
+        const box=document.createElement('input');box.type='checkbox';
+        box.setAttribute('aria-label','Select Path Impact Forward '+item.forwardId);
+        box.disabled=!batchTarget||item.changed!==true||item.recoverySuspended!==false||item.unavailableReason!==null||!item.proposedSpec;
+        box.addEventListener('change',()=>{
+          if(connection!==epoch||token!==listVersion||pending||box.disabled){box.checked=false;return;}
+          if(!box.checked)selected.delete(item.forwardId);
+          else if(selected.size>=10){box.checked=false;notify('Select at most 10 changes from this current path impact page.',true);}
+          else selected.set(item.forwardId,clone(item));
+          selectionState();
+        });checkboxes.add(box);row.children[0].append(box);
         const cell=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Select Current CAS';
         button.disabled=Boolean(item.unavailableReason)||item.recoverySuspended||!item.proposedSpec;
         button.addEventListener('click',()=>{if(connection!==epoch||token!==listVersion||pending||button.disabled)return;
@@ -300,7 +317,16 @@ export function initPathSwitch({request,byId,notify,document=globalThis.document
       }
       el('page').textContent='Page '+page+' / total '+total+'. Current desired references only; not history or global snapshot.';
       el('prev').disabled=page<=1;el('next').disabled=page>=Math.min(10000,Math.max(1,Math.ceil(total/25)));
+      selectionState();
     }catch(error){if(connection===epoch&&token===listVersion){el('page').textContent='References unavailable.';notify(error.message,true);}}
+  }
+  async function prepareBatch(){
+    if(pending||!batchTarget||!selected.size||typeof preparePathBatch!=='function')return;
+    const connection=epoch,token=listVersion;
+    try{
+      const prepared=await preparePathBatch(clone({...batchTarget,items:[...selected.values()]}));
+      if(prepared&&connection===epoch&&token===listVersion){clearRows();invalidate();}
+    }catch(error){if(connection===epoch&&token===listVersion)notify(error.message,true);}
   }
   for(const name of fields)for(const event of ['input','change'])el(name).addEventListener(event,()=>invalidate(['template','revision'].includes(name)));
   for(const [name,action] of [['lock',lock],['current',current],['prepare',prepare],['submit',submit],['references',()=>{page=1;return references();}]])el(name).addEventListener('click',action);
@@ -311,5 +337,6 @@ export function initPathSwitch({request,byId,notify,document=globalThis.document
     state('Explicit single-rule path switch. Same ingress/protocols; target, listener and enabled intent remain unchanged.');
   }
   el('discard').addEventListener('click',()=>{if(pending&&confirm('Discard local path-command memory? This cannot cancel or roll back a committed switch.'))clear();});
-  clear();return {lock,current,prepare,submit,references,clear};
+  el('batch-prepare').addEventListener('click',prepareBatch);
+  clear();return {lock,current,prepare,submit,references,prepareBatch,clear};
 }

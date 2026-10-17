@@ -24,8 +24,9 @@ Control/Agent fixture after replay and grant-recovery checks, before source
 offline deletion. The one-day disposable CA exception is confined to the test
 browser context. This is not production TLS verification or physical-host proof.
 
-The browser fixture grants only ingress an additional business port and gives
-every downstream Node four internal TCP ports: two per dual-protocol Forward.
+The browser fixture grants only ingress two additional business ports and gives
+every downstream Node six internal TCP ports: two per dual-protocol Forward,
+supporting source/copy plus one separately cleaned disabled path-batch reference.
 Selections are distinct within this fixture, bounded to 128 attempts each; this
 does not promise OS availability or reserve ports before original acceptance.
 
@@ -121,13 +122,20 @@ It creates only [immutable template metadata](../spec/native-path-templates-v1.m
 
 This adds exactly five metadata attempts (including one deliberate same-key
 replay), four distinct keys and two bounded captures. With the separate path
-flow, the combined browser session has seventeen intent attempts, fifteen
-distinct keys, five original Relay plan POSTs and three path proposal POSTs.
+and multi-rule path flows, the combined browser session has 21 intent attempts,
+18 distinct keys, eight original Relay plan POSTs and seven path proposal POSTs.
+Nine separate original API fixture setup/race/cleanup writes are not browser attempts.
 `console.templates` records only successful metadata assertions, with explicit
 non-authority flags. Port/UI regressions and real MySQL concurrent CAS/quota /
 SELECT-only history run separately. Original-owner bindings/impact/single-rule
-switches are covered by the separate flow above; multi-rule path publication and
-C1 acceptance remain pending.
+switches are covered by the separate flow above. The
+[explicit multi-rule path flow](../spec/path-publication-v1.md) adds two current
+references, frozen CAS race with independent partial acceptance, a real short
+path, new-revision explicit restoration, committed-response loss/replay with
+blocked tail, then newly confirmed metadata-only provenance. The extra disabled
+Forward never opens business listeners; original delete releases its resources.
+Source spec/revision/traffic remain independently checked. C1 acceptance remains
+pending; these are authored scenarios, not executed results or interruption bounds.
 
 ## Evidence and Remaining Gates
 
@@ -141,7 +149,7 @@ browser evidence. Failure or cleanup error never becomes a successful report.
 Upload adds only `.artifacts/multihop/**/console-multihop-*.png` to the existing
 evidence allowlist. Screenshots cover desktop/390px copy plans, disabled transit
 references, active deployment, shortened path/mobile switching state and
-desktop/390px immutable template inspection.
+desktop/390px immutable template inspection and path-batch partial/uncertain/mobile states.
 No browser trace, HAR, PKI, token or protected
 Agent state is uploaded by this addition; the pre-existing failure report policy
 is unchanged. Browser credentials remain tab-memory-only and the shared helper

@@ -365,7 +365,7 @@ const transportConsole=initTransportConsole({request,notify,byId,detail,edit:ite
 const ruleConsole=initRuleConsole({request,notify,byId,refresh:()=>Promise.all([load('forwards'),load('operations'),loadOverview()])});
 const tunnelConsole=initTunnelConsole({request,notify,byId,deployment:id=>relayConsole.deployment(id)});
 const pathTemplates=initPathTemplates({request,notify,byId});
-const pathSwitch=initPathSwitch({request,notify,byId});
+const pathSwitch=initPathSwitch({request,notify,byId,preparePathBatch:proposal=>ruleConsole.pathBatch(proposal)});
 function clearConnectionData() {
   connectionVersion++;
   for (const key of Object.keys(readVersions)) readVersions[key]++;

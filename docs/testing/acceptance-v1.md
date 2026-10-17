@@ -143,5 +143,16 @@ not satisfy independent physical-host, public-network or long-run release gates.
 不可变来源历史和归档不撤销展开规则，再用返回的当前 CAS 完成原停用/删除/安全资源清理。
 来源不取代原 Forward/Runtime 授权；没有新 Core/Agent/机器协议/Journal。
 本机仅静态检查，所有新功能/数据库/浏览器/网络断言未执行，无本批 exact-SHA Actions。
-多规则路径发布、切换中断时间/UDP 损失测量、C1 冻结源码验收及遥测/运维交付仍待后续；
+多规则路径发布接线见下一节；切换中断时间/UDP 损失测量、C1 冻结源码验收及遥测/运维交付仍待后续；
 同宿主真实进程不能替代物理多主机、公网/NAT 或长周期门槛。
+
+## 10. 多规则显式路径发布
+
+[路径发布 v1](../spec/path-publication-v1.md) 的 9 组队列/4 组选择回归已接既有 web glob，
+检查当前页上限、固定目标/源/配置/CAS、逐条双预检/原绑定命令、部分拒绝、未知预检/未知写入差异、
+原键重放、尾部新确认、来源无部署更新与三阶段停止/断开。功能测试未在本机运行。
+原 [3/4/8 Agent Chromium](native-multihop-console.md) 加双引用与显式夹具 CAS 竞态、
+真实短路径 TCP/UDP、新修订恢复、已提交回执丢失后同键重放不继续尾部、再确认来源无部署更新，
+以及第三条停用夹具规则原删除/资源回收。API 夹具命令与浏览器尝试独立计数；截图仍受原 allowlist 限制。
+无新迁移/协议/Journal/恢复变化，本批仅静态检查，未取得 exact-SHA Actions、实测切换中断/UDP 损失或物理主机证据。
+C1、B1/P1 和整个项目尚未验收完成，不能将“已接线”当作“已执行”。

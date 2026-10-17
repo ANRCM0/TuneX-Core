@@ -47,8 +47,9 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
     const body = el('rule-command-rows'); body.replaceChildren();
     for (const row of plan.rows) {
       const tr = node('tr'), expected = node('td', row.forwardId + ' / expected r' + row.expectedRevision);
-      const frozen = node('details'), summary = node('summary', row.method + ' / ' + (row.preflight ? 'Profile ' + row.preflight.profileId + ' -> locked r' + row.preflight.revision : row.input.spec ? 'desired enabled=' + row.input.spec.enabled : 'explicit retry'));
-      frozen.append(summary, node('pre', JSON.stringify(row.input, null, 2))); expected.append(frozen);
+      const frozen = node('details'), summary = node('summary', row.method + ' / ' + (row.pathTarget ? 'Path ' + row.pathTarget.templateId + ' -> locked r' + row.pathTarget.revision : row.preflight ? 'Profile ' + row.preflight.profileId + ' -> locked r' + row.preflight.revision : row.input.spec ? 'desired enabled=' + row.input.spec.enabled : 'explicit retry'));
+      frozen.append(summary, node('pre', JSON.stringify(row.pathTarget ? { command: row.input, sourceSpec: row.sourceSpec, proposedSpec: row.proposedSpec,
+        interruption: 'possible-same-listener-replacement', tcp: 'bounded-drain-or-authorization-deadline', udp: 'associations-may-reset-and-lose-datagrams' } : row.input, null, 2))); expected.append(frozen);
       if (row.preflight) expected.append(node('p', row.check ? 'Fresh plan checked / NOT reserved or authorization for this later update: ' + JSON.stringify(row.check) :
         'Fresh per-rule plan required before the first write. Unknown write replay retains the original key/body, without substituting another plan.'));
       const state = node('td', row.state), result = node('td', row.result ? JSON.stringify(row.result) : row.error || 'Not sent');
@@ -104,6 +105,39 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
       show('Explicit Profile ' + target.profileId + ' -> r' + target.revision + ' / Independent Rule Updates', rows); return true;
     } catch (error) { notify(error.message, true); return false; }
   }
+  function pathBatch(proposal) {
+    try {
+      const config = proposal?.config;
+      if (!id(proposal?.templateId) || !revision(proposal.targetRevision) || proposal.targetRevision > 64 ||
+          !/^sha256:[a-f0-9]{64}$/.test(proposal.configDigest) || !/^sha256:[a-f0-9]{64}$/.test(proposal.profileDigest) ||
+          !Array.isArray(config?.nodes) || config.nodes.length < 2 || config.nodes.length > 8 || config.nodes.some(value => !id(value)) ||
+          new Set(config.nodes).size !== config.nodes.length || !Array.isArray(config.protocols) || !config.protocols.length || config.protocols.length > 2 ||
+          config.protocols.some(value => !['tcp', 'udp'].includes(value)) || new Set(config.protocols).size !== config.protocols.length ||
+          !id(config.transport?.profileId) || !revision(config.transport.configRevision) ||
+          !Array.isArray(proposal.items) || !proposal.items.length || proposal.items.length > 10 ||
+          new Set(proposal.items.map(item => item.forwardId)).size !== proposal.items.length)
+        throw Error('Select 1 to 10 available changes from one exact current path impact page.');
+      const target = Object.freeze({ templateId: proposal.templateId, revision: proposal.targetRevision, configDigest: proposal.configDigest });
+      const preflight = Object.freeze({ profileId: config.transport.profileId, revision: config.transport.configRevision, configDigest: proposal.profileDigest });
+      const rows = proposal.items.map(item => {
+        if (!id(item.forwardId) || !revision(item.expectedRevision) || item.recoverySuspended !== false || item.changed !== true || item.unavailableReason !== null ||
+            item.binding?.templateId !== target.templateId || !revision(item.binding.revision) || item.binding.revision > 64 || !/^sha256:[a-f0-9]{64}$/.test(item.binding.configDigest) ||
+            item.spec?.ingress?.nodeId !== config.nodes[0] || !Array.isArray(item.spec.protocols) ||
+            JSON.stringify([...item.spec.protocols].sort()) !== JSON.stringify([...config.protocols].sort()) || typeof item.spec.enabled !== 'boolean')
+          throw Error('Invalid, unavailable or recovery-suspended path impact; query a fresh page.');
+        const sourceSpec = clone(item.spec), proposedSpec = { ...clone(item.spec), path: { via: [...config.nodes.slice(1)] }, transport: clone(config.transport) };
+        if (JSON.stringify(ordered(item.proposedSpec)) !== JSON.stringify(ordered(proposedSpec))) throw Error('Path publication may change only the exact path/Profile; target, listener and enabled intent must stay unchanged.');
+        const specChanged = JSON.stringify(ordered(sourceSpec)) !== JSON.stringify(ordered(proposedSpec));
+        if (!specChanged && item.binding.revision === target.revision && item.binding.configDigest === target.configDigest)
+          throw Error('This path binding is already at the exact target.');
+        return { forwardId: item.forwardId, expectedRevision: item.expectedRevision, method: 'PUT', resource: 'forwards/' + encodeURIComponent(item.forwardId) + '/path-binding',
+          input: { expectedRevision: item.expectedRevision, template: target }, key: newKey(), state: 'pending', result: null, error: '',
+          sourceSpec, proposedSpec, specChanged, pathTarget: target, preflight, check: null };
+      });
+      if (!discard()) return false;
+      show('Explicit Path ' + target.templateId + ' -> r' + target.revision + ' / Independent Rule Updates', rows); return true;
+    } catch (error) { notify(error.message, true); return false; }
+  }
   async function retry(operationId) {
     let version = generation;
     try {
@@ -131,7 +165,15 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
       (row.sourceOperationId ? result.sourceOperationId !== row.sourceOperationId || result.revision !== row.expectedRevision || !result.operationId :
         result.revision !== row.expectedRevision + (result.operationId === null ? 0 : 1)))
       throw Error('Unrecognized acceptance; query the known rule and replay only this same command.');
+    if (row.pathTarget) {
+      const binding = result.pathBinding, target = row.pathTarget;
+      if (result.revision !== row.expectedRevision + (row.specChanged ? 1 : 0) || (result.operationId !== null) !== row.specChanged ||
+          binding?.templateId !== target.templateId || binding.revision !== target.revision || binding.configDigest !== target.configDigest ||
+          !revision(binding.sequence) || binding.sequence > 64 || !revision(binding.forwardRevision) || binding.forwardRevision > result.revision || typeof binding.changed !== 'boolean')
+        throw Error('Unrecognized path receipt; original outcome remains uncertain.');
+    }
     return { forwardId: result.forwardId, revision: result.revision, operationId: result.operationId,
+      ...(row.pathTarget ? { pathBinding: clone(result.pathBinding) } : {}),
       ...(row.sourceOperationId ? { sourceOperationId: row.sourceOperationId } : {}) };
   }
   async function dispatch(onlyRow) {
@@ -150,7 +192,19 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
         row.state = row.preflight && !replay ? 'checking' : 'sending'; row.error = ''; render();
         try {
           if (row.preflight && !replay) {
-            const checked = await request('POST', 'relay-plan', clone(row.input.spec), undefined, { signal: abort.signal, timeoutMs: 5000 });
+            if (row.pathTarget) {
+              const preview = await request('POST', 'forwards/' + encodeURIComponent(row.forwardId) + '/path-preview', clone(row.input), undefined, { signal: abort.signal, timeoutMs: 5000 });
+              if (version !== generation || current !== plan) return;
+              abort.signal.throwIfAborted();
+              if (stopped) throw Error('Local dispatch stopped');
+              if (preview?.forwardId !== row.forwardId || preview.expectedRevision !== row.expectedRevision || preview.previewOnly !== true ||
+                  preview.reserved !== false || preview.executionAuthorized !== false || preview.fullPlanAuthorization !== false || preview.changed !== row.specChanged ||
+                  JSON.stringify(ordered(preview.template)) !== JSON.stringify(ordered(row.pathTarget)) ||
+                  JSON.stringify(ordered(preview.spec)) !== JSON.stringify(ordered(row.sourceSpec)) ||
+                  JSON.stringify(ordered(preview.proposedSpec)) !== JSON.stringify(ordered(row.proposedSpec)))
+                throw Error('Fresh path proposal differs from the frozen command; no intent sent. Recheck explicitly, never replace CAS or target.');
+            }
+            const checked = await request('POST', 'relay-plan', clone(row.pathTarget ? row.proposedSpec : row.input.spec), undefined, { signal: abort.signal, timeoutMs: 5000 });
             if (version !== generation || current !== plan) return;
             abort.signal.throwIfAborted();
             if (checked?.reserved !== false || checked.executionSupported !== false || checked.runtimeEnabled !== true || checked.profile?.profileId !== row.preflight.profileId ||
@@ -202,5 +256,5 @@ export function initRuleConsole({ request, notify, byId, refresh, document: dom 
   el('rule-command-close').addEventListener('click', close);
   el('rule-command-dialog').addEventListener('cancel', close);
   selectionState();
-  return { page, checkbox, batch, profileBatch, retry, clear };
+  return { page, checkbox, batch, profileBatch, pathBatch, retry, clear };
 }

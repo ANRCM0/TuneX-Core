@@ -7,6 +7,7 @@ class Element {
   append(...values){this.children.push(...values);}
   replaceChildren(...values){this.children=[...values];}
   addEventListener(event,fn){this.listeners[event]=fn;}
+  setAttribute(name,value){this[name]=value;}
 }
 const hash='sha256:'+'a'.repeat(64),profileDigest='sha256:'+'b'.repeat(64);
 const config=()=>({version:1,nodes:['ingress','egress'],protocols:['tcp','udp'],endpoints:[{nodeId:'egress',revision:2}],transport:{profileId:'profile',configRevision:1}});
@@ -26,14 +27,14 @@ function handler(method,path){
   if(path==='relay-plan')return plan();
   if(method==='PUT')return acceptance();
   if(path==='forwards/forward/path-binding')return {forwardId:'forward',revision:4,deleting:false,recoverySuspended:false,binding:null,history:[],reserved:false,executionAuthorized:false};
-  if(path.startsWith('path-templates/path/references?'))return {...preview(),templateId:'path',target:{...selection(),config:config()},page:Number(new URLSearchParams(path.split('?')[1]).get('page')),limit:25,total:26,
+  if(path.startsWith('path-templates/path/references?'))return {...preview(),templateId:'path',archived:false,target:{...selection(),config:config()},page:Number(new URLSearchParams(path.split('?')[1]).get('page')),limit:25,total:26,
     items:[{forwardId:'forward',expectedRevision:4,binding:{...selection(),revision:1},spec:spec(),proposedSpec:proposed(),changed:true,unavailableReason:null,recoverySuspended:false}]};
   throw Error('Unexpected request '+method+' '+path);
 }
-function harness(run=handler,confirm=()=>true){
+function harness(run=handler,confirm=()=>true,preparePathBatch){
   const elements=new Map(),calls=[],notices=[];let keys=0;
   const byId=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
-  const api=initPathSwitch({byId,document:{createElement:()=>new Element()},confirm,randomUUID:()=>`key-${++keys}`,
+  const api=initPathSwitch({byId,document:{createElement:()=>new Element()},confirm,preparePathBatch,randomUUID:()=>`key-${++keys}`,
     request:async(...args)=>{calls.push(args);return run(...args);},notify:(...args)=>notices.push(args)});
   const el=name=>byId('path-switch-'+name),click=name=>el(name).listeners.click();
   const draft=()=>{el('forward').value='forward';el('expected').value='4';el('template').value='path';el('revision').value='2';};
@@ -132,4 +133,63 @@ test('current provenance lookup only fills explicit CAS; invalid identities/exac
   assert.equal(h.calls.length,1);
   const denied=harness(handler,()=>false);await denied.ready();await denied.click('submit');assert.equal(denied.writes().length,0);
   assert.equal(denied.calls.some(([,path])=>path==='relay-plan'),false);
+});
+
+const boxes=element=>element.children.flatMap(child=>[child,...boxes(child)]).filter(child=>child.type==='checkbox');
+test('path impact selects at most ten detached current-page rows and preparation transfers no hidden command',async()=>{
+  let received;
+  const h=harness((method,path,...args)=>{
+    const value=handler(method,path,...args);
+    if(path.includes('/references?'))value.items=Array.from({length:11},(_,i)=>({...value.items[0],forwardId:'forward-'+i}));
+    return value;
+  },()=>true,value=>{received=value;return true;});
+  h.draft();await h.api.lock();await h.api.references();
+  for(const box of boxes(h.el('rows'))){box.checked=true;box.listeners.change();}
+  assert.equal(boxes(h.el('rows')).at(-1).checked,false);assert.match(h.el('batch-selection').textContent,/10 \/ 10/);
+  const before=h.calls.length;await h.click('batch-prepare');assert.equal(h.calls.length,before);
+  assert.equal(received.items.length,10);assert.equal(received.targetRevision,2);assert.equal(received.configDigest,hash);
+  assert.equal(received.profileDigest,profileDigest);assert.deepEqual(received.config,config());
+  assert.equal(received.items[0].expectedRevision,4);assert.equal(h.el('batch-prepare').disabled,true);assert.equal(h.el('rows').children.length,0);
+});
+
+test('path selection refuses unchanged, suspended, archived and unavailable rows, and malformed config never offers selection',async()=>{
+  for(const mode of ['unchanged','suspended','archived','unavailable','config']){
+    let prepared=0;
+    const h=harness((method,path,...args)=>{
+      const value=handler(method,path,...args);if(!path.includes('/references?'))return value;
+      if(mode==='unchanged')value.items[0].changed=false;
+      if(mode==='suspended')value.items[0].recoverySuspended=true;
+      if(mode==='archived')value.archived=true;
+      if(mode==='unavailable')value.items[0].unavailableReason='UNSUPPORTED_CAPABILITY';
+      if(mode==='config')value.target.config.nodes=['ingress','other'];
+      return value;
+    },()=>true,()=>{prepared++;return true;});
+    h.draft();await h.api.lock();await h.api.references();
+    for(const box of boxes(h.el('rows'))){assert.equal(box.disabled,true);box.checked=true;box.listeners.change();}
+    await h.api.prepareBatch();assert.equal(prepared,0);assert.equal(h.el('batch-prepare').disabled,true);assert.equal(h.writes().length,0);
+  }
+});
+
+test('page, target edits, failed refresh and disconnect invalidate detached path selection controls',async()=>{
+  for(const mode of ['page','edit','failure','disconnect']){
+    let failRead=false,prepared=0;
+    const h=harness((method,path,...args)=>{if(failRead&&path.includes('/references?'))throw fail(403);return handler(method,path,...args);},
+      ()=>true,()=>{prepared++;return true;});
+    h.draft();await h.api.lock();await h.api.references();const old=boxes(h.el('rows'))[0];old.checked=true;old.listeners.change();
+    if(mode==='page')await h.click('next');
+    if(mode==='edit'){h.el('revision').value='3';h.el('revision').listeners.input();}
+    if(mode==='failure'){failRead=true;await h.click('references');}
+    if(mode==='disconnect')h.api.clear();
+    old.checked=true;old.listeners.change();assert.equal(old.checked,false);await h.api.prepareBatch();assert.equal(prepared,0);
+    assert.equal(h.el('batch-prepare').disabled,true);assert.equal(h.writes().length,0);
+  }
+});
+
+test('a declined queue discard retains current impact selection, but later input cannot mutate its detached proposal',async()=>{
+  let received;
+  const h=harness(handler,()=>true,value=>{received=value;return false;});h.draft();await h.api.lock();await h.api.references();
+  const box=boxes(h.el('rows'))[0];box.checked=true;box.listeners.change();await h.api.prepareBatch();
+  assert.equal(h.el('batch-prepare').disabled,false);assert.equal(box.checked,true);
+  h.el('revision').value='3';h.el('revision').listeners.input();assert.equal(received.targetRevision,2);assert.deepEqual(received.items[0].proposedSpec,proposed());
+  assert.equal(h.el('batch-prepare').disabled,true);
 });

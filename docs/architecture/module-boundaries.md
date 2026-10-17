@@ -143,4 +143,12 @@ its three original metadata tables. Reference/proposal reads never accept an
 Operation or reserve resources. See [binding contract](../spec/native-path-bindings-v1.md)
 for no-op attachment, bounded history, archive/recovery and Console uncertainty.
 
+[ADR-0025](../decisions/0025-explicit-path-batches.md) reuses the same tab-local
+rule queue for at most ten exact path proposals from one current impact page.
+Each first write rechecks the original path proposal and Relay plan, then calls
+the independently authorized original binding command. No Bulk API, persistent
+coordinator, cross-rule transaction, extra writer or execution authority is added.
+Unknown writes replay only the original command; acceptance is not deployment
+or health. See [explicit path publication](../spec/path-publication-v1.md).
+
 

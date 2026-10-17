@@ -780,3 +780,14 @@ Core ForwardSpec 仍只保存实际展开路径，不增加模板 ID、第二 Ru
 迁移 0019 与 `adp3-path-bindings-v1` 扩展 Control 读者上界；Agent/Journal/高水位不变。
 端口、UI、真实 MySQL 并发 CAS/配额/回滚/SELECT-only 与 3/4/8 Agent 真实浏览器缩短/显式恢复路径接线均未执行。
 本机仅静态检查，无 exact-SHA Actions；多规则路径发布、C1 验收、中断测量、遥测及交付仍待推进，不宣称项目完成。
+
+## 30. 第二十九批：原命令队列的有界路径逐条发布
+
+[ADR-0025](../decisions/0025-explicit-path-batches.md) 的
+[路径发布 v1](../spec/path-publication-v1.md) 固定当前影响页最多十条源/目标配置、模板摘要与独立 CAS/键。
+每项首次派发先重查原路径提案和 Relay 计划，再用原 `/path-binding` 独立接受；没有 Bulk、持久批次或新执行器。
+未知预检不发意图，未知写入只同键同请求重放、不重新预检替换或自动继续尾部；部分拒绝不冒充原子事务。
+新队列/选择回归和原 3/4/8 Agent Chromium 双引用/外部 CAS 竞态/真实短路径/提交丢回执/尾部新确认/来源无部署更新已接线。
+原夹具增加第三条停用规则并安全清理，API 夹具写者与浏览器尝试分开计数，源规则不变。
+没有 Core、Runtime owner、Agent、机器协议、数据库迁移、Journal 或恢复变更；本地仅静态检查，无 exact-SHA Actions。
+C1 冻结源码验收、中断/UDP 损失测量和全项目遥测/运维交付仍开放，不宣称物理主机、零停机或生产就绪。
