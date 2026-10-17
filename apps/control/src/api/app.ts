@@ -107,6 +107,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
     app.get('/console/relay.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/relay.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/probe.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/probe.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/transport-console.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/transport-console.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/rule-console.js', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/rule-console.js', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/style.css', async c => { consoleHeaders(c); return c.body(await readFile(new URL('../../../web/style.css', import.meta.url), 'utf8'), 200, { 'Content-Type': 'text/css; charset=utf-8' }); });
     app.get('/api/v1/scopes/:scope/native-drivers', async c => {
         if (new URL(c.req.url).search) invalid('Native catalog does not accept query parameters');
@@ -197,11 +198,11 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         const scopeId = scope(c.req.param('scope'));
         await control.identity.scope(tx, c.get('actor'), scopeId);
         const op = await control.ledger.get(tx, scopeId, c.req.param('id'));
-        return { id: op.id, kind: op.kind, requestedBy: op.requested_by, sourceOperationId: op.source_operation_id, status: op.status,recoveryInvalidated:Boolean(op.recovery_invalidated), targetRevision: op.target_revision, cleanupPending: Boolean(op.cleanup_pending), lastError: op.last_error };
+        return { id: op.id, forwardId: op.forward_id, kind: op.kind, requestedBy: op.requested_by, sourceOperationId: op.source_operation_id, status: op.status,recoveryInvalidated:Boolean(op.recovery_invalidated), targetRevision: op.target_revision, cleanupPending: Boolean(op.cleanup_pending), lastError: op.last_error };
     })));
     app.post('/api/v1/scopes/:scope/operations/:id/retry', async (c) => {
         const input = parseJson(await body(c.req.raw)) as Record<string, unknown>;
-        if (!input || typeof input !== 'object' || typeof input.expectedRevision !== 'number')
+        if (!input || typeof input !== 'object' || Object.keys(input).join(',') !== 'expectedRevision' || typeof input.expectedRevision !== 'number')
             invalid('expectedRevision required');
         const result = await control.retry(c.get('actor'), scope(c.req.param('scope')), c.req.header('idempotency-key'), c.req.param('id'), input.expectedRevision);
         return c.json(result.body, result.status);

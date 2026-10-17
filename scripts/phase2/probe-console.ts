@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import type { BrowserContext, Page } from 'playwright';
 
-interface ConsoleFixture { url: string; scope: string; token: string; directory: string }
+export interface ConsoleFixture { url: string; scope: string; token: string; directory: string }
 async function connect(page: Page, fixture: ConsoleFixture) {
     await page.goto(fixture.url + '/console', { waitUntil: 'networkidle' });
     await page.locator('#scope').fill(fixture.scope);
@@ -21,7 +21,7 @@ async function receipt(page: Page, id: string) {
     await page.waitForFunction(() => Boolean(document.getElementById('probe-receipt')?.textContent));
     return JSON.parse((await page.locator('#probe-receipt').textContent())!);
 }
-async function withBrowser<T>(fixture: ConsoleFixture, action: (page: Page, context: BrowserContext) => Promise<T>) {
+export async function withBrowser<T>(fixture: ConsoleFixture, action: (page: Page, context: BrowserContext) => Promise<T>) {
     if (process.platform !== 'linux' || process.env.GITHUB_ACTIONS !== 'true') throw Error('Browser acceptance is Actions-only');
     const browser = await chromium.launch({ headless: true });
     // Only this ephemeral test context ignores trust for the disposable one-day HTTPS fixture CA.

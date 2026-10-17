@@ -66,9 +66,10 @@ async function harness(handler) {
   const relay = (await readFile(new URL('../relay.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '').replace('export function', 'function');
   const probe = (await readFile(new URL('../probe.js', import.meta.url), 'utf8')).replace('export function', 'function');
   const transport = (await readFile(new URL('../transport-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
+  const rules = (await readFile(new URL('../rule-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
   const app = (await readFile(new URL('../app.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '');
-  vm.runInContext(relay + '\n' + probe + '\n' + transport + '\n' + app + `
-    globalThis.flow={load,loadOverview,editor,refreshDirectCandidates,relayConsole,request,
+  vm.runInContext(relay + '\n' + probe + '\n' + transport + '\n' + rules + '\n' + app + `
+    globalThis.flow={load,loadOverview,editor,saveForward,action,refreshDirectCandidates,relayConsole,request,
       connect(scope='scope-a'){clearConnectionData();auth.scope=scope;auth.token='x'.repeat(40);},
       setPage(kind,value){page[kind]=value;},setFilters(kind,value){filters[kind]=value;},
       candidates,page,store,clearConnectionData};
@@ -99,6 +100,67 @@ test('scope-wide overview and candidate selectors do not depend on filtered list
   await h.flow.refreshDirectCandidates();
   assert.equal(h.elements.get('forward-node').value, 'outside-page');
   assert.equal(h.elements.get('forward-port').value, '25565');
+});
+
+test('Direct copy is a detached, disabled new spec requiring an explicit listen port, never a source update', async () => {
+  const h = await harness((resource, options) => {
+    if (options.method === 'POST') return { forwardId: 'copy', revision: 1, operationId: 'create-copy' };
+    if (resource.startsWith('nodes/candidates')) return page([node('node-a')]);
+    if (resource === 'overview') return { nodes: 1, forwards: 2, activeOperations: 0, failedOperations: 0 };
+    return page();
+  });
+  h.flow.connect();
+  const original = { id: 'source', revision: 6, appliedGeneration: 50, health: 'healthy', spec: { enabled: true, protocols: ['tcp'],
+    ingress: { nodeId: 'node-a', listen: { address: '127.0.0.1', port: 25565 } }, target: { host: '127.0.0.1', port: 80 } } };
+  await h.flow.editor(original, true);
+  const fields = h.elements.get('forward-form').elements;
+  assert.equal(fields.namedItem('enabled').checked, false); assert.equal(h.elements.get('forward-node').disabled, false);
+  assert.equal(h.elements.get('forward-port').value, '');
+  assert.equal(h.calls.some(call => call.options.method !== 'GET'), false);
+  h.elements.get('forward-port').value = '25565';
+  await h.flow.saveForward({ preventDefault() {} });
+  const sent = h.calls.filter(call => call.options.method === 'POST'); assert.equal(sent.length, 1);
+  assert.equal(sent[0].resource, 'forwards');
+  const body = JSON.parse(sent[0].options.body); assert.equal(body.enabled, false);
+  assert.deepEqual(Object.keys(body).sort(), ['enabled', 'ingress', 'protocols', 'target']);
+  assert.equal(original.spec.enabled, true); assert.equal(original.revision, 6);
+});
+
+test('Relay copy keeps the immutable Profile lock and path but requires fresh preview and creates disabled intent', async () => {
+  const declarations = JSON.parse(await readFile(new URL('../../../packages/contracts/data/native-drivers-v1.json', import.meta.url), 'utf8'));
+  const h = await harness((resource, options) => {
+    if (resource === 'execution-capabilities') return { multihopEnabled: true };
+    if (resource === 'native-drivers') return { ...declarations, source: 'declared-native-implementation', authorized: false, reserved: false };
+    if (resource === 'transport-profiles') return { profiles: [{ profileId: 'profile-a', currentRevision: 8 }] };
+    if (resource.startsWith('nodes/candidates')) return page([node('relay-a'), node('relay-mid'), node('relay-b')]);
+    if (resource === 'transport-profiles/profile-a?revision=2') return { profileId: 'profile-a', revision: 2, config: { driver: 'native.relay.v1', protocols: ['tcp', 'udp'] } };
+    if (resource.endsWith('/relay-endpoint')) return { revision: 1 };
+    if (resource === 'relay-plan') return { reserved: false, executionSupported: true };
+    if (resource === 'forwards' && options.method === 'POST') return { forwardId: 'copy', revision: 1, operationId: 'create-copy' };
+    if (resource === 'overview') return { nodes: 3, forwards: 2, activeOperations: 0, failedOperations: 0 };
+    if (resource.startsWith('forwards?') || resource.startsWith('operations?')) return page();
+    throw Error(resource + '/' + options.method);
+  });
+  h.flow.connect();
+  const original = { id: 'source', revision: 6, spec: { enabled: true, protocols: ['udp'],
+    ingress: { nodeId: 'relay-a', listen: { address: '127.0.0.1', port: 25565 } }, target: { host: '127.0.0.1', port: 80 },
+    path: { via: ['relay-mid', 'relay-b'] }, transport: { profileId: 'profile-a', configRevision: 2 } } };
+  await h.flow.relayConsole.copy(original);
+  assert.equal(h.calls.some(call => call.options.method !== 'GET'), false);
+  assert.equal(h.elements.get('relay-submit').disabled, true);
+  const form = h.elements.get('relay-forward-form');
+  assert.equal(form.elements.namedItem('enabled').checked, false); assert.equal(h.elements.get('relay-ingress').disabled, false);
+  assert.equal(h.elements.get('relay-listen-port').value, '');
+  h.elements.get('relay-listen-port').value = '25565';
+  await h.elements.get('relay-preview').listeners.click();
+  assert.equal(h.elements.get('relay-submit').disabled, false);
+  await form.listeners.submit({ preventDefault() {} });
+  const sent = h.calls.filter(call => call.resource === 'forwards' && call.options.method === 'POST'); assert.equal(sent.length, 1);
+  const body = JSON.parse(sent[0].options.body);
+  assert.equal(body.enabled, false); assert.deepEqual(body.path.via, ['relay-mid', 'relay-b']);
+  assert.deepEqual(body.transport, { profileId: 'profile-a', configRevision: 2 });
+  assert.equal(Object.hasOwn(body, 'id'), false); assert.equal(Object.hasOwn(body, 'revision'), false);
+  assert.equal(original.spec.enabled, true);
 });
 test('late responses cannot cross connections or overwrite a newer page', async () => {
   const pending = [];

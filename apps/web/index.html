@@ -75,7 +75,7 @@
     </section>
 
     <section id="view-forwards" class="view" hidden>
-      <div class="panel-head section-actions"><div><h2>转发管理</h2><p class="hint">创建 Direct TCP/UDP；Relay 配置可查看但暂不通过简化表单修改。</p></div><button id="show-forward-form" type="button">新建转发</button></div>
+      <div class="panel-head section-actions"><div><h2>转发管理</h2><p class="hint">Direct 使用简化表单；Relay / 多跳在链路编辑器重新预检。复制默认停用，必须另选入口端口，不继承执行或健康状态。</p></div><button id="show-forward-form" type="button">新建转发</button></div>
       <form id="forward-form" class="panel editor" hidden>
         <h3 id="forward-form-title">创建 Direct Forward</h3>
         <div class="query-controls">
@@ -104,6 +104,10 @@
         <label>业务协议<select name="protocol"><option value="">全部</option><option value="tcp">包含 TCP</option><option value="udp">包含 UDP</option><option value="both">同时包含 TCP / UDP</option></select></label>
         <button type="submit" class="secondary">应用筛选</button>
       </form>
+      <section class="panel" aria-label="当前页有界规则批次">
+        <div class="actions"><span id="rule-selection" class="hint" role="status">0 / 10 selected on this page</span><button id="rule-batch-enable" type="button" class="secondary" disabled>预览批量启用</button><button id="rule-batch-disable" type="button" class="secondary" disabled>预览批量停用</button></div>
+        <p class="hint">最多选择当前页 10 条，刷新/筛选/翻页清空选择。逐条使用原 CAS 与独立幂等键，结果可以部分失败；无跨规则原子性、自动回滚或后台重试。列表中恢复挂起的规则不纳入批次，请先走原恢复审查；页面选择不是服务端安全边界。</p>
+      </section>
       <div class="panel table-wrap"><table><thead><tr><th>入口与端口</th><th>目标</th><th>协议</th><th>期望状态</th><th>操作状态</th><th>操作</th></tr></thead><tbody id="forward-rows"><tr><td colspan="6" class="empty">连接后加载转发</td></tr></tbody></table></div>
       <div id="forwards-pagination" class="pagination"></div>
     </section>
@@ -233,6 +237,15 @@
   <div class="table-wrap inner-table"><table><thead><tr><th>Forward / Revision</th><th>当前 Profile 锁定</th><th>配置影响（非就绪）</th><th>操作</th></tr></thead><tbody id="transport-reference-rows"></tbody></table></div>
   <div class="pagination"><button id="transport-references-prev" type="button" class="secondary" disabled>上一页</button><button id="transport-references-next" type="button" class="secondary" disabled>下一页</button></div>
   <p class="hint">影响预览需 Scope 管理权限与显式 Profile Grant；不代替每个 Node Grant、目标策略、Endpoint、端口和运行状态检查，不提供跨规则原子发布或自动回滚。</p>
+</dialog>
+<dialog id="rule-command-dialog" aria-labelledby="rule-command-title">
+  <div class="dialog-title"><h2 id="rule-command-title">Explicit Rule Commands</h2><button id="rule-command-close" type="button" class="secondary">关闭本地批次</button></div>
+  <p class="hint">最多 10 条固定配置 / expectedRevision，串行提交；每条独立接受或拒绝。服务端重新核对权限、策略、资源与容量。202 仅表示持久接受，不是已生效或健康。</p>
+  <div class="table-wrap inner-table"><table><thead><tr><th>规则 / CAS</th><th>本次请求结果</th><th>回执 / 拒绝原因</th><th>显式重放</th></tr></thead><tbody id="rule-command-rows"></tbody></table></div>
+  <p id="rule-command-state" class="hint" role="status" aria-live="polite"></p>
+  <label class="check"><input id="rule-command-consent" type="checkbox">我确认提交本次固定命令；接受逐项结果与部分失败。不确定结果仅重放原键 / 原请求，不自动刷新 revision 或换键。</label>
+  <div class="actions"><button id="rule-command-start" type="button" disabled>Send Explicit Commands</button><button id="rule-command-stop" type="button" class="secondary" disabled>停止本地派发</button></div>
+  <p class="hint">单请求最多 5 秒；网络/服务端不确定响应停止后续派发，需另行确认后重放原命令。停止/关闭/断开只影响本地，可能已有远程提交，不能取消、回滚或撤销执行。失败重试还须最新失败 Operation 与当前修订匹配；Control 最终裁决。</p>
 </dialog>
 </body>
 </html>

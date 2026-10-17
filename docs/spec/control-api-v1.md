@@ -12,7 +12,7 @@
 | PUT /api/v1/scopes/{scopeId}/forwards/{id} | expectedRevision、spec（完整受控配置） | 202：forwardId、新 revision、operationId |
 | DELETE /api/v1/scopes/{scopeId}/forwards/{id} | expectedRevision | 202：forwardId、墓碑 revision、operationId |
 | GET /api/v1/scopes/{scopeId}/forwards/{id} | 无 | 200：desired、applied、health、lastOperation |
-| GET /api/v1/scopes/{scopeId}/operations/{id} | 无 | 200：状态、目标 revision、进度、错误、cleanupPending |
+| GET /api/v1/scopes/{scopeId}/operations/{id} | 无 | 200：forwardId、状态、目标 revision、进度、错误、cleanupPending |
 | POST /api/v1/scopes/{scopeId}/operations/{id}/retry | expectedRevision | 202：新 operationId、原 operationId |
 
 启用/禁用通过 PUT 修改 enabled；禁止客户端覆盖 id/scopeId/revision。非重放请求仍须先通过 expectedRevision CAS 检查；配置规范化后完全相同的 PUT 返回 200 和当前资源，不增加 revision，不创建 Operation；请求幂等记录仍须保存。DELETE 是逻辑删除并递增 revision；普通 GET 对已删除资源返回 404，清理进度通过 Operation 查询。需要导出历史信息的审计接口不属于最小 API。
@@ -57,6 +57,10 @@ succeeded 不代表最终目标持续健康。observed 超时后健康仍可变�
 失败不删除 desired、不自动回滚用户 revision，也不免除 Runtime 清理责任。TCP+UDP 局部执行成功时整体 Operation 不成功，read model 显示每协议状态与 degraded。failed 且 cleanupPending=true 是合法状态；清理任务持久化并在 Worker 重启后继续。清理超过截止应告警/人工介入，不能静默放弃或无界占用任务队列。
 
 retry 仅允许仍为当前 desired revision 的 failed Operation；创建新 Operation、记录重试来源，Forward revision 不变。已被新意图取代的旧 Operation 返回 409 `OPERATION_SUPERSEDED`。Controller 可以继续观察事实和执行清理，但 failed 目标的新主动部署尝试须有新的 Operation，不能无审计地自动恢复成成功。
+
+retry JSON 只接受 `expectedRevision` 一个字段；Operation 详情的 `forwardId` 仍经同一
+Scope 授权事务读取。Console 的复制、显式重试与当前页最多 10 条启停计划见
+[原生规则管理](native-rule-management-v1.md)：共用原逐条命令，不是跨规则原子 API。
 
 ## 4. 连续修改与删除优先
 

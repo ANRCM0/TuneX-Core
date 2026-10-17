@@ -235,7 +235,7 @@ jobs:
         run: node scripts/run-go.mjs run ./cmd/time-proof --check
       - name: Install Chromium only on the disposable browser acceptance runner
         run: npx playwright install --with-deps chromium
-      - name: Real default-off Control, desktop/mobile Console, Agent lifecycle, mTLS, MySQL and zero-payload target
+      - name: Real default-off Probe, native rule Console/CAS/retry, Agent lifecycle, mTLS, MySQL and bounded TCP fixtures
         run: npm run test:probe
       - name: Preserve only redacted Probe evidence, never test PKI or protected Agent state
         if: always()

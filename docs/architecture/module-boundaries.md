@@ -79,4 +79,15 @@ revision inside the same authorized transaction. Impact output is a proposal onl
 it never writes Forward intent, resources or the Runtime ledger. Console loading
 continues through the original editor, plan check and owner-owned CAS command.
 
+## 8. Explicit Console Native Commands
+
+[ADR-0020](../decisions/0020-explicit-native-rule-commands.md) keeps copying as an
+editor proposal and a bounded ten-rule batch as tab-local serial orchestration.
+Neither can write owner tables or bypass Forward commands. Each frozen request
+uses the original authorized transaction, CAS, independent idempotency and single
+Runtime ledger. A stopped/uncertain local dispatch is not remote rollback; retries
+require explicit consent and retain original keys/bodies. Operation detail exposes
+only its already-scope-authorized Forward identity. No durable Batch, new Agent
+command, Core selector, generic plugin interface or recovery authority is introduced.
+
 

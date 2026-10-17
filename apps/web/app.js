@@ -2,6 +2,7 @@ import { validScope, parsePorts, parseCidrs, directCapable, allowedProtocols, di
 import { initRelayConsole } from './relay.js';
 import { initProbeConsole } from './probe.js';
 import { initTransportConsole } from './transport-console.js';
+import { initRuleConsole } from './rule-console.js';
 
 const byId = id => document.getElementById(id);
 const auth = { scope: '', token: '' };
@@ -77,7 +78,11 @@ async function request(method, resource, input, stableKey, options = {}) {
   try { result = await response.json(); } catch { throw new Error('Control 返回了非 JSON 响应'); }
   if (version !== connectionVersion) throw new Error('连接已变化，已丢弃旧请求结果');
   options.signal?.throwIfAborted();
-  if (!response.ok) throw new Error(String(result.code ?? 'HTTP_' + response.status) + '：' + String(result.message ?? '请求失败'));
+  if (!response.ok) {
+    const error = new Error(String(result.code ?? 'HTTP_' + response.status) + '：' + String(result.message ?? '请求失败'));
+    error.httpStatus = response.status;
+    throw error;
+  }
   return result;
 }
 async function mutate(method, resource, input) {
@@ -175,6 +180,7 @@ function renderNodes() {
   }
 }
 function renderForwards() {
+  ruleConsole.page();
   const tbody = byId('forward-rows');
   tbody.replaceChildren();
   if (!store.forwards.length) { const tr = element('tr'); const t = cell(tr, element('span', '暂无 Forward', 'empty')); t.colSpan = 6; tbody.append(tr); }
@@ -182,6 +188,8 @@ function renderForwards() {
     const tr = element('tr');
     const a = item.spec;
     const entry = cell(tr, element('div', a.ingress.nodeId.slice(0, 13), 'mono cell-title'));
+    const select = element('label', undefined, 'check'); select.append(ruleConsole.checkbox(item), element('span', '选择'));
+    entry.append(select);
     entry.append(element('div', a.ingress.listen.address + ':' + a.ingress.listen.port, 'subline'));
     const target = cell(tr, element('div', a.target.host + ':' + a.target.port, 'cell-title'));
     target.append(element('div', 'r' + item.revision + (a.path ? ' · '+(a.path.via.length+1)+' 节点链路' : ' · Direct'), 'subline'));
@@ -193,6 +201,7 @@ function renderForwards() {
     const group = element('div', undefined, 'cell-actions');
     group.append(button('详情', 'forward-detail', item.id, 'secondary'));
     group.append(button('编辑', 'forward-edit', item.id, 'secondary'));
+    group.append(button('复制配置', 'forward-copy', item.id, 'secondary'));
     if(!a.path && a.protocols.includes('tcp'))group.append(button('TCP 探测', 'forward-probe', item.id, 'secondary'));
     if(a.path)group.append(button('部署进度', 'forward-deployment', item.id, 'secondary'));
     group.append(button(a.enabled ? '停用' : '启用', 'forward-toggle', item.id, 'secondary'), button('删除', 'forward-delete', item.id, 'secondary'));
@@ -214,6 +223,7 @@ function renderOperations() {
     cell(tr, element('span', date(item.updatedAt)));
     const last = cell(tr);
     last.append(button(item.lastError ? '查看错误' : '详情', 'operation-detail', item.id, 'secondary'));
+    if (item.status === 'failed' && !item.recoveryInvalidated) last.append(button('显式重试', 'operation-retry', item.id, 'secondary'));
     tbody.append(tr);
   }
 }
@@ -242,27 +252,28 @@ function fillCapabilities(preferred) {
   byId('forward-capabilities').textContent = node ? '可用监听地址和端口由当前 Node Policy 决定，服务端会再次检查授权、目标 CIDR 与资源独占。' : '没有具备 ADP/3 Direct 能力和有效凭据的节点；请先接入 Agent。';
   byId('save-forward').disabled = !node;
 }
-async function editor(item) {
+async function editor(item, copy = false) {
   byId('forward-form').hidden = true;
   editing = null;
   candidatePages.direct = 1;
   byId('direct-candidate-prefix').value = '';
   if (!await loadCandidates('direct', item ? [item.spec.ingress.nodeId] : [])) return;
   if (item && !candidates.direct.some(n => n.id === item.spec.ingress.nodeId)) throw new Error('当前入口节点不再具备候选资格，请检查授权、凭据和能力');
-  editing = item ?? null;
+  editing = copy ? null : item ?? null;
   const form = byId('forward-form');
   form.reset();
-  byId('forward-form-title').textContent = item ? '编辑 Direct Forward · r' + item.revision : '创建 Direct Forward';
+  byId('forward-form-title').textContent = item ? (copy ? '复制为新 Direct Forward（停用）· 来源 r' : '编辑 Direct Forward · r') + item.revision : '创建 Direct Forward';
   form.hidden = false;
   byId('forward-node').disabled = false;
   if (item) {
     if (item.spec.path) throw new Error('Relay 编辑需要完整的 Transport Profile，当前表单仅支持 Direct');
     fillNodes(item.spec.ingress.nodeId);
     fillCapabilities({ protocol: item.spec.protocols.length === 2 ? 'both' : item.spec.protocols[0], address: item.spec.ingress.listen.address, port: item.spec.ingress.listen.port });
-    byId('forward-node').disabled = true;
+    byId('forward-node').disabled = !copy;
+    if (copy) byId('forward-port').value = '';
     form.elements.namedItem('targetHost').value = item.spec.target.host;
     form.elements.namedItem('targetPort').value = String(item.spec.target.port);
-    form.elements.namedItem('enabled').checked = item.spec.enabled;
+    form.elements.namedItem('enabled').checked = copy ? false : item.spec.enabled;
   } else fillNodes();
   display('forwards');
   form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -306,9 +317,11 @@ async function action(kind, id) {
       return detail('Forward · 期望 / 应用 / 健康', record);
     }
     if (kind === 'operation-detail') return detail('Operation · ' + shortId(id), await request('GET', 'operations/' + encodeURIComponent(id)));
+    if (kind === 'operation-retry') return await ruleConsole.retry(id);
     const forward = store.forwards.find(f => f.id === id);
     if (!forward) throw new Error('Forward 列表已更新，请刷新');
     if (kind === 'forward-edit') return forward.spec.path?await relayConsole.edit(forward):await editor(forward);
+    if (kind === 'forward-copy') return forward.spec.path?await relayConsole.copy(forward):await editor(forward, true);
     if (kind === 'forward-probe') return await probeConsole.open(forward);
     if (kind === 'forward-deployment') return await relayConsole.deployment(id);
     if (kind === 'forward-toggle') {
@@ -346,6 +359,7 @@ const relayConsole=initRelayConsole({request,mutate,notify,byId,candidates,load,
   inspectProfile:profile=>transportConsole.open(profile),loadCatalog:()=>transportConsole.catalog()});
 const probeConsole=initProbeConsole({request,notify,byId,display});
 const transportConsole=initTransportConsole({request,notify,byId,detail,edit:item=>relayConsole.edit(item)});
+const ruleConsole=initRuleConsole({request,notify,byId,refresh:()=>Promise.all([load('forwards'),load('operations'),loadOverview()])});
 function clearConnectionData() {
   connectionVersion++;
   for (const key of Object.keys(readVersions)) readVersions[key]++;
@@ -365,7 +379,7 @@ function clearConnectionData() {
     byId(mode + '-candidate-page').textContent = '尚未查询候选';
     byId(mode + '-candidate-prev').disabled = byId(mode + '-candidate-next').disabled = true;
   }
-  relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); fillNodes();
+  relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); ruleConsole.clear(); fillNodes();
   renderNodes(); renderForwards(); renderOperations(); updateOverview();
 }
 async function refreshDirectCandidates() {

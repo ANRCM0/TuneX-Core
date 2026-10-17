@@ -4,3 +4,4 @@
 #view-probes .actions{flex-wrap:wrap}
 #transport-references-dialog{width:min(960px,calc(100vw - 32px))}#transport-references-dialog .actions{flex-wrap:wrap}#transport-reference-rows button{margin:3px}
 #transport-reference-title{overflow-wrap:anywhere;min-width:0}
+#rule-command-dialog{width:min(1040px,calc(100vw - 32px))}#rule-command-dialog .actions,#view-forwards>.panel>.actions{flex-wrap:wrap}#rule-command-title{overflow-wrap:anywhere;min-width:0}#rule-command-rows td{overflow-wrap:anywhere;max-width:400px}

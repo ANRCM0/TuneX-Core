@@ -13,8 +13,9 @@ import { createConnection } from 'mysql2/promise';
 import { DEFAULT_POLICY, parseRuntimeMessage } from '@tunex/contracts';
 import { startControl } from '../../apps/control/src/server.ts';
 import { newToken } from '../../apps/control/src/modules/identity.ts';
-import { json, rows } from '../../apps/control/src/infrastructure/mysql.ts';
+import { json, rows, write } from '../../apps/control/src/infrastructure/mysql.ts';
 import { issueFromConsole, verifyDisabledConsole, verifyHistoricalConsole } from './probe-console.ts';
+import { verifyRuleConsole } from './rule-console.ts';
 
 if (process.platform !== 'linux' || !process.env.GITHUB_ACTIONS || !process.env.TUNEX_TEST_DATABASE_URL)
     throw new Error('Probe combined acceptance requires disposable MySQL and a native Linux GitHub Actions runner');
@@ -34,6 +35,11 @@ let control: Awaited<ReturnType<typeof startControl>> | undefined, agent: ChildP
 let createdDatabase = false, ca: Buffer, agentArgs: string[] = [], nodeId = '', forwardId = '';
 let connections = 0, eof = 0, applicationBytes = 0;
 const sockets = new Set<Socket>();
+const ruleSockets = new Set<Socket>();
+const ruleTarget = createServer(socket => {
+    ruleSockets.add(socket); socket.on('data', bytes => socket.write(bytes)); socket.on('error', () => {});
+    socket.on('close', () => ruleSockets.delete(socket));
+});
 const target = createServer(socket => {
     connections++; sockets.add(socket);
     socket.setTimeout(3000, () => socket.destroy());
@@ -137,11 +143,14 @@ try {
     await control.close(); control = undefined; control = await startControl({ ...options, probeExecutionEnabled: true });
     await new Promise<void>(resolve => target.listen(0, '127.0.0.1', resolve));
     const targetPort = (target.address() as { port: number }).port;
-    const reservation = createServer(); await new Promise<void>(resolve => reservation.listen(0, '127.0.0.1', resolve));
-    const ingressPort = (reservation.address() as { port: number }).port;
-    await new Promise<void>(resolve => reservation.close(() => resolve()));
+    const reservations = await Promise.all(Array.from({ length: browserEnabled ? 3 : 1 }, async () => {
+        const server = createServer(); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve)); return server;
+    }));
+    const ingressPorts = reservations.map(server => (server.address() as { port: number }).port), ingressPort = ingressPorts[0]!;
+    if (browserEnabled) await new Promise<void>(resolve => ruleTarget.listen(0, '127.0.0.1', resolve));
+    await Promise.all(reservations.map(server => new Promise<void>(resolve => server.close(() => resolve()))));
     const provision = await call('POST', `/api/v1/scopes/${scope}/nodes`, { allowedListenerAddresses: ['127.0.0.1'],
-        allowedPorts: [ingressPort], egressPolicyRevision: 1, allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false });
+        allowedPorts: ingressPorts, egressPolicyRevision: 1, allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false });
     assert.equal(provision.status, 201); nodeId = provision.body.nodeId;
     agentArgs = ['--control', `https://127.0.0.1:${control.port}`, '--node', nodeId, '--ca', caCert,
         '--state', join(directory, 'agent-state'), '--journal-key', join(directory, 'secrets', 'journal.key')];
@@ -216,6 +225,15 @@ try {
     } finally { agent!.kill('SIGCONT'); }
     await sleep(3100); assert.equal(connections, stableConnections); assert.equal(applicationBytes, 0);
     passed('Explicit revocation before delivery stays closed across repeated manager requests');
+    if (browserEnabled) {
+        await verifyRuleConsole({ url: `https://127.0.0.1:${control.port}`, scope, token, directory, sourceId: forwardId,
+            listenerPorts: [ingressPorts[1]!, ingressPorts[2]!], targetPort: (ruleTarget.address() as { port: number }).port,
+            injectFailedOperation: async id => {
+                assert.equal(await write(control!.db.pool, "UPDATE operations SET status='failed',last_error=?,cleanup_pending=TRUE WHERE id=? AND status='succeeded'",
+                    [JSON.stringify({ code: 'TEST_INJECTED_FAILURE', retryable: true }), id]), 1);
+            } });
+        passed('Real Chromium copies disabled Direct rules, sends partial-CAS batches, validates actual Agent TCP bytes, replays a lost committed response with the same key and explicitly retries a fixture-injected failed Operation without changing desired revision');
+    }
     await ready(); agent!.kill('SIGSTOP');
     try {
         const blocked = await issue(); assert.equal(blocked.status, 202);
@@ -238,6 +256,8 @@ try {
 } finally {
     await stopAgent().catch(() => {});
     for (const socket of sockets) socket.destroy();
+    for (const socket of ruleSockets) socket.destroy();
+    if (ruleTarget.listening) await new Promise<void>(resolve => ruleTarget.close(() => resolve()));
     if (target.listening) await new Promise<void>(resolve => target.close(() => resolve()));
     await control?.close();
     if (createdDatabase) await admin.query(`DROP DATABASE \`${database}\``);

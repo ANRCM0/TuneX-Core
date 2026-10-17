@@ -224,18 +224,18 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
   el('multihop-add').addEventListener('click',()=>{const id=el('multihop-candidate').value;if(id&&multihopEnabled&&intermediates.length<6&&!intermediates.includes(id)){intermediates.push(id);invalidate();}});
   el('relay-cancel-edit').addEventListener('click',cancelEdit);
   function cancelEdit(){editVersion++;editing=null;pinnedProfileRevision=null;intermediates=[];el('relay-cancel-edit').hidden=true;el('relay-submit').textContent='创建链路';el('relay-ingress').disabled=false;invalidate();}
-  async function edit(item){
+  async function edit(item,copy=false){
     const version=++editVersion;
     if (!await refresh([item.spec.ingress.nodeId,...item.spec.path.via]) || version!==editVersion) return;
     if ([item.spec.ingress.nodeId,...item.spec.path.via].some(id=>!candidates.relay.some(n=>n.id===id))) throw Error('路径中存在不再具备候选资格的节点，请检查授权、凭据和能力');
-    editing={id:item.id,revision:item.revision};pinnedProfileRevision=item.spec.transport.configRevision;
+    editing=copy?null:{id:item.id,revision:item.revision};pinnedProfileRevision=item.spec.transport.configRevision;
     const form=el('relay-forward-form'),s=item.spec;
     el('relay-ingress').value=s.ingress.nodeId;el('relay-egress').value=s.path.via.at(-1);populateIngress();
-    el('relay-ingress').disabled=true;el('relay-profile-select').value=s.transport.profileId;
+    el('relay-ingress').disabled=!copy;el('relay-profile-select').value=s.transport.profileId;
     form.elements.namedItem('protocol').value=s.protocols.length===2?'both':s.protocols[0];
-    form.elements.namedItem('listenAddress').value=s.ingress.listen.address;form.elements.namedItem('listenPort').value=String(s.ingress.listen.port);
-    form.elements.namedItem('targetHost').value=s.target.host;form.elements.namedItem('targetPort').value=String(s.target.port);form.elements.namedItem('enabled').checked=s.enabled;
-    intermediates=s.path.via.slice(0,-1);el('relay-submit').textContent='更新链路 r'+item.revision;el('relay-cancel-edit').hidden=false;
+    form.elements.namedItem('listenAddress').value=s.ingress.listen.address;form.elements.namedItem('listenPort').value=copy?'':String(s.ingress.listen.port);
+    form.elements.namedItem('targetHost').value=s.target.host;form.elements.namedItem('targetPort').value=String(s.target.port);form.elements.namedItem('enabled').checked=copy?false:s.enabled;
+    intermediates=s.path.via.slice(0,-1);el('relay-submit').textContent=copy?'复制为新链路（停用）':'更新链路 r'+item.revision;el('relay-cancel-edit').hidden=false;
     invalidate();display('relay');
   }
   el('deployment-close').addEventListener('click',()=>el('deployment-dialog').close());
@@ -302,5 +302,5 @@ export function initRelayConsole({ request, mutate, notify, byId, candidates, lo
     row.append(cell);tbody.append(row);
     populateNodes();
   }
-  return {refresh,populateNodes,refreshCandidates,clear,edit,deployment};
+  return {refresh,populateNodes,refreshCandidates,clear,edit,copy:item=>edit(item,true),deployment};
 }

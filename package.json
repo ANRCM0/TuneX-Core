@@ -15,7 +15,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --test packages/core/test/*.test.ts packages/contracts/test/*.test.ts apps/control/test/*.test.ts",
-    "test:web": "node --check apps/web/app.js && node --check apps/web/model.js && node --check apps/web/relay.js && node --check apps/web/relay-model.js && node --check apps/web/probe.js && node --check apps/web/transport-console.js && node --test apps/web/test/*.test.mjs",
+    "test:web": "node --check apps/web/app.js && node --check apps/web/model.js && node --check apps/web/relay.js && node --check apps/web/relay-model.js && node --check apps/web/probe.js && node --check apps/web/transport-console.js && node --check apps/web/rule-console.js && node --test apps/web/test/*.test.mjs",
     "test:udp-smoke": "node --test scripts/manual/test/*.test.mjs",
     "test:go": "node scripts/run-go.mjs test ./...",
     "build:go": "node scripts/run-go.mjs build ./...",

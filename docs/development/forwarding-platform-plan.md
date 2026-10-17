@@ -391,5 +391,9 @@ Agent 注册表一致性回归、Scope 授权能力视图，以及 SELECT-only P
 影响预览不做 Node/端口授权或发布，仍需原计划检查与 CAS。原生目录与无引用 Profile 发布/预览也已接真实浏览器夹具，
 引用规则编辑仍需独立浏览器证据。以上均待对应提交 Actions；持久历史、其他 API 读写与遥测仍待后续切片，
 不扩展 Core 或新增驱动。
+随后按 [ADR-0020](../decisions/0020-explicit-native-rule-commands.md) 编写原编辑器配置复制、最新失败 Operation 显式重试和
+当前页最多十条串行启停；固定原配置/revision/幂等键，逐条结果，不确定提交停止并需手动同键重放。
+新增队列/复制/HTTP 回归及真实 Direct Chromium→Control→Agent→TCP、并发 CAS 部分失败、已提交响应丢失与注入失败重试接线。
+没有 durable Batch、跨规则事务或自动回滚；本机仅静态检查，Relay/多跳复制浏览器和其余隧道管理继续待补。
 此调整不取消审计与产品验收缺口；首批实现等待对应提交的 Actions，
 不自动发布或启用新能力。
