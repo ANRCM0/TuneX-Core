@@ -156,9 +156,15 @@ try {
         '--state', join(directory, 'agent-state'), '--journal-key', join(directory, 'secrets', 'journal.key')];
     await execute(binary, [...agentArgs, '--enroll'], { env: { ...process.env, TUNEX_ENROLLMENT_TOKEN: provision.body.enrollmentToken } });
     startAgent(false);
+    await until(async () => {
+        const [current] = await rows<{ session_epoch: number; facts: unknown }>(control!.db.pool,
+            'SELECT r.session_epoch,n.facts FROM nodes n JOIN runtime_nodes r ON r.node_id=n.id WHERE n.id=?', [nodeId]);
+        const facts = current ? json<{ capabilities: string[] }>(current.facts) : null;
+        return Boolean(current?.session_epoch && ['adp.3', 'native.direct.v1', 'tcp'].every(capability => facts?.capabilities.includes(capability)));
+    }, 'real Agent Hello capability publication before Direct authoring');
     const created = await call('POST', `/api/v1/scopes/${scope}/forwards`, { enabled: true, protocols: ['tcp'],
         ingress: { nodeId, listen: { address: '127.0.0.1', port: ingressPort } }, target: { host: '127.0.0.1', port: targetPort } });
-    assert.equal(created.status, 202); forwardId = created.body.forwardId;
+    assert.equal(created.status, 202, JSON.stringify(created.body)); forwardId = created.body.forwardId;
     await until(async () => (await call('GET', `/api/v1/scopes/${scope}/operations/${created.body.operationId}`)).body.status === 'succeeded', 'Direct acceptance');
     await ready();
     const browserIssue = browserEnabled ? await issueFromConsole({ url: `https://127.0.0.1:${control.port}`, scope, token, directory }, forwardId) : null;

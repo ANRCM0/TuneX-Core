@@ -14,6 +14,8 @@ import type { PathTemplateReader } from '../src/modules/path-template-ports.ts';
 import type { ForwardWriter } from '../src/modules/forwarding-ports.ts';
 import type { ForwardCommandPreparation, ForwardOperationCommands } from '../src/modules/runtime/forward-command-ports.ts';
 import { pathReferenceQuery } from '../src/api/path-template-query.ts';
+import { MySqlPathBindings } from '../src/infrastructure/mysql-path-bindings.ts';
+import type { Transaction } from '../src/infrastructure/mysql.ts';
 
 type Tx = { name: string };
 const hash = 'sha256:' + 'a'.repeat(64);
@@ -24,6 +26,32 @@ const desired = () => {
         target: { host: '127.0.0.1', port: 9000 }, path: { via: ['middle', 'egress'] }, transport: { profileId: 'profile', configRevision: 1 } });
     if (!parsed.ok) throw Error('invalid fixture'); return parsed.value;
 };
+
+test('MySQL binding sequences accept exact numeric aggregate text and retain the immutable cap before either write', async () => {
+    const record = { templateId: 'path', revision: 1, configDigest: hash, forwardRevision: 4,
+        expandedSpec: desired(), specDigest: digest(desired()), actorId: 'manager', createdAt: 1800000000000 };
+    for (const maximum of [0, '0', 1, '1', 63, '63', 64, '64', 65, '65', null, undefined, true, '', '01', '1.0', '1e1',
+        '+1', '-0', '1\n', ' 1', '-1', -1, 1.5, '1.5', NaN, Infinity, '9007199254740992']) {
+        const writes: unknown[][] = [];
+        const tx = { execute: async (sql: string, args: unknown[]) => {
+            if (sql.startsWith('SELECT')) {
+                assert.match(sql, /COALESCE\(MAX\(sequence\),0\)/); assert.deepEqual(args, ['forward']);
+                return [[{ n: maximum }], []];
+            }
+            writes.push(args); return [{ affectedRows: 1 }, []];
+        } } as unknown as Transaction;
+        const pending = new MySqlPathBindings().append(tx, 'scope', 'forward', record);
+        if ([0, '0', 1, '1', 63, '63'].includes(maximum as number | string)) {
+            const sequence = Number(maximum) + 1;
+            assert.equal((await pending).sequence, sequence); assert.equal(writes.length, 2);
+            assert.equal(writes[0]![1], sequence); assert.deepEqual(writes[1], ['forward', sequence]);
+        } else {
+            await assert.rejects(pending, { code: [64, '64', 65, '65'].includes(maximum as number | string) ? 'RESOURCE_LIMIT' : 'INTEGRITY_FAILURE' });
+            assert.equal(writes.length, 0);
+        }
+    }
+});
+
 function fixture() {
     const tx: Tx = { name: 'original-transaction' }, calls: string[] = [];
     let state = { forward: { id: 'forward', scopeId: 'scope', revision: 4, spec: desired() } as Forward,

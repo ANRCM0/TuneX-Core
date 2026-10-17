@@ -199,6 +199,14 @@ test('the per-process cooldown expires and policy cannot be weakened by mutating
     assert.equal((await host.observe('actor-a', 'scope-a', 'node-a', command)).status, 'stale');
 });
 
+const rawReportProjection = /(?:\bSELECT|,)\s*r\.last_report(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?\s*(?:,|\bFROM\b)/i;
+test('the raw-report projection guard distinguishes selected bodies from bounded JSON function arguments', () => {
+    for (const sql of ['SELECT r.last_report FROM runtime_nodes r', 'SELECT n.id,r.last_report, r.node_id FROM runtime_nodes r',
+        'SELECT n.id,r.last_report AS body FROM runtime_nodes r', 'SELECT r.last_report body FROM runtime_nodes r'])
+        assert.match(sql, rawReportProjection);
+    assert.doesNotMatch("SELECT LEFT(JSON_UNQUOTE(JSON_EXTRACT(r.last_report,'$.nodeId')),129) report_node, JSON_LENGTH(r.last_report,'$.observations') observation_count FROM runtime_nodes r", rawReportProjection);
+});
+
 function mysqlFixture(allowed = true) {
     const events: string[] = [], controller = new AbortController(), now = Date.now();
     const tx = {
@@ -211,7 +219,7 @@ function mysqlFixture(allowed = true) {
         execute: async (sql: string, args: unknown[]) => {
             events.push('read');
             assert.ok(sql.includes('n.id=? AND n.scope_id=?'));
-            assert.ok(!/\br\.last_report\s*(?:,|FROM)/.test(sql), 'raw report bodies must not be selected');
+            assert.doesNotMatch(sql, rawReportProjection, 'raw report bodies must not be selected');
             assert.deepEqual(args, ['node-a', 'scope-a']);
             return [[{ id: 'node-a', scope_id: 'scope-a', revoked: 0, credential_until: now + 60000,
                 session_epoch: 2, boot_id: 'boot-a', snapshot_generation: 3, received_at: now,

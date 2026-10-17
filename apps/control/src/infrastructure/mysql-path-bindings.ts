@@ -34,8 +34,13 @@ export class MySqlPathBindings implements PathBindingWriter<Transaction> {
             recoverySuspended: Boolean(row.recovery_suspended), binding: binding(row) })) };
     }
     async append(tx: Transaction, scope: string, forwardId: string, record: Omit<PathBindingRecord, 'sequence'>) {
-        const sequence = ((await rows<{ n: number }>(tx, 'SELECT COALESCE(MAX(sequence),0) n FROM forward_path_bindings WHERE forward_id=?', [forwardId]))[0]!.n) + 1;
-        if (!Number.isSafeInteger(sequence) || sequence > 64) throw new ControlError('RESOURCE_LIMIT', 429, 'Forward immutable path binding limit reached');
+        const maximum = (await rows<{ n: number | string }>(tx, 'SELECT COALESCE(MAX(sequence),0) n FROM forward_path_bindings WHERE forward_id=?', [forwardId]))[0]!.n;
+        // MySQL can promote COALESCE over BIGINT to DECIMAL, which mysql2 returns as text.
+        const previous = typeof maximum === 'string' && String(Number(maximum)) === maximum ? Number(maximum) : maximum;
+        if (typeof previous !== 'number' || !Number.isSafeInteger(previous) || previous < 0)
+            throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid persisted path binding sequence');
+        if (previous >= 64) throw new ControlError('RESOURCE_LIMIT', 429, 'Forward immutable path binding limit reached');
+        const sequence = previous + 1;
         await write(tx, 'INSERT INTO forward_path_bindings(forward_id,sequence,scope_id,template_id,template_revision,config_digest,forward_revision,expanded_spec,spec_digest,actor_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
             [forwardId, sequence, scope, record.templateId, record.revision, record.configDigest, record.forwardRevision, JSON.stringify(record.expandedSpec), record.specDigest, record.actorId, record.createdAt]);
         await write(tx, 'INSERT INTO current_path_bindings(forward_id,sequence) VALUES(?,?) ON DUPLICATE KEY UPDATE sequence=VALUES(sequence)', [forwardId, sequence]);

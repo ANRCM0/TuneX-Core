@@ -665,7 +665,7 @@ test('Snapshot sources share capacity and publication collection across Direct a
     assert.equal(snapshot.assignments.filter(a=>a.role==='direct').length,2);
     const stored=(await rows<{body:unknown}>(f.db.pool,'SELECT body FROM snapshots WHERE node_id=? AND generation=?',
       [ingress.nodeId,snapshot.snapshotGeneration]))[0]!;
-    assert.deepEqual(json(stored.body),snapshot);
+    assert.deepEqual(parseRuntimeMessage('Snapshot',JSON.stringify(json(stored.body))),snapshot);
     assert.equal((await rows<{n:number}>(f.db.pool,'SELECT COUNT(*) n FROM execution_leases WHERE forward_id=?',
       [accepted.body.forwardId]))[0]!.n,2);
   });

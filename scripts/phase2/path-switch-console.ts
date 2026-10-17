@@ -60,7 +60,7 @@ export async function verifyPathSwitchConsole(page: Page, context: BrowserContex
             page.waitForResponse(response => new URL(response.url()).pathname === forwardPath && response.request().method() === 'PUT'),
             page.locator('#path-switch-submit').click()
         ]);
-        assert.equal(response.status(), status); const value = await response.json();
+        const value = await response.json(); assert.equal(response.status(), status, JSON.stringify(value));
         await page.waitForFunction(() => !(document.getElementById('path-switch-forward') as HTMLInputElement).disabled);
         return value;
     }
