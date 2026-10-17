@@ -151,7 +151,9 @@ test('plan parsing rejects duplicates, unknown fields, unsafe counters, legacy p
 });
 test('known migration footprints cover tables, multi-column DDL and superseded enums', async () => {
     const catalog = await upgradeSchemaCatalog();
-    assert.equal(catalog.files.length, 18);
+    assert.equal(catalog.files.length, 19);
+    assert.ok(catalog.markers.some(m => m.migration === '0019-path-bindings.sql' && m.table === 'forward_path_bindings'));
+    assert.ok(catalog.markers.some(m => m.migration === '0019-path-bindings.sql' && m.table === 'current_path_bindings'));
     assert.ok(catalog.markers.some(m => m.migration === '0018-path-templates.sql' && m.table === 'path_templates'));
     assert.ok(catalog.markers.some(m => m.migration === '0018-path-templates.sql' && m.table === 'path_template_revisions'));
     assert.ok(catalog.markers.some(m => m.migration === '0018-path-templates.sql' && m.table === 'path_template_events'));
@@ -281,6 +283,27 @@ test('immutable path metadata requires a Control-only reader ceiling and rejects
     const columns = ['path_templates', 'path_template_revisions', 'path_template_events'].map(table => ({ table, column: 'scope_id', type: 'varchar(128)' }));
     assert.deepEqual(inspectSchema([migration], markers, columns), []);
     for (let mask = 0; mask < 7; mask++) assert.deepEqual(inspectSchema([migration], markers, columns.filter((_, index) => mask & (1 << index))), [migration]);
+    assert.deepEqual(inspectSchema([], markers, columns), [migration]);
+});
+
+test('immutable path provenance requires its own Control-only ceiling and detects partial two-table DDL', async () => {
+    const f = fixture(), migration = '0019-path-bindings.sql';
+    for (const name of ['0014-probe-instances.sql', '0015-probe-permits.sql', '0016-probe-permit-withdrawals.sql', '0017-probe-results.sql', '0018-path-templates.sql', migration]) {
+        f.inspection.schemaFiles.push({ name, sha256: 'f'.repeat(64) }); f.inspection.database.migrations.push(name);
+    }
+    f.plan.source.control.profile = 'adp3-path-bindings-v1'; f.plan.target.control.profile = 'adp3-path-bindings-v1'; f.plan.controlMultihop = true;
+    assert.equal(assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection).decision, 'compatible');
+    for (const profile of ['adp3-runtime-v1', 'adp3-multihop-v1', 'adp3-probe-registry-v1', 'adp3-probe-permits-v1', 'adp3-probe-withdrawals-v1', 'adp3-probe-results-v1', 'adp3-path-templates-v1'] as const) {
+        f.plan.target.control.profile = profile;
+        assert.ok(assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)), f.inspection).checks.some(c => c.code === 'CONTROL_SCHEMA_READER' && c.subject === 'target' && c.status === 'block'));
+    }
+    f.plan.target.agent.profile = 'adp3-path-bindings-v1'; assert.throws(() => parseUpgradePlan(JSON.stringify(f.plan)));
+    const sql = await readFile(new URL('../migrations/' + migration, import.meta.url), 'utf8');
+    assert.ok(!/--[^\r\n]*;/.test(sql)); assert.ok(!/\b(?:ALTER|UPDATE|DELETE|DROP|TRUNCATE)\b/.test(sql));
+    const markers = schemaMarkers(migration, sql);
+    const columns = ['forward_path_bindings', 'current_path_bindings'].map(table => ({ table, column: 'forward_id', type: 'varchar(128)' }));
+    assert.deepEqual(inspectSchema([migration], markers, columns), []);
+    for (let mask = 0; mask < 3; mask++) assert.deepEqual(inspectSchema([migration], markers, columns.filter((_, index) => mask & (1 << index))), [migration]);
     assert.deepEqual(inspectSchema([], markers, columns), [migration]);
 });
 

@@ -50,6 +50,8 @@ jobs:
         run: node --test apps/control/test/tunnel-query-ports.test.ts
       - name: Immutable native PathTemplate authoring, scope CAS, quota and original reference ports
         run: node --test apps/control/test/path-template-ports.test.ts
+      - name: Exact native path bindings share original Forward acceptance and retain immutable provenance
+        run: node --test apps/control/test/path-binding-ports.test.ts
       - name: Owner-owned Profile commands and Runtime grant effects
         run: node --test apps/control/test/transport-grant-ports.test.ts
       - name: Owner-owned member and Node Grant command ports
@@ -154,6 +156,8 @@ jobs:
         run: node --test apps/control/test/tunnel-query-mysql-acceptance.test.ts
       - name: PathTemplate native grants, concurrent CAS and quota, archive and SELECT-only history
         run: node --test apps/control/test/path-template-mysql-acceptance.test.ts
+      - name: Original Forward path bindings, concurrent CAS, provenance quota rollback and SELECT-only impact
+        run: node --test apps/control/test/path-binding-mysql-acceptance.test.ts
       - name: Passive observation API with SELECT-only MySQL and scoped provenance
         run: node --test apps/control/test/node-observation-mysql-acceptance.test.ts
       - name: Non-executable probe preflight with SELECT-only MySQL and current binding checks

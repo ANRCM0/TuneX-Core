@@ -126,7 +126,7 @@ test('disconnect or explicit discard aborts pending requests and ignores late ac
     if(action==='clear')h.api.clear();else await h.click('discard');
     assert.equal(h.writes()[0][4].signal.aborted,true);finish();await sending;
     assert.equal(h.el('id').value,'');assert.equal(h.el('expected').value,'0');assert.equal(h.el('id').disabled,false);
-    assert.equal(h.el('rows').children.length,0);assert.match(h.el('state').textContent,/No Forward bindings/);
+    assert.equal(h.el('rows').children.length,0);assert.match(h.el('state').textContent,/Metadata authoring only/);
   }
 });
 

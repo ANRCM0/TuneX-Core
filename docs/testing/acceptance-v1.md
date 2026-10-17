@@ -131,4 +131,17 @@ not satisfy independent physical-host, public-network or long-run release gates.
 现有 [3/4/8 Agent Chromium](native-multihop-console.md) 延伸模板元数据表单、真实提交后丢响应/原键重放、
 无变化、新修订和历史归档，并独立复查源规则、资源和实际 TCP/UDP 不变。
 迁移 0018/Control-only Profile/部分 DDL 拒绝有升级评估回归；Agent/Core/Journal 不变。
-以上待 exact-SHA Actions，不是已经执行的证据；C1 的模板规则绑定、引用影响与手动切换仍未实现。
+以上待 exact-SHA Actions，不是已经执行的证据；该首片后续的绑定/切换见下一节。
+
+## 9. 原 Forward 同事务路径绑定与显式单规则切换
+
+[路径绑定 v1](../spec/native-path-bindings-v1.md) 的 9 组端口、9 组 Console 回归、
+真实 MySQL/API 同事务 CAS 竞态/绑定配额/失败后完整回滚/SELECT-only 历史与影响，以及
+0019 Control-only 兼容读者/部分 DDL 拒绝已编写并接入原 contracts/phase1/升级作业。
+既有 [3/4/8 Agent Chromium](native-multihop-console.md) 增加原路径无部署绑定、模板发布不自动应用、
+真实两节点缩短路径、已提交丢回执后原键重放、实际 TCP/UDP、新 CAS/Operation 显式切回原路径、
+不可变来源历史和归档不撤销展开规则，再用返回的当前 CAS 完成原停用/删除/安全资源清理。
+来源不取代原 Forward/Runtime 授权；没有新 Core/Agent/机器协议/Journal。
+本机仅静态检查，所有新功能/数据库/浏览器/网络断言未执行，无本批 exact-SHA Actions。
+多规则路径发布、切换中断时间/UDP 损失测量、C1 冻结源码验收及遥测/运维交付仍待后续；
+同宿主真实进程不能替代物理多主机、公网/NAT 或长周期门槛。

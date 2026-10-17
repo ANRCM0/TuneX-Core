@@ -6,7 +6,7 @@ import { rows } from '../infrastructure/mysql.ts';
 import { consoleQuery } from './console-query.ts';
 import { transportReferenceQuery } from './transport-query.ts';
 import { tunnelReferenceQuery } from './tunnel-query.ts';
-import { pathTemplateListQuery, pathTemplateRevisionQuery } from './path-template-query.ts';
+import { pathTemplateListQuery, pathTemplateRevisionQuery, pathReferenceQuery } from './path-template-query.ts';
 import { randomUUID } from 'node:crypto';
 import { parseJson, parseRuntimeMessage, parseTransitNegotiation, parseTransitDelivery, parseProbeNegotiation, parseProbeInstance, parseProbeClaim, parseProbeDelivery, parseProbeResult } from '@tunex/contracts';
 import { TransitNegotiator } from '../modules/runtime/transit-negotiation.ts';
@@ -143,6 +143,7 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         c.get('actor'), scope(c.req.param('scope')), c.req.param('node'), tunnelReferenceQuery(new URL(c.req.url).searchParams))));
     app.put('/api/v1/scopes/:scope/nodes/:node/relay-endpoint',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='config,expectedRevision'||!isCounter(input.expectedRevision,true))invalid('Relay endpoint config and expectedRevision required');const result=await control.relayEndpoints.change(c.get('actor'),scope(c.req.param('scope')),c.req.param('node'),c.req.header('idempotency-key'),input.expectedRevision,input.config);return c.json(result.body,result.status);});
     app.get('/api/v1/scopes/:scope/path-templates', async c => c.json(await control.pathTemplateQueries.list(c.get('actor'), scope(c.req.param('scope')), pathTemplateListQuery(new URL(c.req.url).searchParams))));
+    app.get('/api/v1/scopes/:scope/path-templates/:template/references', async c => c.json(await control.pathBindings.references(c.get('actor'), scope(c.req.param('scope')), c.req.param('template'), pathReferenceQuery(new URL(c.req.url).searchParams))));
     app.get('/api/v1/scopes/:scope/path-templates/:template', async c => c.json(await control.pathTemplateQueries.get(c.get('actor'), scope(c.req.param('scope')), c.req.param('template'), pathTemplateRevisionQuery(new URL(c.req.url).searchParams))));
     app.put('/api/v1/scopes/:scope/path-templates/:template', async c => {
         if (new URL(c.req.url).search) invalid('PathTemplate mutation does not accept query parameters');
@@ -197,6 +198,22 @@ export function createApp(control: ControlApplication, runtime: RuntimeControlle
         return c.json(await control.nodes.enroll(input.nodeId as string, input.token as string, input.csr as string));
     });
     app.post('/api/v1/scopes/:scope/forwards', async (c) => { const result = await control.create(c.get('actor'), scope(c.req.param('scope')), c.req.header('idempotency-key'), parseJson(await body(c.req.raw))); return c.json(result.body, result.status); });
+    app.get('/api/v1/scopes/:scope/forwards/:id/path-binding', async c => {
+        if (new URL(c.req.url).search) invalid('Path binding lookup has no query parameters');
+        return c.json(await control.pathBindings.get(c.get('actor'), scope(c.req.param('scope')), c.req.param('id')));
+    });
+    for (const action of ['path-preview', 'path-binding'] as const) {
+        app.on(action === 'path-preview' ? 'POST' : 'PUT', '/api/v1/scopes/:scope/forwards/:id/' + action, async c => {
+            if (new URL(c.req.url).search) invalid('Path commands have no query parameters');
+            const input = parseJson(await body(c.req.raw, 1024)) as Record<string, unknown>;
+            if (!input || typeof input !== 'object' || Array.isArray(input) ||
+                Object.keys(input).sort().join(',') !== 'expectedRevision,template' || typeof input.expectedRevision !== 'number')
+                invalid('Closed expectedRevision and exact template selection required');
+            if (action === 'path-preview') return c.json(await control.pathBindings.preview(c.get('actor'), scope(c.req.param('scope') ?? ''), c.req.param('id') ?? '', input.expectedRevision, input.template));
+            const result = await control.forwards.applyPath(c.get('actor'), scope(c.req.param('scope') ?? ''), c.req.param('id') ?? '', c.req.header('idempotency-key'), input.expectedRevision, input.template);
+            return c.json(result.body, result.status);
+        });
+    }
     app.put('/api/v1/scopes/:scope/forwards/:id', async (c) => {
         const input = parseJson(await body(c.req.raw)) as Record<string, unknown>;
         if (!input || typeof input !== 'object' || Object.keys(input).sort().join(',') !== 'expectedRevision,spec' || typeof input.expectedRevision !== 'number')

@@ -18,6 +18,8 @@
 | [Explicit Profile publication v1](spec/profile-publication-v1.md) | 当前影响页最多十条固定修订，逐条新预检与原 CAS/幂等更新；部分失败与不确定重放，非原子发布 |
 | [Native PathTemplate metadata v1](spec/native-path-templates-v1.md) | C1 首片不可变路径/精确 Endpoint 与 Profile 锁版、CAS 配额/归档；不创建绑定或切换，待 Actions |
 | [ADR-0023](decisions/0023-immutable-native-path-metadata.md) | 路径元数据归属、原引用授权、升级恢复和后续同事务 Forward 绑定边界 |
+| [Native path bindings v1](spec/native-path-bindings-v1.md) | 精确模板绑定/有界来源历史与引用影响，单规则显式切换走原 Forward 同事务接受；待 Actions |
+| [ADR-0024](decisions/0024-original-owner-path-bindings.md) | 原 Forward 接受与路径来源原子保存、无变化绑定、配额/归档/恢复和切换限制 |
 | [Deployment Protocol v2](protocol/agent-deployment-v2.md) | Snapshot / Assignment / Observation / 租约与版本 |
 | [Runtime & Agent v1](spec/runtime-agent-v1.md) | 部署状态机、双节点编排、故障恢复 |
 | [模块边界](architecture/module-boundaries.md) | 模块拥有者、同步调用、持久化所有权 |

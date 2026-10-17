@@ -33,5 +33,6 @@ No physical-host or production-readiness result is implied.
 Native path metadata authoring (immutable revisions, exact references and archive)
 is implemented separately from executable rules:
 [PathTemplate v1](docs/spec/native-path-templates-v1.md).
-Rule bindings, reference impact and manual switching remain next C1 work;
-this slice has no exact-commit Actions acceptance yet.
+[Exact bindings, bounded reference impact and explicit single-rule switching](docs/spec/native-path-bindings-v1.md)
+now enter the original Forward acceptance transaction. Multi-rule path
+publication and exact-commit Actions acceptance remain pending.

@@ -2,13 +2,15 @@ import { decideForwardChange, isCounter, isId, MAX_COUNTER, parseForwardSpec } f
 import type { Forward } from '@tunex/core';
 import { ControlError, invalid } from './errors.ts';
 import { requestIdentity } from './command-request.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from './ports.ts';
+import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary, RequestIdentity } from './ports.ts';
 import type { ForwardWriter } from '../modules/forwarding-ports.ts';
 import type { ForwardCommandPreparation, ForwardOperationCommands } from '../modules/runtime/forward-command-ports.ts';
+import { parsePathSelection } from '../modules/path-binding-contract.ts';
+import type { ForwardPathBindings, PathBindingReceipt, PathSelection } from '../modules/path-binding-ports.ts';
 
 export interface ForwardAccepted {
     status: 200 | 202;
-    body: { forwardId: string; revision: number; operationId: string | null; sourceOperationId?: string };
+    body: { forwardId: string; revision: number; operationId: string | null; sourceOperationId?: string; pathBinding?: PathBindingReceipt };
 }
 
 function revision(value: number): void {
@@ -23,14 +25,15 @@ export class ForwardCommands<Tx> {
     private readonly operations: ForwardOperationCommands<Tx>;
     private readonly execution: ForwardCommandPreparation<Tx>;
     private readonly newId: () => string;
+    private readonly paths: ForwardPathBindings<Tx> | undefined;
 
     constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, idempotency: IdempotentRequests<Tx>,
         forwarding: ForwardWriter<Tx>, operations: ForwardOperationCommands<Tx>, execution: ForwardCommandPreparation<Tx>,
-        newId: () => string) {
+        newId: () => string, paths?: ForwardPathBindings<Tx>) {
         for (const method of ['prepareCreate', 'planCreate', 'prepareUpdate', 'planUpdate', 'lock', 'lockRemoval', 'prepareRetry', 'assertCapacity'] as const)
             if (typeof execution?.[method] !== 'function') throw new Error('Forward execution preparation is required');
         this.db = db; this.identity = identity; this.idempotency = idempotency; this.forwarding = forwarding;
-        this.operations = operations; this.execution = execution; this.newId = newId;
+        this.operations = operations; this.execution = execution; this.newId = newId; this.paths = paths;
     }
 
     async create(actorId: string, scopeId: string, key: string | undefined, input: unknown): Promise<ForwardAccepted> {
@@ -71,24 +74,51 @@ export class ForwardCommands<Tx> {
             const decision = decideForwardChange(current, expectedRevision, { kind: 'replace', spec });
             if (!decision.ok) throw new ControlError(decision.errors[0]!.code, 409, decision.errors[0]!.message);
             const next = decision.value;
-            const recoverySuspended = next.spec.ingress.nodeId !== current.spec.ingress.nodeId ?
-                (await this.forwarding.record(tx, scopeId, id)).recoverySuspended : false;
-            await this.execution.prepareUpdate(tx, actorId, current, next, recoverySuspended);
-            if (next.revision === current.revision) {
-                const response: ForwardAccepted = { status: 200, body: { forwardId: id, revision: current.revision, operationId: null } };
-                await this.idempotency.respond(tx, request, response);
-                return response;
-            }
+            return this.acceptUpdate(tx, actorId, current, next, request);
+        });
+    }
+
+    async applyPath(actorId: string, scopeId: string, id: string, key: string | undefined, expectedRevision: number,
+        input: unknown): Promise<ForwardAccepted> {
+        revision(expectedRevision);
+        if (!isId(id)) invalid('Valid Forward ID required');
+        const selection = parsePathSelection(input);
+        const paths = this.paths; if (!paths) throw new Error('Original path binding preparation is required');
+        const request = requestIdentity(actorId, scopeId, key, 'PUT', `/api/v1/scopes/${scopeId}/forwards/${id}/path-binding`, { expectedRevision, template: selection });
+        return this.db.transaction(async tx => {
+            await this.identity.scope(tx, actorId, scopeId, true);
+            const replay = await this.idempotency.claim<ForwardAccepted>(tx, request); if (replay) return replay;
+            const current = await this.forwarding.currentForUpdate(tx, scopeId, id);
+            if (current.revision !== expectedRevision || (await this.forwarding.record(tx, scopeId, id)).recoverySuspended)
+                throw new ControlError('REVISION_CONFLICT', 409, 'Forward changed or recovery suspended');
+            const spec = await paths.resolve(tx, actorId, current, selection);
+            const decision = decideForwardChange(current, expectedRevision, { kind: 'replace', spec });
+            if (!decision.ok) throw new ControlError(decision.errors[0]!.code, 409, decision.errors[0]!.message);
+            return this.acceptUpdate(tx, actorId, current, decision.value, request, selection);
+        });
+    }
+
+    private async acceptUpdate(tx: Tx, actorId: string, current: Forward, next: Forward, request: RequestIdentity,
+        selection?: PathSelection): Promise<ForwardAccepted> {
+        const recoverySuspended = next.spec.ingress.nodeId !== current.spec.ingress.nodeId ?
+            (await this.forwarding.record(tx, current.scopeId, current.id)).recoverySuspended : false;
+        await this.execution.prepareUpdate(tx, actorId, current, next, recoverySuspended);
+        let operationId: string | null = null;
+        if (next.revision !== current.revision) {
             await this.forwarding.replace(tx, current, next);
+            if (!selection) await this.paths?.preserve(tx, current, next);
             await this.forwarding.setAuthorizer(tx, next.id, actorId);
             await this.execution.planUpdate(tx, actorId, next);
             const kind = !next.spec.enabled ? 'disable' : !current.spec.enabled ? 'enable' : 'update';
-            const operationId = await this.operations.accept(tx, next, request, kind, current.spec);
+            operationId = await this.operations.accept(tx, next, request, kind, current.spec);
             await this.execution.assertCapacity(tx, next);
-            const response: ForwardAccepted = { status: 202, body: { forwardId: id, revision: next.revision, operationId } };
-            await this.idempotency.respond(tx, request, response);
-            return response;
-        });
+        }
+        // Exact-path attachment can change provenance without restarting an unchanged Forward.
+        const pathBinding = selection ? await this.paths!.accept(tx, actorId, next, selection) : undefined;
+        const response: ForwardAccepted = { status: operationId ? 202 : 200, body: { forwardId: next.id, revision: next.revision, operationId,
+            ...(pathBinding ? { pathBinding } : {}) } };
+        await this.idempotency.respond(tx, request, response);
+        return response;
     }
 
     async remove(actorId: string, scopeId: string, id: string, key: string | undefined, expectedRevision: number): Promise<ForwardAccepted> {

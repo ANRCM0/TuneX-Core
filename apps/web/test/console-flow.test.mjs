@@ -68,9 +68,9 @@ async function harness(handler) {
   const transport = (await readFile(new URL('../transport-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
   const rules = (await readFile(new URL('../rule-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
   const tunnels = (await readFile(new URL('../tunnel-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
-  const paths = 'const initPathTemplates = (() => {\n' +
-    (await readFile(new URL('../path-templates.js', import.meta.url), 'utf8')).replace('export function', 'function') +
-    '\nreturn initPathTemplates; })();';
+  const paths = 'const { initPathTemplates, initPathSwitch } = (() => {\n' +
+    (await readFile(new URL('../path-templates.js', import.meta.url), 'utf8')).replaceAll('export function', 'function') +
+    '\nreturn { initPathTemplates, initPathSwitch }; })();';
   const app = (await readFile(new URL('../app.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '');
   vm.runInContext(relay + '\n' + probe + '\n' + transport + '\n' + rules + '\n' + tunnels + '\n' + paths + '\n' + app + `
     globalThis.flow={load,loadOverview,editor,saveForward,action,refreshDirectCandidates,relayConsole,request,

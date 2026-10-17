@@ -196,6 +196,11 @@ const portImports = new Map([
   ['modules/native-path-references.ts', ['../application/errors.ts', './node-execution-ports.ts', './transport-ports.ts', './relay-endpoint-contract.ts', './path-template-ports.ts', './path-template-contract.ts']],
   ['infrastructure/mysql-path-templates.ts', ['node:crypto', './mysql-console-read.ts', '../application/console-query.ts', '../modules/path-template-ports.ts', './mysql.ts']],
   ['api/path-template-query.ts', ['@tunex/core', '../application/errors.ts', '../application/console-query.ts']],
+  ['modules/path-binding-contract.ts', ['@tunex/core', '../application/errors.ts', './path-template-contract.ts', './path-binding-ports.ts']],
+  ['modules/path-binding-ports.ts', ['@tunex/core', '../application/console-query.ts']],
+  ['application/path-bindings.ts', ['@tunex/core', '@tunex/contracts', './console-query.ts', './errors.ts', './ports.ts', './path-templates.ts',
+    '../modules/path-binding-contract.ts', '../modules/path-binding-ports.ts', '../modules/path-template-ports.ts', '../modules/path-template-contract.ts', '../modules/forwarding-ports.ts']],
+  ['infrastructure/mysql-path-bindings.ts', ['@tunex/core', '../application/errors.ts', '../application/console-query.ts', '../modules/path-binding-ports.ts', './mysql-console-read.ts', './mysql.ts']],
   ['modules/relay-endpoint-contract.ts', ['@tunex/core', '../application/errors.ts']],
   ['api/tunnel-query.ts', ['../application/console-query.ts', '../application/tunnel-queries.ts', '../application/errors.ts']],
   ['infrastructure/mysql-tunnel-read.ts', ['@tunex/core', '../application/console-query.ts', '../application/tunnel-queries.ts', './mysql-console-read.ts', './mysql.ts']],
@@ -238,7 +243,7 @@ const portImports = new Map([
     '../modules/identity-credentials.ts', '../modules/identity-ports.ts', '../modules/node-grant-ports.ts', '../modules/runtime/access-ports.ts']],
   ['application/node-management.ts', ['@tunex/core', './errors.ts', './command-request.ts', './ports.ts',
     '../modules/node-management-ports.ts', '../modules/node-policy.ts', '../modules/runtime/node-change-ports.ts']],
-  ['application/forward-commands.ts', ['@tunex/core', './errors.ts', './command-request.ts', './ports.ts',
+  ['application/forward-commands.ts', ['@tunex/core', './errors.ts', './command-request.ts', './ports.ts', '../modules/path-binding-contract.ts', '../modules/path-binding-ports.ts',
     '../modules/forwarding-ports.ts', '../modules/runtime/forward-command-ports.ts']],
   ['api/console-query.ts', ['../application/console-query.ts', '../application/errors.ts']],
   ['modules/transport-ports.ts', ['@tunex/contracts', '../application/ports.ts']],
@@ -328,6 +333,13 @@ if (/\b(?:createPool|createConnection|fetch)\s*\(/.test(pathStore) ||
     [...pathStore.matchAll(/\b(?:INTO|UPDATE|FROM)\s+([a-z_]+)\b(?!\s*=)/g)].some(([, table]) =>
       !['path_templates', 'path_template_revisions', 'path_template_events', 'scopes'].includes(table))) {
   throw new Error('PathTemplate metadata owner may access only its supplied transaction/tables and Scope quota lock, never execution state');
+}
+const bindingStore = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-path-bindings.ts'), 'utf8');
+if (/\b(?:createPool|createConnection|fetch)\s*\(/.test(bindingStore) || /\b(?:ALTER|CREATE|DROP|TRUNCATE|REPLACE)\b/.test(bindingStore) ||
+    [...bindingStore.matchAll(/\b(?:INTO|FROM|JOIN)\s+([a-z_]+)\b/g)].some(([, table]) => !['forward_path_bindings', 'current_path_bindings', 'forwards'].includes(table)) ||
+    /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+forwards\b/.test(bindingStore) ||
+    /\b(?:UPDATE|DELETE\s+FROM)\s+forward_path_bindings\b/.test(bindingStore)) {
+  throw new Error('Path binding store must retain immutable provenance and mutate its pointer only, using the supplied original Forward transaction');
 }
 const browserOptIn = relayFixture.indexOf("const tunnelBrowser=process.env.TUNEX_TUNNEL_BROWSER==='1';");
 const browserGuard = relayFixture.indexOf("if(tunnelBrowser&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'))throw Error('Tunnel browser acceptance is Actions-only');");

@@ -152,8 +152,164 @@ export function initPathTemplates({request,byId,notify,document=globalThis.docum
     pending=null;sending=false;locks=null;stamp=null;page=1;total=0;
     for(const name of fields)el(name).value=name==='expected'?'0':name==='protocol'?'both':'';
     el('prefix').value='';el('rows').replaceChildren();el('record').textContent='';el('endpoints').textContent='';el('page').textContent='';
-    el('prev').disabled=el('next').disabled=true;controls();state('Metadata only. No Forward bindings or manual switching in this slice.');
+    el('prev').disabled=el('next').disabled=true;controls();state('Metadata authoring only. Use the separate explicit path panel for Forward bindings or switching.');
   }
   el('discard').addEventListener('click',()=>{if(pending&&confirm('Discard tab-memory command history? This cannot cancel or roll back a committed command.'))clear();});
   clear();return {list,inspect,capture,clear};
+}
+
+export function initPathSwitch({request,byId,notify,document=globalThis.document,confirm=globalThis.confirm,randomUUID=()=>crypto.randomUUID()}) {
+  const el=name=>byId('path-switch-'+name),fields=['forward','expected','template','revision'];
+  const counter=value=>/^[1-9][0-9]*$/.test(value)&&Number.isSafeInteger(Number(value));
+  const clone=value=>JSON.parse(JSON.stringify(value));
+  const canonical=value=>JSON.stringify(value&&typeof value==='object'?(Array.isArray(value)?value.map(v=>JSON.parse(canonical(v))):
+    Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(canonical(value[k]))]))):value);
+  const equal=(a,b)=>canonical(a)===canonical(b);
+  let epoch=0,version=0,listVersion=0,page=1,total=0,locked=null,proposal=null,pending=null,sending=false;
+  const controllers=new Set();
+  async function call(method,path,body,key) {
+    const controller=new AbortController();controllers.add(controller);
+    try{return await request(method,path,body,key,{signal:controller.signal,timeoutMs:5000});}finally{controllers.delete(controller);}
+  }
+  const state=message=>{el('state').textContent=message;};
+  const resource=forward=>'forwards/'+encodeURIComponent(forward);
+  function controls() {
+    for(const name of fields)el(name).disabled=Boolean(pending);
+    for(const name of ['lock','current','prepare','references'])el(name).disabled=Boolean(pending);
+    el('submit').disabled=sending||(!proposal&&!pending);el('discard').disabled=!pending;
+    el('submit').textContent=pending?'Replay Same Path Command':'Apply Explicit Path';
+  }
+  function clearRows() {listVersion++;el('rows').replaceChildren();el('page').textContent='';el('prev').disabled=el('next').disabled=true;}
+  function invalidate(target=false) {
+    if(pending)return;version++;proposal=null;el('proposal').textContent='';el('record').textContent='';
+    if(target){locked=null;el('digest').value='';clearRows();}
+    state('Prepare an exact, non-reserving path proposal. No automatic publication or switch.');controls();
+  }
+  function selection() {
+    const templateId=el('template').value.trim(),revision=el('revision').value;
+    if(!locked||locked.templateId!==templateId||!number(revision)||locked.revision!==Number(revision))throw Error('Inspect the exact target template revision first.');
+    return {templateId,revision:Number(revision),configDigest:locked.configDigest};
+  }
+  async function lock() {
+    if(pending)return;invalidate(true);const connection=epoch,current=++version;
+    try {
+      const template=el('template').value.trim(),revision=el('revision').value;
+      if(!id(template)||!number(revision))throw Error('Exact template ID and revision (1-64) required; no latest alias.');
+      const value=await call('GET','path-templates/'+encodeURIComponent(template)+'?revision='+revision);
+      if(connection!==epoch||current!==version||pending)return;
+      if(value.templateId!==template||value.revision!==Number(revision)||!Number.isSafeInteger(value.currentRevision)||
+          value.currentRevision<value.revision||value.currentRevision>64||value.archived!==false||!hash(value.configDigest)||
+          !hash(value.profileDigest)||value.executionAuthorized!==false||value.reserved!==false||value.bindingCreated!==false)
+        throw Error('Invalid or archived exact template.');
+      locked={templateId:template,revision:Number(revision),configDigest:value.configDigest,profileDigest:value.profileDigest,config:configView(value.config)};
+      el('digest').value=locked.configDigest;state('Exact immutable template inspected. Current grants, Endpoints, CAS and resources are not reserved.');
+    }catch(error){if(connection===epoch&&current===version)notify(error.message,true);}
+  }
+  async function current() {
+    if(pending)return;invalidate();const connection=epoch,token=++version;
+    try {
+      const forward=el('forward').value.trim();if(!id(forward))throw Error('Choose a Forward ID.');
+      const value=await call('GET',resource(forward)+'/path-binding');
+      if(connection!==epoch||token!==version||pending)return;
+      if(value.forwardId!==forward||!Number.isSafeInteger(value.revision)||value.revision<1||value.executionAuthorized!==false||
+          value.reserved!==false||typeof value.recoverySuspended!=='boolean'||typeof value.deleting!=='boolean')throw Error('Invalid current provenance response.');
+      el('expected').value=String(value.revision);el('record').textContent=JSON.stringify(value,null,2);
+      state('Current CAS inspected. Provenance is historical, not current execution authority'+(value.recoverySuspended?' / recovery suspended':'')+'.');
+    }catch(error){if(connection===epoch&&token===version)notify(error.message,true);}
+  }
+  async function prepare() {
+    if(pending)return;invalidate();const connection=epoch,token=++version;
+    try {
+      const forward=el('forward').value.trim(),expected=el('expected').value,target=selection(),config=clone(locked.config);
+      if(!id(forward)||!counter(expected))throw Error('Exact current Forward ID and CAS revision required.');
+      const body={expectedRevision:Number(expected),template:target};
+      const value=await call('POST',resource(forward)+'/path-preview',body);
+      if(connection!==epoch||token!==version||pending)return;
+      const spec=value.spec;
+      if(value.forwardId!==forward||value.expectedRevision!==body.expectedRevision||!equal(value.template,target)||value.reserved!==false||
+          value.executionAuthorized!==false||value.fullPlanAuthorization!==false||value.previewOnly!==true||
+          spec?.ingress?.nodeId!==config.nodes[0]||!id(spec.ingress.nodeId)||!Number.isSafeInteger(spec.ingress.listen?.port)||spec.ingress.listen.port<1||spec.ingress.listen.port>65535||
+          typeof spec.ingress.listen.address!=='string'||typeof spec.target?.host!=='string'||!Number.isSafeInteger(spec.target.port)||spec.target.port<1||spec.target.port>65535||
+          typeof spec.enabled!=='boolean'||!Array.isArray(spec.protocols)||!equal([...spec.protocols].sort(),[...config.protocols].sort()))
+        throw Error('Invalid non-reserving path preview.');
+      const proposedSpec={...spec,path:{via:config.nodes.slice(1)},transport:{...config.transport}};
+      if(!equal(value.proposedSpec,proposedSpec)||value.changed!==!equal(spec,proposedSpec))throw Error('Preview changes more than the exact path/Profile binding.');
+      proposal={forward,body:clone(body),proposedSpec:clone(proposedSpec),profileDigest:locked.profileDigest,changed:value.changed};
+      el('proposal').textContent=JSON.stringify({forwardId:forward,...body,spec,proposedSpec,reserved:false,executionAuthorized:false,
+        interruption:'possible-same-listener-replacement',tcp:'bounded-drain-or-authorization-deadline',udp:'associations-may-reset-and-lose-datagrams'},null,2);
+      state('Proposal prepared only. Apply performs a fresh original Relay plan, then independently authorized original Forward acceptance.');controls();
+    }catch(error){if(connection===epoch&&token===version){proposal=null;controls();notify(error.message,true);}}
+  }
+  async function submit() {
+    if(sending||(!pending&&!proposal))return;const connection=epoch,replay=Boolean(pending);
+    try {
+      if(!confirm(replay?'Replay only the original path key/body, without replacing CAS, template or plan? A current denial cannot disprove the original commit.':
+        'Apply this exact template through the original Forward update? Interruption is possible, TCP drain is bounded, UDP may lose associations/datagrams. No automatic rollback.'))return;
+      if(!pending){pending={...clone(proposal),key:randomUUID(),sent:false};version++;listVersion++;}
+      const original=pending;sending=true;controls();
+      if(!replay){
+        state('Checking the fresh original Relay plan; no path command sent yet.');
+        const plan=await call('POST','relay-plan',original.proposedSpec);
+        if(connection!==epoch||pending!==original)return;
+        if(plan.reserved!==false||plan.executionSupported!==false||plan.runtimeEnabled!==true||
+            plan.profile?.profileId!==original.proposedSpec.transport.profileId||plan.profile.revision!==original.proposedSpec.transport.configRevision||
+            plan.profile.configDigest!==original.profileDigest)throw Error('Fresh Relay plan does not match the exact locked Profile or runtime gate.');
+      }
+      original.sent=true;state('Sending the original same-transaction Forward/path command...');
+      const value=await call('PUT',resource(original.forward)+'/path-binding',original.body,original.key);
+      if(connection!==epoch||pending!==original)return;
+      const binding=value.pathBinding,target=original.body.template,expected=original.body.expectedRevision+(original.changed?1:0);
+      if(value.forwardId!==original.forward||value.revision!==expected||
+          (original.changed?!id(value.operationId):value.operationId!==null)||!binding||binding.templateId!==target.templateId||
+          binding.revision!==target.revision||binding.configDigest!==target.configDigest||!Number.isSafeInteger(binding.sequence)||binding.sequence<1||binding.sequence>64||
+          !Number.isSafeInteger(binding.forwardRevision)||binding.forwardRevision<1||binding.forwardRevision>value.revision||typeof binding.changed!=='boolean')
+        throw Error('Invalid path acceptance; original outcome remains uncertain.');
+      pending=null;proposal=null;sending=false;el('expected').value=String(value.revision);el('record').textContent=JSON.stringify(value,null,2);controls();
+      state(value.operationId?'Accepted original Operation '+value.operationId+'. Deployment/traffic are separate checks.':
+        'Path provenance accepted without a deployment Operation: expanded ForwardSpec is unchanged.');
+    }catch(error){if(connection===epoch){
+      sending=false;
+      if(pending&&!pending.sent){pending=null;state('Preflight failed: no path command sent. Prepare and explicitly confirm a new check.');}
+      else if(pending&&!replay&&[400,401,403,404,409,413,422,429].includes(error.httpStatus)){pending=null;state('Path command rejected. Prepare a new explicit proposal; no CAS replacement.');}
+      else if(pending)state('uncertain: original path command may have committed. Only explicit same-key/body replay remains.');
+      proposal=null;controls();notify(error.message,true);
+    }}
+  }
+  async function references() {
+    if(pending)return;const connection=epoch,token=++listVersion,requestedPage=page;
+    el('rows').replaceChildren();el('prev').disabled=el('next').disabled=true;
+    try {
+      const target=selection(),value=await call('GET','path-templates/'+encodeURIComponent(target.templateId)+'/references?page='+page+'&limit=25&targetRevision='+target.revision);
+      if(connection!==epoch||token!==listVersion||pending)return;
+      if(value.templateId!==target.templateId||value.page!==requestedPage||value.limit!==25||value.reserved!==false||value.executionAuthorized!==false||
+          value.fullPlanAuthorization!==false||!Number.isSafeInteger(value.total)||value.total<0||!Array.isArray(value.items)||value.items.length>25||
+          !equal({templateId:value.target?.templateId,revision:value.target?.revision,configDigest:value.target?.configDigest},target)||
+          new Set(value.items.map(item=>item.forwardId)).size!==value.items.length||value.items.some(item=>!id(item.forwardId)||
+            !Number.isSafeInteger(item.expectedRevision)||item.expectedRevision<1||typeof item.recoverySuspended!=='boolean'||
+            !number(String(item.binding?.revision))||item.binding.templateId!==target.templateId||!hash(item.binding.configDigest)))throw Error('Invalid bounded current reference page.');
+      total=value.total;el('rows').replaceChildren();
+      for(const item of value.items){
+        const row=document.createElement('tr');
+        for(const text of [item.forwardId+' @ '+item.expectedRevision,'template r'+item.binding.revision,
+          item.unavailableReason??(item.changed?'explicit change available':'unchanged path/provenance')]){const cell=document.createElement('td');cell.textContent=text;row.append(cell);}
+        const cell=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Select Current CAS';
+        button.disabled=Boolean(item.unavailableReason)||item.recoverySuspended||!item.proposedSpec;
+        button.addEventListener('click',()=>{if(connection!==epoch||token!==listVersion||pending||button.disabled)return;
+          invalidate();el('forward').value=item.forwardId;el('expected').value=String(item.expectedRevision);});
+        cell.append(button);row.append(cell);el('rows').append(row);
+      }
+      el('page').textContent='Page '+page+' / total '+total+'. Current desired references only; not history or global snapshot.';
+      el('prev').disabled=page<=1;el('next').disabled=page>=Math.min(10000,Math.max(1,Math.ceil(total/25)));
+    }catch(error){if(connection===epoch&&token===listVersion){el('page').textContent='References unavailable.';notify(error.message,true);}}
+  }
+  for(const name of fields)for(const event of ['input','change'])el(name).addEventListener(event,()=>invalidate(['template','revision'].includes(name)));
+  for(const [name,action] of [['lock',lock],['current',current],['prepare',prepare],['submit',submit],['references',()=>{page=1;return references();}]])el(name).addEventListener('click',action);
+  for(const [name,direction] of [['prev',-1],['next',1]])el(name).addEventListener('click',()=>{if(!el(name).disabled&&!pending){page+=direction;return references();}});
+  function clear(){
+    epoch++;version++;for(const controller of controllers)controller.abort();controllers.clear();locked=null;proposal=null;pending=null;sending=false;page=1;total=0;
+    for(const name of fields)el(name).value='';el('digest').value='';el('proposal').textContent='';el('record').textContent='';clearRows();controls();
+    state('Explicit single-rule path switch. Same ingress/protocols; target, listener and enabled intent remain unchanged.');
+  }
+  el('discard').addEventListener('click',()=>{if(pending&&confirm('Discard local path-command memory? This cannot cancel or roll back a committed switch.'))clear();});
+  clear();return {lock,current,prepare,submit,references,clear};
 }

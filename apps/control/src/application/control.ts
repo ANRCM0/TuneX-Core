@@ -55,6 +55,8 @@ import { MySqlTunnelReader } from '../infrastructure/mysql-tunnel-read.ts';
 import { PathTemplateCommands, PathTemplateQueries } from './path-templates.ts';
 import { MySqlPathTemplates } from '../infrastructure/mysql-path-templates.ts';
 import { NativePathReferences } from '../modules/native-path-references.ts';
+import { PathBindings } from './path-bindings.ts';
+import { MySqlPathBindings } from '../infrastructure/mysql-path-bindings.ts';
 /** Coordinates owner-owned commands inside one durable acceptance transaction. */
 export class ControlApplication {
     readonly forwarding = new Forwarding();
@@ -72,6 +74,7 @@ export class ControlApplication {
     readonly tunnelQueries: TunnelQueries<Transaction>;
     readonly pathTemplates: PathTemplateCommands<Transaction>;
     readonly pathTemplateQueries: PathTemplateQueries<Transaction>;
+    readonly pathBindings: PathBindings<Transaction>;
     readonly observations: NodeObservations;
     readonly probePlans: ForwardProbePlans<Transaction>;
     readonly probeNegotiation: ProbeNegotiator<Transaction>;
@@ -118,8 +121,10 @@ export class ControlApplication {
         this.transportQueries=new TransportQueries(db,identity,new MySqlTransportReader(),this.transport);
         this.relayEndpoints=new RelayEndpoints(db,identity,nodes,this.idempotency,this.forwarding);
         const pathStore=new MySqlPathTemplates();
-        this.pathTemplates=new PathTemplateCommands(db,identity,this.idempotency,pathStore,new NativePathReferences(nodes,this.transport,this.relayEndpoints));
+        const pathReferences=new NativePathReferences(nodes,this.transport,this.relayEndpoints);
+        this.pathTemplates=new PathTemplateCommands(db,identity,this.idempotency,pathStore,pathReferences);
         this.pathTemplateQueries=new PathTemplateQueries(db,identity,pathStore);
+        this.pathBindings=new PathBindings(db,identity,pathStore,pathReferences,new MySqlPathBindings(),this.forwarding);
         this.relay=new RelayCoordinator(nodes,this.forwarding,this.transport,this.relayEndpoints,this.ledger,policy,multihopEnabled);
         const execution:ForwardAuthorizationExecution<Transaction>={
             lock:(tx,forward)=>this.lockExecution(tx,forward),
@@ -133,7 +138,7 @@ export class ControlApplication {
                 lockNodes:(tx,forward)=>this.relay.lockNodes(tx,forward),
                 canExecute:(tx,actor,forward)=>this.relay.canExecute(tx,actor,forward),
                 acceptPlan:async(tx,actor,forward)=>{await this.relay.acceptPlan(tx,actor,forward);},
-            },execution),randomUUID);
+            },execution),randomUUID,this.pathBindings);
         this.profileGrants=new TransportGrantCommands(db,identity,this.idempotency,this.transport,
             new ProfileGrantReconciler(this.forwarding,execution));
         this.access=new AccessCommands(db,identity,nodes,this.idempotency,

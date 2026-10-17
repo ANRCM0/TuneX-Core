@@ -15,8 +15,8 @@ size: 3, 4 and 8 Agents. The following isolated-network step does not opt in.
 The opt-in rejects non-Linux, non-Actions and `--isolated` combinations before
 creating artifacts/PKI, opening MySQL or constructing a network lab. Default
 fixture default behavior, production feature flags, Core, machine contracts,
-Journal and Runtime authority are unchanged. The separate template metadata slice
-adds migration 0018, not another executable contract. Do not run functional acceptance on
+Journal and Runtime authority are unchanged. Separate path slices add migrations
+0018/0019 and original-owner provenance, not another executable contract. Do not run functional acceptance on
 the development workstation; use the existing Actions entry point.
 
 `scripts/phase2/multihop-console.ts` reuses `withBrowser` and the original real
@@ -51,14 +51,15 @@ does not promise OS availability or reserve ports before original acceptance.
    and reverse activation order, then verify actual TCP and UDP through both
    source and copy. The deployment query still reports `trafficVerified:false`;
    only the separate native client provides this fixture's traffic evidence.
-7. Explicitly disable with CAS r2. Wait for convergence and refuse both protocols,
-   retaining the copy's reservations. Explicitly delete with CAS r3 and wait for
+7. The separate path-switch flow below attaches the same path, switches and
+   explicitly restores it before cleanup. Explicitly disable using its returned
+   current CAS (r4), retaining the copy's reservations; then delete with CAS r5 and wait for
    safe cleanup; no owned copy slots remain and source traffic still works.
 
-These seven lifecycle stages check exactly five explicit browser intent requests
+The copy lifecycle still checks exactly five explicit browser intent requests
 (Profile/create/enable/disable/delete), two read-only plan POSTs and five distinct
-original idempotency keys before the separate metadata flow. There is no source
-update, hidden replay, bulk endpoint, automatic
+original idempotency keys, separately from the path-switch and metadata flows. There is no source
+update, hidden retry, bulk endpoint, automatic
 rollback, physical Link sharing or new execution path. Operation/readiness waits
 poll bounded conditions rather than assuming success after a fixed sleep.
 
@@ -66,6 +67,37 @@ Two additional lightweight DOM regressions cover the six-transit maximum,
 reordering/invalidation/fresh preview with a newer current Profile, and fail-closed
 copy preview when the Control multi-hop gate is disabled. They remain model/UI
 tests, not substitutes for the real browser flow.
+
+## Explicit Path Binding and Switching
+
+`scripts/phase2/path-switch-console.ts` uses the same original browser/Control/
+Agent context while the copy is enabled at r2:
+
+1. Publish an exact full-path template r1 through the metadata form, retaining
+   Profile r1 while its current head is r2. Attach it through the separate path
+   panel. The expanded copy is unchanged: 200, no Operation or generation change.
+2. Publish template r2 with only ingress/egress, then verify the copy remains at
+   its old CAS/path. Current reference impact shows the fixed target and original
+   CAS, without reserving resources or applying automatically.
+3. Prepare the exact proposal, confirm, run the original fresh Relay plan and
+   original Forward/path transaction. Route the actual committed 202 then abort
+   its response. UI fields lock uncertain; explicitly replay the identical
+   key/body with no new plan or CAS replacement. Copy becomes r3, the real
+   two-Node deployment is ready, and actual native TCP/UDP is verified.
+4. Explicitly select template r1 and current CAS r3. A new original Operation
+   restores the full 3/4/8-Node path as r4 with a higher deployment generation;
+   this is not automatic rollback or replay of an old Snapshot. Verify real
+   TCP/UDP, unchanged full spec and three immutable provenance records [r1,r2,r1].
+5. Archive template head r2. Its current binding still points to r1 and actual
+   traffic still works; new impact is unavailable. Original copy disable/delete
+   then uses returned CAS r4/r5 and verifies original safe resource cleanup.
+
+This adds three metadata commands and four binding attempts (one deliberate
+same-key replay), six distinct keys, three non-reserving path proposals and
+three original Relay plan checks. Only original Runtime deploys the two actual
+path changes. `console.pathSwitch` records assertions after completion, including
+no physical-host or measured-interruption claim. Screenshots cover shortened
+path state and 390px layout; source desired spec/revision is never mutated.
 
 ## PathTemplate Metadata Follow-up
 
@@ -88,12 +120,14 @@ It creates only [immutable template metadata](../spec/native-path-templates-v1.m
    reservation, Forward update or new Runtime lifecycle.
 
 This adds exactly five metadata attempts (including one deliberate same-key
-replay), four distinct keys and two bounded captures. The combined browser session
-has ten intent attempts, nine distinct keys and the original two plan POSTs.
+replay), four distinct keys and two bounded captures. With the separate path
+flow, the combined browser session has seventeen intent attempts, fifteen
+distinct keys, five original Relay plan POSTs and three path proposal POSTs.
 `console.templates` records only successful metadata assertions, with explicit
 non-authority flags. Port/UI regressions and real MySQL concurrent CAS/quota /
-SELECT-only history run separately; C1 binding/impact/manual switch are not tested
-as implemented capabilities because they remain next work.
+SELECT-only history run separately. Original-owner bindings/impact/single-rule
+switches are covered by the separate flow above; multi-rule path publication and
+C1 acceptance remain pending.
 
 ## Evidence and Remaining Gates
 
@@ -106,7 +140,8 @@ browser evidence. Failure or cleanup error never becomes a successful report.
 
 Upload adds only `.artifacts/multihop/**/console-multihop-*.png` to the existing
 evidence allowlist. Screenshots cover desktop/390px copy plans, disabled transit
-references, active deployment and desktop/390px immutable template inspection.
+references, active deployment, shortened path/mobile switching state and
+desktop/390px immutable template inspection.
 No browser trace, HAR, PKI, token or protected
 Agent state is uploaded by this addition; the pre-existing failure report policy
 is unchanged. Browser credentials remain tab-memory-only and the shared helper

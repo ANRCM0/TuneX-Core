@@ -4,7 +4,7 @@ import { initProbeConsole } from './probe.js';
 import { initTransportConsole } from './transport-console.js';
 import { initRuleConsole } from './rule-console.js';
 import { initTunnelConsole } from './tunnel-console.js';
-import { initPathTemplates } from './path-templates.js';
+import { initPathTemplates, initPathSwitch } from './path-templates.js';
 
 const byId = id => document.getElementById(id);
 const auth = { scope: '', token: '' };
@@ -365,6 +365,7 @@ const transportConsole=initTransportConsole({request,notify,byId,detail,edit:ite
 const ruleConsole=initRuleConsole({request,notify,byId,refresh:()=>Promise.all([load('forwards'),load('operations'),loadOverview()])});
 const tunnelConsole=initTunnelConsole({request,notify,byId,deployment:id=>relayConsole.deployment(id)});
 const pathTemplates=initPathTemplates({request,notify,byId});
+const pathSwitch=initPathSwitch({request,notify,byId});
 function clearConnectionData() {
   connectionVersion++;
   for (const key of Object.keys(readVersions)) readVersions[key]++;
@@ -384,7 +385,7 @@ function clearConnectionData() {
     byId(mode + '-candidate-page').textContent = '尚未查询候选';
     byId(mode + '-candidate-prev').disabled = byId(mode + '-candidate-next').disabled = true;
   }
-  relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); ruleConsole.clear(); tunnelConsole.clear(); pathTemplates.clear(); fillNodes();
+  relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); ruleConsole.clear(); tunnelConsole.clear(); pathTemplates.clear(); pathSwitch.clear(); fillNodes();
   renderNodes(); renderForwards(); renderOperations(); updateOverview();
 }
 async function refreshDirectCandidates() {

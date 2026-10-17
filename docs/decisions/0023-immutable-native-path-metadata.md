@@ -14,6 +14,8 @@ path must not become another execution authority or implicitly rewrite rules.
 This slice implements real metadata commands, persistence, reads and Console
 authoring. It does not implement rule bindings, reference impact or switching.
 Those remaining C1 capabilities must not be inferred from an accepted template.
+The later [ADR-0024](0024-original-owner-path-bindings.md) implements their
+separate original-Forward integration; this ADR preserves the first metadata slice.
 
 ## Decision
 

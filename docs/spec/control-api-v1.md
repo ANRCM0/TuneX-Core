@@ -101,6 +101,14 @@ Scope 内的 [原生 PathTemplate 元数据](native-path-templates-v1.md) 提供
 不改变本文 Forward/Runtime 命令语义。模板读取不复核 Node/Profile 授权，显式显示
 `executionAuthorized:false` / `reserved:false` / `bindingCreated:false`；不能拿它替代原计划和发布。
 
+[路径绑定/显式单规则切换](native-path-bindings-v1.md) 单独提供
+`GET /forwards/:id/path-binding`（最多 64 条不可变来源历史）、
+`POST /forwards/:id/path-preview`、同事务 `PUT /forwards/:id/path-binding`
+与 `GET /path-templates/:id/references`（有界当前引用/精确目标影响）。
+命令仅接受固定模板 ID/revision/digest 与原 Forward CAS，展开后仍进入原 owner 更新/Operation/资源链。
+展开不变可 200/无 Operation，仅保存来源；新绑定和实际 Forward 更新原子提交，模板发布不自动改变规则。
+未知提交只重放原键/原请求，归档/恢复隔离、同监听中断/TCP 排空/UDP 重建边界见独立契约；无新机器协议或 Core 字段。
+
 Node 的有界原生 TLS 状态与相邻期望引用见 [隧道管理只读契约](native-tunnel-management-v1.md)：
 同事务 Scope/Node 校验，SELECT-only 元数据，不签发凭据、不证明健康、执行授权或删除安全。
 

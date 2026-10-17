@@ -125,6 +125,22 @@ authorization. Immutable revisions and terminal archives survive backup/recovery
 restored request keys retain existing quarantine. Future bindings must enter
 the original Forward acceptance in the same transaction, not grow a second
 executor or add template IDs to Core. Binding/impact/manual-switch APIs remain
-unimplemented in this first metadata-only slice.
+unimplemented in that first metadata-only slice; the follow-up below implements
+their original-owner integration.
+
+## 12. Native Path Bindings
+
+[ADR-0024](../decisions/0024-original-owner-path-bindings.md) supplies
+`ForwardPathBindings<Tx>` expansion/provenance ports to the original
+`ForwardCommands<Tx>`. Exact template integrity/current reference checks,
+original Forward CAS/preparation/Relay resources/Operation/capacity, immutable
+binding history and original idempotent receipt share one supplied transaction.
+Ordinary replacement uses the same private acceptance and atomically detaches
+topology-divergent provenance; no pool, second executor or Core template ID is added.
+The new MySQL store mutates only its two tables, reads the scoped original
+Forward and retains all immutable history. Template authoring still owns only
+its three original metadata tables. Reference/proposal reads never accept an
+Operation or reserve resources. See [binding contract](../spec/native-path-bindings-v1.md)
+for no-op attachment, bounded history, archive/recovery and Console uncertainty.
 
 

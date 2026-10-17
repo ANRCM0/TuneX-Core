@@ -2,7 +2,7 @@ import { isId, MAX_COUNTER } from '@tunex/core';
 import { parseJson } from '@tunex/contracts';
 import type { AuthorityRecord } from '../../apps/control/src/infrastructure/authority.ts';
 
-export type CompatibilityProfile = 'adp3-runtime-v1' | 'adp3-multihop-v1' | 'adp3-probe-registry-v1' | 'adp3-probe-permits-v1' | 'adp3-probe-withdrawals-v1' | 'adp3-probe-results-v1' | 'adp3-path-templates-v1';
+export type CompatibilityProfile = 'adp3-runtime-v1' | 'adp3-multihop-v1' | 'adp3-probe-registry-v1' | 'adp3-probe-permits-v1' | 'adp3-probe-withdrawals-v1' | 'adp3-probe-results-v1' | 'adp3-path-templates-v1' | 'adp3-path-bindings-v1';
 interface Build {
     revision: string;
     imageDigest: string;
@@ -52,13 +52,14 @@ export interface UpgradeInspection {
 type Check = { code: string; status: 'pass' | 'block' | 'review'; subject: string };
 const sha = /^[a-f0-9]{40}$/;
 const digest = /^sha256:[a-f0-9]{64}$/;
-const profiles = new Set<CompatibilityProfile>(['adp3-runtime-v1', 'adp3-multihop-v1', 'adp3-probe-registry-v1', 'adp3-probe-permits-v1', 'adp3-probe-withdrawals-v1', 'adp3-probe-results-v1', 'adp3-path-templates-v1']);
+const profiles = new Set<CompatibilityProfile>(['adp3-runtime-v1', 'adp3-multihop-v1', 'adp3-probe-registry-v1', 'adp3-probe-permits-v1', 'adp3-probe-withdrawals-v1', 'adp3-probe-results-v1', 'adp3-path-templates-v1', 'adp3-path-bindings-v1']);
 const controlSchemaCeiling: Record<CompatibilityProfile, string> = {
     'adp3-runtime-v1': '0012-', 'adp3-multihop-v1': '0013-', 'adp3-probe-registry-v1': '0014-',
     'adp3-probe-permits-v1': '0015-',
     'adp3-probe-withdrawals-v1': '0016-',
     'adp3-probe-results-v1': '0017-',
     'adp3-path-templates-v1': '0018-',
+    'adp3-path-bindings-v1': '0019-',
 };
 const migrationName = /^[0-9]{4}-[a-z0-9-]+\.sql$/;
 const invalid = (): never => { throw new Error('INVALID_UPGRADE_PLAN'); };

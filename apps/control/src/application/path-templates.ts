@@ -12,13 +12,13 @@ const hash = (value: unknown): value is string => typeof value === 'string' && /
 function identity(actor: string, scope: string, id?: string) {
     if (![actor, scope, ...(id === undefined ? [] : [id])].every(isId)) invalid('Valid PathTemplate identity required');
 }
-function head(record: PathTemplateHead, id = record.templateId) {
+export function validateTemplateHead(record: PathTemplateHead, id = record.templateId) {
     if (record.templateId !== id || !isId(record.templateId) || !isCounter(record.currentRevision) ||
         record.currentRevision > PATH_TEMPLATE_LIMITS.revisionsPerTemplate || typeof record.archived !== 'boolean')
         throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid persisted PathTemplate head');
     return { ...record };
 }
-function revision(record: PathTemplateRevision, number: number) {
+export function validateTemplateRevision(record: PathTemplateRevision, number: number) {
     let config: PathTemplateConfig;
     try { config = parsePathTemplate(record.config); } catch { throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid persisted PathTemplate configuration'); }
     if (record.revision !== number || !isCounter(number) || number > PATH_TEMPLATE_LIMITS.revisionsPerTemplate ||
@@ -49,7 +49,7 @@ export class PathTemplateQueries<Tx> {
                 result.items.length > paging.limit || new Set(result.items.map(item => item.templateId)).size !== result.items.length ||
                 result.items.some(item => !item.templateId.startsWith(prefix)))
                 throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid bounded PathTemplate page');
-            return deepFreeze({ ...paging, total: result.total, items: result.items.map(item => head(item)), source: 'persisted-control-state', executionAuthorized: false });
+            return deepFreeze({ ...paging, total: result.total, items: result.items.map(item => validateTemplateHead(item)), source: 'persisted-control-state', executionAuthorized: false });
         });
     }
     async get(actor: string, scope: string, id: string, requestedRevision?: number) {
@@ -58,9 +58,9 @@ export class PathTemplateQueries<Tx> {
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
             const current = await this.read.head(tx, scope, id); if (!current) notFound();
-            const metadata = head(current, id), number = requestedRevision ?? metadata.currentRevision;
+            const metadata = validateTemplateHead(current, id), number = requestedRevision ?? metadata.currentRevision;
             const stored = await this.read.revision(tx, scope, id, number); if (!stored) notFound();
-            const record = revision(stored, number);
+            const record = validateTemplateRevision(stored, number);
             return deepFreeze({ ...metadata, ...record, createdAt: new Date(record.createdAt).toISOString(),
                 capabilityRequirements: pathRequirements(record.config), source: 'persisted-control-state',
                 referenceAuthorization: 'not-rechecked-by-this-query', executionAuthorized: false, reserved: false, bindingCreated: false });
@@ -97,13 +97,13 @@ export class PathTemplateCommands<Tx> {
             const replay = await this.requests.claim<TemplateResponse>(tx, request); if (replay) return replay;
             // Serializes creation quotas and both CAS/archival before any reference resolution.
             await this.store.lockScope(tx, scope);
-            const found = await this.store.head(tx, scope, id, true), current = found ? head(found, id) : null;
+            const found = await this.store.head(tx, scope, id, true), current = found ? validateTemplateHead(found, id) : null;
             if ((current?.currentRevision ?? 0) !== expectedRevision) throw new ControlError('REVISION_CONFLICT', 409, 'PathTemplate revision conflict');
             if (!config && !current) notFound();
             if (config && current?.archived) throw new ControlError('TEMPLATE_ARCHIVED', 409, 'Archived template identifiers cannot be reused');
             const old = current ? await this.store.revision(tx, scope, id, current.currentRevision) : null;
             if (current && !old) throw new ControlError('INTEGRITY_FAILURE', 409, 'Current PathTemplate revision is missing');
-            if (old) revision(old, current!.currentRevision);
+            if (old) validateTemplateRevision(old, current!.currentRevision);
             let changed = false, number = expectedRevision, configDigest = old?.configDigest ?? '';
             const at = this.clock();
             if (!Number.isSafeInteger(at) || at < 0 || at > 8640000000000000) throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid template command time');

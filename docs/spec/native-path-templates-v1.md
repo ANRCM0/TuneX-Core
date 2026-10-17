@@ -3,7 +3,9 @@
 Status (2026-10-17): first C1 metadata slice implemented and Actions acceptance
 authored; not yet functionally verified for its exact commit.
 Decision: [ADR-0023](../decisions/0023-immutable-native-path-metadata.md).
-Rule bindings, reference/impact preview and manual switching remain unimplemented.
+Subsequent exact bindings, reference/impact preview and explicit single-rule
+switching are implemented separately in [Path bindings v1](native-path-bindings-v1.md),
+with exact-commit acceptance still pending. This metadata API itself stays non-executable.
 
 ## Configuration
 
@@ -126,9 +128,10 @@ and archival state. Recovery retains non-executable metadata, quarantines old
 request keys and applies the original identity/grant/intent isolation; it must
 not materialize fresh bindings. See [upgrade assessment](../operations/upgrade-assessment.md).
 
-Future bindings must pin the exact template revision/digest outside Core and
-persist the actually expanded ForwardSpec. Expansion/current authorization and
-original Forward acceptance must share one transaction. Bounded reference impact,
-explicit publication and manual switch through the original Runtime are still
-next C1 work, with no zero-downtime/cross-host-atomic claim. This metadata API is
-not a substitute for those commands, groups, backup paths or automatic failover.
+Subsequent [Path bindings v1](native-path-bindings-v1.md) pins the exact template
+revision/digest outside Core and persists the actual expanded ForwardSpec in
+the same transaction as original Forward acceptance/current reference checks.
+It supplies bounded references and explicit single-rule switching through the
+original Runtime. Multi-rule path publication remains a follow-up; no zero-downtime
+or cross-host-atomic claim is made. The two metadata mutation routes still do
+not execute those commands, groups, backup paths or automatic failover.

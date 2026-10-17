@@ -151,6 +151,25 @@
         <div class="table-wrap inner-table"><table><thead><tr><th>Template ID</th><th>Current Revision</th><th>Read-only Action</th></tr></thead><tbody id="path-template-rows"></tbody></table></div>
         <div class="pagination"><button id="path-template-prev" type="button" class="secondary" disabled>Previous</button><span id="path-template-page"></span><button id="path-template-next" type="button" class="secondary" disabled>Next</button></div>
       </section>
+      <section class="panel" aria-labelledby="path-switch-title">
+        <div class="panel-head"><h3 id="path-switch-title">显式绑定与单规则路径切换</h3></div>
+        <p class="hint">固定模板修订和摘要，在原规则事务中重新授权、复核 Endpoint、CAS 与独立资源；不自动追随模板、不建立第二个执行器。入口节点和业务协议必须相同，目标、监听及启用意图保持不变。相同监听可能中断，TCP 排空有界，UDP 关联可能重建或丢包，无自动回滚。</p>
+        <div class="form-grid">
+          <label>Forward ID <input id="path-switch-forward" autocomplete="off" maxlength="128"></label>
+          <label>Expected Forward revision <input id="path-switch-expected" type="number" min="1"></label>
+          <label>Exact Template ID <input id="path-switch-template" autocomplete="off" maxlength="128"></label>
+          <label>Exact template revision <input id="path-switch-revision" type="number" min="1" max="64"></label>
+        </div>
+        <label>Inspected immutable template digest <input id="path-switch-digest" readonly spellcheck="false" class="mono"></label>
+        <div class="actions"><button id="path-switch-lock" type="button" class="secondary">Inspect Exact Template</button><button id="path-switch-current" type="button" class="secondary">Inspect Current Provenance</button><button id="path-switch-prepare" type="button" class="secondary">Prepare Path Proposal</button></div>
+        <pre id="path-switch-proposal" class="plan-output" aria-label="Frozen path proposal; not reserved or authorized"></pre>
+        <div class="actions"><button id="path-switch-submit" type="button" disabled>Apply Explicit Path</button><button id="path-switch-discard" type="button" class="secondary" disabled>Discard Local Path Command</button></div>
+        <p id="path-switch-state" class="hint" role="status"></p><pre id="path-switch-record" class="plan-output" aria-label="Historical provenance or durable acceptance; not deployment success"></pre>
+        <p class="hint">路径展开不变时可只接受来源绑定而不创建 Operation；每规则最多 64 条不可变绑定记录，普通停用/删除不消耗该配额。未知提交仅显式重放原键与原请求，不替换 CAS/修订、不重新预检后自动发新命令。丢弃只清理标签页记忆，不能撤销远端提交。</p>
+        <div class="actions"><button id="path-switch-references" type="button" class="secondary">Preview Current References</button></div>
+        <div class="table-wrap inner-table"><table><thead><tr><th>Forward / CAS</th><th>Current Binding</th><th>Exact Target Impact</th><th>Explicit Selection</th></tr></thead><tbody id="path-switch-rows"></tbody></table></div>
+        <div class="pagination"><button id="path-switch-prev" type="button" class="secondary" disabled>Previous References</button><span id="path-switch-page"></span><button id="path-switch-next" type="button" class="secondary" disabled>Next References</button></div>
+      </section>
       <section class="panel">
         <div class="panel-head"><h3>第 1 步 · 发布 Transport Profile</h3></div>
         <form id="relay-profile-form">

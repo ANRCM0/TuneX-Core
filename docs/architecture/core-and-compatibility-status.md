@@ -767,4 +767,16 @@ Actions 尚未执行/通过；同宿主机组合不是物理多主机、长期�
 Agent 仍只使用原两种 Journal Profile。完整 SQL 备份保留模板/修订/归档/审计，恢复隔离原键且不展开绑定。
 原 Node/Profile 授权在发布事务复核；历史查询只校验 Scope 与完整性，不冒充当前授权。
 端口、UI、真实 MySQL 并发/SELECT-only、3/4/8 Agent Chromium 元数据流均仅编写/接线，本机只静态检查。
-C1 规则绑定、引用影响、同事务原 Forward 发布和手动切换仍未实现，无匹配 SHA 的 Actions 或项目完成结论。
+C1 规则绑定、引用影响、同事务原 Forward 发布和手动切换在该首片仍未实现；后续见下一节。
+
+## 29. 第二十八批：原 Forward 同事务路径绑定与显式单规则切换
+
+[ADR-0024](../decisions/0024-original-owner-path-bindings.md) 增加固定模板修订/摘要选择，
+原授权/Endpoint 复核与原 Forward CAS/执行准备/资源/Operation/容量/来源记录/幂等响应同事务。
+Core ForwardSpec 仍只保存实际展开路径，不增加模板 ID、第二 Runtime 或机器字段。
+展开不变可 200/无 Operation 记录来源；每规则最多 64 条不可变历史，普通拓扑编辑只解除当前来源指针。
+模板发布/归档不隐式改变/撤销已有展开规则；原恢复挂起不能借新绑定绕过。
+有界当前引用/目标影响、来源历史和 Console 显式单规则切换已编写，未知提交保持原键请求/不确定性。
+迁移 0019 与 `adp3-path-bindings-v1` 扩展 Control 读者上界；Agent/Journal/高水位不变。
+端口、UI、真实 MySQL 并发 CAS/配额/回滚/SELECT-only 与 3/4/8 Agent 真实浏览器缩短/显式恢复路径接线均未执行。
+本机仅静态检查，无 exact-SHA Actions；多规则路径发布、C1 验收、中断测量、遥测及交付仍待推进，不宣称项目完成。
