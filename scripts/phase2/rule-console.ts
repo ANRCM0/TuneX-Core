@@ -50,6 +50,7 @@ export async function verifyRuleConsole(fixture: RuleFixture) {
         for (const port of fixture.listenerPorts) {
             await page.locator('[data-action="forward-copy"][data-id="' + fixture.sourceId + '"]').click();
             await page.waitForFunction(() => document.getElementById('forward-form-title')?.textContent?.includes('复制为新'));
+            await page.locator('#forward-form').waitFor({ state: 'visible' });
             assert.equal(await page.locator('#forward-form [name="enabled"]').isChecked(), false);
             assert.equal(await page.locator('#forward-port').inputValue(), '');
             assert.equal(await page.locator('#forward-node').isDisabled(), false);

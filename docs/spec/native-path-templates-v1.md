@@ -52,7 +52,9 @@ and unknown fields, require `Idempotency-Key`, and allow no query parameters.
 | `DELETE /path-templates/:id` | Closed `{expectedRevision}` with existing positive CAS; terminal archive returns 202, already archived returns 200, never physical deletion |
 
 Unknown or duplicate query keys, ambiguous numbers (`01`, decimals, exponent,
-zero/negative read revision) and wildcard prefixes are 400. Lists return bounded
+zero/negative read revision) and wildcard prefixes are 422 (`INVALID_CONFIG`),
+matching the existing Control error boundary. Duplicate JSON body keys remain
+409 (`INTEGRITY_FAILURE`); this does not introduce a new API error mapping. Lists return bounded
 `items:[{templateId,currentRevision,archived}]`, `page`, `limit`, `offset`, `total`,
 `source:"persisted-control-state"`, `executionAuthorized:false`. No config arrays
 are hidden in this listing, and archived IDs remain visible and count toward

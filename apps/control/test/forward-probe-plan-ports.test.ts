@@ -24,7 +24,8 @@ function fixture() {
     const current: PublishedProbeSnapshot = { bootId: 'boot-a', sessionEpoch: 2, credentialUntil: now + 60000,
         snapshot: compileSnapshot({ nodeId: 'node-a', sessionEpoch: 2, snapshotGeneration: 3,
             issuedAt: new Date(now).toISOString(), validUntil: new Date(now + 60000).toISOString(), tombstones: [],
-            assignments: compileDirect(forward, facts, [{ nodeId: 'node-a', forwardId: 'forward-a', protocol: 'tcp',
+            assignments: compileDirect({ id: forward.id, scopeId: forward.scopeId, revision: forward.revision, spec: forward.spec }, facts,
+                [{ nodeId: 'node-a', forwardId: 'forward-a', protocol: 'tcp',
                 port: 22001, bindingFence: 4, deploymentGeneration: 5 }]) }) };
     const state = { forward, facts, current: structuredClone(current) as PublishedProbeSnapshot | undefined, denyNode: false, denyScope: false };
     const host = new ForwardProbePlans({

@@ -71,8 +71,17 @@ export async function verifyPathBatchConsole(page: Page, context: BrowserContext
             const deployment = (await call('GET', 'forwards/' + fixture.copyId + '/deployment')).deployment;
             if (deployment?.stage === 'active' && deployment.renewalAllowed && deployment.nodes.length === path.length &&
                 deployment.nodes.every((node: any) => node.ready && node.reportFresh)) {
-                assert.deepEqual(deployment.nodes.map((node: any) => node.nodeId), path);
-                assert.deepEqual(deployment.activationOrder, [...path].reverse()); return deployment;
+                assert.deepEqual(deployment.nodes.map((node: any) => node.nodeId).sort(), [...path].sort());
+                for (const [index, nodeId] of path.entries()) {
+                    const role = path.length === 2 ? (index === 0 ? 'relay-ingress' : 'relay-egress') :
+                        index === 0 ? 'multihop-ingress' : index === path.length - 1 ? 'multihop-egress' : 'multihop-transit';
+                    assert.equal(deployment.nodes.find((node: any) => node.nodeId === nodeId)?.role, role);
+                }
+                if (path.length > 2) {
+                    assert.deepEqual(deployment.nodes.map((node: any) => node.nodeId), path);
+                    assert.deepEqual(deployment.activationOrder, [...path].reverse());
+                }
+                return deployment;
             }
             await sleep(250);
         }

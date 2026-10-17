@@ -93,9 +93,9 @@ test('path binding uses real original owner transactions: immutable expanded pro
             assert.deepEqual(metadata.history[0].expandedSpec, spec); assert.deepEqual(metadata.history[1].expandedSpec.path.via, ['egress']);
             assert.equal(metadata.history[1].specDigest, digest(metadata.history[1].expandedSpec));
             await call('PUT', 'forwards/main/path-binding', input(1, 1), 409);
-            await call('PUT', 'forwards/main/path-binding?latest=true', input(2, 1), 400);
-            await call('PUT', 'forwards/main/path-binding', { ...input(2, 1), extra: true }, 400);
-            await call('PUT', 'forwards/main/path-binding', '{"expectedRevision":2,"expectedRevision":3,"template":{}}', 400);
+            await call('PUT', 'forwards/main/path-binding?latest=true', input(2, 1), 422);
+            await call('PUT', 'forwards/main/path-binding', { ...input(2, 1), extra: true }, 422);
+            await call('PUT', 'forwards/main/path-binding', '{"expectedRevision":2,"expectedRevision":3,"template":{}}', 409);
             await call('PUT', 'forwards/main/path-binding', input(2, 1), 403, 'viewer');
             await call('PUT', 'forwards/main/path-binding', input(2, 1), 404, 'outsider');
 
@@ -162,8 +162,8 @@ test('path binding uses real original owner transactions: immutable expanded pro
             assert.equal((await read('forwards/main/path-binding')).history.length, 2);
             const page = await read('path-templates/saved/references?page=1&limit=1'); assert.equal(page.items.length, 1); assert.equal(page.total, 2);
             const next = await read('path-templates/saved/references?page=2&limit=1'); assert.notEqual(page.items[0].forwardId, next.items[0].forwardId);
-            await read('path-templates/saved/references?targetRevision=1', 403); await read('path-templates/saved/references?revision=01', 400);
-            await read('path-templates/saved/references?limit=1&limit=2', 400); await read('forwards/main/path-binding?revision=1', 400);
+            await read('path-templates/saved/references?targetRevision=1', 403); await read('path-templates/saved/references?revision=01', 422);
+            await read('path-templates/saved/references?limit=1&limit=2', 422); await read('forwards/main/path-binding?revision=1', 422);
             await read('forwards/main/path-binding', 404, 'outsider'); await read('path-templates/Saved/references', 404);
             assert.equal(await inventory(connection), before);
             for (const table of ['port_slots', 'snapshots', 'execution_leases', 'relay_deployments']) {

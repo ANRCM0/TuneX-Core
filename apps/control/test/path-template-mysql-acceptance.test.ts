@@ -99,10 +99,10 @@ test('path templates use real native reference authorization, transactional CAS/
             const beforeRevoked = await inventory(connection); await call('PUT', '/revoked-node', input, 403);
             assert.equal(await inventory(connection), beforeRevoked);
             await connection.execute('UPDATE nodes SET revoked=FALSE WHERE id=?', ['middle']);
-            await call('PUT', '/bad', { ...input, extra: true }, 400);
-            await call('PUT', '/bad?latest=1', input, 400);
-            await call('PUT', '/bad', '{"expectedRevision":0,"expectedRevision":1,"config":{}}', 400);
-            await call('PUT', '/bad', { ...input, config: { ...config, transport: { ...config.transport, latest: true } } }, 400);
+            await call('PUT', '/bad', { ...input, extra: true }, 422);
+            await call('PUT', '/bad?latest=1', input, 422);
+            await call('PUT', '/bad', '{"expectedRevision":0,"expectedRevision":1,"config":{}}', 409);
+            await call('PUT', '/bad', { ...input, config: { ...config, transport: { ...config.transport, latest: true } } }, 422);
 
             await call('PUT', '/race', input, 202);
             async function race(protocol: string) {
@@ -155,7 +155,7 @@ test('path templates use real native reference authorization, transactional CAS/
             const prefix = await get('?prefix=page-00&limit=100'); assert.equal(prefix.total, 10);
             assert.ok(prefix.items.every((item: any) => item.templateId.startsWith('page-00')));
             const old = await get('/saved?revision=1'); assert.equal(old.currentRevision, 2); assert.equal(old.bindingCreated, false); assert.equal(old.executionAuthorized, false);
-            await get('/saved?revision=1&revision=2', 400); await get('?limit=25&limit=100', 400); await get('?prefix=%25', 400); await get('?page=01', 400);
+            await get('/saved?revision=1&revision=2', 422); await get('?limit=25&limit=100', 422); await get('?prefix=%25', 422); await get('?page=01', 422);
             await get('/saved?revision=1', 404, 'outsider'); await get('/saved?revision=999', 404); await get('/Saved', 404);
             assert.equal(await inventory(connection), beforeRead);
         } finally {
