@@ -207,10 +207,14 @@ jobs:
         run: node --test apps/control/test/audit-store-complete.test.ts apps/control/test/audit-attribution-native-complete.test.ts apps/control/test/station-storage-complete.test.ts apps/control/test/path-group-store-sql-complete.test.ts
       - name: Original Publication, IngressGroup, ObservationService and ProbeRegistry transactions
         run: node --test apps/control/test/path-publication-store-sql-complete.test.ts apps/control/test/ingress-group-storage-complete.test.ts apps/control/test/observation-service-store-complete.test.ts apps/control/test/probe-registry-store-complete.test.ts
+      - name: Original Ingress Deployment and Migration same-transaction Forward statement rollback
+        run: node --test apps/control/test/ingress-batch-mysql-acceptance.test.ts
       - name: Original Node and Identity native authority and SQL rollback
         run: node --test apps/control/test/node-owner-complete.test.ts apps/control/test/node-store-sql-complete.test.ts apps/control/test/identity-owner-complete.test.ts apps/control/test/identity-store-sql-complete.test.ts
       - name: Probe history native family projection and MySQL0037 immutable capture
         run: node --test apps/control/test/probe-history-complete.test.ts
+      - name: Original Probe history and finite plans same-transaction statement rollback and scheduler contention
+        run: node --test apps/control/test/probe-history-plan-native-complete.test.ts
       - name: Read-only upgrade assessment with SELECT-only MySQL and authenticated Agent journal
         run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
       - name: Console scoped filters, independent candidates and full-scope overview with SELECT-only MySQL

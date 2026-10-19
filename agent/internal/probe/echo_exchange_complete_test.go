@@ -340,8 +340,14 @@ func TestEchoExchangeCompleteCancellationCloseAndLegacyDenialIdentity(t *testing
 	if proof, tx, rx, err := exchangeEcho(ctx2, short, input, func() error { return nil }); err != nil || proof != nil || tx != 256 || rx != 19 || short.closes.Load() != 0 {
 		t.Fatal("legacy wrapper changed short response evidence", err, tx, rx)
 	}
-	if errTLSBudget != observationtrust.ErrTLSBudget || echoFrameBytes != 256 || echoFrameBytes != probenative.EchoFrameBytes {
-		t.Fatal("private native error/frame aliases changed")
+	if errTLSBudget != observationtrust.ErrTLSBudget {
+		t.Fatal("private native error alias changed")
+	}
+	if echoFrameBytes != 256 {
+		t.Fatal("private echo frame size changed")
+	}
+	if echoFrameBytes != probenative.EchoFrameBytes {
+		t.Fatal("private native frame alias changed")
 	}
 }
 

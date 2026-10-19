@@ -118,3 +118,44 @@ test('68 actual owner and HTTP route populated native SQL share read-only caller
  const original=Buffer.byteLength;t.mock.method(Buffer,'byteLength',(...args:Parameters<typeof Buffer.byteLength>)=>typeof args[0]==='string'&&args[0].includes('"auditVersion":1')?131073:original(...args));const bounded=createControlApp({...options,services:{...options.services,audit:owner()}});trace.length=0;response=await bounded.request(path,{headers:{authorization:'Bearer test'}});assert.equal(response.status,409);assert.equal((await response.json() as {code:string}).code,'INTEGRITY_FAILURE');assert.deepEqual(trace,['authorize','read']);
  assert.deepEqual(await snapshot(db),before);
 }));
+
+test('68 multi-row MySQL group and batch node attribution matches independent canonical JSON containment without correlated JSON_TABLE semijoins',{skip:!databaseURL},async()=>database(async db=>{
+ await db.transaction(async tx=>{
+  await seedMetadata(tx);
+  for(const family of families){await seedBatch(tx,family);await seedBatch(tx,family,'scope','second-batch');await seedBatch(tx,family,'foreign');}
+ });
+ const before=await snapshot(db);
+ const identity=(records:{entityId:unknown;revision:unknown;kind:unknown}[])=>records.map(record=>[record.entityId,Number(record.revision),record.kind]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b),'en'));
+ await db.transaction(async tx=>{
+  for(const family of ['path','ingress'] as const){
+   const collection=family==='path'?'candidates':'members',source=family==='path'?'path-group':'ingress-group';
+   const count=await rows<{n:number}>(tx,`SELECT COUNT(*) n FROM ${family}_group_events WHERE scope_id=?`,['scope']);assert.equal(Number(count[0]!.n),6,'multiple outer group-event rows must remain in the fixture');
+   for(const scope of ['scope','foreign'])for(const nodeId of ['old-node','new-node','OLD-NODE','foreign-node','foreign-only-node','never-present']){
+    // This independent baseline joins immutable revisions directly and tests
+    // whole template references by JSON containment; it has no JSON_TABLE or
+    // correlated subquery that could share the adapter's optimizer failure.
+    const canonical=await rows<{entityId:string;revision:number;kind:string}>(tx,
+     `SELECT DISTINCT e.group_id entityId,e.revision,e.kind FROM ${family}_group_events e `+
+     `JOIN ${family}_group_revisions r ON r.scope_id=e.scope_id AND r.group_id=e.group_id AND r.revision=e.revision `+
+     'JOIN path_template_revisions t ON t.scope_id=e.scope_id '+
+     `AND JSON_CONTAINS(r.config,JSON_OBJECT('template',JSON_OBJECT('templateId',t.template_id,'revision',t.revision,'configDigest',t.config_digest)),'$.${collection}') `+
+     "WHERE e.scope_id=? AND JSON_CONTAINS(JSON_EXTRACT(t.config,'$.nodes'),JSON_QUOTE(?))",[scope,nodeId]);
+    const actual=await read(tx,source,{nodeId},scope);assert.deepEqual(identity(actual),identity(canonical),source+' '+scope+' '+nodeId);safe(actual);
+    if(scope==='scope'&&(nodeId==='old-node'||nodeId==='new-node'))assert.equal(canonical.length,1,'canonical historical template join must be populated');
+   }
+  }
+  for(const family of families){
+   const count=await rows<{n:number}>(tx,`SELECT COUNT(*) n FROM ${family.prefix}_events WHERE scope_id=?`,['scope']);assert.equal(Number(count[0]!.n),4,'multiple outer batch-event rows must remain in the fixture');
+   const specPaths=family.source==='path-publication'?['$.items[*].source.spec','$.items[*].proposedSpec']:family.source==='ingress-deployment'?['$.items[*].spec']:['$.items[*].spec','$.sources[*].state.spec'];
+   const predicate=specPaths.flatMap(path=>[`${path}.ingress.nodeId`,`${path}.path.via`]).map(path=>`JSON_CONTAINS(JSON_EXTRACT(p.plan,'${path}'),JSON_QUOTE(?))`).join(' OR ');
+   for(const scope of ['scope','foreign'])for(const nodeId of ['baseline-node-1','proposed-node-1','planned-node-1','add-node-1','migration-baseline-node','BASELINE-NODE-1','never-present']){
+    const canonical=await rows<{entityId:string;revision:number;kind:string}>(tx,
+     `SELECT e.batch_id entityId,e.revision,e.kind FROM ${family.prefix}_events e JOIN ${family.head} p ON p.scope_id=e.scope_id AND p.batch_id=e.batch_id WHERE e.scope_id=? AND (${predicate})`,[scope,...specPaths.flatMap(()=>[nodeId,nodeId])]);
+    const actual=await read(tx,family.source,{nodeId},scope);assert.deepEqual(identity(actual),identity(canonical),family.source+' '+scope+' '+nodeId);safe(actual);
+    const populated=family.source==='path-publication'?['baseline-node-1','proposed-node-1']:family.source==='ingress-deployment'?['planned-node-1']:['add-node-1','migration-baseline-node'];
+    if(populated.includes(nodeId))assert.equal(canonical.length,scope==='scope'?4:2,'canonical immutable plan association must be populated');
+   }
+  }
+ });
+ assert.deepEqual(await snapshot(db),before);
+}));

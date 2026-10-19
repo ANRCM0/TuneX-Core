@@ -124,8 +124,8 @@ short publication windows from delayed Agent progress without uploading wire or
 credential bodies.
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 145 cases have fully
-identified assertions; 75 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 169 cases have fully
+identified assertions; 51 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
@@ -259,3 +259,42 @@ does not validate them.
 
 Integrated TypeScript and staged whitespace checks passed before saving this batch.
 Go test/build/vet/race and all functional/native MySQL execution remain Actions-owned.
+
+Candidate `a2c82d14856650c8bfb11293ab1b4b88175b2377` ran baseline
+`39311005424` at exact checkout `323040af75cd728a71ea56fce413aa603a112cd2`
+against main `4c2fabdb9ab102614eed31c2808bea5a72227904`. Deployment, Probe,
+Relay isolation and three/four/eight-node integration passed.
+Packaging `39311005410` passed. Contracts and
+Windows were blocked by the new Echo frame test combining equivalent constant
+checks in a Go-vet suspect-or expression; its assertions are now independent.
+phase1 exposed cross-realm arrays in the Station fixture and two populated
+Audit historical Node-attribution queries returning no rows. Station now executes
+its unchanged source in one realm. Audit retains the original immutable Scope,
+revision/digest and exact Node predicates while using correlated scalar counts
+for the two JSON_TABLE query builders; this avoids the EXISTS semijoin shape
+implicated by the failure. Original failing fixtures/expectations remain and a
+multi-row, cross-Scope canonical MySQL baseline independently uses direct joins
+and JSON containment. The root-cause diagnosis and correction still require
+execution on the next exact source; they are not accepted from source inspection.
+
+The next authored batch closes original Ingress Deployment/Migration and
+Probe history/finite-plan owner and SQL matrices, plus Agent Transit controller
+and durable native preparation/TLS refusal. New actual-route matrices cover
+all management read/write registration and body bounds, machine/parser/session
+ordering and telemetry lookup exclusions, all Console assets/bytes/headers,
+request UUID before lifecycle and client-abort drain behavior. Complete outer
+Forward/Path/Group/Publication/Ingress caller coverage reconciles the former
+aggregate Path and Ingress source obligations. The maintained source map now
+identifies 169 complete and 51 partial requirements across 373 suites. Functional,
+MySQL, native socket and lifecycle execution remains Actions-only on the later
+saved candidate. Foundation acceptance, physical-host, parallel product and
+release gates remain separate.
+
+The same authored batch now also covers original Access/Node command effects and
+native driver catalog construction, Console/Transport/Tunnel read projections,
+Agent native control construction and offline execution, and real TLS handshake
+defaults and refusal behavior. These assertions reuse original owners and current
+public contracts. TypeScript and the 950-file production boundary scan passed
+locally; Go formatting and whitespace checks are static only. The Audit private
+SQL correction is included in this batch, so earlier production boundary evidence
+is supplemented by the current scan rather than treated as unchanged-source proof.

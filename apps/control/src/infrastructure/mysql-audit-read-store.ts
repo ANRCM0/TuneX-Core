@@ -17,15 +17,17 @@ const specNode = (spec: string) => `(CAST(${text(spec,'$.ingress.nodeId')} AS BI
 const configNode = (config: string) => `JSON_CONTAINS(${extract(config,'$.nodes')},JSON_QUOTE(${nodeToken}))`;
 const itemAt = (array: string, position: string) => `JSON_EXTRACT(${array},CONCAT('$[',(${position})-1,']'))`;
 const planItems = (plan: string) => extract(plan,'$.items');
+// Aggregate correlation prevents the JSON_TABLE semijoin transformation that can
+// lose matching outer rows on MySQL (bug #114897).
 const planSpecs = (plan: string, collection: string, path: string) =>
-    `EXISTS (SELECT 1 FROM JSON_TABLE(${plan},${literal(collection)} COLUMNS (spec JSON PATH ${literal(path)})) audit_specs WHERE ${specNode('audit_specs.spec')})`;
+    `((SELECT COUNT(*) FROM JSON_TABLE(${plan},${literal(collection)} COLUMNS (spec JSON PATH ${literal(path)})) audit_specs WHERE ${specNode('audit_specs.spec')})>0)`;
 function definitionNode(config: string, members: 'candidates' | 'members', scope: string) {
-    return `EXISTS (SELECT 1 FROM JSON_TABLE(${config},'$.${members}[*]' COLUMNS (` +
+    return `((SELECT COUNT(*) FROM JSON_TABLE(${config},'$.${members}[*]' COLUMNS (` +
         "template_id VARCHAR(128) PATH '$.template.templateId',template_revision BIGINT PATH '$.template.revision'," +
         "config_digest VARCHAR(71) PATH '$.template.configDigest')) audit_members " +
         `JOIN path_template_revisions audit_template ON audit_template.scope_id=${scope} AND audit_template.template_id=audit_members.template_id ` +
         'AND audit_template.revision=audit_members.template_revision AND audit_template.config_digest=audit_members.config_digest ' +
-        `WHERE ${configNode('audit_template.config')})`;
+        `WHERE ${configNode('audit_template.config')})>0)`;
 }
 function metadata(table: string, id: string, revisions: string, entity: string, members?: 'candidates' | 'members'): Projection {
     return { from: `${table} e JOIN ${revisions} r ON r.scope_id=e.scope_id AND r.${id}=e.${id} AND r.revision=e.revision`,
