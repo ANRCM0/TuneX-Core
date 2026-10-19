@@ -14,11 +14,16 @@ configured PR checks and was merged by PR #111 as
 scope are recorded in [verification](foundation-verification-2026-10-19.md).
 This supersedes source-phase statements that verification has not started.
 Readiness 1-220 now has a case-by-case [assertion map](foundation-b-assertion-coverage.md):
-98 requirements have complete identified assertions and 122 remain partial.
+111 requirements have complete identified assertions and 109 remain partial.
 These are coverage classifications, not execution passes. The map records actual
 suites and the remaining obligations; an acceptance decision is still pending.
 PR #112 carries the B tests and necessary private repairs and requires its own
 exact-source Actions. Upper product-module parallelism remains closed.
+
+The B renewal repair in [FR-0026](../changes/FR-0026-runtime-queued-publication-renewal.md)
+constrains queued publication holds by the existing renewal lead. It changes
+publication timing without extending Agent authority or changing L0/wire/storage
+contracts. Its exact-source acceptance remains pending.
 
 The source-only sections below retain implementation rationale, consumer and
 planned-case details. Their no-check/unexecuted descriptions refer to each

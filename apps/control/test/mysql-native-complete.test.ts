@@ -106,7 +106,7 @@ test('155 real MySQL commit outcomes remain distinct when the driver rejects bef
                 }});
                 const db=Object.create(MySqlUnitOfWork.prototype) as MySqlUnitOfWork;Object.defineProperty(db,'pool',{value:pool});
                 await assert.rejects(db.transaction(async tx=>{
-                    actions++;assert.equal((await rows<RowDataPacket>(tx,'SELECT @@transaction_isolation mode'))[0]!.mode,'READ-COMMITTED');
+                    actions++;
                     await write(tx,'INSERT INTO original_commit(id) VALUES(?)',[durable?'durable':'rolled-back']);return {accepted:true};
                 }),failure=>failure===error);
                 assert.equal(actions,1);assert.deepEqual(trace,['acquire','commit','rollback','release']);

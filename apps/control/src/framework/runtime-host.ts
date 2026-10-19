@@ -72,7 +72,10 @@ export class RuntimeHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> imp
             a.assignmentId===old.assignmentId&&a.deploymentGeneration===old.deploymentGeneration&&a.bindingFence===old.bindingFence&&
             a.phase===old.phase&&a.driver.configDigest===old.driver.configDigest))??false;
         const published=previous?{sessionEpoch:previous.sessionEpoch,validUntil:this.ports.codec.parseTime(previous.validUntil)}:undefined;
-        if(previous&&holdPublishedSnapshot(published,{sessionEpoch:state.session_epoch,now,credentialUntil,withdrawn,awaitingClaim,multihopPreserved}))return previous;
+        // Queued work cannot defer renewal until the Agent's skew-adjusted cutoff.
+        // Keep the original hold predicate and also honor ordinary renewal lead.
+        if(previous&&published&&published.validUntil-now>this.policy.renewalLeadSeconds*1000&&
+            holdPublishedSnapshot(published,{sessionEpoch:state.session_epoch,now,credentialUntil,withdrawn,awaitingClaim,multihopPreserved}))return previous;
         const relayUntil=this.ports.relay?await this.ports.relay.authorizationBound(tx,assignments):Number.MAX_SAFE_INTEGER;
         if(previous&&reusePublishedSnapshot(published,{sessionEpoch:state.session_epoch,now,credentialUntil,relayUntil,
             renewalLeadSeconds:this.policy.renewalLeadSeconds,assignmentsUnchanged:previous.sessionEpoch===state.session_epoch&&

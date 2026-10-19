@@ -442,7 +442,13 @@ test('117 actual Node canonical service command policy API effects and retained 
         ['apps/control/test/access-command-ports.test.ts', '../src/modules/node-grant-ports.ts', ['NodeGrantWriter']],
         ['apps/control/test/planner.test.ts', '../src/modules/runtime/planner.ts', ['AuthorizedNodeFacts', 'ReservedSlot', 'SnapshotInput']],
         ['apps/control/src/api/routes.ts', '../modules/node-owner/public.ts', ['NodePolicy']],
-    ] as const) assert.deepEqual(imports(path, target), names.map(name => ({ local: name, remote: name, typeOnly: true })), path);
+    ] as const) {
+        const values = path === 'apps/control/test/planner.test.ts' ? ['compileDirect', 'compileSnapshot'] : [];
+        assert.deepEqual(imports(path, target), [
+            ...values.map(name => ({ local: name, remote: name, typeOnly: false })),
+            ...names.map(name => ({ local: name, remote: name, typeOnly: true })),
+        ], path);
+    }
 });
 
 test('117/125/127/130/135 moved public facts each have one canonical declaration and no current private-path declaration augmentation', () => {

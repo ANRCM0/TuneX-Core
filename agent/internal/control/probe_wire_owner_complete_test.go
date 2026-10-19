@@ -109,7 +109,11 @@ func TestProbeWireOwnerCompleteInvalidLargePathAndRequestBeforeProvider(t *testi
 func TestProbeWireOwnerCompleteInstanceParseCheckBeforeCancellation(t *testing.T){
 	for _,mode:=range []string{"valid","parse","correlation","status","reader"}{t.Run(mode,func(t *testing.T){
 		trace:=&timeOwnerTrace{};schedule:=&wireOwnerSchedule{trace:trace};request:=probeinstance.Request{ProtocolVersion:3,ProbeVersion:1,Kind:"probe-instance",Action:"inspect",NodeId:"node",BootId:"boot",SessionEpoch:2,InstanceId:strings.Repeat("a",64)}
-		ack:=probeinstance.Response{ProtocolVersion:3,ProbeVersion:1,Kind:"probe-instance-ack",Action:"inspect",NodeId:"node",BootId:"boot",SessionEpoch:2,InstanceId:request.InstanceId,State:"absent",ServerTime:"2026-10-19T01:02:03Z"}
+		ack:=probeinstance.Response{ProtocolVersion:3,ProbeVersion:1,Kind:"probe-instance-ack",Action:"inspect",NodeId:"node",BootId:"boot",SessionEpoch:2,InstanceId:request.InstanceId,State:"absent",ServerTime:"2026-10-19T01:02:03.000Z"}
+		// The native instance format requires exactly three fractional digits;
+		// prove the complete baseline parses/checks before introducing cancellation
+		// or the per-case malformed/correlation/status mutations below.
+		baseline,baselineErr:=json.Marshal(ack);if baselineErr!=nil{t.Fatal(baselineErr)};if _,baselineErr=nativeexecution.DecodeProbeInstanceResponse(request,baseline);baselineErr!=nil{t.Fatal("instance baseline fixture must pass strict Parse+Check",baselineErr,string(baseline))}
 		if mode=="correlation"{ack.BootId="other"};raw,_:=json.Marshal(ack);if mode=="parse"{raw=[]byte("{")};status:=200;if mode=="status"{status=403;raw=[]byte(`{"code":"DENIED"}`)};failure:=errors.New("instance body reader");body:=wireOwnerResponse(trace,status,raw);body.onRead=func(){schedule.workCancel()};if mode=="reader"{body.readErr=failure}
 		provider:=&wireOwnerAuxiliary{trace:trace,instance:func(_ context.Context,raw []byte,epoch uint64)(executionchannel.Reply,error){want,_:=json.Marshal(request);if string(raw)!=string(want)||epoch!=2{t.Fatal("instance native request projection")};return executionchannel.Reply{StatusCode:status,Body:body},nil}}
 		runner:=&Runner{effects:Effects{Schedule:schedule,Auxiliary:provider}};got,err:=runner.probeInstanceExchange(context.Background(),request)

@@ -197,6 +197,10 @@ jobs:
         run: node --test apps/control/test/resource-sql-complete.test.ts
       - name: Original MySQL migration lock, partial DDL and uncertain commit outcomes
         run: node --test apps/control/test/mysql-native-complete.test.ts
+      - name: Original observation and publication recovery SQL retention and rollback
+        run: node --test apps/control/test/observation-recovery-stores-complete.test.ts apps/control/test/publication-recovery-stores-complete.test.ts
+      - name: Original Node and Identity native authority and SQL rollback
+        run: node --test apps/control/test/node-owner-complete.test.ts apps/control/test/node-store-sql-complete.test.ts apps/control/test/identity-owner-complete.test.ts apps/control/test/identity-store-sql-complete.test.ts
       - name: Probe history native family projection and MySQL0037 immutable capture
         run: node --test apps/control/test/probe-history-complete.test.ts
       - name: Read-only upgrade assessment with SELECT-only MySQL and authenticated Agent journal

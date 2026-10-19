@@ -124,8 +124,8 @@ short publication windows from delayed Agent progress without uploading wire or
 credential bodies.
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 98 cases have fully
-identified assertions; 122 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 111 cases have fully
+identified assertions; 109 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
@@ -147,3 +147,24 @@ Agent pending-response recovery and observation provider/type witnesses. MySQL
 examples are routed to phase1. Local TypeScript passed; cached-only Go vet was
 blocked by two missing modules with GOPROXY=off, so no Go static pass is inferred.
 These tests require their own saved-source Actions and do not inherit 5107046.
+
+Candidate c60e4a0 had a new workflow indentation error; baseline39293488202
+failed before creating jobs, so it supplies no functional execution. The YAML-only
+fix0c51cc0859b16986c2f0bfde91085f6343da05b9 ran in baseline39293728114 at
+checkout24740a29b2b35b0bdbc0cae23e9942496a2cbee4. Contracts recorded1079
+TypeScript passes,2new fixture failures and89conditional skips; Web153/153.
+The two failures assumed a plain TLS JSON prototype and omitted two real value
+imports in a source-type expectation. Linux/Windows Agent found a malformed
+new Probe timestamp fixture. phase1 found a new test incorrectly asserted the
+session default isolation rather than current transaction behavior. All four
+fixture corrections are authored for the next candidate. Packaging39293728031,
+deployment tools, Probe, Relay isolation and3/4-node integration passed.
+
+The8-node browser path batch timed out after its ingress Agent safely expired.
+Sanitized snapshots show generation47issued17:38:44.783Z, validUntil17:39:29.783Z,
+Agent exit17:39:24.807Z and generation48issued17:39:29.789Z. FR-0026 records the
+queued-publication hold repair: honor the configured renewal lead before the
+Agent's existing skew cutoff. Tests cover exact boundaries and authority/persist
+failure ordering. No lease/guard relaxation is made. This source repair and the
+new HTTP, Node/Identity, observation, recovery and bootstrap/channel suites require
+the next frozen candidate's own full Actions. No complete B baseline is green.

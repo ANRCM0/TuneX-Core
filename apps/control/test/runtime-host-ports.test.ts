@@ -137,6 +137,34 @@ test('Runtime publication preserves queued same-instance multihop state and refu
     assert.equal(f.events.some(value => value.startsWith('retire:') || value.startsWith('authority:')), false);
 });
 
+test('FR0026 queued preserved multihop publications renew at the normal lead before Agent skew expiry', async () => {
+    for (const remaining of [18001, 18000, 17999, 5001, 5000]) {
+        const f = fixture(); f.assignment.role = 'multihop-ingress'; f.data.awaiting = 2;
+        Object.assign(f.ports, { policy: { ...DEFAULT_POLICY, leaseSeconds: 45, renewalLeadSeconds: 18 } });
+        f.data.previous = { ...f.previous(), validUntil: String(f.data.now + remaining) };
+        const snapshot = await f.host().snapshot('node', 2);
+        if (remaining > 18000) {
+            assert.equal(snapshot, f.data.previous); assert.equal(f.events.includes('compile'), false);
+        } else {
+            assert.equal(snapshot.snapshotGeneration, 5); assert.equal(snapshot.validUntil, '55000');
+            assert.deepEqual(snapshot.assignments, f.data.previous.assignments);
+            assert.deepEqual(f.events.slice(-6), ['verify', 'authority:55000/45/5', 'save-snapshot:5', 'leases', 'complete', 'commit']);
+        }
+    }
+    // An unrelated changed assignment still publishes immediately outside the lead.
+    const changed = fixture(); changed.assignment.role = 'multihop-ingress'; changed.data.awaiting = 1;
+    changed.data.previous = changed.previous(); changed.data.previous.assignments[0]!.bindingFence--;
+    assert.equal((await changed.host().snapshot('node', 2)).snapshotGeneration, 5);
+    for (const stage of ['authorityFailure', 'saveFailure'] as const) {
+        const f = fixture(), failure = new Error(stage); f.assignment.role = 'multihop-ingress'; f.data.awaiting = 1;
+        Object.assign(f.ports, { policy: { ...DEFAULT_POLICY, leaseSeconds: 45, renewalLeadSeconds: 18 } });
+        f.data.previous = { ...f.previous(), validUntil: '28000' }; f.data[stage] = failure;
+        await assert.rejects(f.host().snapshot('node', 2), error => error === failure);
+        assert.equal(f.events.at(-1), 'rollback'); assert.equal(f.events.includes('leases'), false);
+        assert.equal(f.events.includes('complete'), false);
+    }
+});
+
 test('Runtime stale worker claim after compilation refuses authority and Snapshot persistence', async () => {
     const f = fixture();
     const originalClaim = { ...f.work };

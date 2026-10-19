@@ -153,7 +153,14 @@ test('186 recorder preserves all five families with detached immutable challenge
             assert.ok(Object.isFrozen(stored.echoChallenge)); assert.ok(Object.isFrozen(stored.result!.echo));
             assert.equal(verifyProbeEchoProof(value.serviceContext!, invocation(value), value.echoChallenge!, stored.result!.echo!), true);
         } else assert.equal(Object.hasOwn(stored, 'echoChallenge'), false);
-        if (measurement.includes('tls')) assert.deepEqual(stored.result!.tls, (request(value, 3) as native.ProbeServicesResultRequest).tls);
+        if (measurement.includes('tls')) {
+            const tls = stored.result!.tls;
+            assert.ok(tls); assert.equal(Object.getPrototypeOf(tls), null);
+            assert.deepEqual(Object.keys(tls), ['version', 'alpn', 'leafFingerprint', 'verified']);
+            assert.deepEqual({ ...tls }, { version: 'TLSv1.3', alpn: 'tunex-observation/1',
+                leafFingerprint: hash(Buffer.from('AQ==', 'base64')), verified: true });
+            assert.deepEqual({ ...tls }, (request(value, 3) as native.ProbeServicesResultRequest).tls);
+        }
         const view = publicProbeRun(stored, issued + 3000);
         assert.equal(view.contentDigest, digest(stored)); assert.equal(view.health, 'unknown'); assert.equal(view.executionAuthorized, false);
         assert.equal(view.historical, true); assert.equal(view.permitExpired, true); assert.equal(view.resultExpired, true);
