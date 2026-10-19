@@ -124,8 +124,8 @@ short publication windows from delayed Agent progress without uploading wire or
 credential bodies.
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 130 cases have fully
-identified assertions; 90 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 145 cases have fully
+identified assertions; 75 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
@@ -217,3 +217,45 @@ append/detach rollback assertions; full create/group/publication caller coverage
 remains explicitly partial. The maintained map identifies 130 complete assertion
 requirements and 90 partial requirements. This source classification is separate
 from execution success. No local functional or MySQL tests ran.
+
+Candidate `c8c358f66ddfecc0a2268ae251c07d138b142ded` subsequently finished its
+eight-node Chromium lifecycle and namespace partition/loss job successfully.
+The baseline still failed Contracts, Windows and phase1 as recorded above.
+
+Candidate `ef9f84002ce3a98a7e7e2d7fbbe9a7bf4fb5f711` runs baseline
+`39305091289` at checkout `04bcf03a4322233c12ad332c9c93fb510c4b8f7a`.
+Windows, deployment tools, Probe, Relay isolation and three/four/eight-node
+integration passed. Packaging `39305091229` also passed on this candidate. Contracts recorded
+1374 TypeScript passes, two failures and112conditional skips; Web153/153.
+The failures were new Notification expectations for the native parser's
+null-prototype records and synchronous request-creation rejection. phase1 stopped
+on a new Node grant fixture whose subject was a viewer, correctly denied by the
+original management check. Corrections retain that refusal and unchanged-state
+proof before seeding a manager for the three-write rollback case. No production
+behavior is changed by these fixture repairs; their next-source execution is pending.
+
+The following authored batch adds Echo bounded-exchange, Audit populated native
+attribution/HTTP, Station retention/transaction, Forward command/native execution
+and PathGroup owner/SQL assertions. The actual Forward/Executor/Path/Group chain
+shares one caller transaction through capacity then both immutable provenance
+owners. Outer publication/Ingress batch callers remain explicitly partial.
+The maintained map identifies136complete assertion requirements and84partial
+requirements across336source suites. Native MySQL cases are explicitly routed to
+phase1. This classification supplies no execution pass or foundation acceptance.
+
+The next authored batch completes the outer PathPublications owner chain and
+IngressGroups, Diagnostics, ObservationServices, Probe instance/qualification
+registries and native Journal format/loader/Bootstrap assertions. Publication
+uses actual ForwardCommands, native execution, PathBindings and PathGroups in one
+transaction, including grant refusal, every late owner/attempt/response rollback
+and pointer-only compensation retaining immutable history. Original native SQL
+and canonical MySQL batch/refusal/CAS/quota tests are explicitly routed to phase1.
+The maintained map now identifies 145 complete assertion requirements and 75
+partial requirements across 350 source suites. This is assertion-source coverage,
+not a completion percentage or passing execution. No local functional or MySQL
+tests ran. Later candidate Actions must execute these additions and the three
+ef9 fixture corrections on their exact source; historical integration success
+does not validate them.
+
+Integrated TypeScript and staged whitespace checks passed before saving this batch.
+Go test/build/vet/race and all functional/native MySQL execution remain Actions-owned.

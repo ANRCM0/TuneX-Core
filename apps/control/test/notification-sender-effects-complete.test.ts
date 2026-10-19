@@ -78,12 +78,12 @@ test('71 monotonic total deadline covers DNS and authorization and suppresses la
     for(const behavior of ['deny','throw'] as const){const h=harness(),pending=h.sender.send({...input(),beforeDispatch:async()=>{if(behavior==='throw')throw new Error('private guard failure');return false;}});h.answer();assert.equal((await pending).code,behavior==='throw'?'GUARD_FAILED':'DISPATCH_DENIED');assert.equal(h.requests.length,0);await h.sender.close();}
 });
 
-test('71 response cap counts cumulative bytes accepts exact4096 denies4097 and preserves incomplete invalid status or native errors as unknown',async()=>{
+test('71 response cap counts cumulative bytes accepts exact4096 denies4097 and distinguishes request creation refusal from dispatched unknown errors',async()=>{
     for(const mode of ['exact','overflow','incomplete','undefined','low','high','error','aborted','request-error','request-throw'] as const){const h=harness();h.state.requestThrow=mode==='request-throw';const pending=h.sender.send(input());h.answer();await flush();if(mode!=='request-throw'){
         const response=h.respond(mode==='undefined'?undefined:mode==='low'?99:mode==='high'?600:204,mode!=='incomplete');if(mode==='undefined')response.statusCode=undefined;
         if(mode==='exact'||mode==='overflow'){response.emit('data',Buffer.alloc(2048));response.emit('data',Buffer.alloc(mode==='exact'?2048:2049));}
         if(mode==='error'||mode==='aborted')response.emit(mode,new Error('private response failure'));else if(mode==='request-error')h.requests[0]!.req.emit('error',new Error('private TLS error'));else response.emit('end');
-    }const result=await pending;assert.deepEqual(plain(result),mode==='exact'?{outcome:'delivered',code:'HTTP_ACCEPTED',statusCode:204}:unknown(mode==='overflow'?'RESPONSE_LIMIT':'NETWORK_UNKNOWN'),mode);assert.equal(h.dns.length,1);assert.ok(h.requests.length<=1);await h.sender.close();}
+    }const result=await pending;assert.deepEqual(plain(result),mode==='exact'?{outcome:'delivered',code:'HTTP_ACCEPTED',statusCode:204}:mode==='request-throw'?reject('NETWORK_UNKNOWN'):unknown(mode==='overflow'?'RESPONSE_LIMIT':'NETWORK_UNKNOWN'),mode);assert.equal(h.dns.length,1);assert.equal(h.requests.length,mode==='request-throw'?0:1);await h.sender.close();}
 });
 
 test('71 all HTTP class boundaries redirect and retry statuses retain one request and original public outcome',async()=>{
