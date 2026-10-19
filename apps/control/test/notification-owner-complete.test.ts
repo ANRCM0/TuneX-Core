@@ -94,7 +94,7 @@ test('72 claim denial precedence recovery authorization policy endpoint silence 
     const cases:Array<[string,(f:ReturnType<typeof fixture>)=>void]>=[
         ['RECOVERY_SUSPENDED',f=>{f.state.row.recoverySuspended=true;f.state.denied=true;f.state.policy=null;}],
         ['AUTHORIZATION_REVOKED',f=>{f.state.denied=true;f.state.policy=null;}],
-        ['POLICY_CHANGED',f=>{f.state.policy.configRevision=2;f.state.endpoint=null;}],
+        ['POLICY_CHANGED',f=>{f.state.policy.revision=2;f.state.policy.configRevision=2;f.state.endpoint=null;}],
         ['ENDPOINT_CHANGED',f=>{f.state.endpoint.credentialRevision=2;f.state.endpoint.revision=2;f.state.policy.silencedUntil=at+1;}],
         ['CURRENT_SILENCE',f=>{f.state.policy.silencedUntil=at+1;f.state.binding='sha256:'+'d'.repeat(64);}],
         ['RECOVERY_SUSPENDED',f=>{f.state.binding='sha256:'+'d'.repeat(64);}]];

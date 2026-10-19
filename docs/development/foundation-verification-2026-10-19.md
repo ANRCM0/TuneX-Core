@@ -124,8 +124,8 @@ short publication windows from delayed Agent progress without uploading wire or
 credential bodies.
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 122 cases have fully
-identified assertions; 98 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 130 cases have fully
+identified assertions; 90 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
@@ -194,3 +194,26 @@ boundary check passed during integration; no local functional tests ran. Its
 saved-source Actions remain required. The map now distinguishes 122 complete
 assertion requirements from 98 partial requirements; neither count is an
 execution pass or a foundation/physical-host/release decision.
+
+Candidate `c8c358f66ddfecc0a2268ae251c07d138b142ded` ran baseline
+`39301514084` at checkout `291cfd4` (the logged merge of that candidate into
+`4c2fabdb9ab102614eed31c2808bea5a72227904`). Contracts recorded 1305 TypeScript
+passes, seven failures and 109 conditional skips; Web passed 153/153. The failures
+were new Notification policy-version consistency and Transit fake-row aliasing
+and native versus parsed JSON prototype expectations. Windows found a new
+scheduling fixture checked a deferred ticker Stop before its notification. phase1
+found a new negotiation clock fault escaped into mysql2's subsequent connection
+timestamp and inventory. Source fixture repairs preserve the original production
+contracts and their denial/order assertions; they require the next candidate's
+Actions. Native PathTemplate SQL and per-write canonical rollback cases passed
+before the negotiation failure. Deployment tools, Probe, Relay isolation and
+three/four-node integration passed. Packaging `39301514062` passed at the same
+logged checkout; eight-node execution is still pending at this record update.
+
+The next authored batch adds complete Runner, forward-counter/time-guard, offline
+Transit coordination and Notification sender/admission/lifecycle assertions.
+PathBinding now has native SQL, exact projection/default-time and canonical
+append/detach rollback assertions; full create/group/publication caller coverage
+remains explicitly partial. The maintained map identifies 130 complete assertion
+requirements and 90 partial requirements. This source classification is separate
+from execution success. No local functional or MySQL tests ran.

@@ -106,14 +106,14 @@ func(t *traceFixture)count(value string)int{n:=0;for _,event:=range t.events(){i
 type timerFixture struct{ticks chan time.Time;stops int;interval time.Duration}
 func(t *timerFixture)C()<-chan time.Time{return t.ticks}
 func(t *timerFixture)Stop()bool{t.stops++;return t.stops==1}
-type tickerFixture struct{ticks chan time.Time;trace *traceFixture;interval time.Duration}
+type tickerFixture struct{ticks chan time.Time;trace *traceFixture;interval time.Duration;stopped chan struct{}}
 func(t *tickerFixture)C()<-chan time.Time{return t.ticks}
-func(t *tickerFixture)Stop(){t.trace.add("ticker-stop:"+t.interval.String())}
+func(t *tickerFixture)Stop(){t.trace.add("ticker-stop:"+t.interval.String());if t.stopped!=nil{close(t.stopped)}}
 type scheduleFixture struct{mutex sync.Mutex;trace *traceFixture;now time.Time;after []time.Duration;timers []*timerFixture;waits []time.Duration;until time.Duration;untilInputs []time.Time;onAfter func(int);onTimer func(int,*timerFixture);onTicker func(*tickerFixture);timeoutContexts []context.Context;timeoutDurations []time.Duration;timeoutCancels int}
 func(s *scheduleFixture)Now()time.Time{s.trace.add("now");return s.now}
 func(s *scheduleFixture)Until(at time.Time)time.Duration{s.trace.add("until");s.mutex.Lock();s.untilInputs=append(s.untilInputs,at);s.mutex.Unlock();return s.until}
 func(s *scheduleFixture)After(d time.Duration)<-chan time.Time{s.after=append(s.after,d);s.trace.add("after:"+d.String());ch:=make(chan time.Time,1);if s.onAfter!=nil{s.onAfter(len(s.after))};ch<-s.now;return ch}
-func(s *scheduleFixture)NewTicker(d time.Duration)*tickerFixture{ticker:=&tickerFixture{make(chan time.Time,1),s.trace,d};s.trace.add("ticker:"+d.String());if s.onTicker!=nil{s.onTicker(ticker)};return ticker}
+func(s *scheduleFixture)NewTicker(d time.Duration)*tickerFixture{ticker:=&tickerFixture{ticks:make(chan time.Time,1),trace:s.trace,interval:d};s.trace.add("ticker:"+d.String());if s.onTicker!=nil{s.onTicker(ticker)};return ticker}
 func(s *scheduleFixture)NewTimer(d time.Duration)*timerFixture{timer:=&timerFixture{ticks:make(chan time.Time,1),interval:d};s.mutex.Lock();s.waits=append(s.waits,d);s.timers=append(s.timers,timer);index:=len(s.timers);s.mutex.Unlock();if s.onTimer!=nil{s.onTimer(index,timer)};return timer}
 func(s *scheduleFixture)AfterFunc(ctx context.Context,work func())func()bool{s.trace.add("afterfunc");stop:=context.AfterFunc(ctx,work);return func()bool{s.trace.add("afterfunc-stop");return stop()}}
 func(s *scheduleFixture)WithTimeout(ctx context.Context,d time.Duration)(context.Context,context.CancelFunc){s.timeoutContexts=append(s.timeoutContexts,ctx);s.timeoutDurations=append(s.timeoutDurations,d);work,cancel:=context.WithCancel(ctx);return work,func(){s.timeoutCancels++;cancel()}}
@@ -191,6 +191,7 @@ func(r *Runner)probeCurrentLocked(*registeredProbe)bool{if r.mutex.TryLock(){r.m
 func(r *Runner)probeWatchLocal(*probeAuthorityWatch)error{r.trace.add("watch-local");return r.watchFailure}
 func(r *Runner)probeStatusExchange(w *probeAuthorityWatch)error{r.statusCount++;r.trace.add("status");if r.onStatus!=nil{return r.onStatus(w,r.statusCount)};return nil}
 func equalFixture(t *testing.T,got,want any){t.Helper();if !reflect.DeepEqual(got,want){t.Fatalf("got %#v want %#v",got,want)}}
+func waitTickerStopFixture(t *testing.T,stopped <-chan struct{}){t.Helper();select{case <-stopped:case <-time.After(5*time.Second):t.Fatal("original ticker deferred Stop did not finish")}}
 
 func TestRunOriginalHelloBackoffFatalAndEarlyFailures(t *testing.T){
  failure:=errors.New("original-failure")
@@ -203,7 +204,7 @@ func TestRunOriginalHelloBackoffFatalAndEarlyFailures(t *testing.T){
 func TestRunOriginalCredentialRenewalRetryReportAndRetirement(t *testing.T){
  failure:=errors.New("original-effect-error")
  for _,mode:=range []string{"rotate-retry","due-boundary","not-due","reload","relay-retry","relay-success","poll-error","report-error","empty","401","403","superseded","integrity"}{
-  r,ctx,cancel:=newRunnerFixture();r.pending=[]int{1};r.clock.onAfter=func(n int){limit:=1;if mode=="rotate-retry"{limit=3};if mode=="401"||mode=="403"||mode=="superseded"||mode=="relay-retry"||mode=="poll-error"||mode=="report-error"||mode=="integrity"{limit=2};if n==limit{cancel()}}
+  r,ctx,cancel:=newRunnerFixture();guardStopped:=make(chan struct{});r.clock.onTicker=func(ticker *tickerFixture){if ticker.interval==100*time.Millisecond{ticker.stopped=guardStopped}};r.pending=[]int{1};r.clock.onAfter=func(n int){limit:=1;if mode=="rotate-retry"{limit=3};if mode=="401"||mode=="403"||mode=="superseded"||mode=="relay-retry"||mode=="poll-error"||mode=="report-error"||mode=="integrity"{limit=2};if n==limit{cancel()}}
   switch mode{case "rotate-retry":r.options.Rotate=true;r.rotateFailures=[]error{failure,nil};case "due-boundary":r.clock.until=2*time.Minute;case "not-due":r.clock.until=2*time.Minute+time.Nanosecond;case "reload":r.reloadFailure=failure;case "relay-retry","relay-success":r.options.Relay=true;r.relayDue=true;if mode=="relay-retry"{r.renewFailure=failure};case "poll-error":r.pollFailure=failure;case "report-error":r.reportFailure=failure;case "empty":r.pending=nil;case "401":r.pollFailure=httpError{status:401};case "403":r.pollFailure=httpError{status:403};case "superseded":r.pollFailure=httpError{code:"SESSION_SUPERSEDED"};case "integrity":r.pollFailure=httpError{code:"INTEGRITY_FAILURE"}}
   err:=r.Run(ctx);cancel();if mode=="reload"{if err!=failure||r.polls!=0||len(r.clock.after)!=0{t.Fatal("reload original error/short circuit")};continue};if err!=context.Canceled{t.Fatal(mode,err)}
   if mode=="rotate-retry"{if r.rotations!=2||r.reloads!=3||r.polls!=3||r.trace.count("Credential rotation retry pending:")!=1{t.Fatal("rotation retry flag/reset")}}else if mode=="due-boundary"{if r.rotations!=1{t.Fatal("renewal equal bound not due")}}else if r.rotations!=0{t.Fatal("unexpected machine rotation",mode)}
@@ -213,18 +214,20 @@ func TestRunOriginalCredentialRenewalRetryReportAndRetirement(t *testing.T){
   if mode=="report-error"&&(r.reports!=2||r.polls!=2||r.trace.count("Agent report retry pending:")!=2){t.Fatal("report failure retry warning")}
   if (mode=="poll-error"||mode=="integrity")&&(r.polls!=2||r.reloads!=2){t.Fatal("non-retiring poll failure stopped retries",mode)}
   if (mode=="empty"||mode=="poll-error"||mode=="integrity")&&r.reports!=0{t.Fatal("report ran after poll failure or no pending")}
-  if r.trace.count("ticker-stop:100ms")!=1||r.trace.count("idle-close")!=1||r.trace.count("stop")!=1{t.Fatal("Run guard join/final cleanup",mode,r.trace.events())}
+  // The original guard closes guardDone before its earlier deferred ticker.Stop.
+  // Run joins guardDone; explicitly await the remaining deferred native effect.
+  waitTickerStopFixture(t,guardStopped);if r.trace.count("ticker-stop:100ms")!=1||r.trace.count("idle-close")!=1||r.trace.count("stop")!=1{t.Fatal("Run guard join/final cleanup",mode,r.trace.events())}
  }
 }
 
 func TestRunOriginalWorkersCancelAndJoinBeforeReturning(t *testing.T){
- r,ctx,cancel:=newRunnerFixture();r.options.Telemetry=true;r.options.ForwardTelemetry=true;r.options.HostTelemetry=true;r.options.ProbeTelemetry=true;r.options.Diagnostics="diagnostics";r.options.ProbeRegistration=true;r.options.ProbeExecution=true
+ r,ctx,cancel:=newRunnerFixture();guardStopped:=make(chan struct{});r.clock.onTicker=func(ticker *tickerFixture){if ticker.interval==100*time.Millisecond{ticker.stopped=guardStopped}};r.options.Telemetry=true;r.options.ForwardTelemetry=true;r.options.HostTelemetry=true;r.options.ProbeTelemetry=true;r.options.Diagnostics="diagnostics";r.options.ProbeRegistration=true;r.options.ProbeExecution=true
  r.workerStarted=make(chan string,4);release:=make(chan struct{});r.workerRelease=release;entered:=make(chan struct{});r.onPoll=func(context.Context){for i:=0;i<4;i++{<-r.workerStarted};close(entered);cancel()}
  done:=make(chan error,1);go func(){done<-r.Run(ctx)}();<-entered
  select{case err:=<-done:t.Fatalf("Run returned before worker join %v",err);default:}
  close(release);select{case err:=<-done:if err!=context.Canceled{t.Fatal(err)};case <-time.After(5*time.Second):t.Fatal("Run failed to join cancelled workers")}
  for _,name:=range []string{"process","forward","host","probe"}{if r.trace.count("start:"+name)!=1||r.trace.count("cancel:"+name)!=1||r.trace.count("done:"+name)!=1{t.Fatal("worker lifecycle",name,r.trace.events())}}
- for _,interval:=range []string{"100ms","500ms","10s"}{if r.trace.count("ticker:"+interval)!=1||r.trace.count("ticker-stop:"+interval)!=1{t.Fatal("ticker lifecycle",interval)}}
+ waitTickerStopFixture(t,guardStopped);for _,interval:=range []string{"100ms","500ms","10s"}{if r.trace.count("ticker:"+interval)!=1||r.trace.count("ticker-stop:"+interval)!=1{t.Fatal("ticker lifecycle",interval)}}
  if r.trace.count("diagnostic:true")!=1||r.trace.count("counter:true")!=1||r.trace.count("stop")!=2||r.trace.count("idle-close")!=1||r.revokes!=1||r.clock.timeoutCancels!=1{t.Fatal("diagnostic and registration finalization",r.trace.events())}
 }
 

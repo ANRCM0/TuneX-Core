@@ -219,6 +219,8 @@ jobs:
         run: node --test apps/control/test/path-template-mysql-acceptance.test.ts
       - name: Original Forward path bindings, concurrent CAS, provenance quota rollback and SELECT-only impact
         run: node --test apps/control/test/path-binding-mysql-acceptance.test.ts
+      - name: Original Path binding SQL and coordination journal native transaction rollback
+        run: node --test apps/control/test/path-binding-store-sql-complete.test.ts apps/control/test/transit-coordination-store-complete.test.ts apps/control/test/transit-delivery-store-complete.test.ts
       - name: Passive observation API with SELECT-only MySQL and scoped provenance
         run: node --test apps/control/test/node-observation-mysql-acceptance.test.ts
       - name: Non-executable probe preflight with SELECT-only MySQL and current binding checks
