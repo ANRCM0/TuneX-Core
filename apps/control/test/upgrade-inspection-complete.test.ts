@@ -149,7 +149,7 @@ test('only the exact reviewed CHECK replacement permits no new footprint while w
  assert.deepEqual(schemaMarkers(name,sql+'\n--'),[]);
  // Existing 0033 tables must not create a false interrupted-0038 footprint before this migration applies.
  assert.deepEqual(inspectSchema([],schemaMarkers(name,sql),[{table:'probe_plans',column:'config',type:'json'}]),[]);
- for(const changed of [sql.replace('probe_plans_chk_7','probe_plans_chk_8'),sql.replace('UNSIGNED INTEGER','UNSIGNEDINTEGER'),sql.replace('UNSIGNED INTEGER','UNSIGNED  INTEGER'),
+ for(const changed of [sql.replace('probe_plans_chk_7','probe_plans_chk_8'),sql.replace("'UNSIGNED INTEGER'","'UNSIGNEDINTEGER'"),sql.replace("'UNSIGNED INTEGER'","'UNSIGNED  INTEGER'"),
   sql.replace(" IN ('INTEGER','UNSIGNED INTEGER')"," = 'INTEGER'"),sql.replace(' IS NOT NULL',' IS NULL'),
   sql.replace('probe_plan_expiry_json_integer','other_constraint'),sql+'\nSELECT 1;',sql.replace('ALTER TABLE','ALTER /* ignored? */ TABLE'),
   sql.replace('ALTER TABLE','ALTER --not-comment\n TABLE'),sql.replace('ALTER TABLE','ALTER\u00a0TABLE')]){

@@ -428,6 +428,13 @@ macOS job; no production/source contract or new test body changes. This head is
 superseded before complete acceptance, and its partial results do not validate
 the next saved candidate.
 
+The superseded job's completed log reports1945 TypeScript passes, one failure
+and143 conditional skips; Web153/153 passed. The remaining new rejection fixture
+replaced UNSIGNED INTEGER in its introductory SQL comment rather than the quoted
+literal. The next source change targets the quoted literal exactly, preserving
+strict SQL refusal and all original assertions. The routing-only b31a432 candidate
+inherits that fixture and is also superseded; no passing result is inferred.
+
 The same source audit confirms all45 database-conditional TypeScript files are
 explicitly routed through phase1 with disposable MySQL8.4.9. Linux/getuid and
 GITHUB_ACTIONS native tests run in contracts; Chromium/namespace cases have their
