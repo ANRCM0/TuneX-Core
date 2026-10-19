@@ -36,9 +36,12 @@ PR #111 的源码 head：`9f1d78d939a59c1514d9bcca1591afa2e89e6754`。
 
 地基仍为 **not stable/accepted**；上层模块并行开发门禁关闭。
 [readiness](foundation-readiness.md) 的 220 条要求已逐项形成
-[断言映射](foundation-b-assertion-coverage.md)，111 条具有完整断言、109 条仍部分覆盖。
+[断言映射](foundation-b-assertion-coverage.md)，122 条具有完整断言、98 条仍部分覆盖。
 PR #112 补充 Runtime/Agent/Web/owner 事务与失败顺序回归，并修复通知取消注册时
 容量不能释放的私有竞态；新增测试和修复等待最终修订的独立 Actions 结果。
+候选 `5b44eec` 已在 `a43e1be` 测试合并修订通过 3/4/8 节点、Probe、Relay
+隔离、Windows、部署和容器任务；Contracts 与 phase1 的夹具错误已修入下一批，
+整轮仍未全绿。
 继续关闭记录中的余缺，再记录可接受的公共接口范围。
 
 独立物理多主机、长稳／负载、独立 Responder 构建／发布、正式发行与生产就绪

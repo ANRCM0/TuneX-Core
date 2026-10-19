@@ -269,7 +269,7 @@ test('119 publication samples after original awaited state and snapshot reads an
 test('119 Host publication retains every hold reuse deadline time sample and authority parse ordering including revoked short circuit',async()=>{
     for(const mode of ['new','hold','hold-boundary','reuse','renewal-boundary','credential-cap','relay-cap','withdrawn','expired-credential','new-session','changed-assignments'] as const){
         const f=fixture();f.data.previous=mode==='new'?undefined:f.previous();
-        if(mode==='hold'||mode==='hold-boundary'){f.data.awaiting=1;f.data.previous!.validUntil=String(f.data.now+(mode==='hold'?5001:5000));}
+        if(mode==='hold'||mode==='hold-boundary'){f.data.awaiting=1;f.data.previous!.validUntil=String(f.data.now+DEFAULT_POLICY.renewalLeadSeconds*1000+(mode==='hold'?1:0));}
         if(mode==='renewal-boundary')f.data.previous!.validUntil=String(f.data.now+DEFAULT_POLICY.renewalLeadSeconds*1000);
         if(mode==='credential-cap')f.data.credentialUntil=150000;
         if(mode==='relay-cap')f.data.relayUntil=150000;

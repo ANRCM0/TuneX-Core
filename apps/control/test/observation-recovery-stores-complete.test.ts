@@ -128,7 +128,10 @@ async function withDatabase(action:(db:MySqlUnitOfWork)=>Promise<void>) {
 async function insert(tx:Transaction,table:string,value:Record<string,unknown>) {
     const keys=Object.keys(value);await write(tx,`INSERT INTO ${table}(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`,Object.values(value));
 }
-async function table(db:MySqlUnitOfWork,name:string) {return rows<Record<string,unknown>>(db.pool,`SELECT * FROM ${name} ORDER BY 1,2`);}
+async function table(db:MySqlUnitOfWork,name:string) {
+    const values=await rows<Record<string,unknown>>(db.pool,`SELECT * FROM ${name}`);
+    return values.sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+}
 async function snapshot(db:MySqlUnitOfWork,names:readonly string[]):Promise<Record<string,Record<string,unknown>[]>> {
     return Object.fromEntries(await Promise.all(names.map(async name=>[name,await table(db,name)])));
 }

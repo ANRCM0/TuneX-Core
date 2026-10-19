@@ -148,7 +148,7 @@ test('186 recorder preserves all five families with detached immutable challenge
         assert.equal(probeRunImmutable(stored), probeRunImmutable(owner));
         assert.ok(Object.isFrozen(stored)); assert.ok(Object.isFrozen(stored.binding)); assert.ok(Object.isFrozen(stored.result));
         if (measurement.includes('echo')) {
-            assert.deepEqual(stored.echoChallenge, value.echoChallenge); assert.deepEqual(stored.result!.echo, proof(value));
+            assert.deepEqual(stored.echoChallenge, value.echoChallenge); assert.equal(Object.getPrototypeOf(stored.result!.echo!), null); assert.deepEqual(Object.entries(stored.result!.echo!), Object.entries(proof(value)));
             assert.equal(stored.result!.requestBytes, 256); assert.equal(stored.result!.responseBytes, 256);
             assert.ok(Object.isFrozen(stored.echoChallenge)); assert.ok(Object.isFrozen(stored.result!.echo));
             assert.equal(verifyProbeEchoProof(value.serviceContext!, invocation(value), value.echoChallenge!, stored.result!.echo!), true);

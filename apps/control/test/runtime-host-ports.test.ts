@@ -130,6 +130,7 @@ test('Runtime publication stops on authority/save failures and never records lea
 
 test('Runtime publication preserves queued same-instance multihop state and refuses exhausted counters before retirement', async () => {
     const f = fixture(); f.assignment.role = 'multihop-ingress'; f.data.previous = f.previous(); f.data.awaiting = 1;
+    Object.assign(f.ports, { policy: { ...DEFAULT_POLICY, leaseSeconds: 45, renewalLeadSeconds: 18 } });
     assert.equal(await f.host().snapshot('node', 2), f.data.previous);
     assert.equal(f.events.includes('compile'), false);
     f.events.length = 0; f.data.previous = undefined; f.state.snapshot_generation = MAX_COUNTER;

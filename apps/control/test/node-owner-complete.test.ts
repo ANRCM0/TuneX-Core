@@ -131,7 +131,7 @@ test('12 Relay authority overlap is bounded by original machine certificate life
 });
 
 test('12 grant no-op change conflict revoked and exhaustion preserve visibility Runtime lock and scoped read before write and access audit',async()=>{
- const order=['owner','scope','visible','lockNode','scopedNode','grantRevisionForUpdate'];
+ const order=['isCounter','owner','scope','visible','lockNode','scopedNode','grantRevisionForUpdate'];
  for(const allowed of [false,true])for(const previous of [false,true]){const f=fixture();f.state.grant=previous;const result=await f.options.db.transaction(tx=>f.host.changeGrant(tx,'owner','scope-a','node-a','subject',1,allowed));
   assert.deepEqual(result,{nodeId:'node-a',actorId:'subject',revision:allowed===previous?1:2,allowed,changed:allowed!==previous});
   assert.deepEqual(sequence(f),['begin',...order,...(allowed?['scope']:[]),'hasGrant',...(allowed!==previous?[allowed?'insertGrant':'deleteGrant','setGrantRevision','accessAudit']:[]),'commit']);

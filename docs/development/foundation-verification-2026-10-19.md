@@ -124,8 +124,8 @@ short publication windows from delayed Agent progress without uploading wire or
 credential bodies.
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 111 cases have fully
-identified assertions; 109 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 122 cases have fully
+identified assertions; 98 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
@@ -168,3 +168,29 @@ Agent's existing skew cutoff. Tests cover exact boundaries and authority/persist
 failure ordering. No lease/guard relaxation is made. This source repair and the
 new HTTP, Node/Identity, observation, recovery and bootstrap/channel suites require
 the next frozen candidate's own full Actions. No complete B baseline is green.
+
+Candidate `5b44eec5fdfe7f45bbce9ec721d517aeb1724c62` ran in baseline
+`39297576207` at checkout `a43e1be8bb5a48e2d677659ab4cd57a334b7c1cc`.
+Deployment tools, Windows Agent, Probe, Relay isolation and all 3/4/8-node
+integration jobs passed. The 8-node job includes renewal, Control restart,
+namespace partition/delay/loss, each intermediate restart, prior-generation
+report replay, grant withdrawal/restoration and deletion after offline lease
+expiry. Packaging `39297576289` passed at the same checkout. This supplies
+configured integration evidence for FR-0026, not complete B acceptance.
+
+Contracts recorded 1193 TypeScript passes, six failures and 98 conditional skips.
+Four new expectations mishandled bearer terminal newlines, an observed validation
+call, the captured mock clock proxy and a null-prototype historical proof. Two prior
+Runtime hold assertions still expected holding inside the renewal lead changed
+by FR-0026. phase1 stopped on a new inventory helper ordering a one-column table
+by a nonexistent second column. All seven fixture corrections are authored in
+the next batch; no production behavior is changed for these fixture repairs.
+
+The following authored batch adds original scheduler/CLI, Transport, Transit
+reservation/stage/abort/negotiation, PathTemplate and Notification storage/Vault
+assertions. MySQL cases are explicitly routed to phase1; native Linux Vault runs
+through the ordinary Linux contracts suite. Local TypeScript and the 950-file
+boundary check passed during integration; no local functional tests ran. Its
+saved-source Actions remain required. The map now distinguishes 122 complete
+assertion requirements from 98 partial requirements; neither count is an
+execution pass or a foundation/physical-host/release decision.

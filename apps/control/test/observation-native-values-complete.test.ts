@@ -32,7 +32,7 @@ test('40/41/42 native helper aliases preserve public parser digest and original 
     assert.equal(native.parseProbeServiceContext,wire.parseProbeServiceContext);assert.equal(native.parseProbeEchoServiceContext,echo.parseProbeEchoServiceContext);
     for(const name of ['parseNodeTelemetryAck','parseNodeTelemetrySample','parseHostTelemetryAck','parseHostTelemetrySample','parseForwardTelemetryAck','parseForwardTelemetryCoverage','parseForwardTelemetryIdentity','parseForwardTelemetryPoint','parseForwardTelemetrySample','parseProbeTelemetryAck','parseProbeTelemetryCoverage','parseProbeTelemetryIdentity','parseProbeTelemetryPoint','parseProbeTelemetrySample','telemetryUint64'] as const)assert.equal(native[name],telemetry[name],name);
     let reads=0;const original=()=>{reads++;return 7;};t.mock.method(Date,'now',original);
-    const captured=native.nativeWallClockSource();assert.equal(captured,original);assert.equal(reads,0);
+    const current=Date.now,captured=native.nativeWallClockSource();assert.equal(captured,current);assert.equal(reads,0);
     t.mock.method(Date,'now',()=>9);assert.equal(captured(),7);assert.equal(native.nativeWallClockNow(),9);assert.equal(reads,1);
 });
 

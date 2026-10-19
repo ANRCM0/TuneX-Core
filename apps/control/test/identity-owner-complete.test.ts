@@ -30,9 +30,7 @@ const meaningful=(f:ReturnType<typeof fixture>)=>f.events.filter(name=>!['isId',
 
 test('20 explicit access host preserves exact native Bearer grammar pool versus transaction lookup and 401 boundaries',async()=>{
  for(const header of [undefined,'',token,'bearer '+token,'Bearer  '+token,'Bearer '+token+' ','Bearer '+'a'.repeat(31),'Bearer '+'a'.repeat(129),'Bearer '+'a'.repeat(31)+'+']){const f=fixture();await assert.rejects(f.host.authenticate(header),code('UNAUTHENTICATED'));assert.deepEqual(f.events,['bearer']);}
- // The original header regex uses $, retaining its native final-newline match;
- // standalone bearer validation has a separate explicit CR/LF refusal.
- const newline=fixture();assert.equal(await newline.host.authenticate('Bearer '+token+'\n'),'actor');assert.equal(validBearerToken(token+'\n'),false);
+ const newline=fixture();await assert.rejects(newline.host.authenticate('Bearer '+token+'\n'),code('UNAUTHENTICATED'));assert.deepEqual(newline.events,['bearer']);assert.equal(validBearerToken(token+'\n'),false);
  for(const method of ['authenticate','authenticateIn'] as const)for(const absent of [false,true]){const f=fixture();if(absent)f.state.account=undefined;const invoke=()=>method==='authenticate'?f.host.authenticate('Bearer '+token):f.host.authenticateIn(f.tx,'Bearer '+token);if(absent)await assert.rejects(invoke(),code('UNAUTHENTICATED'));else assert.equal(await invoke(),'actor');assert.deepEqual(f.events,['bearer','tokenHash',method==='authenticate'?'byToken':'accountByToken']);assert.deepEqual(f.calls.at(-1)!.args,[tokenHash(token)]);}
  for(const stage of ['bearer','tokenHash','byToken','accountByToken']){const f=fixture();f.state.fail=stage;await assert.rejects(stage==='accountByToken'?f.host.authenticateIn(f.tx,'Bearer '+token):f.host.authenticate('Bearer '+token),e=>e===f.state.error);assert.equal(f.events.at(-1),stage);}
  const f=fixture(),access=new IdentityAccessHost(f.options);assert.equal(await access.authenticate('Bearer '+token),'actor');assert.deepEqual(f.state.writes,[]);

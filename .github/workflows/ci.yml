@@ -199,6 +199,10 @@ jobs:
         run: node --test apps/control/test/mysql-native-complete.test.ts
       - name: Original observation and publication recovery SQL retention and rollback
         run: node --test apps/control/test/observation-recovery-stores-complete.test.ts apps/control/test/publication-recovery-stores-complete.test.ts
+      - name: Original Transport, Transit and Path metadata statement faults and canonical rollback
+        run: node --test apps/control/test/transport-store-sql-complete.test.ts apps/control/test/transit-store-sql-complete.test.ts apps/control/test/transit-negotiation-sql-complete.test.ts apps/control/test/path-template-store-sql-complete.test.ts
+      - name: Original notification native quotas, retention, compare-and-set and statement rollback
+        run: node --test apps/control/test/notification-native-complete.test.ts
       - name: Original Node and Identity native authority and SQL rollback
         run: node --test apps/control/test/node-owner-complete.test.ts apps/control/test/node-store-sql-complete.test.ts apps/control/test/identity-owner-complete.test.ts apps/control/test/identity-store-sql-complete.test.ts
       - name: Probe history native family projection and MySQL0037 immutable capture

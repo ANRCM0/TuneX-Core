@@ -1,7 +1,8 @@
 # FR-0026: Queued Runtime Publication Respects Renewal Lead
 
 Date: 2026-10-20 (Asia/Shanghai).
-Status: implemented-unverified; proposal recorded before implementation.
+Status: implemented; configured 3/4/8-node integration passed on candidate
+5b44eec, full B acceptance pending. Proposal recorded before implementation.
 Owner and authorization: RuntimeHost publication owner. The human's 2026-10-19
 standing foundation source authorization covers this semantic repair. The active
 explicit B verification/commit/push authorization supplies its separate test gate.
@@ -20,7 +21,7 @@ No acceptance, PR merge, product parallelism or release is authorized here.
 5. Acceptance: authored exact equality/one-millisecond-before/after boundaries,
    continuous queued work, nonpreserved changes, same transaction and publication
    failure ordering; exact-source Actions must include Agent and 8-node browser
-   integration. Local verification is static only. No functional result yet.
+   integration. Local verification is static only; executed evidence is below.
 6. Parallel impact: only RuntimeHost, its publication tests and this record change;
    Agent, Identity, Notification and other owner test work remains independent.
 
@@ -64,9 +65,18 @@ Tests are authored for the same frozen candidate and Actions environment. They
 must show queued hold outside the lead, fresh generation at equality and inside,
 normal deadline caps, mandatory authority/save/lease order and failure rollback.
 The original Agent guard must continue refusing expiry with no grace extension.
-The observed production timeout is not considered resolved until exact-source
+The observed acceptance timeout is not considered resolved until exact-source
 3/4/8-node and other configured jobs pass. Independent physical-host, long-run,
 Responder publication and release gates remain separate.
+
+Candidate `5b44eec5fdfe7f45bbce9ec721d517aeb1724c62`, baseline `39297576207`,
+tested checkout `a43e1be8bb5a48e2d677659ab4cd57a334b7c1cc`. Its 3/4/8-node,
+Probe, Relay isolation, Windows and deployment tasks passed; packaging
+`39297576289` passed at that checkout. The 8-node renewal and subsequent fault,
+restart, withdrawal and cleanup scenarios passed with the original Agent guard.
+Contracts and phase1 still found fixture failures, including two older Runtime
+hold expectations updated for the new renewal lead in the next candidate. No
+complete baseline, physical-host, long-run or foundation acceptance is claimed.
 
 ## Source Authorization And Acceptance Gate
 
