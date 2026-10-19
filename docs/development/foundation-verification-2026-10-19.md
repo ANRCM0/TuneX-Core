@@ -107,9 +107,26 @@ The new Ledger MySQL groups and Relay owner groups are explicitly routed to the
 disposable MySQL phase1 job. Local TypeScript and 950-source boundaries passed.
 No local functional tests ran. All appended tests require their saved head's Actions.
 
+Candidate `51070461f9172bd964a143a1e39300a4a14ddd42` ran at checkout
+`bb66c203539b68c5ab7ee3ded672a9878dd72f15` in baseline `39289305414`.
+Its contracts result was 1037 TypeScript passes, five failures and 84 conditional
+skips. Three notification fixtures used a query-string destination that the
+existing parser refuses before dispatch; two recovery/upgrade fixtures expected
+the domain error instead of the earlier exact-integer JSON error. Linux/Windows
+Agent found an uninitialized timing policy in a new guard fixture. phase1 found
+the claim-competition fixture mixed expiry UPDATE scan locks into selector locks;
+the next fixture isolates SKIP LOCKED while retaining real expiry/claim checks.
+These corrections are authored in the following batch. Packaging, Probe, Relay
+isolation, deployment tools and 3/4-node integration passed; 8-node is still running
+at this update. No full passing baseline is claimed. Next failure artifacts retain
+sanitized snapshot windows/instance identifiers and plan authorization deadlines,
+plus policy, local diagnostics and Agent error/exit timestamps, to distinguish
+short publication windows from delayed Agent progress without uploading wire or
+credential bodies.
+
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 78 cases have fully
-identified assertions; 142 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 85 cases have fully
+identified assertions; 135 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`

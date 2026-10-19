@@ -21,7 +21,7 @@ type NativeSubstitution = Expect<AbortSignal extends CancellationSignal ? true :
 type LowerOnlyIsNotNative = Expect<CancellationSignal extends AbortSignal ? false : true>;
 const typeWitness: [SignalKeys, NativeSubstitution, LowerOnlyIsNotNative] = [true, true, true];
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
-const value = (signal?: CancellationSignal): Parameters<NotificationSender['send']>[0] => ({ destination: 'https://notify.tunex.org/hook?one=1',
+const value = (signal?: CancellationSignal): Parameters<NotificationSender['send']>[0] => ({ destination: 'https://notify.tunex.org/hook',
     deliveryId: 'delivery-a', body: '{"message":"bytes-\u00e9"}', secret: new Uint8Array(32).fill(7), beforeDispatch: async () => true, ...(signal ? { signal } : {}) });
 
 function transport(t: TestContext) {
@@ -127,7 +127,7 @@ test('211 pinned dispatch keeps literal signing bytes and response bounds while 
         assert.deepEqual(owned.options.headers, { Host: 'notify.tunex.org', 'Content-Type': 'application/json', Accept: 'application/json',
             'Content-Length': Buffer.byteLength(input.body, 'utf8'), Connection: 'close', 'X-TuneX-Delivery-Id': 'delivery-a',
             'X-TuneX-Signature': 'v1=' + createHmac('sha256', input.secret).update('delivery-a\n', 'utf8').update(Buffer.from(input.body, 'utf8')).digest('hex') });
-        assert.equal(owned.options.path, '/hook?one=1'); assert.equal(owned.options.agent, false); assert.equal(owned.options.autoSelectFamily, false);
+        assert.equal(owned.options.path, '/hook'); assert.equal(owned.options.agent, false); assert.equal(owned.options.autoSelectFamily, false);
         let pinned = false;
         (owned.options.lookup as (...args: any[]) => void)('ignored-other-host', {}, (error: unknown, address: string, family: number) => {
             assert.equal(error, null); assert.equal(address, '1.1.1.1'); assert.equal(family, 4); pinned = true;

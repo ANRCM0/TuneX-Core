@@ -276,9 +276,15 @@ test('10 real MySQL Ledger claim expires first retains token attempt deadline an
         await db.transaction(async tx=>{await write(tx,'DELETE FROM operations');await insertOperation(tx,f,'first','accepted',1);await insertOperation(tx,f,'second','accepted',2);});
         const left=await db.pool.getConnection(),right=await db.pool.getConnection();
         try{await left.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');await right.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');await left.beginTransaction();await right.beginTransaction();
-            const first=await nativeLedger(()=>100,()=> 'token-first').claim(left);assert.equal(first?.id,'first');
-            const store=new MySqlRuntimeLedgerStore(),second=await store.claimableOperation(right,100);assert.equal(second?.id,'second','locked oldest claim is skipped');
-            await store.claimOperation(right,second!.id,'token-second',100,15100);await right.commit();await left.commit();
+            // Isolate selector competition from claim's preceding expiry UPDATE, whose scan can hold other queue rows.
+            // A keyed row lock also avoids depending on the left selector's filesort/index lock footprint.
+            const first=(await rows<RuntimeOperation>(left,'SELECT * FROM operations WHERE id=? FOR UPDATE',['first']))[0];assert.equal(first?.id,'first');
+            const store=new MySqlRuntimeLedgerStore();await store.claimOperation(left,first!.id,'token-first',100,15100);
+            const second=await store.claimableOperation(right,100);assert.equal(second?.id,'second','locked oldest claim is skipped');
+            assert.notEqual(second!.id,first!.id,'concurrent selector must not return the operation owned by the other transaction');
+            await store.claimOperation(right,second!.id,'token-second',100,15100);
+            assert.equal(await store.claimableOperation(right,100),undefined,'locked first and live second cannot be claimed again');
+            await right.commit();await left.commit();
         }finally{await left.rollback();await right.rollback();left.release();right.release();}
         const claimed=await rows<RuntimeOperation&{attempt_count:number}>(db.pool,'SELECT * FROM operations ORDER BY id');
         assert.deepEqual(claimed.map(op=>[op.id,op.status,op.claim_token,op.claim_until,op.attempt_count,op.execution_deadline]),

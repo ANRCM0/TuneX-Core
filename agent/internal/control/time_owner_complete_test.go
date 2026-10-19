@@ -231,7 +231,7 @@ func TestRunnerTimeOwnerCompletePollObservedAtDrainRemainingAndAck(t *testing.T)
 
 func TestRunnerTimeOwnerCompleteMachineRotationReloadAndPublication(t *testing.T){
 	for _,mode:=range []string{"prepare","io","validate","save","reload","guard","remove","success","same-fingerprint"}{t.Run(mode,func(t *testing.T){
-		r,p,c,tr:=newTimeOwnerRunner();failure:=errors.New("machine stage failure");r.client=&http.Client{}
+		r,p,c,tr:=newTimeOwnerRunner();failure:=errors.New("machine stage failure");r.client=&http.Client{};r.hello.Policy=timeOwnerPolicy()
 		p.machine=executionidentity.MachineIdentity[tls.Certificate]{Certificate:tls.Certificate{Leaf:&x509.Certificate{}},Until:c.now.Add(time.Hour),Fingerprint:[32]byte{9}}
 		if mode=="same-fingerprint"{r.credentialFingerprint=p.machine.Fingerprint}
 		if mode=="prepare"{p.prepareErr=failure};if mode=="validate"{p.machineValidateErr=failure};if mode=="save"{p.machineSaveErr=failure};if mode=="reload"{p.machineLoadErr=failure};if mode=="remove"{p.removeErr=failure}
