@@ -29,9 +29,11 @@ TuneX 是基于 TypeScript Control、MySQL 和独立 Go Agent 的 TCP/UDP 转发
 
 ## 验证状态
 
-完整 A5 候选已通过 PR #111 的配置内 CI，并合并为 `373c291`。
-准确源码、测试合并修订与运行见[验证记录](docs/development/foundation-verification-2026-10-19.md)。
-清理后的修订需要自己的检查结果。
+B 已完成当前公共接口与配置内环境的限定范围接受：220 项断言和适用执行结果
+逐项对齐，完整 baseline 与容器检查通过。源码 `e208a3a` 的准确测试合并修订、
+作业结果与范围见[验证记录](docs/development/foundation-verification-2026-10-19.md)。
+PR #112 尚未合并；main 仍是此前 A5 集成线，本轮没有发布。
 
-地基 readiness 逐项接受、独立物理多主机、长稳／负载、独立 Responder 发布及正式发行
-仍有各自门槛；上层模块并行开发门禁保持关闭。
+后续模块须消费已接受的冻结接口或单独验证的后继修订，并有自己的公共契约、
+测试和集成说明。独立物理多主机、长稳／负载、独立 Responder 交付、正式发行与
+生产就绪保留各自门槛。

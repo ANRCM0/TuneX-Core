@@ -1,8 +1,9 @@
 # FR-0027: Native JSON Integer Probe Plan Expiry
 
 Date: 2026-10-20 (Asia/Shanghai).
-Status: implemented-unverified; source assertions frozen, exact-source Actions
-acceptance pending. Proposal recorded before implementation.
+Status: accepted in the recorded B public-contract/configured-Actions scope;
+proposal recorded before implementation. Independent environments and release
+remain separate gates.
 Owner and authorization: L2 MySQL/upgrade adapters and L3 UpgradeAssessment owner.
 The human's 2026-10-19 standing foundation source authorization covers this
 proposal; explicit full-B parallel work, verification and commit/push instructions
@@ -118,3 +119,14 @@ outcome are documented above. Explicit full-B authorization permits the named
 parallel test work and subsequent static checks/commit/push, but does not itself
 mark the foundation accepted. The final B decision requires its own source-bound
 evidence and declared scope.
+
+## Final B Execution And Decision - 2026-10-20
+
+Source `e208a3abf17129b0c2898ba2022c69f60f45445a`, actual checkout
+`c3ce8a67b901f61234b4116190409854818cb6c7`: baseline 39341589653 and
+packaging 39341589509 passed. All applicable steps, including this proposal's
+native/transaction/refusal and full integration assertions, are reconciled in
+[verification](../development/foundation-verification-2026-10-19.md). This closes
+the earlier pending exact-source acceptance in the declared B scope. The public
+compatibility impact and independent physical/long-run/Responder/release limits
+above remain; PR #112 is not merged by this task.

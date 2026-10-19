@@ -1,8 +1,9 @@
 # FR-0026: Queued Runtime Publication Respects Renewal Lead
 
 Date: 2026-10-20 (Asia/Shanghai).
-Status: implemented; configured 3/4/8-node integration passed on candidate
-5b44eec, full B acceptance pending. Proposal recorded before implementation.
+Status: accepted in the recorded B public-contract/configured-Actions scope;
+proposal recorded before implementation. Independent environments and release
+remain separate gates.
 Owner and authorization: RuntimeHost publication owner. The human's 2026-10-19
 standing foundation source authorization covers this semantic repair. The active
 explicit B verification/commit/push authorization supplies its separate test gate.
@@ -84,3 +85,14 @@ Choose this bounded host repair under standing source authorization and proceed
 without another confirmation. This record explicitly discloses the earlier
 publication behavior on the frozen foundation. B acceptance remains unfinished
 while any mapped assertions or applicable execution evidence are missing.
+
+## Final B Execution And Decision - 2026-10-20
+
+Source `e208a3abf17129b0c2898ba2022c69f60f45445a`, actual checkout
+`c3ce8a67b901f61234b4116190409854818cb6c7`: baseline 39341589653 and
+packaging 39341589509 passed. All applicable steps, including this proposal's
+native/transaction/refusal and full integration assertions, are reconciled in
+[verification](../development/foundation-verification-2026-10-19.md). This closes
+the earlier pending exact-source acceptance in the declared B scope. The public
+compatibility impact and independent physical/long-run/Responder/release limits
+above remain; PR #112 is not merged by this task.

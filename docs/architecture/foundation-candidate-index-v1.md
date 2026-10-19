@@ -1,7 +1,8 @@
 # Foundation Candidate Review Index v1
 
-Date: 2026-10-19 (Asia/Shanghai). Status: **source review index, not a frozen
-revision, complete dependency manifest or accepted foundation**. This document
+Date: 2026-10-20 (Asia/Shanghai). Status: **source/public-version index supporting
+the separately identified B acceptance decision**. The index is not itself a
+complete dependency manifest or execution certificate. This document
 joins actual public declarations, their documented consumers, source roots and
 distribution inputs. Version numbers below are declarations read from source,
 not successful compatibility negotiations or test results.
@@ -13,6 +14,15 @@ revision and matching machine/functional acceptance were absent at that handoff.
 The human has since authorized B verification and push; see
 [verification record](../development/foundation-verification-2026-10-19.md).
 Existing compatibility constructors/aliases are retained deliberately.
+
+B accepts the current public-version/consumer/default/compatibility scope at
+`e208a3abf17129b0c2898ba2022c69f60f45445a`, actually tested as
+`c3ce8a67b901f61234b4116190409854818cb6c7`. The
+[assertion map](../development/foundation-b-assertion-coverage.md) and
+[verification](../development/foundation-verification-2026-10-19.md) supersede the
+dated planned/unexecuted source handoff below for this revision. Future modules
+consume that frozen contract set or a verified successor; independent physical,
+long-run/load, Responder, release and production gates remain separate.
 
 ## Candidate Identity And Scope
 
@@ -61,8 +71,8 @@ all 26 older profile ceilings, old aliases and Agent release profiles remain.
 Exhaustive CompatibilityProfile source consumers must account for the new member.
 Plan/report payload versions remain 1. The explicitly reviewed CHECK-only SQL
 has no new table/column footprint and does not prove full schema equivalence.
-The original A5 inventories below retain their dated source scope; B acceptance
-and new migration behavior require the final candidate's separate evidence.
+The original A5 inventories below retain their dated source scope. B acceptance
+and the new migration behavior have their own exact-source evidence in verification.
 
 | Public entry/declaration | Current candidate value | Concrete consumers and compatibility boundary |
 | --- | --- | --- |
@@ -229,4 +239,5 @@ The A5 source classification and reviewable candidate records are now complete;
 the next stage is separately authorized saving/freezing and B contract/functional/
 example acceptance. C/D/E and
 independent physical, long-run, recovery, image, release and production gates do
-not become complete by writing this index. The upper-module gate stays closed.
+not become complete by writing this index. The original source handoff kept the upper-module gate closed. The later bounded
+B decision above opens contract consumption only at its identified revision and scope.
