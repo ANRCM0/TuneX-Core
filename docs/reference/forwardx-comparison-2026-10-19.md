@@ -31,8 +31,9 @@
 该研究当时采用独立编写、未复制源码的范围。后续 2026-10-19 用户已明确允许适用成熟代码的参考、改写和复用；实际来源/修订/适配/版权许可按 [复用映射](../development/reference-code-reuse-map.md) 记录。本报告原研究本身没有引入上游源码。
 `Forwardx/` 不进入 TuneX 的编译、导入、运行时或部署依赖。
 
-后续引用本报告时应同时记录上述参考 SHA。参考目录将来更新后，文件链接可能
-指向新内容；本报告不自动对新修订生效，也不把新的上游标签自动选为兼容目标。
+后续引用本报告时应同时记录上述参考 SHA。证据链接固定到该修订的上游文件，
+不要求 TuneX 的干净检出包含被忽略的本地参考目录。本报告不自动对新修订生效，
+也不把新的上游标签自动选为兼容目标。
 
 ## 2. 总体对比
 
@@ -78,10 +79,10 @@ Runtime ledger 和恢复约定需要先收口。可以学习“外部差异集�
 
 ### 4.1 用完整性计数解释运行状态
 
-证据：[运行汇总](../../Forwardx/server/forwardGroupRuntimeStatus.ts)、
-[入口节点投影](../../Forwardx/server/portEntryRuntime.ts)、
-[诊断 DTO](../../Forwardx/shared/portEntryDiagnostics.ts)、
-[节点详情组件](../../Forwardx/client/src/components/PortEntryRuntimeSummary.tsx)。
+证据：[运行汇总](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/forwardGroupRuntimeStatus.ts)、
+[入口节点投影](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/portEntryRuntime.ts)、
+[诊断 DTO](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/shared/portEntryDiagnostics.ts)、
+[节点详情组件](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/client/src/components/PortEntryRuntimeSummary.tsx)。
 
 上游不是看到一条 running 子规则就把整个资源染绿，而是对期望身份去重后计算
 已运行数量，区分空闲、等待、部分运行、停用和离线。节点详情还区分配置同步失败
@@ -97,9 +98,9 @@ TuneX 已有 [诊断公开契约](../../apps/control/src/application/forward-dia
 
 ### 4.2 预检要回答“为什么不能选”
 
-证据：[工具发现缓存](../../Forwardx/server/agentToolInventory.ts)、
-[资源预检](../../Forwardx/server/portForwardToolPreflight.ts)、
-[Agent 发现实现](../../Forwardx/agent/tool_inventory.go)。
+证据：[工具发现缓存](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/agentToolInventory.ts)、
+[资源预检](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/portForwardToolPreflight.ts)、
+[Agent 发现实现](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/agent/tool_inventory.go)。
 
 上游发现结果有明确时间，过期或未上报时返回 unknown；缺失工具可以提前解释，
 而不是一概等到部署失败。多入口选择还需要逐节点判断，不能只检查其中一台。
@@ -113,10 +114,10 @@ Node facts、当前 capability、平台、协议、角色与 flag 组合给出�
 
 ### 4.3 事件用于唤醒，队列与背压必须分别定义
 
-证据：[Agent 事件流](../../Forwardx/server/agentEvents.ts)、
-[心跳 gate](../../Forwardx/server/agentHeartbeatGate.ts)、
-[按 key 调度](../../Forwardx/server/keyedTaskDispatcher.ts)、
-[不重叠定时任务](../../Forwardx/server/scheduledTask.ts)。
+证据：[Agent 事件流](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/agentEvents.ts)、
+[心跳 gate](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/agentHeartbeatGate.ts)、
+[按 key 调度](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/keyedTaskDispatcher.ts)、
+[不重叠定时任务](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/scheduledTask.ts)。
 
 事件流实现了刷新合并、慢连接排空、帧数/字节上限和 drain 超时，心跳工作有同节点
 互斥与全局活跃上限。它们针对的是重复规划、慢消费者和峰值负载，而不是业务授权。
@@ -132,8 +133,8 @@ TuneX 已有 [BackgroundTasks](../../apps/control/src/framework/background-tasks
 
 ### 4.4 在线、健康与执行期限各自保留语义
 
-证据：[快速活性追踪](../../Forwardx/server/agentFastLiveness.ts) 与
-[健康窗口/过期重评估](../../Forwardx/server/forwardGroupHealthRecheck.ts)。
+证据：[快速活性追踪](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/agentFastLiveness.ts) 与
+[健康窗口/过期重评估](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/forwardGroupHealthRecheck.ts)。
 
 上游活性追踪包含启动宽限、transition epoch 和异步消费者的 current 检查，避免
 较旧的离线处理覆盖后来活动；健康数据也会因过期变成 stale。可学习的是在多个
@@ -145,13 +146,13 @@ TuneX 已有 [BackgroundTasks](../../apps/control/src/framework/background-tasks
 
 ### 4.5 用累计计数统计，用采样点画图
 
-证据：[探测计数 gate](../../Forwardx/server/agentProbeCounterReportGate.ts)、
-[计数仓储](../../Forwardx/server/repositories/probeCounterRepository.ts)、
-[拓扑身份](../../Forwardx/server/probeTopology.ts)。
+证据：[探测计数 gate](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/agentProbeCounterReportGate.ts)、
+[计数仓储](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/repositories/probeCounterRepository.ts)、
+[拓扑身份](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/probeTopology.ts)。
 
 上游将健康变化采样与累计探测计数分开；身份包括资源、节点、目标、拓扑、方法和
 epoch。计数写入去重，窗口统计使用可观察基线，不把首次看见之前的生命周期总数
-全算进窗口。[接收路由](../../Forwardx/server/agentReportRoutes.ts) 的实际调用顺序是
+全算进窗口。[接收路由](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/agentReportRoutes.ts) 的实际调用顺序是
 先生成 counter plan，await 写入计数快照，再 commit 内存 gate；因此数据库调用
 抛错时不会执行后面的 gate commit。这个顺序值得借鉴，但不证明多批次 SQL 全局
 原子或崩溃恢复已经通过；相应失败路径仍需独立验收。
@@ -167,10 +168,10 @@ TCP 连接失败率、网络丢包、业务错误率、主机网卡流量与业�
 
 ### 4.6 拓扑变化后隔离旧探测
 
-证据：[拓扑 key](../../Forwardx/server/probeTopology.ts)、
-[多跳观测聚合](../../Forwardx/server/forwardGroupAutoLatencyState.ts)、
-[历史查询窗口](../../Forwardx/server/latencyHistoryWindow.ts)、
-[指标说明](../../Forwardx/docs/guide/traffic-latency.md)。
+证据：[拓扑 key](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/probeTopology.ts)、
+[多跳观测聚合](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/forwardGroupAutoLatencyState.ts)、
+[历史查询窗口](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/latencyHistoryWindow.ts)、
+[指标说明](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/docs/guide/traffic-latency.md)。
 
 上游对拓扑排序后生成身份，聚合要求同 generation/hopCount 和时效；新的路径不应
 混入旧目标或旧分支结果。其指南也区分并行备选分支与串行必经节点，并说明分段
@@ -183,9 +184,9 @@ Scope 变更、恢复隔离、凭据轮换、实例重建、目标/路径改变�
 
 ### 4.7 组、批次和切换要暴露部分结果
 
-证据：[多入口说明](../../Forwardx/docs/guide/port-entry-groups.en.md)、
-[入口运行投影](../../Forwardx/server/portEntryRuntime.ts)、
-[故障切换场景](../../Forwardx/server/forwardGroupFailover.test.ts)。
+证据：[多入口说明](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/docs/guide/port-entry-groups.en.md)、
+[入口运行投影](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/portEntryRuntime.ts)、
+[故障切换场景](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/forwardGroupFailover.test.ts)。
 
 一个逻辑规则映射多入口时，用户需要知道哪台应用、哪台失败、哪台尚未处理。
 上游把这些差异暴露出来，而不是把所有入口折成一个布尔值。这里还需区分
@@ -203,10 +204,10 @@ Forward owner 的 group executor，也不能承诺跨节点全局原子或无缝
 
 ### 4.8 低干扰交互与故障恢复路径
 
-证据：[pending 展示时序](../../Forwardx/client/src/lib/pendingFeedback.ts)、
-[页面刷新策略](../../Forwardx/client/src/lib/operationsRefresh.ts)、
-[数据库故障页](../../Forwardx/client/src/components/DatabaseHealthGate.tsx)、
-[数据库健康路由](../../Forwardx/server/databaseHealthRoutes.ts)。
+证据：[pending 展示时序](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/client/src/lib/pendingFeedback.ts)、
+[页面刷新策略](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/client/src/lib/operationsRefresh.ts)、
+[数据库故障页](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/client/src/components/DatabaseHealthGate.tsx)、
+[数据库健康路由](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/databaseHealthRoutes.ts)。
 
 上游延迟的是 loading 的视觉展示，不是请求或防重复点击；页面刷新可配置，并在
 隐藏页面或离开对应页面时停止。数据库故障与 Web 进程仍在线也分别说明。当前
@@ -220,9 +221,9 @@ TuneX 可以独立实现同样的交互原则，继续使用现有 Web 技术：
 
 ### 4.9 运维闭环应可定位、可恢复
 
-证据：[升级备份说明](../../Forwardx/docs/guide/upgrade-backup.md)、
-[管理入口](../../Forwardx/docs/guide/agent-proxy-manager.md)、
-[发行版本说明](../../Forwardx/docs/guide/releases.md)。
+证据：[升级备份说明](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/docs/guide/upgrade-backup.md)、
+[管理入口](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/docs/guide/agent-proxy-manager.md)、
+[发行版本说明](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/docs/guide/releases.md)。
 
 上游将状态、日志、升级、修复、备份与卸载放入用户能找到的流程，且说明换回旧
 镜像不等于回退数据库。界面还区分升级任务的服务端生命周期与浏览器倒计时。
@@ -236,10 +237,10 @@ nonce/replay、高水位与历史；repair 不能自动 enroll 或清空状态�
 
 ### 4.10 适配器要有能力边界和拒绝路径
 
-证据：[V3 transport 适配](../../Forwardx/server/forwardXTransport.ts)、
-[Agent V3 校验](../../Forwardx/agent/fxp_v3_transport.go)、
-[V3 协议边界说明](../../Forwardx/forwardx-fxp/internal/v3/PROTOCOL.md)、
-[外部数据导入](../../Forwardx/client/src/lib/nyanpassImport.ts)。
+证据：[V3 transport 适配](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/forwardXTransport.ts)、
+[Agent V3 校验](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/agent/fxp_v3_transport.go)、
+[V3 协议边界说明](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/forwardx-fxp/internal/v3/PROTOCOL.md)、
+[外部数据导入](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/client/src/lib/nyanpassImport.ts)。
 
 值得学习的细节包括：先校验再触碰已运行实例；省略值与显式 false 分开；复制
 可变配置而非保留调用者指针；未知版本拒绝；外部导入逐字段检查、不支持的配置
@@ -261,13 +262,13 @@ TuneX 将来适配任何外部引擎时，都应声明目标/版本、平台、�
 
 | 上游测试源码 | 值得带入 TuneX 的场景；均非本轮通过证据 |
 | --- | --- |
-| [运行汇总](../../Forwardx/server/forwardGroupRuntimeStatus.test.ts) | 同成员重复子规则不能补足另一个成员；部分运行、空资源与外部入口分别展示 |
-| [入口诊断](../../Forwardx/server/portEntryDiagnostics.test.ts) | 旧失败不能盖过新成功、共享可见性不能泄露其他用户错误、预检拒绝不能破坏已有运行 |
-| [事件流](../../Forwardx/server/agentEvents.test.ts) | backpressure、drain、完整帧、溢出/关闭和不重复释放 |
-| [拓扑身份](../../Forwardx/server/probeTopology.test.ts) | 仅顺序变化保持身份，目标/端口/路径变化隔离历史；不按运行时间生成新拓扑 |
-| [健康重评估](../../Forwardx/server/forwardGroupHealthRecheck.test.ts) | fake clock、过期重评估、执行中收到新事件、仅失败项重试和退避上限 |
-| [故障切换](../../Forwardx/server/forwardGroupFailover.test.ts) | 故障/恢复窗口、异步外部操作和部分失败的组合场景 |
-| [CI 声明](../../Forwardx/.github/workflows/ci.yml) | 将 UI/服务/Agent/runtime 分组；真实 Linux namespace 用例与普通单元测试区分 |
+| [运行汇总](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/forwardGroupRuntimeStatus.test.ts) | 同成员重复子规则不能补足另一个成员；部分运行、空资源与外部入口分别展示 |
+| [入口诊断](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/portEntryDiagnostics.test.ts) | 旧失败不能盖过新成功、共享可见性不能泄露其他用户错误、预检拒绝不能破坏已有运行 |
+| [事件流](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/agentEvents.test.ts) | backpressure、drain、完整帧、溢出/关闭和不重复释放 |
+| [拓扑身份](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/probeTopology.test.ts) | 仅顺序变化保持身份，目标/端口/路径变化隔离历史；不按运行时间生成新拓扑 |
+| [健康重评估](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/forwardGroupHealthRecheck.test.ts) | fake clock、过期重评估、执行中收到新事件、仅失败项重试和退避上限 |
+| [故障切换](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/server/forwardGroupFailover.test.ts) | 故障/恢复窗口、异步外部操作和部分失败的组合场景 |
+| [CI 声明](https://github.com/poouo/Forwardx/blob/8a3e70ccd62fbfee301f3b919120d51e9892de28/.github/workflows/ci.yml) | 将 UI/服务/Agent/runtime 分组；真实 Linux namespace 用例与普通单元测试区分 |
 
 上游测试使用的 SQLite、进程 fixture、SSE fake 或同机 namespace，只证明其各自
 场景。TuneX 仍需自己的 MySQL 锁/事务、mTLS、Guard/Journal、Direct/Relay/多跳

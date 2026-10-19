@@ -138,6 +138,27 @@ operations, retains unrelated-table write denials and whole-database digests for
 reads/refusals/rollback, and tests a failure after history writes. No broad database
 grant or production-owner bypass is intended.
 
+### Third Saved Candidate
+
+Head `d846de1056c46b2a1f92c261fdc1c20194e40525` used test merge
+`0592ff483c83d4ac713c5d110b4e29b6ac1568a2`. Container run `39249781749`
+passed. Baseline run `39249781664` passed all 99 Web tests, all 630 applicable
+TypeScript tests (78 conditional cases skipped), the real Probe/Relay browser
+workflow and the preceding targeted MySQL acceptance groups. The long-running
+jobs were still in progress when the next repair was prepared; their partial
+results are not a final foundation acceptance result.
+
+The independent Go full-suite and race groups found the same faulty new test:
+a byte substring search confused the value `certificate` with a JSON field key.
+The repair checks parsed object keys while retaining native byte vectors and
+fact round trips; it changes no production credential encoding. Go vet passed.
+
+The static graph covered 950 production files, but documentation checking found
+links into the ignored local Forwardx reference checkout. Research evidence links
+are now pinned to that report's original upstream SHA instead of requiring an
+untracked directory in a clean checkout. The checker is not exempted or weakened.
+The boundary negative tests were not reached before this link failure.
+
 Use the saved revision's Actions job logs and final run conclusions for actual
 passing/failing/skipped cases. This record does not mark readiness cases 1-220 as
 passed, certify all migration equivalence or open the upper module gate.

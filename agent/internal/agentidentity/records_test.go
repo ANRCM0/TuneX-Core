@@ -54,8 +54,17 @@ func TestNativeCredentialRecordsKeepEncodingAndFacts(t *testing.T) {
 	if err != nil || string(raw) != `{"nodeId":"node","certificate":"certificate","privateKey":"private","fingerprint":"fingerprint","validUntil":"until","certificateNotAfter":"notAfter","renewAfter":"renew","requestId":"request"}` {
 		t.Fatalf("optional record fields changed: %s, %v", raw, err)
 	}
-	lower, _ := json.Marshal(CredentialBundleFacts(machine))
-	if bytes.Contains(lower, []byte(`"certificate"`)) {
+	lower, err := json.Marshal(CredentialBundleFacts(machine))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(lower, &fields); err != nil {
+		t.Fatal(err)
+	}
+	_, certificateKey := fields["certificate"]
+	_, privateKey := fields["privateKey"]
+	if certificateKey || privateKey {
 		t.Fatalf("lower facts silently retain native encoding: %s", lower)
 	}
 }
