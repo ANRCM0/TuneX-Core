@@ -83,8 +83,8 @@ export function sourceViolations(path, source, inventory) {
     if (!classified.binding && layer === 'L3' && target?.startsWith('apps/control/src/infrastructure/')) errors.push('product imports concrete storage: ' + reference);
     if (!classified.binding && layer === 'L3' && owner(path) && !target) errors.push('product imports external/native implementation: ' + reference);
   }
-  // A product may decide from injected facts, but native platform selection
-  // belongs to its L2 provider. Legacy construction entries remain explicit.
+  // Products branch on capabilities. OS/architecture selection belongs to L2,
+  // even when its platform name arrives through an injected fact.
   if (layer === 'L3' && !classified.binding) {
     if (path.endsWith('.go')) {
       const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\r\n]*/g, '');
@@ -93,6 +93,9 @@ export function sourceViolations(path, source, inventory) {
       for (const match of code.matchAll(/(?:\bimport\s+|^\s*)([A-Za-z_]\w*|\.)\s+"runtime"/gm)) aliases.push(match[1]);
       if (aliases.some(alias => alias === '.' ? /\bGO(?:OS|ARCH)\b/.test(operations) :
           new RegExp('\\b' + alias + '\\.GO(?:OS|ARCH)\\b').test(operations))) errors.push('product native platform selection');
+      const platformFact = '\\b[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*\\.(?:Platform|OS|Arch|Architecture|OperatingSystem)\\b';
+      if (new RegExp(platformFact + '\\s*(?:==|!=|<=|>=|<|>)|(?:==|!=|<=|>=|<|>)\\s*' + platformFact + '|\\bswitch\\s+(?:[^;{}]*;\\s*)?' + platformFact + '\\s*\\{').test(operations))
+        errors.push('product native platform selection through injected facts');
       const platforms = '(?:aix|android|darwin|dragonfly|freebsd|hurd|illumos|ios|js|linux|nacl|netbsd|openbsd|plan9|solaris|wasip1|windows|zos)';
       if (new RegExp('_' + platforms + '(?:_[a-z0-9]+)?\\.go$').test(path) ||
           source.split(/\r?\n/).some(line => /^\s*\/\/(?:go:build|\s*\+build)\s/.test(line) && new RegExp('\\b' + platforms + '\\b').test(line)))
@@ -107,6 +110,10 @@ export function sourceViolations(path, source, inventory) {
           return memberPath(node.expression) + '.' + node.argumentExpression.text;
         return '';
       }
+      function platformFact(node) {
+        while (ts.isParenthesizedExpression(node)) node = node.expression;
+        return /\.(?:platform|os|arch|architecture|operatingSystem)$/i.test(memberPath(node));
+      }
       function visit(node) {
         const name = memberPath(node).replace(/^globalThis\./, '');
         if (/^(?:process\.(?:platform|arch)|navigator\.(?:platform|userAgent|userAgentData)|Deno\.build|Bun\.env)(?:\.|$)/.test(name))
@@ -117,6 +124,11 @@ export function sourceViolations(path, source, inventory) {
         if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer &&
             nativeRoots.has(memberPath(node.initializer).replace(/^globalThis\./, '')))
           errors.push('product native platform selection through native alias');
+        if (ts.isBinaryExpression(node) && [ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
+          ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.LessThanToken,
+          ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(node.operatorToken.kind) &&
+          (platformFact(node.left) || platformFact(node.right)) || ts.isSwitchStatement(node) && platformFact(node.expression))
+          errors.push('product native platform selection through injected facts');
         ts.forEachChild(node, visit);
       }
       visit(syntax);

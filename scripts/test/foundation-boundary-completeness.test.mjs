@@ -58,12 +58,18 @@ test('Control and browser product owners reject native platform branches includi
     'if (navigator.platform === "Win32") windows();',
     'if (globalThis["navigator"]["userAgentData"].platform === "Windows") windows();',
     'if (Deno.build.os === "windows") windows();',
+    'if (facts.platform === "windows") windows();',
+    'if ("linux" !== facts["os"]) other();',
+    'const choice = facts.arch === "arm64" ? arm() : other();',
+    'switch (facts["platform"]) { case "windows": windows(); }',
+    'switch (facts.architecture) { case "arm64": arm(); }',
   ];
   for (const path of ['apps/control/src/modules/identity-owner/boundary-completeness.ts', 'apps/web/console-model-owner/service.js']) {
     assert.equal(classifySource(path, inventory).layer, 'L3');
     assert.equal(classifySource(path, inventory).binding, false);
     for (const source of sources) rejects(path, source, /product native platform/);
-    assert.deepEqual(sourceViolations(path, 'export function choose(facts) { return facts.platform === "windows" ? 1 : 2; }', inventory), []);
+    assert.deepEqual(sourceViolations(path, 'export function choose(facts) { return facts.supported ? 1 : 2; }', inventory), []);
+    assert.deepEqual(sourceViolations(path, 'export function display(facts) { return { platform: facts.platform, arch: facts["arch"] }; }', inventory), []);
   }
 });
 
@@ -76,11 +82,16 @@ test('Go product owners reject native OS and architecture selection through impo
     'package agentcommand\nimport rt "runtime"\nfunc choose() { switch rt.GOARCH { case "arm64": arm() } }',
     'package agentcommand\nimport (\n rt "runtime"\n)\nvar selected = rt.GOOS',
     'package agentcommand\nimport . "runtime"\nvar selected = GOOS',
+    'package agentcommand\nfunc choose(facts Facts) bool { return facts.Platform == "windows" }',
+    'package agentcommand\nfunc choose(facts Facts) bool { return "linux" != facts.OS }',
+    'package agentcommand\nfunc choose(facts Facts) { switch facts.Arch { case "arm64": arm() } }',
+    'package agentcommand\nfunc choose(facts Facts) { switch facts.OperatingSystem { case "windows": windows() } }',
   ]) rejects(path, source, /product native platform/);
   for (const source of ['//go:build linux && amd64\npackage agentcommand', '// +build windows\npackage agentcommand'])
     rejects(path, source, /platform-specific source selection/);
   rejects('agent/internal/agentcommand/fixture_linux_amd64.go', 'package agentcommand', /platform-specific source selection/);
-  assert.deepEqual(sourceViolations(path, 'package agentcommand\nfunc choose(facts Facts) bool { return facts.Platform == "windows" }', inventory), []);
+  assert.deepEqual(sourceViolations(path, 'package agentcommand\nfunc choose(facts Facts) bool { return facts.Supported }', inventory), []);
+  assert.deepEqual(sourceViolations(path, 'package agentcommand\nfunc display(facts Facts) string { return facts.Platform }', inventory), []);
   assert.deepEqual(sourceViolations(path, 'package agentcommand\n// runtime.GOOS is adapter-owned\nvar label = "runtime.GOOS"', inventory), []);
 });
 

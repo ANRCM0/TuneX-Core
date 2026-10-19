@@ -120,6 +120,34 @@ jobs:
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       - run: node scripts/run-go.mjs test -race ./...
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+  windows-agent:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      GOARCH: amd64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            agent/.cache/go-mod
+            agent/.cache/go-build
+          key: vnext-go-windows-amd64-${{ hashFiles('agent/go.sum') }}
+      - name: Native Windows Agent contracts and filesystem lifecycle
+        run: node scripts/run-go.mjs test ./... -count=1
+      - name: Windows Agent build
+        if: ${{ !cancelled() }}
+        run: node scripts/run-go.mjs build ./...
+      - name: Windows Agent vet
+        if: ${{ !cancelled() }}
+        run: node scripts/run-go.mjs vet ./...
   phase1:
     runs-on: ubuntu-latest
     timeout-minutes: 30

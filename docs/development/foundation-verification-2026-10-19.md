@@ -79,8 +79,8 @@ These static results do not claim a new functional CI result.
 ## Remaining Acceptance
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. Six cases have fully
-identified assertions; 214 remain partial. This classification does not report
+with actual suites and specific remaining obligations. Eleven cases have fully
+identified assertions; 209 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
