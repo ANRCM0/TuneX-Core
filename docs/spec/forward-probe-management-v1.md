@@ -1,5 +1,10 @@
 # Forward Probe Management v1
 
+Later typed ingress scope is defined by
+[Same-Agent Direct ingress probes](direct-ingress-probes-v1.md). Existing routes
+accept the explicit new kind; old v1 machine behavior stays egress-only, not a
+silent observation-point change.
+
 Status: working-tree implementation, 2026-10-17; matching-SHA Actions pending.
 Decision: [ADR-0018](../decisions/0018-probe-production-workflow.md).
 Foundation and machine contracts remain [Probe v1](forward-probe-v1.md),
@@ -93,6 +98,17 @@ history. Eligible expired rows can be pruned on the next permit mutation after
 the original expiry plus one-second cooldown. There is no guaranteed minimum
 history duration beyond current retention and no new background cleanup service.
 The idempotent acceptance can outlive its queryable receipt and still cannot rerun.
+
+Subsequent [Probe runs v1](probe-runs-v1.md) /
+[ADR-0041](../decisions/0041-bounded-probe-run-history.md) adds an independent bounded
+history captured in the original mutation transaction. The retention paragraph
+above still describes THIS ephemeral receipt endpoint, not the separate Run API.
+No history lookup recreates a permit, extends a deadline or replays execution.
+
+Later [Probe plans v1](probe-plans-v1.md) adds finite immutable manual/scheduled
+intent for this same Direct TCP type. Every decision uses the original issuer and
+current authorization in the plan transaction; cancellation only stops future plan
+decisions and does not replace this endpoint's explicit permit revocation.
 
 ## Revoke retained authority
 

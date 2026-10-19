@@ -2,12 +2,14 @@ package control
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
+	"github.com/tunex/vnext/agent/internal/nativeexecution"
+	"github.com/tunex/vnext/agent/internal/platformruntime"
 	"github.com/tunex/vnext/agent/internal/probe"
-	"github.com/tunex/vnext/agent/internal/probedelivery"
+	"github.com/tunex/vnext/agent/internal/probeecho"
+	"github.com/tunex/vnext/agent/internal/runtimeplatform"
 )
 
 // An internal observation monitor, NOT a probe.Permit/Grant or socket admission by itself.
@@ -24,6 +26,12 @@ type probeAuthorityWatch struct {
 	err                                        error
 }
 
+func (watch *probeAuthorityWatch) scheduler() runtimeplatform.Scheduler {
+	if watch.runner != nil {
+		return watch.runner.scheduler()
+	}
+	return platformruntime.Schedule{}
+}
 func (watch *probeAuthorityWatch) fail(err error) {
 	watch.mutex.Lock()
 	if watch.err == nil {
@@ -41,7 +49,7 @@ func (watch *probeAuthorityWatch) current() error {
 	if err := watch.ctx.Err(); err != nil {
 		return err
 	}
-	if !watch.ready || !time.Now().Before(watch.freshUntil) || !time.Now().Before(watch.until) {
+	if !watch.ready || !watch.scheduler().Now().Before(watch.freshUntil) || !watch.scheduler().Now().Before(watch.until) {
 		return probe.ErrDenied
 	}
 	return nil
@@ -75,7 +83,7 @@ func (watch *probeAuthorityWatch) tighten(until time.Time) error {
 	if watch.err != nil {
 		return watch.err
 	}
-	if watch.ctx.Err() != nil || !time.Now().Before(until) || !time.Now().Before(watch.until) {
+	if watch.ctx.Err() != nil || !watch.scheduler().Now().Before(until) || !watch.scheduler().Now().Before(watch.until) {
 		return probe.ErrDenied
 	}
 	if until.Before(watch.until) {
@@ -88,7 +96,7 @@ func (watch *probeAuthorityWatch) tighten(until time.Time) error {
 func (watch *probeAuthorityWatch) publish(until, checked, server time.Time) error {
 	watch.mutex.Lock()
 	defer watch.mutex.Unlock()
-	now := time.Now()
+	now := watch.scheduler().Now()
 	if watch.err != nil {
 		return watch.err
 	}
@@ -106,11 +114,12 @@ func (watch *probeAuthorityWatch) publish(until, checked, server time.Time) erro
 func (runner *Runner) probeWatchLocal(watch *probeAuthorityWatch) error {
 	session, receipt := watch.receipt.session, watch.receipt
 	runner.mutex.Lock()
-	if runner.probeRegistration != session || !runner.probeCurrentLocked(session) || runner.hello.Policy.MaxClockSkewSeconds > 2 {
+	if runner.probeRegistration != session || !runner.probeCurrentLocked(session) || runner.hello.Policy.MaxClockSkewSeconds > 2 ||
+		receipt.typed && !runner.probeTypesCurrentLocked(session) || receipt.services && !runner.probeServicesCurrentLocked(session) || receipt.echo && !runner.probeEchoCurrentLocked(session) {
 		runner.mutex.Unlock()
 		return probe.ErrDenied
 	}
-	target, err := runner.probeTargetLocked(receipt.binding)
+	target, err := runner.probeTargetForReceiptLocked(receipt)
 	until := minProbeDeadline(receipt.until, minProbeDeadline(session.until, target.ExecutionUntil))
 	runner.mutex.Unlock()
 	if err != nil {
@@ -127,7 +136,8 @@ func (runner *Runner) monitorConsumedProbe(ctx context.Context, receipt *probeCl
 	runner.mutex.Lock()
 	session := runner.probeRegistration
 	if session == nil || receipt == nil || receipt.session != session || session.receipts[receipt.permitID] != receipt ||
-		!runner.probeCurrentLocked(session) || runner.hello.Policy.MaxClockSkewSeconds > 2 || !time.Now().Before(receipt.until) {
+		!runner.probeCurrentLocked(session) || runner.hello.Policy.MaxClockSkewSeconds > 2 || !runner.scheduler().Now().Before(receipt.until) ||
+		receipt.typed && !runner.probeTypesCurrentLocked(session) || receipt.services && !runner.probeServicesCurrentLocked(session) || receipt.echo && !runner.probeEchoCurrentLocked(session) {
 		runner.mutex.Unlock()
 		return nil, probe.ErrDenied
 	}
@@ -135,22 +145,30 @@ func (runner *Runner) monitorConsumedProbe(ctx context.Context, receipt *probeCl
 		runner.mutex.Unlock()
 		return nil, probe.ErrReplay
 	}
-	target, err := runner.probeTargetLocked(receipt.binding)
+	target, err := runner.probeTargetForReceiptLocked(*receipt)
 	if err != nil {
 		runner.mutex.Unlock()
 		return nil, err
 	}
 	receipt.watched = true
 	copy := *receipt
+	if receipt.service != nil {
+		service := *receipt.service
+		copy.service = &service
+	}
+	if receipt.echoInput != nil {
+		echoInput := probeecho.CloneExecution(*receipt.echoInput)
+		copy.echoInput = &echoInput
+	}
 	until := minProbeDeadline(copy.until, minProbeDeadline(session.until, target.ExecutionUntil))
-	release, err := probeDeliveries.acquire(session.node, false, time.Now())
+	release, err := probeDeliveries.acquire(session.node, false, runner.scheduler().Now())
 	runner.mutex.Unlock()
 	if err != nil {
 		return nil, err
 	}
-	work, cancel := context.WithDeadline(ctx, until)
+	work, cancel := runner.scheduler().WithDeadline(ctx, until)
 	watch := &probeAuthorityWatch{runner: runner, receipt: copy, ctx: work, cancel: cancel, done: make(chan struct{}),
-		changed: make(chan struct{}, 1), until: until, freshUntil: minProbeDeadline(until, time.Now().Add(probeExchangeLimit))}
+		changed: make(chan struct{}, 1), until: until, freshUntil: minProbeDeadline(until, runner.scheduler().Now().Add(probeExchangeLimit))}
 	first := make(chan error, 1)
 	go runner.runProbeWatch(watch, first, release)
 	select {
@@ -171,53 +189,54 @@ func (runner *Runner) monitorConsumedProbe(ctx context.Context, receipt *probeCl
 }
 
 func (runner *Runner) probeStatusExchange(watch *probeAuthorityWatch) error {
+	if watch.receipt.echo {
+		return runner.probeEchoStatusExchange(watch)
+	}
+	if watch.receipt.services {
+		return runner.probeServicesStatusExchange(watch)
+	}
+	if watch.receipt.typed {
+		return runner.probeTypesStatusExchange(watch)
+	}
 	if err := runner.probeWatchLocal(watch); err != nil {
 		return err
 	}
 	watch.mutex.Lock()
 	freshUntil := watch.freshUntil
 	watch.mutex.Unlock()
-	work, cancel := context.WithDeadline(watch.ctx, freshUntil)
+	work, cancel := runner.scheduler().WithDeadline(watch.ctx, freshUntil)
 	defer cancel()
-	id, err := probeRequestID()
+	id, err := runner.probeRequestID()
 	if err != nil {
 		return err
 	}
 	session, receipt := watch.receipt.session, watch.receipt
-	request := probedelivery.StatusRequest{ProtocolVersion: 3, ProbeVersion: 1, Kind: "probe-status", NodeId: session.node,
-		BootId: session.boot, SessionEpoch: session.epoch, InstanceId: session.gate.InstanceID(), InstanceGeneration: session.generation,
-		RequestId: id, PermitId: receipt.permitID}
-	raw, err := json.Marshal(request)
+	request := nativeexecution.ProbeStatusRequest(session.node, session.boot, session.epoch, session.gate.InstanceID(), session.generation, id, receipt.permitID)
+	raw, err := nativeexecution.EncodeProbeStatusRequest(request)
 	if err != nil {
-		return err
-	}
-	if _, err := probedelivery.ParseStatusRequest(raw); err != nil {
 		return err
 	}
 	raw, started, err := runner.probeDeliveryExchange(work, session, "/agent/v3/probe/status", request)
 	if err != nil {
 		return err
 	}
-	ack, err := probedelivery.ParseStatusResponse(raw)
+	ack, err := nativeexecution.DecodeProbeStatusResponse(request, raw)
 	if err != nil {
-		return err
-	}
-	if err := probedelivery.CheckStatusResponse(request, *ack); err != nil {
 		return err
 	}
 	if deliveryBinding(ack.Binding) != receipt.binding || ack.IssuedAt != receipt.issuedAt || ack.ExpiresAt != receipt.expiresAt ||
 		ack.ConsumedAt != receipt.consumedAt || time.Duration(ack.TimeoutMs)*time.Millisecond != receipt.timeout {
 		return probe.ErrDenied
 	}
-	freshUntil, err = probeFreshUntil(session, started, ack.CheckedAt, ack.ServerTime)
+	freshUntil, err = probeFreshUntilWith(runner.scheduler(), session, started, ack.CheckedAt, ack.ServerTime)
 	if err != nil {
 		return err
 	}
 	if err := runner.probeWatchLocal(watch); err != nil {
 		return err
 	}
-	checked, _ := time.Parse(time.RFC3339Nano, ack.CheckedAt)
-	server, _ := time.Parse(time.RFC3339Nano, ack.ServerTime)
+	checked, _ := nativeexecution.ParseProbeWireTime(ack.CheckedAt)
+	server, _ := nativeexecution.ParseProbeWireTime(ack.ServerTime)
 	if work.Err() != nil {
 		return work.Err()
 	}
@@ -226,7 +245,7 @@ func (runner *Runner) probeStatusExchange(watch *probeAuthorityWatch) error {
 
 func (runner *Runner) superviseProbeWatch(watch *probeAuthorityWatch, done chan struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(25 * time.Millisecond)
+	ticker := runner.scheduler().NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		if watch.ctx.Err() != nil {
@@ -239,15 +258,15 @@ func (runner *Runner) superviseProbeWatch(watch *probeAuthorityWatch, done chan 
 		watch.mutex.Lock()
 		until := minProbeDeadline(watch.until, watch.freshUntil)
 		watch.mutex.Unlock()
-		deadline := time.NewTimer(time.Until(until))
+		deadline := runner.scheduler().NewTimer(runner.scheduler().Until(until))
 		select {
 		case <-watch.ctx.Done():
 			deadline.Stop()
 			return
-		case <-deadline.C:
+		case <-deadline.C():
 			// A completed response may have moved freshness while the previous timer was selected.
 			watch.mutex.Lock()
-			expired := !time.Now().Before(minProbeDeadline(watch.until, watch.freshUntil))
+			expired := !runner.scheduler().Now().Before(minProbeDeadline(watch.until, watch.freshUntil))
 			watch.mutex.Unlock()
 			if expired {
 				watch.fail(probe.ErrDenied)
@@ -255,14 +274,14 @@ func (runner *Runner) superviseProbeWatch(watch *probeAuthorityWatch, done chan 
 			}
 		case <-watch.changed:
 			deadline.Stop()
-		case <-ticker.C:
+		case <-ticker.C():
 			deadline.Stop()
 		}
 	}
 }
 func (runner *Runner) runProbeWatch(watch *probeAuthorityWatch, first chan<- error, release func()) {
 	supervised := make(chan struct{})
-	stop := context.AfterFunc(watch.receipt.session.ctx, func() { watch.fail(probe.ErrDenied) })
+	stop := runner.scheduler().AfterFunc(watch.receipt.session.ctx, func() { watch.fail(probe.ErrDenied) })
 	defer stop()
 	go runner.superviseProbeWatch(watch, supervised)
 	defer func() { watch.fail(context.Canceled); <-supervised; release(); close(watch.done) }()
@@ -278,12 +297,12 @@ func (runner *Runner) runProbeWatch(watch *probeAuthorityWatch, first chan<- err
 			return
 		}
 		// Wait AFTER completion: no overlapping requests, catch-up bursts, retries or unbounded polling.
-		timer := time.NewTimer(probeStatusInterval)
+		timer := runner.scheduler().NewTimer(probeStatusInterval)
 		select {
 		case <-watch.ctx.Done():
 			timer.Stop()
 			return
-		case <-timer.C:
+		case <-timer.C():
 		}
 	}
 }

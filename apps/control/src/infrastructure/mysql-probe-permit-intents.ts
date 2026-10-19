@@ -1,11 +1,10 @@
-import type { Forward } from '@tunex/core';
-import { notFound } from '../application/errors.ts';
-import type { ProbeIntents } from '../modules/probe-ports.ts';
+import type { ForwardValue as Forward, RuntimeForwards } from '../framework/public.ts';
+import { notFound } from '../framework/public.ts';
 import { json, rows } from './mysql.ts';
 import type { Transaction } from './mysql.ts';
 
 /** Scoped, locking projection for permit authorization; owns no Forward mutations. */
-export class MySqlProbePermitIntents implements ProbeIntents<Transaction> {
+export class MySqlProbePermitIntents implements RuntimeForwards<Transaction> {
     async record(tx: Transaction, scopeId: string, id: string) {
         const [row] = await rows<{ id: string; scope_id: string; revision: number; spec: unknown;
             deleting: number; recovery_suspended: number }>(tx,

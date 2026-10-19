@@ -9,12 +9,13 @@ import (
 // framedTCP keeps application FIN independent of the TLS connection's reverse direction.
 type framedTCP struct {
 	*tls.Conn
-	maximum    int
-	allow      func() error
-	writeMutex sync.Mutex
-	readBuffer []byte
-	readEnded  bool
-	writeEnded bool
+	maximum        int
+	allow          func() error
+	writeMutex     sync.Mutex
+	readBuffer     []byte
+	readEnded      bool
+	writeEnded     bool
+	payloadWritten func(int)
 }
 
 func (c *framedTCP) Read(buffer []byte) (int, error) {
@@ -59,6 +60,9 @@ func (c *framedTCP) Write(buffer []byte) (int, error) {
 		n := min(len(buffer), c.maximum)
 		if err := WriteFrame(c.Conn, FrameTCP, buffer[:n], "tcp", c.maximum); err != nil {
 			return written, err
+		}
+		if c.payloadWritten != nil {
+			c.payloadWritten(n)
 		}
 		written += n
 		buffer = buffer[n:]

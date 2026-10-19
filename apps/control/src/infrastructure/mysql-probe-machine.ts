@@ -1,9 +1,9 @@
 import { json, rows } from './mysql.ts';
 import type { Transaction } from './mysql.ts';
-import type { ProbeMachineEvidence, ProbeMachineReader } from '../modules/probe-negotiation-ports.ts';
+import type { MachineSessionEvidence, MachineSessionReader } from '../framework/public.ts';
 
-export class MySqlProbeMachineReader implements ProbeMachineReader<Transaction> {
-    async read(tx: Transaction, nodeId: string, fingerprint: string): Promise<ProbeMachineEvidence | undefined> {
+export class MySqlProbeMachineReader implements MachineSessionReader<Transaction> {
+    async read(tx: Transaction, nodeId: string, fingerprint: string): Promise<MachineSessionEvidence | undefined> {
         const [current] = await rows<{
             node_id: string; boot_id: string | null; session_epoch: number;
             revoked: number; credential_revoked: number | null; credential_until: number | null;

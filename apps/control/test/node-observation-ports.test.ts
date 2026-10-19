@@ -7,6 +7,7 @@ import { observeNodeReport } from '../src/modules/node-report-observation.ts';
 import type { AuthorizedNodeReportReader, NodeObservationContext, NodeReportEvidence } from '../src/modules/observation-ports.ts';
 import { MySqlNodeObservationReader } from '../src/infrastructure/mysql-node-observation.ts';
 import type { MySqlUnitOfWork, Transaction } from '../src/infrastructure/mysql.ts';
+import type { CancellationSignal } from '../src/framework/public.ts';
 
 const command = { source: 'persisted-agent-report', version: 1 };
 const policy = { freshnessMs: 30000, clockSkewMs: 5000 };
@@ -207,7 +208,7 @@ test('the raw-report projection guard distinguishes selected bodies from bounded
     assert.doesNotMatch("SELECT LEFT(JSON_UNQUOTE(JSON_EXTRACT(r.last_report,'$.nodeId')),129) report_node, JSON_LENGTH(r.last_report,'$.observations') observation_count FROM runtime_nodes r", rawReportProjection);
 });
 
-function mysqlFixture(allowed = true) {
+function mysqlFixture(allowed = true, signal?: CancellationSignal) {
     const events: string[] = [], controller = new AbortController(), now = Date.now();
     const tx = {
         connection: { stream: { destroy: (_error: Error) => { events.push('transport-stop'); } } },
@@ -236,7 +237,7 @@ function mysqlFixture(allowed = true) {
         if (!allowed) throw new ControlError('NOT_FOUND', 404, 'denied');
     } });
     const context: NodeObservationContext = Object.freeze({
-        actorId: 'actor-a', scopeId: 'scope-a', nodeId: 'node-a', deadlineAt: now + 2000, signal: controller.signal,
+        actorId: 'actor-a', scopeId: 'scope-a', nodeId: 'node-a', deadlineAt: now + 2000, signal: signal ?? controller.signal,
     });
     return { events, controller, tx, db, reader, context };
 }
@@ -260,6 +261,34 @@ test('MySQL cancellation destroys only the observation connection and never rele
     finish.resolve();
     await rejected;
     assert.ok(!f.events.includes('release')); assert.ok(!f.events.includes('rollback'));
+});
+
+test('the read adapter subscribes and removes the same callback using only the common cancellation port', async () => {
+    let callback: (() => void) | undefined, cancelled = false;
+    const reason = new Error('common provider cancellation'), listeners: (() => void)[] = [], removed: (() => void)[] = [];
+    const signal: CancellationSignal = {
+        get aborted() { return cancelled; }, get reason() { return cancelled ? reason : undefined; },
+        throwIfAborted: () => { if (cancelled) throw reason; },
+        addEventListener: (type, listener, options) => {
+            assert.equal(type, 'abort'); assert.deepEqual(options, { once: true });
+            listeners.push(listener); callback = listener;
+        },
+        removeEventListener: (type, listener) => {
+            assert.equal(type, 'abort'); assert.equal(listener, callback); removed.push(listener); callback = undefined;
+        },
+    };
+    const normal = mysqlFixture(true, signal);
+    await normal.reader.read(normal.context);
+    assert.equal(listeners.length, 1); assert.deepEqual(removed, listeners);
+    const interrupted = mysqlFixture(true, signal), entered = deferred<void>(), finish = deferred<void>();
+    interrupted.tx.execute = async () => { entered.resolve(); await finish.promise; throw reason; };
+    const work = interrupted.reader.read(interrupted.context), rejected = assert.rejects(work, error => error === reason);
+    await entered.promise;
+    cancelled = true; callback?.();
+    assert.ok(interrupted.events.includes('transport-stop')); assert.ok(interrupted.events.includes('destroy'));
+    finish.resolve(); await rejected;
+    assert.equal(listeners.length, 2); assert.deepEqual(removed, listeners);
+    assert.ok(!interrupted.events.includes('release')); assert.ok(!interrupted.events.includes('rollback'));
 });
 
 test('pool acquisition after cancellation is destroyed and failed rollback is never returned to the pool', async () => {

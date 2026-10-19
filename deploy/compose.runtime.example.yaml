@@ -18,6 +18,11 @@ services:
       TUNEX_AUTHORITY_INITIALIZE: "0"
       TUNEX_MULTIHOP_EXECUTION: ${TUNEX_MULTIHOP_EXECUTION:-0}
       TUNEX_PROBE_EXECUTION: ${TUNEX_PROBE_EXECUTION:-0}
+      TUNEX_TELEMETRY: ${TUNEX_TELEMETRY:-0}
+      TUNEX_FORWARD_TELEMETRY: ${TUNEX_FORWARD_TELEMETRY:-0}
+      TUNEX_HOST_TELEMETRY: ${TUNEX_HOST_TELEMETRY:-0}
+      TUNEX_PROBE_TELEMETRY: ${TUNEX_PROBE_TELEMETRY:-0}
+      TUNEX_TELEMETRY_ROLLUPS: ${TUNEX_TELEMETRY_ROLLUPS:-0}
       TUNEX_PROBE_CLOCK_SKEW_SECONDS: ${TUNEX_PROBE_CLOCK_SKEW_SECONDS:-}
     volumes:
       - type: bind
@@ -51,6 +56,10 @@ services:
       - --journal-key=/run/tunex-agent-secrets/journal.key
       - --probe-registration=${TUNEX_PROBE_REGISTRATION:-false}
       - --probe-execution=${TUNEX_PROBE_AGENT_EXECUTION:-false}
+      - --telemetry=${TUNEX_TELEMETRY_AGENT:-false}
+      - --forward-telemetry=${TUNEX_FORWARD_TELEMETRY_AGENT:-false}
+      - --host-telemetry=${TUNEX_HOST_TELEMETRY_AGENT:-false}
+      - --probe-telemetry=${TUNEX_PROBE_TELEMETRY_AGENT:-false}
       - --diagnostics
     volumes:
       - type: bind

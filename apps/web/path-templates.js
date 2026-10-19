@@ -14,24 +14,50 @@ function configView(value) {
     transport: { profileId: value.transport.profileId, configRevision: value.transport.configRevision } };
 }
 
-export function initPathTemplates({request,byId,notify,document=globalThis.document,confirm=globalThis.confirm,randomUUID=()=>crypto.randomUUID()}) {
+function managementView(value) {
+  const view=value?.management;
+  if(view?.version!==1||view.kind!=='native-logical-tunnel'||view.backingResource!=='path-template'||
+      view.configurationReuse!==true||view.physicalConnectionSharing!==false||view.allocationOwner!=='forward-runtime'||view.health!=='not-assessed')
+    throw Error('Invalid logical tunnel management view.');
+}
+
+export function initPathTemplates({request,byId,notify,tunnelManagement=false,onSelectDefinition,document=globalThis.document,confirm=globalThis.confirm,randomUUID=()=>crypto.randomUUID()}) {
   const el = name => byId('path-template-' + name), fields = ['id','expected','nodes','protocol','profile','profile-revision','read-revision'];
-  let epoch=0,readVersion=0,listVersion=0,captureVersion=0,page=1,total=0,pending=null,sending=false,locks=null,stamp=null;
+  const collection=tunnelManagement?'tunnels':'path-templates';
+  let epoch=0,readVersion=0,listVersion=0,captureVersion=0,page=1,total=0,pending=null,sending=false,locks=null,stamp=null,inspected=null;
   const controllers=new Set();
   async function call(method,resource,body,key) {
     const controller=new AbortController();controllers.add(controller);
     try {return await request(method,resource,body,key,{signal:controller.signal,timeoutMs:5000});}
     finally {controllers.delete(controller);}
   }
-  const resource = template => 'path-templates/' + encodeURIComponent(template);
+  const resource = template => collection+'/' + encodeURIComponent(template);
+  function definition(value=null) {
+    inspected=value;
+    if(!tunnelManagement)return;
+    const topology=byId('tunnel-definition-topology'),summary=byId('tunnel-definition-summary');
+    topology.replaceChildren();
+    if(value){
+      const config=value.config;
+      for(const [index,nodeId] of config.nodes.entries()){
+        const item=document.createElement('li'),role=index===0?'Ingress':index===config.nodes.length-1?'Egress':'Transit';
+        item.textContent=role+' / '+nodeId+(index?' / Endpoint r'+config.endpoints[index-1].revision:'');topology.append(item);
+      }
+      summary.textContent=value.templateId+' / r'+value.revision+' (current r'+value.currentRevision+') / '+(value.archived?'archived':'published')+
+        ' / '+config.protocols.join('+').toUpperCase()+' / Profile '+config.transport.profileId+' @ '+config.transport.configRevision+
+        '. Reusable configuration only; each Forward owns independent runtime resources. Health not assessed.';
+    }else summary.textContent='Inspect a published logical tunnel to see its locked path. Draft changes are not a deployed tunnel.';
+    byId('path-template-use').disabled=!value||value.archived||Boolean(pending)||typeof onSelectDefinition!=='function';
+  }
   function state(message) {el('state').textContent=message;}
   function controls() {
     for(const name of fields)el(name).disabled=Boolean(pending);
     el('capture').disabled=Boolean(pending);el('inspect').disabled=Boolean(pending);
     el('publish').disabled=sending||pending?.method==='DELETE';el('archive').disabled=sending||pending?.method==='PUT';
     el('publish').textContent=pending?.method==='PUT'?'Replay Same Publish':'Publish Immutable Revision';
-    el('archive').textContent=pending?.method==='DELETE'?'Replay Same Archive':'Archive Template';
+    el('archive').textContent=pending?.method==='DELETE'?'Replay Same Archive':tunnelManagement?'Archive Tunnel':'Archive Template';
     el('discard').disabled=!pending;
+    if(tunnelManagement)byId('path-template-use').disabled=Boolean(pending)||!inspected||inspected.archived||typeof onSelectDefinition!=='function';
   }
   function draft() {
     const nodes=el('nodes').value.split(/[\r\n,]+/).map(value=>value.trim()).filter(Boolean);
@@ -43,12 +69,12 @@ export function initPathTemplates({request,byId,notify,document=globalThis.docum
   }
   function invalidate() {
     if(pending)return;
-    captureVersion++;readVersion++;locks=null;stamp=null;el('endpoints').textContent='';el('record').textContent='';
+    captureVersion++;readVersion++;locks=null;stamp=null;definition();el('endpoints').textContent='';el('record').textContent='';
     state('Metadata only. Capture current Endpoint revisions before publishing. No binding or execution authorization.');
   }
   async function capture() {
     if(pending)return;const version=++captureVersion,connection=epoch;
-    readVersion++;el('record').textContent='';
+    readVersion++;definition();el('record').textContent='';
     try {
       const proposal=draft(),signature=JSON.stringify(proposal),endpoints=[];
       locks=null;stamp=null;el('endpoints').textContent='';state('Reading bounded current Endpoint metadata...');
@@ -65,11 +91,12 @@ export function initPathTemplates({request,byId,notify,document=globalThis.docum
   }
   async function inspect(template=el('id').value.trim(),requested=el('read-revision').value) {
     if(pending)return;const connection=epoch,version=++readVersion;
-    captureVersion++;locks=null;stamp=null;el('endpoints').textContent='';el('record').textContent='';
+    captureVersion++;locks=null;stamp=null;definition();el('endpoints').textContent='';el('record').textContent='';
     try {
       if(!id(template)||requested!==''&&!number(requested))throw Error('Choose a template ID and an exact revision or blank for current.');
       const result=await call('GET',resource(template)+(requested?'?revision='+requested:''));
       if(connection!==epoch||version!==readVersion||pending)return;
+      if(tunnelManagement){managementView(result);if(result.tunnelId!==template)throw Error('Tunnel backing identity mismatch.');}
       if(result.templateId!==template||!Number.isSafeInteger(result.currentRevision)||result.currentRevision<1||result.currentRevision>64||
           !Number.isSafeInteger(result.revision)||result.revision<1||result.revision>result.currentRevision||result.revision!==(requested?Number(requested):result.currentRevision)||
           typeof result.archived!=='boolean'||!hash(result.configDigest)||!hash(result.profileDigest)||result.executionAuthorized!==false||result.bindingCreated!==false||result.reserved!==false)
@@ -79,6 +106,7 @@ export function initPathTemplates({request,byId,notify,document=globalThis.docum
       el('profile').value=config.transport.profileId;el('profile-revision').value=String(config.transport.configRevision);
       el('protocol').value=config.protocols.length===2?'both':config.protocols[0];
       locks=config.endpoints;stamp=JSON.stringify(draft());el('endpoints').textContent=JSON.stringify(locks,null,2);
+      definition({...result,config});
       el('record').textContent=JSON.stringify({templateId:template,revision:result.revision,currentRevision:result.currentRevision,archived:result.archived,
         config,configDigest:result.configDigest,profileDigest:result.profileDigest,executionAuthorized:false,bindingCreated:false,reserved:false},null,2);
       state('Inspecting r'+result.revision+' / current r'+result.currentRevision+(result.archived?' / archived':'')+'. Historical config never updates a Forward or grants execution.');
@@ -89,8 +117,9 @@ export function initPathTemplates({request,byId,notify,document=globalThis.docum
     el('rows').replaceChildren();el('prev').disabled=el('next').disabled=true;el('page').textContent='Reading bounded template metadata...';
     try {
       const prefix=el('prefix').value.trim();if(prefix&&!id(prefix))throw Error('Invalid template prefix.');
-      const data=await call('GET','path-templates?page='+requestedPage+'&limit=25'+(prefix?'&prefix='+encodeURIComponent(prefix):''));
+      const data=await call('GET',collection+'?page='+requestedPage+'&limit=25'+(prefix?'&prefix='+encodeURIComponent(prefix):''));
       if(connection!==epoch||version!==listVersion)return;
+      if(tunnelManagement){managementView(data);if(!Array.isArray(data.items)||data.items.some(item=>item.tunnelId!==item.templateId))throw Error('Tunnel list backing identity mismatch.');}
       if(data.page!==requestedPage||data.limit!==25||!Number.isSafeInteger(data.total)||data.total<0||data.total>128||
           !Array.isArray(data.items)||data.items.length>25||new Set(data.items.map(item=>item.templateId)).size!==data.items.length||
           data.items.some(item=>!id(item.templateId)||!item.templateId.startsWith(prefix)||!Number.isSafeInteger(item.currentRevision)||item.currentRevision<1||item.currentRevision>64||typeof item.archived!=='boolean'))
@@ -122,7 +151,7 @@ export function initPathTemplates({request,byId,notify,document=globalThis.docum
         }
         if(!confirm(method==='PUT'?'Publish metadata only? No Forward binding, switch, reservation or execution will be created.':'Archive this identifier permanently? History remains; running expanded rules are not changed.'))return;
         pending={method,template,resource:resource(template),body:JSON.parse(JSON.stringify(body)),key:randomUUID()};
-        readVersion++;captureVersion++;
+        readVersion++;captureVersion++;definition();
       }
       sending=true;controls();state('Sending original metadata command...');
       const original=pending,result=await call(original.method,original.resource,original.body,original.key);
@@ -149,16 +178,21 @@ export function initPathTemplates({request,byId,notify,document=globalThis.docum
   });
   function clear() {
     epoch++;readVersion++;listVersion++;captureVersion++;for(const controller of controllers)controller.abort();controllers.clear();
-    pending=null;sending=false;locks=null;stamp=null;page=1;total=0;
+    pending=null;sending=false;locks=null;stamp=null;page=1;total=0;definition();
     for(const name of fields)el(name).value=name==='expected'?'0':name==='protocol'?'both':'';
     el('prefix').value='';el('rows').replaceChildren();el('record').textContent='';el('endpoints').textContent='';el('page').textContent='';
     el('prev').disabled=el('next').disabled=true;controls();state('Metadata authoring only. Use the separate explicit path panel for Forward bindings or switching.');
   }
   el('discard').addEventListener('click',()=>{if(pending&&confirm('Discard tab-memory command history? This cannot cancel or roll back a committed command.'))clear();});
+  if(tunnelManagement)byId('path-template-use').addEventListener('click',()=>{
+    if(!pending&&inspected&&!inspected.archived&&typeof onSelectDefinition==='function'){
+      try {onSelectDefinition(JSON.parse(JSON.stringify(inspected)));}catch(error){notify(error.message,true);}
+    }
+  });
   clear();return {list,inspect,capture,clear};
 }
 
-export function initPathSwitch({request,byId,notify,preparePathBatch,document=globalThis.document,confirm=globalThis.confirm,randomUUID=()=>crypto.randomUUID()}) {
+export function initPathSwitch({request,byId,notify,preparePathBatch,tunnelManagement=false,document=globalThis.document,confirm=globalThis.confirm,randomUUID=()=>crypto.randomUUID()}) {
   const el=name=>byId('path-switch-'+name),fields=['forward','expected','template','revision'];
   const counter=value=>/^[1-9][0-9]*$/.test(value)&&Number.isSafeInteger(Number(value));
   const clone=value=>JSON.parse(JSON.stringify(value));
@@ -174,6 +208,7 @@ export function initPathSwitch({request,byId,notify,preparePathBatch,document=gl
   }
   const state=message=>{el('state').textContent=message;};
   const resource=forward=>'forwards/'+encodeURIComponent(forward);
+  const collection=tunnelManagement?'tunnels':'path-templates',bindingResource=tunnelManagement?'tunnel-binding':'path-binding',previewResource=tunnelManagement?'tunnel-preview':'path-preview';
   function selectionState(){
     el('batch-selection').textContent=selected.size+' / 10 selected from this path impact page';
     el('batch-prepare').disabled=Boolean(pending)||!selected.size||!batchTarget||typeof preparePathBatch!=='function';
@@ -197,18 +232,29 @@ export function initPathSwitch({request,byId,notify,preparePathBatch,document=gl
     if(!locked||locked.templateId!==templateId||!number(revision)||locked.revision!==Number(revision))throw Error('Inspect the exact target template revision first.');
     return {templateId,revision:Number(revision),configDigest:locked.configDigest};
   }
+  function lockValue(value,template,revision) {
+    if(tunnelManagement){managementView(value);if(value.tunnelId!==template)throw Error('Tunnel backing identity mismatch.');}
+    if(!id(template)||value.templateId!==template||!Number.isSafeInteger(value.revision)||value.revision!==revision||!Number.isSafeInteger(value.currentRevision)||
+        revision<1||revision>64||value.currentRevision<revision||value.currentRevision>64||value.archived!==false||!hash(value.configDigest)||
+        !hash(value.profileDigest)||value.executionAuthorized!==false||value.reserved!==false||value.bindingCreated!==false)
+      throw Error('Invalid or archived exact template.');
+    return {templateId:template,revision,configDigest:value.configDigest,profileDigest:value.profileDigest,config:configView(value.config)};
+  }
+  function selectDefinition(value) {
+    if(pending)throw Error('Resolve or explicitly discard the original uncertain path command before choosing another tunnel.');
+    const next=lockValue(value,value.templateId,value.revision);
+    invalidate(true);el('template').value=next.templateId;el('revision').value=String(next.revision);locked=next;
+    el('digest').value=next.configDigest;state('Exact tunnel revision selected. Inspect the Forward CAS, then prepare and explicitly confirm its binding. No command sent.');
+    return true;
+  }
   async function lock() {
     if(pending)return;invalidate(true);const connection=epoch,current=++version;
     try {
       const template=el('template').value.trim(),revision=el('revision').value;
       if(!id(template)||!number(revision))throw Error('Exact template ID and revision (1-64) required; no latest alias.');
-      const value=await call('GET','path-templates/'+encodeURIComponent(template)+'?revision='+revision);
+      const value=await call('GET',collection+'/'+encodeURIComponent(template)+'?revision='+revision);
       if(connection!==epoch||current!==version||pending)return;
-      if(value.templateId!==template||value.revision!==Number(revision)||!Number.isSafeInteger(value.currentRevision)||
-          value.currentRevision<value.revision||value.currentRevision>64||value.archived!==false||!hash(value.configDigest)||
-          !hash(value.profileDigest)||value.executionAuthorized!==false||value.reserved!==false||value.bindingCreated!==false)
-        throw Error('Invalid or archived exact template.');
-      locked={templateId:template,revision:Number(revision),configDigest:value.configDigest,profileDigest:value.profileDigest,config:configView(value.config)};
+      locked=lockValue(value,template,Number(revision));
       el('digest').value=locked.configDigest;state('Exact immutable template inspected. Current grants, Endpoints, CAS and resources are not reserved.');
     }catch(error){if(connection===epoch&&current===version)notify(error.message,true);}
   }
@@ -216,7 +262,7 @@ export function initPathSwitch({request,byId,notify,preparePathBatch,document=gl
     if(pending)return;invalidate();const connection=epoch,token=++version;
     try {
       const forward=el('forward').value.trim();if(!id(forward))throw Error('Choose a Forward ID.');
-      const value=await call('GET',resource(forward)+'/path-binding');
+      const value=await call('GET',resource(forward)+'/'+bindingResource);
       if(connection!==epoch||token!==version||pending)return;
       if(value.forwardId!==forward||!Number.isSafeInteger(value.revision)||value.revision<1||value.executionAuthorized!==false||
           value.reserved!==false||typeof value.recoverySuspended!=='boolean'||typeof value.deleting!=='boolean')throw Error('Invalid current provenance response.');
@@ -230,7 +276,7 @@ export function initPathSwitch({request,byId,notify,preparePathBatch,document=gl
       const forward=el('forward').value.trim(),expected=el('expected').value,target=selection(),config=clone(locked.config);
       if(!id(forward)||!counter(expected))throw Error('Exact current Forward ID and CAS revision required.');
       const body={expectedRevision:Number(expected),template:target};
-      const value=await call('POST',resource(forward)+'/path-preview',body);
+      const value=await call('POST',resource(forward)+'/'+previewResource,body);
       if(connection!==epoch||token!==version||pending)return;
       const spec=value.spec;
       if(value.forwardId!==forward||value.expectedRevision!==body.expectedRevision||!equal(value.template,target)||value.reserved!==false||
@@ -263,7 +309,7 @@ export function initPathSwitch({request,byId,notify,preparePathBatch,document=gl
             plan.profile.configDigest!==original.profileDigest)throw Error('Fresh Relay plan does not match the exact locked Profile or runtime gate.');
       }
       original.sent=true;state('Sending the original same-transaction Forward/path command...');
-      const value=await call('PUT',resource(original.forward)+'/path-binding',original.body,original.key);
+      const value=await call('PUT',resource(original.forward)+'/'+bindingResource,original.body,original.key);
       if(connection!==epoch||pending!==original)return;
       const binding=value.pathBinding,target=original.body.template,expected=original.body.expectedRevision+(original.changed?1:0);
       if(value.forwardId!==original.forward||value.revision!==expected||
@@ -285,7 +331,7 @@ export function initPathSwitch({request,byId,notify,preparePathBatch,document=gl
   async function references() {
     if(pending)return;clearRows();const connection=epoch,token=listVersion,requestedPage=page;
     try {
-      const target=selection(),value=await call('GET','path-templates/'+encodeURIComponent(target.templateId)+'/references?page='+page+'&limit=25&targetRevision='+target.revision);
+      const target=selection(),value=await call('GET',collection+'/'+encodeURIComponent(target.templateId)+'/references?page='+page+'&limit=25&targetRevision='+target.revision);
       if(connection!==epoch||token!==listVersion||pending)return;
       if(value.templateId!==target.templateId||value.page!==requestedPage||value.limit!==25||value.reserved!==false||value.executionAuthorized!==false||
           value.fullPlanAuthorization!==false||!Number.isSafeInteger(value.total)||value.total<0||!Array.isArray(value.items)||value.items.length>25||
@@ -338,5 +384,5 @@ export function initPathSwitch({request,byId,notify,preparePathBatch,document=gl
   }
   el('discard').addEventListener('click',()=>{if(pending&&confirm('Discard local path-command memory? This cannot cancel or roll back a committed switch.'))clear();});
   el('batch-prepare').addEventListener('click',prepareBatch);
-  clear();return {lock,current,prepare,submit,references,prepareBatch,clear};
+  clear();return {lock,current,prepare,submit,references,prepareBatch,selectDefinition,clear};
 }

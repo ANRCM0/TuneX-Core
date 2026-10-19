@@ -1,9 +1,9 @@
 import { createHmac,randomBytes,createHash,X509Certificate,timingSafeEqual } from 'node:crypto';
 import { mkdir,readFile,open,rename,unlink,stat } from 'node:fs/promises';
 import { dirname,resolve } from 'node:path';
-import { parseJson,digest } from '@tunex/contracts';
+import { parseJson, digest } from '@tunex/contracts/shared';
 import { MAX_COUNTER,isId } from '@tunex/core';
-import { ControlError } from '../application/errors.ts';
+import { ControlError } from '../framework/public.ts';
 
 export interface AuthorityRecord {
  version:1;sequence:number;database:string;trustDigest:string;maintenance:boolean;

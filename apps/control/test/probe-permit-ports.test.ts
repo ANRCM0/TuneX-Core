@@ -190,6 +190,7 @@ test('management receipts reject corrupt digest, binding, times and disguised re
         (r: ProbeResultRecord) => ({ ...r, acceptedAt: Date.parse(r.body.validUntil) }),
         (r: ProbeResultRecord) => ({ ...r, body: { ...r.body, requestId: '0'.repeat(64) } }),
         (r: ProbeResultRecord) => {
+            assert.ok(r.body.probeVersion === 1, 'this corruption fixture uses the original egress result family');
             const body = { ...r.body, binding: { ...r.body.binding, bindingFence: 999 } };
             return { ...r, body, resultDigest: probeResultDigest({ ...body, requestId: '0'.repeat(64) }) };
         },

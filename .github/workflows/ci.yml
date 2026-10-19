@@ -42,6 +42,8 @@ jobs:
             agent/.cache/go-build
           key: vnext-go-${{ runner.os }}-${{ hashFiles('agent/go.sum') }}
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Public foundation extension preview through declared interfaces
+        run: node examples/foundation-extension/main.ts
       - name: Native execution registry and host authorization contracts
         run: node scripts/run-go.mjs test ./internal/control -run '^TestExecution' -count=1
       - name: Control query and Transport resolution port regressions

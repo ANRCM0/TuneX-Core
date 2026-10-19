@@ -22,3 +22,11 @@ IMPORTANT: The physical reservation primitive is deliberately not invoked by dep
 The existing Console and ADP/3 Runtime STILL reject any N>2 Relay. No existing Node capability advertisement is modified. Do not hand-inject the proposed intent into a Snapshot or interpret a passing unit test as a production multi-hop release.
 
 Checks: npm run typecheck, npm test, npm run test:go, npm run contracts:check, plus mainline Phase 1, Relay isolation and container security gates.
+## 2026-10-19 Foundation Source Follow-Up
+
+Original preparation and exclusive reservations now have public Transit rules,
+L2 native framing and the same Runtime resource owner through required raw ports.
+The old compiler and reservation entries are precise aliases/bindings; no live
+Transit execution is enabled. See [source boundary](../architecture/transit-preparation-reservations-v1.md)
+and readiness items 65/66, both unexecuted. Staging/abort and protected release
+still need source extraction; historical test descriptions do not verify this source.

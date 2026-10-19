@@ -1,7 +1,9 @@
 import { createPool } from 'mysql2/promise';
 import type { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { readFile, readdir } from 'node:fs/promises';
-import type { TransactionBoundary } from '../application/ports.ts';
+import type { TransactionBoundary } from '../framework/public.ts';
+import { readStoredValue as json } from '../compatibility/public.ts';
+export { readStoredValue as json } from '../compatibility/public.ts';
 export type Transaction = PoolConnection;
 export async function rows<T>(tx: Pool | Transaction, sql: string, args: unknown[] = []): Promise<T[]> {
     const [result] = await tx.execute<RowDataPacket[]>(sql, args);
@@ -92,4 +94,3 @@ export class MySqlUnitOfWork implements TransactionBoundary<Transaction> {
     }
     async close(): Promise<void> { await this.pool.end(); }
 }
-export function json<T>(value: unknown): T { return (typeof value === 'string' ? JSON.parse(value) : value) as T; }

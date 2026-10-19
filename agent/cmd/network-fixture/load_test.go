@@ -11,7 +11,7 @@ import (
 func TestClassifyLoadError(t *testing.T) {
 	cases := []struct {
 		name string
-		err error
+		err  error
 		want string
 	}{
 		{"payload", nil, "payload-mismatch"},

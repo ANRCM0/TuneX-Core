@@ -17,11 +17,19 @@ import (
 
 // Classify transient load failures without exposing any payloads or connection secrets.
 func classifyLoadError(err error) string {
-	if err == nil { return "payload-mismatch" }
+	if err == nil {
+		return "payload-mismatch"
+	}
 	var network net.Error
-	if errors.As(err, &network) && network.Timeout() { return "timeout" }
-	if errors.Is(err, io.EOF) { return "eof" }
-	if errors.Is(err, net.ErrClosed) { return "closed" }
+	if errors.As(err, &network) && network.Timeout() {
+		return "timeout"
+	}
+	if errors.Is(err, io.EOF) {
+		return "eof"
+	}
+	if errors.Is(err, net.ErrClosed) {
+		return "closed"
+	}
 	return "io-error"
 }
 
@@ -119,7 +127,11 @@ func load(port, tcpCount, udpCount, seconds, size int, runID string, progress bo
 					mutex.Lock()
 					failures = append(failures, "write")
 					clients[index]["failure"] = "write"
-					if err == nil { clients[index]["errorKind"] = "short-write" } else { clients[index]["errorKind"] = classifyLoadError(err) }
+					if err == nil {
+						clients[index]["errorKind"] = "short-write"
+					} else {
+						clients[index]["errorKind"] = classifyLoadError(err)
+					}
 					mutex.Unlock()
 					return
 				}
@@ -139,7 +151,11 @@ func load(port, tcpCount, udpCount, seconds, size int, runID string, progress bo
 					mutex.Lock()
 					failures = append(failures, "reply")
 					clients[index]["failure"] = "reply"
-					if malformed { clients[index]["errorKind"] = "udp-size-mismatch" } else { clients[index]["errorKind"] = classifyLoadError(err) }
+					if malformed {
+						clients[index]["errorKind"] = "udp-size-mismatch"
+					} else {
+						clients[index]["errorKind"] = classifyLoadError(err)
+					}
 					if err == nil || malformed {
 						invalidPayload = true
 					}
@@ -176,8 +192,8 @@ func load(port, tcpCount, udpCount, seconds, size int, runID string, progress bo
 		// Preserve individual client/protocol failure kinds for CI artifacts.
 		// Only public counters, generic error classes and timestamps are emitted.
 		_ = encoder.Encode(map[string]any{
-			"completed":false,"reason":"unexpected-client-failure",
-			"clients":clients,"errors":len(failures),"verifiedReplies":completed.Load(),
+			"completed": false, "reason": "unexpected-client-failure",
+			"clients": clients, "errors": len(failures), "verifiedReplies": completed.Load(),
 		})
 		return fmt.Errorf("load failed: %d errors, %d verified replies", len(failures), completed.Load())
 	}

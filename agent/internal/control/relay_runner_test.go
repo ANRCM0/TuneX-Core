@@ -280,8 +280,12 @@ func TestRelayRunnerPersistsBeforePrepareAndActivatesAfterRealPeerProbe(t *testi
 				if err != nil {
 					t.Fatal("previous Relay listener remains bound after ingress Prepared", err)
 				}
-				if probeTCP != nil { probeTCP.Close() }
-				if probe != nil { probe.Close() }
+				if probeTCP != nil {
+					probeTCP.Close()
+				}
+				if probe != nil {
+					probe.Close()
+				}
 			}
 			assertAvailable()
 			ingressRaw = runnerSnapshot(t, "node-a", 2, 5, []adp3.Assignment{})

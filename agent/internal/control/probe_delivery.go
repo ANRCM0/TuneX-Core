@@ -1,21 +1,18 @@
 package control
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/tunex/vnext/agent/internal/nativeexecution"
+	"github.com/tunex/vnext/agent/internal/observationtrust"
+	"github.com/tunex/vnext/agent/internal/platformruntime"
 	"github.com/tunex/vnext/agent/internal/probe"
 	"github.com/tunex/vnext/agent/internal/probedelivery"
+	"github.com/tunex/vnext/agent/internal/probeecho"
+	"github.com/tunex/vnext/agent/internal/runtimeplatform"
 )
 
 const (
@@ -25,10 +22,19 @@ const (
 )
 
 type probeDeliveryOffer struct {
-	permitID string
-	binding  probe.Binding
-	until    time.Time
-	timeout  time.Duration
+	permitID            string
+	measurement         string
+	typed               bool
+	services            bool
+	echo                bool
+	echoInput           *probeecho.Execution
+	service             *observationtrust.Context
+	instance            execution
+	session             *registeredProbe
+	issuedAt, expiresAt string
+	binding             probe.Binding
+	until               time.Time
+	timeout             time.Duration
 }
 
 type probeDeliverySlot struct {
@@ -75,12 +81,10 @@ func (budget *probeDeliveryBudget) acquire(node string, poll bool, now time.Time
 	}, nil
 }
 
-func probeRequestID() (string, error) {
-	var bytes [32]byte
-	if _, err := rand.Read(bytes[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes[:]), nil
+func probeRequestID() (string, error)                  { return probeRequestIDWith(platformruntime.Local{}) }
+func (runner *Runner) probeRequestID() (string, error) { return probeRequestIDWith(runner.entropy()) }
+func probeRequestIDWith(source runtimeplatform.Entropy) (string, error) {
+	return nativeexecution.ProbeRequestID(source)
 }
 func deliveryBinding(b probedelivery.Binding) probe.Binding {
 	return probe.Binding{NodeID: b.NodeId, BootID: b.BootId, SessionEpoch: b.SessionEpoch,
@@ -90,67 +94,62 @@ func deliveryBinding(b probedelivery.Binding) probe.Binding {
 }
 
 func (runner *Runner) probeDeliveryExchange(ctx context.Context, session *registeredProbe, path string, input any) ([]byte, time.Time, error) {
-	started := time.Now()
-	work, cancel := context.WithDeadline(ctx, minProbeDeadline(session.until, started.Add(probeExchangeLimit)))
+	return runner.probeDeliveryExchangeBounded(ctx, session, path, input, 4096)
+}
+
+func (runner *Runner) probeDeliveryExchangeBounded(ctx context.Context, session *registeredProbe, path string, input any, limit int) ([]byte, time.Time, error) {
+	started := runner.scheduler().Now()
+	if limit != 4096 && (limit != 32768 || path != "/agent/v3/probe/services/poll" && path != "/agent/v3/probe/echo/poll") {
+		return nil, started, probe.ErrInvalid
+	}
+	work, cancel := runner.scheduler().WithDeadline(ctx, minProbeDeadline(session.until, started.Add(probeExchangeLimit)))
 	defer cancel()
-	stop := context.AfterFunc(session.ctx, cancel)
+	stop := runner.scheduler().AfterFunc(session.ctx, cancel)
 	defer stop()
-	raw, err := json.Marshal(input)
-	if err != nil {
-		return nil, started, err
-	}
-	runner.mutex.Lock()
-	baseURL, clientPointer := runner.options.URL, runner.client
-	runner.mutex.Unlock()
-	message, err := http.NewRequestWithContext(work, "POST", strings.TrimRight(baseURL, "/")+path, bytes.NewReader(raw))
-	if err != nil {
-		return nil, started, err
-	}
-	if message.URL.Scheme != "https" || message.URL.Host == "" || message.URL.User != nil ||
-		message.URL.RawQuery != "" || message.URL.Fragment != "" || clientPointer == nil {
-		return nil, started, probe.ErrDenied
-	}
-	message.Header.Set("Content-Type", "application/json")
-	message.Header.Set("X-TuneX-Session-Epoch", strconv.FormatUint(session.epoch, 10))
-	client := *clientPointer
-	client.CheckRedirect = func(*http.Request, []*http.Request) error {
-		return fmt.Errorf("Probe delivery redirects are forbidden")
-	}
-	response, err := client.Do(message)
-	if err != nil {
-		return nil, started, err
-	}
-	defer response.Body.Close()
-	raw, err = io.ReadAll(io.LimitReader(response.Body, 4097))
+	raw, err := nativeexecution.EncodeProbeRequest(input)
 	if err != nil {
 		return nil, started, err
 	}
 	if len(raw) > 4096 {
 		return nil, started, probe.ErrInvalid
 	}
+	runner.mutex.Lock()
+	baseURL, clientPointer := runner.options.URL, runner.client
+	runner.mutex.Unlock()
+	response, err := runner.auxiliary().ProbeDelivery(work, clientPointer, baseURL, path, raw, session.epoch)
+	if err != nil {
+		return nil, started, probeChannelError(err)
+	}
+	defer response.Body.Close()
+	raw, oversized, err := nativeexecution.ReadProbeResponseBody(response.Body, limit)
+	if err != nil {
+		return nil, started, err
+	}
+	if oversized {
+		return nil, started, probe.ErrInvalid
+	}
 	if work.Err() != nil {
 		return nil, started, work.Err()
 	}
 	if response.StatusCode != http.StatusOK {
-		var problem struct {
-			Code string `json:"code"`
-		}
-		_ = json.Unmarshal(raw, &problem)
-		return nil, started, httpError{response.StatusCode, problem.Code}
+		return nil, started, httpError{response.StatusCode, nativeexecution.ProbeResponseErrorCode(raw)}
 	}
 	return raw, started, nil
 }
 
 func probeFreshUntil(session *registeredProbe, started time.Time, observedAt, serverTime string) (time.Time, error) {
-	observed, e1 := time.Parse(time.RFC3339Nano, observedAt)
-	server, e2 := time.Parse(time.RFC3339Nano, serverTime)
+	return probeFreshUntilWith(platformruntime.Schedule{}, session, started, observedAt, serverTime)
+}
+func probeFreshUntilWith(schedule runtimeplatform.Scheduler, session *registeredProbe, started time.Time, observedAt, serverTime string) (time.Time, error) {
+	observed, e1 := nativeexecution.ParseProbeWireTime(observedAt)
+	server, e2 := nativeexecution.ParseProbeWireTime(serverTime)
 	if e1 != nil || e2 != nil || server.Before(observed) || server.Sub(observed) > probeObservationAge ||
 		session.guard.ValidateServerTime(server) != nil {
 		return time.Time{}, probe.ErrDenied
 	}
 	// Subtract remote observation age AND all local elapsed time; receipt time never starts a new window.
 	until := started.Add(probeObservationAge - server.Sub(observed))
-	if !time.Now().Before(until) {
+	if !schedule.Now().Before(until) {
 		return time.Time{}, probe.ErrDenied
 	}
 	return until, nil
@@ -169,42 +168,36 @@ func (runner *Runner) pollProbe(ctx context.Context) (*probeDeliveryOffer, error
 	}
 	skew := time.Duration(runner.hello.Policy.MaxClockSkewSeconds) * time.Second
 	runner.mutex.Unlock()
-	release, err := probeDeliveries.acquire(session.node, true, time.Now())
+	release, err := probeDeliveries.acquire(session.node, true, runner.scheduler().Now())
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	id, err := probeRequestID()
+	id, err := runner.probeRequestID()
 	if err != nil {
 		return nil, err
 	}
 	request := probedelivery.PollRequest{ProtocolVersion: 3, ProbeVersion: 1, Kind: "probe-poll", NodeId: session.node,
 		BootId: session.boot, SessionEpoch: session.epoch, InstanceId: session.gate.InstanceID(), InstanceGeneration: session.generation, RequestId: id}
-	raw, err := json.Marshal(request)
+	raw, err := nativeexecution.EncodeProbePollRequest(request)
 	if err != nil {
-		return nil, err
-	}
-	if _, err := probedelivery.ParsePollRequest(raw); err != nil {
 		return nil, err
 	}
 	raw, started, err := runner.probeDeliveryExchange(ctx, session, "/agent/v3/probe/poll", request)
 	if err != nil {
 		return nil, err
 	}
-	ack, err := probedelivery.ParsePollResponse(raw)
+	ack, err := nativeexecution.DecodeProbePollResponse(request, raw)
 	if err != nil {
 		return nil, err
 	}
-	if err := probedelivery.CheckPollResponse(request, *ack); err != nil {
-		return nil, err
-	}
-	freshUntil, err := probeFreshUntil(session, started, ack.ObservedAt, ack.ServerTime)
+	freshUntil, err := probeFreshUntilWith(runner.scheduler(), session, started, ack.ObservedAt, ack.ServerTime)
 	if err != nil {
 		return nil, err
 	}
 	runner.mutex.Lock()
 	defer runner.mutex.Unlock()
-	if ctx.Err() != nil || runner.probeRegistration != session || !runner.probeCurrentLocked(session) || !time.Now().Before(freshUntil) {
+	if ctx.Err() != nil || runner.probeRegistration != session || !runner.probeCurrentLocked(session) || !runner.scheduler().Now().Before(freshUntil) {
 		return nil, probe.ErrDenied
 	}
 	if ack.Offer == nil {
@@ -218,14 +211,14 @@ func (runner *Runner) pollProbe(ctx context.Context) (*probeDeliveryOffer, error
 	if err != nil {
 		return nil, err
 	}
-	expires, _ := time.Parse(time.RFC3339Nano, ack.Offer.ExpiresAt)
-	server, _ := time.Parse(time.RFC3339Nano, ack.ServerTime)
+	expires, _ := nativeexecution.ParseProbeWireTime(ack.Offer.ExpiresAt)
+	server, _ := nativeexecution.ParseProbeWireTime(ack.ServerTime)
 	remaining := expires.Sub(server) - skew
 	if remaining <= 0 || remaining > 2*time.Second {
 		return nil, probe.ErrDenied
 	}
 	until := minProbeDeadline(started.Add(remaining), minProbeDeadline(session.until, target.ExecutionUntil))
-	if !time.Now().Before(until) || !time.Now().Before(freshUntil) {
+	if !runner.scheduler().Now().Before(until) || !runner.scheduler().Now().Before(freshUntil) {
 		return nil, probe.ErrDenied
 	}
 	return &probeDeliveryOffer{permitID: ack.Offer.PermitId, binding: binding, until: until,

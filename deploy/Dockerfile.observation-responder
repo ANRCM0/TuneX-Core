@@ -1,0 +1,14 @@
+# syntax=docker/dockerfile:1
+FROM golang:1.26.3-bookworm AS builder
+WORKDIR /src/agent
+COPY agent/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/tunex-observation-responder ./cmd/tunex-observation-responder
+
+FROM scratch
+ARG TUNEX_SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.source="https://github.com/ANRCM0/TuneX-Core" \
+      org.opencontainers.image.revision="${TUNEX_SOURCE_REVISION}" \
+      org.opencontainers.image.title="TuneX Independent Observation Responder"
+COPY --from=builder /out/tunex-observation-responder /usr/local/bin/tunex-observation-responder
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/tunex-observation-responder"]

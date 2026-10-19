@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkFoundationBoundaries } from './check-foundation.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 function files(path) {
   return readdirSync(path, { withFileTypes: true }).flatMap(entry => {
@@ -37,8 +38,9 @@ for (const file of files(resolve(root, 'agent/internal/control'))) {
   }
 }
 for (const [directory, allowed] of [
-  ['probe', ['context', 'crypto/rand', 'encoding/hex', 'errors', 'net', 'net/netip', 'regexp', 'strconv', 'sync', 'time',
-    'github.com/tunex/vnext/agent/internal/egress']],
+  ['probe', ['context', 'encoding/hex', 'errors', 'net', 'regexp', 'sync', 'time',
+    'github.com/tunex/vnext/agent/internal/probe/native', 'github.com/tunex/vnext/agent/internal/probeecho',
+    'github.com/tunex/vnext/agent/internal/observationtrust', 'github.com/tunex/vnext/agent/internal/runtimeplatform']],
   ['egress', ['net/netip']],
   ['probedelivery', ['embed', 'encoding/json', 'fmt', 'regexp', 'sync', 'time',
     'github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer',
@@ -51,6 +53,9 @@ for (const [directory, allowed] of [
   const source = readFileSync(file, 'utf8');
   const imports = source.match(/\bimport\s*\(([\s\S]*?)\)/)?.[1] ?? source.match(/\bimport\s+("[^"]+")/)?.[1] ?? '';
   for (const [, reference] of imports.matchAll(/"([^"]+)"/g)) {
+    // Native effects are classified separately; this closed list applies to
+    // the product's direct leaves rather than to its new nested L2 adapters.
+    if (directory === 'probe' && dirname(file) !== resolve(root, 'agent/internal/probe')) continue;
     if (!allowed.includes(reference)) throw new Error(`Probe/egress dependency boundary violated: ${file}: ${reference}`);
   }
   if (/\b(?:Listen|ListenPacket|WriteFile|StartAuthorized|StoreProtected)\s*\(/.test(source)) {
@@ -110,7 +115,7 @@ if (deliveryContract.$defs.StatusResponse.properties.state.const !== 'consumed' 
       'bootId,instanceGeneration,instanceId,kind,nodeId,permitId,probeVersion,protocolVersion,requestId,sessionEpoch') {
   throw new Error('Probe delivery requests may carry only machine association and correlation, never caller authority');
 }
-const deliveryAdapter = readFileSync(resolve(root, 'apps/control/src/application/probe-delivery.ts'), 'utf8');
+const deliveryAdapter = readFileSync(resolve(root, 'apps/control/src/modules/probe-owner/delivery.ts'), 'utf8');
 if (/\b(?:fetch|createConnection|createPool|transaction|issue|consume|revoke|withdraw)\s*\(/.test(deliveryAdapter)) {
   throw new Error('Probe delivery adapter must delegate read-only offer/check without transactions, execution or mutation');
 }
@@ -123,7 +128,7 @@ if (JSON.stringify(resultContract.$defs.Binding) !== JSON.stringify(claimContrac
     resultContract.$defs.Response.properties.executionEnabled.const !== false) {
   throw new Error('Probe result receipts must preserve binding and reported-only, zero-payload, non-authorizing semantics');
 }
-const resultAdapter = readFileSync(resolve(root, 'apps/control/src/application/probe-results.ts'), 'utf8');
+const resultAdapter = readFileSync(resolve(root, 'apps/control/src/modules/probe-owner/results.ts'), 'utf8');
 if (/\b(?:fetch|createConnection|createPool|transaction|issue|consume|revoke|withdraw)\s*\(/.test(resultAdapter) ||
     !resultAdapter.includes('this.permits.receiveResult(')) {
   throw new Error('Probe result adapter must delegate ingestion to the existing permit owner without another authority');
@@ -135,9 +140,12 @@ if (/\bprobe\.(?:Permit|Grant)\s*\{|\bprobeDirect\s*\(|\.Run\s*\(|\brunner\.(?:j
 const deliveryHostPaths = ['probe_delivery.go', 'probe_authority_watch.go'].map(name => resolve(root, 'agent/internal/control', name));
 const executionHostPath = resolve(root, 'agent/internal/control/probe_execution.go');
 const workflowHostPath = resolve(root, 'agent/internal/control/probe_workflow.go');
+const pollRouterPath = resolve(root, 'agent/internal/control/probe_types_delivery.go');
 const deliveryHostImports = ['bytes', 'context', 'crypto/rand', 'encoding/hex', 'encoding/json', 'fmt', 'io', 'net/http',
   'strconv', 'strings', 'sync', 'time', 'github.com/tunex/vnext/agent/internal/probe',
-  'github.com/tunex/vnext/agent/internal/probedelivery'];
+  'github.com/tunex/vnext/agent/internal/probedelivery', 'github.com/tunex/vnext/agent/internal/nativeexecution',
+  'github.com/tunex/vnext/agent/internal/observationtrust', 'github.com/tunex/vnext/agent/internal/platformruntime',
+  'github.com/tunex/vnext/agent/internal/probeecho', 'github.com/tunex/vnext/agent/internal/runtimeplatform'];
 for (const file of deliveryHostPaths) {
   const source = readFileSync(file, 'utf8');
   const imports = source.match(/\bimport\s*\(([\s\S]*?)\)/)?.[1] ?? '';
@@ -148,23 +156,32 @@ for (const file of deliveryHostPaths) {
 }
 const executionHost = readFileSync(executionHostPath, 'utf8');
 const executionHostImports = ['context', 'encoding/json', 'sync/atomic', 'time', 'github.com/tunex/vnext/agent/internal/probe',
-  'github.com/tunex/vnext/agent/internal/proberesult'];
+  'github.com/tunex/vnext/agent/internal/proberesult', 'github.com/tunex/vnext/agent/internal/nativeexecution',
+  'github.com/tunex/vnext/agent/internal/platformruntime', 'github.com/tunex/vnext/agent/internal/probeecho',
+  'github.com/tunex/vnext/agent/internal/probeservices', 'github.com/tunex/vnext/agent/internal/probetypes',
+  'github.com/tunex/vnext/agent/internal/runtimeplatform'];
 const executionImports = executionHost.match(/\bimport\s*\(([\s\S]*?)\)/)?.[1] ?? '';
 if ([...executionImports.matchAll(/"([^"]+)"/g)].some(([, name]) => !executionHostImports.includes(name)) ||
     /\b(?:probeDirect|claimProbe|pollProbe|NewGate|StoreProtected|Save|beginDrain|startExecution)\s*\(|\brunner\.(?:journal|runtimeState|instances|drains|ticket|guard)\s*=(?!=)/.test(executionHost) ||
     !executionHost.includes('runner.monitorConsumedProbe(') || !executionHost.includes('owned.session.gate.Run(') ||
-    !executionHost.includes('Check: watch.Check') || !executionHost.includes('proberesult.ParseRequest(')) {
+    !executionHost.includes('Check: watch.Check') || !executionHost.includes('nativeexecution.ProjectProbeResult(')) {
   throw new Error('Probe admission must use the retained receipt monitor and existing one-use Gate, serialize closed results, and never mutate authority or perform HTTP');
 }
 const workflowHost = readFileSync(workflowHostPath, 'utf8');
 const workflowImports = workflowHost.match(/\bimport\s*\(([\s\S]*?)\)/)?.[1] ?? '';
 if ([...workflowImports.matchAll(/"([^"]+)"/g)].some(([, name]) => !['context', 'time',
-    'github.com/tunex/vnext/agent/internal/probe', 'github.com/tunex/vnext/agent/internal/proberesult'].includes(name)) ||
+    'github.com/tunex/vnext/agent/internal/probe', 'github.com/tunex/vnext/agent/internal/nativeexecution'].includes(name)) ||
     /\b(?:probeDirect|NewGate|StoreProtected|Save|beginDrain|startExecution|monitorConsumedProbe|probeResultRequest)\s*\(|\bprobe\.(?:Permit|Grant)\s*\{|\.gate\.Run\s*\(|\brunner\.(?:journal|runtimeState|instances|drains|ticket|guard)\s*=(?!=)/.test(workflowHost) ||
     !workflowHost.includes('if !runner.options.ProbeExecution || !runner.options.ProbeRegistration') ||
-    !workflowHost.includes('runner.executeConsumedProbe(') || !workflowHost.includes('proberesult.CheckResponse(') ||
+    !workflowHost.includes('runner.executeConsumedProbe(') || !workflowHost.includes('nativeexecution.DecodeProbeResultResponse(') ||
     !workflowHost.includes('execution.reported.CompareAndSwap(false, true)')) {
   throw new Error('Probe workflow must opt in explicitly, reuse owner admission, validate receipts and never recreate execution authority');
+}
+const resultWire = readFileSync(resolve(root, 'agent/internal/nativeexecution/probe_result_wire.go'), 'utf8');
+for (const marker of ['func ProjectProbeResult(', 'proberesult.ParseRequest(raw)', 'func DecodeProbeResultResponse(',
+  'proberesult.ParseResponse(raw)', 'proberesult.CheckResponse(request, *ack)',
+  'ApplicationHealth: "unknown"', 'Source: "agent-reported"', 'ApplicationPayloadBytes: 0']) {
+  if (!resultWire.includes(marker)) throw Error('Probe native result codec must retain closed serialization and ACK validation: ' + marker);
 }
 for (const file of files(resolve(root, 'agent/internal/control'))) {
   if (!file.endsWith('.go') || file.endsWith('_test.go')) continue;
@@ -172,7 +189,7 @@ for (const file of files(resolve(root, 'agent/internal/control'))) {
   if (![claimHostPath, workflowHostPath].includes(file) && /\bclaimProbe\s*\(/.test(source)) {
     throw new Error(`Only the opt-in serial Probe workflow may claim tasks: ${file}`);
   }
-  if (![workflowHostPath, ...deliveryHostPaths].includes(file) && /\bpollProbe\s*\(/.test(source) ||
+  if (![workflowHostPath, pollRouterPath, ...deliveryHostPaths].includes(file) && /\bpollProbe\s*\(/.test(source) ||
       file !== executionHostPath && !deliveryHostPaths.includes(file) && /\bmonitorConsumedProbe\s*\(/.test(source)) {
     throw new Error(`Probe delivery/watch hooks must feed only the opt-in workflow and original one-use adapter: ${file}`);
   }
@@ -181,109 +198,17 @@ for (const file of files(resolve(root, 'agent/internal/control'))) {
     throw new Error(`Only the one-use adapter may construct grants; only its opt-in workflow may execute/report: ${file}`);
   }
 }
-const portImports = new Map([
-  ['application/forward-probes.ts', ['@tunex/core', './errors.ts', './command-request.ts', './ports.ts', './probe-permits.ts']],
-  ['application/ports.ts', []],
-  ['application/command-request.ts', ['@tunex/core', '@tunex/contracts', './errors.ts', './ports.ts']],
-  ['application/console-query.ts', ['./errors.ts']],
-  ['application/console-queries.ts', ['./console-query.ts', './errors.ts', './ports.ts']],
-  ['application/native-drivers.ts', ['@tunex/core', '@tunex/contracts', './ports.ts']],
-  ['application/transport-queries.ts', ['@tunex/core', './console-query.ts', './errors.ts', './ports.ts', '../modules/transport-ports.ts']],
-  ['application/tunnel-queries.ts', ['@tunex/core', '../modules/relay-endpoint-contract.ts', './console-query.ts', './errors.ts', './ports.ts']],
-  ['application/path-templates.ts', ['@tunex/core', '@tunex/contracts', './console-query.ts', './errors.ts', './ports.ts', '../modules/path-template-contract.ts', '../modules/path-template-ports.ts']],
-  ['modules/path-template-contract.ts', ['@tunex/core', '../application/errors.ts']],
-  ['modules/path-template-ports.ts', ['../application/console-query.ts', './path-template-contract.ts']],
-  ['modules/native-path-references.ts', ['../application/errors.ts', './node-execution-ports.ts', './transport-ports.ts', './relay-endpoint-contract.ts', './path-template-ports.ts', './path-template-contract.ts']],
-  ['infrastructure/mysql-path-templates.ts', ['node:crypto', './mysql-console-read.ts', '../application/console-query.ts', '../modules/path-template-ports.ts', './mysql.ts']],
-  ['api/path-template-query.ts', ['@tunex/core', '../application/errors.ts', '../application/console-query.ts']],
-  ['modules/path-binding-contract.ts', ['@tunex/core', '../application/errors.ts', './path-template-contract.ts', './path-binding-ports.ts']],
-  ['modules/path-binding-ports.ts', ['@tunex/core', '../application/console-query.ts']],
-  ['application/path-bindings.ts', ['@tunex/core', '@tunex/contracts', './console-query.ts', './errors.ts', './ports.ts', './path-templates.ts',
-    '../modules/path-binding-contract.ts', '../modules/path-binding-ports.ts', '../modules/path-template-ports.ts', '../modules/path-template-contract.ts', '../modules/forwarding-ports.ts']],
-  ['infrastructure/mysql-path-bindings.ts', ['@tunex/core', '../application/errors.ts', '../application/console-query.ts', '../modules/path-binding-ports.ts', './mysql-console-read.ts', './mysql.ts']],
-  ['modules/relay-endpoint-contract.ts', ['@tunex/core', '../application/errors.ts']],
-  ['api/tunnel-query.ts', ['../application/console-query.ts', '../application/tunnel-queries.ts', '../application/errors.ts']],
-  ['infrastructure/mysql-tunnel-read.ts', ['@tunex/core', '../application/console-query.ts', '../application/tunnel-queries.ts', './mysql-console-read.ts', './mysql.ts']],
-  ['api/transport-query.ts', ['@tunex/core', '../application/console-query.ts', '../application/transport-queries.ts', '../application/errors.ts']],
-  ['infrastructure/mysql-transport-read.ts', ['@tunex/core', '../application/transport-queries.ts', '../application/console-query.ts', './mysql-console-read.ts', './mysql.ts']],
-  ['application/node-observations.ts', ['@tunex/core', './errors.ts', '../modules/node-report-observation.ts',
-    '../modules/observation-ports.ts']],
-  ['modules/observation-ports.ts', []],
-  ['modules/probe-ports.ts', ['@tunex/core', '@tunex/contracts', './node-management-ports.ts']],
-  ['modules/probe-negotiation-ports.ts', []],
-  ['modules/probe-instance-ports.ts', []],
-  ['modules/probe-permit-ports.ts', ['./probe-ports.ts', './probe-instance-ports.ts', './probe-result-ports.ts']],
-  ['modules/probe-result-ports.ts', ['@tunex/contracts']],
-  ['modules/probe-permit-state.ts', ['@tunex/core', './probe-ports.ts', './probe-permit-ports.ts']],
-  ['application/probe-permits.ts', ['node:crypto', '@tunex/core', '@tunex/contracts', './errors.ts', './probe-machine-authorization.ts', './ports.ts',
-    '../modules/probe-negotiation-ports.ts', '../modules/probe-ports.ts', '../modules/probe-permit-ports.ts', '../modules/probe-permit-state.ts']],
-  ['infrastructure/mysql-probe-permits.ts', ['@tunex/core', '../application/errors.ts', '../modules/probe-permit-ports.ts', '../modules/probe-result-ports.ts',
-    '../modules/probe-permit-state.ts', './mysql.ts']],
-  ['infrastructure/mysql-probe-permit-intents.ts', ['@tunex/core', '../application/errors.ts', '../modules/probe-ports.ts', './mysql.ts']],
-  ['application/probe-machine-authorization.ts', ['./errors.ts', '../modules/probe-negotiation-ports.ts']],
-  ['application/probe-instances.ts', ['@tunex/core', './errors.ts', './probe-machine-authorization.ts', './ports.ts',
-    '../modules/probe-negotiation-ports.ts', '../modules/probe-instance-ports.ts']],
-  ['application/probe-instance-registry.ts', ['@tunex/contracts', './errors.ts', './probe-instances.ts']],
-  ['application/probe-claims.ts', ['@tunex/contracts', './errors.ts', './probe-permits.ts']],
-  ['application/probe-delivery.ts', ['@tunex/contracts', './errors.ts', './probe-permits.ts']],
-  ['application/probe-results.ts', ['@tunex/contracts', './errors.ts', './probe-permits.ts']],
-  ['application/probe-negotiation.ts', ['@tunex/core', '@tunex/contracts', './errors.ts', './ports.ts',
-    '../modules/probe-negotiation-ports.ts', './probe-machine-authorization.ts']],
-  ['infrastructure/mysql-probe-instances.ts', ['@tunex/core', '../application/errors.ts', './mysql.ts',
-    '../modules/probe-instance-ports.ts']],
-  ['infrastructure/mysql-probe-machine.ts', ['./mysql.ts', '../modules/probe-negotiation-ports.ts']],
-  ['application/forward-probe-plans.ts', ['@tunex/core', '@tunex/contracts', './errors.ts', './ports.ts',
-    '../modules/probe-ports.ts', '../modules/target-policy.ts']],
-  ['infrastructure/mysql-probe-read.ts', ['@tunex/contracts', './mysql.ts', '../modules/probe-ports.ts']],
-  ['modules/node-report-observation.ts', ['@tunex/core', '../application/errors.ts', './observation-ports.ts']],
-  ['infrastructure/mysql-node-observation.ts', ['@tunex/core', 'node:stream', '../application/errors.ts', '../application/ports.ts',
-    './mysql.ts', '../modules/observation-ports.ts']],
-  ['application/transport-grants.ts', ['@tunex/core', '@tunex/contracts', './errors.ts', './ports.ts', '../modules/transport-ports.ts']],
-  ['application/access-commands.ts', ['@tunex/core', './errors.ts', './command-request.ts', './ports.ts',
-    '../modules/identity-credentials.ts', '../modules/identity-ports.ts', '../modules/node-grant-ports.ts', '../modules/runtime/access-ports.ts']],
-  ['application/node-management.ts', ['@tunex/core', './errors.ts', './command-request.ts', './ports.ts',
-    '../modules/node-management-ports.ts', '../modules/node-policy.ts', '../modules/runtime/node-change-ports.ts']],
-  ['application/forward-commands.ts', ['@tunex/core', './errors.ts', './command-request.ts', './ports.ts', '../modules/path-binding-contract.ts', '../modules/path-binding-ports.ts',
-    '../modules/forwarding-ports.ts', '../modules/runtime/forward-command-ports.ts']],
-  ['api/console-query.ts', ['../application/console-query.ts', '../application/errors.ts']],
-  ['modules/transport-ports.ts', ['@tunex/contracts', '../application/ports.ts']],
-  ['modules/forwarding-ports.ts', ['@tunex/core']],
-  ['modules/identity-ports.ts', []],
-  ['modules/node-grant-ports.ts', []],
-  ['modules/node-management-ports.ts', []],
-  ['modules/node-execution-ports.ts', ['@tunex/core', './node-management-ports.ts']],
-  ['modules/node-policy.ts', ['@tunex/core', '@tunex/contracts', '../application/errors.ts', './node-management-ports.ts']],
-  ['modules/identity-credentials.ts', ['node:crypto']],
-  ['modules/runtime/authorization-ports.ts', ['@tunex/core', '../../application/ports.ts', '../node-management-ports.ts']],
-  ['modules/runtime/access-ports.ts', ['../../application/ports.ts', '../identity-ports.ts', '../node-grant-ports.ts']],
-  ['modules/runtime/profile-grants.ts', ['../../application/errors.ts', '../../application/ports.ts',
-    '../forwarding-ports.ts', '../transport-ports.ts', './authorization-ports.ts']],
-  ['modules/runtime/access-changes.ts', ['@tunex/core', '../../application/errors.ts', '../../application/ports.ts',
-    '../forwarding-ports.ts', '../identity-ports.ts', '../node-grant-ports.ts', './access-ports.ts', './authorization-ports.ts']],
-  ['modules/runtime/node-change-ports.ts', ['../../application/ports.ts', '../node-management-ports.ts', './access-ports.ts']],
-  ['modules/runtime/node-changes.ts', ['../../application/errors.ts', '../../application/ports.ts',
-    '../forwarding-ports.ts', '../node-management-ports.ts', './authorization-ports.ts', './access-ports.ts', './node-change-ports.ts']],
-  ['modules/runtime/forward-command-ports.ts', ['@tunex/core', '../../application/ports.ts', './planner.ts']],
-  ['modules/runtime/forward-commands.ts', ['@tunex/core', '../../application/errors.ts', '../node-execution-ports.ts',
-    '../node-management-ports.ts', './authorization-ports.ts', './forward-command-ports.ts', './planner.ts']],
-  ['modules/runtime/snapshot-assignment-ports.ts', ['@tunex/contracts']],
-  ['modules/runtime/snapshot-assignments.ts', ['@tunex/core', '@tunex/contracts', '../../application/errors.ts', './snapshot-assignment-ports.ts']],
-  ['modules/runtime/relay-assignment-source.ts', ['./snapshot-assignment-ports.ts']],
-]);
-for (const [path, allowed] of portImports) {
-  const source = readFileSync(resolve(root, 'apps/control/src', path), 'utf8');
-  for (const [, reference] of source.matchAll(/(?:\bfrom\s*|\bimport\s*\(|\brequire\s*\()\s*['"]([^'"]+)['"]/g)) {
-    if (!allowed.includes(reference)) throw new Error(`Control port dependency boundary violated: ${path}: ${reference}`);
-  }
-}
-const transportSource = readFileSync(resolve(root, 'apps/control/src/modules/transport.ts'), 'utf8');
+// Canonical AST policy covers value imports, type imports and public/private edges.
+// The former intermediate-path table no longer describes extracted owners.
+checkFoundationBoundaries();
+const transportSource = readFileSync(resolve(root, 'apps/control/src/modules/transport-owner/service.ts'), 'utf8');
 if (/\bonGrantChange\b/.test(transportSource)) {
   throw new Error('Profile grant acceptance must use owner command/effect ports, not a mutable Transport callback');
 }
 if (/['"]\.\/runtime\//.test(transportSource)) {
   throw new Error('Transport must own Profile mutations without importing the Runtime implementation');
 }
-const apiSource = readFileSync(resolve(root, 'apps/control/src/api/app.ts'), 'utf8');
+const apiSource = readFileSync(resolve(root, 'apps/control/src/api/routes.ts'), 'utf8');
 if (/\btransport\s*\.\s*(?:applyGrant|changeGrant)\s*\(/.test(apiSource)) {
   throw new Error('HTTP must enter Profile grant acceptance through the application transaction, not owner mutation primitives');
 }
@@ -317,6 +242,12 @@ const projection = readFileSync(resolve(root, 'apps/control/src/infrastructure/m
 if (/\bControlApplication\b|\b(?:write|createPool|createConnection)\s*\(/.test(projection)) {
   throw new Error('Console projections must use the supplied read transaction, not Control or write/connection helpers');
 }
+// The old wrappers retain constructors; actual SELECT bodies now share this
+// canonical raw store. Check it as well so empty forwarders cannot hide writes.
+const managementStore = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-management-read.ts'), 'utf8');
+if (/\bControlApplication\b|\b(?:write|createPool|createConnection|fetch)\s*\(|\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|CREATE|DROP|TRUNCATE)\b/.test(managementStore)) {
+  throw Error('Canonical management/reference/Tunnel raw storage must remain SELECT-only on the supplied transaction');
+}
 const transportProjection = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-transport-read.ts'), 'utf8');
 if (/\b(?:write|createPool|createConnection|fetch)\s*\(|\b(?:INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\b/.test(transportProjection)) {
   throw new Error('Transport reference projections must remain SELECT-only in the supplied transaction');
@@ -325,8 +256,12 @@ const tunnelProjection = readFileSync(resolve(root, 'apps/control/src/infrastruc
 if (/\b(?:write|createPool|createConnection|fetch)\s*\(|\b(?:INSERT|UPDATE|DELETE|ALTER|CREATE|DROP)\b|\b(?:certificate|response|source_fingerprint)\b|SELECT\s+\*/.test(tunnelProjection)) {
   throw new Error('Tunnel metadata must remain SELECT-only and must not select certificates, issuance responses or whole rows');
 }
+const tunnelRaw = managementStore.slice(managementStore.indexOf('export class MySqlTunnelMetadataReadStore'));
+if (!tunnelRaw.startsWith('export class MySqlTunnelMetadataReadStore') || /\b(?:certificate|response|source_fingerprint)\b|SELECT\s+\*/.test(tunnelRaw)) {
+  throw Error('Canonical Tunnel metadata must not select certificates, issuance responses or whole rows');
+}
 const relayFixture = readFileSync(resolve(root, 'scripts/phase2/relay.ts'), 'utf8');
-const pathStore = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-path-templates.ts'), 'utf8');
+const pathStore = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-path-template-store.ts'), 'utf8');
 if (/\b(?:createPool|createConnection|fetch)\s*\(/.test(pathStore) ||
     /\b(?:ALTER|CREATE|DROP|TRUNCATE|REPLACE)\b/.test(pathStore) ||
     /\b(?:INTO|UPDATE|DELETE\s+FROM)\s+scopes\b/.test(pathStore) ||
@@ -334,7 +269,7 @@ if (/\b(?:createPool|createConnection|fetch)\s*\(/.test(pathStore) ||
       !['path_templates', 'path_template_revisions', 'path_template_events', 'scopes'].includes(table))) {
   throw new Error('PathTemplate metadata owner may access only its supplied transaction/tables and Scope quota lock, never execution state');
 }
-const bindingStore = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-path-bindings.ts'), 'utf8');
+const bindingStore = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-path-binding-store.ts'), 'utf8');
 if (/\b(?:createPool|createConnection|fetch)\s*\(/.test(bindingStore) || /\b(?:ALTER|CREATE|DROP|TRUNCATE|REPLACE)\b/.test(bindingStore) ||
     [...bindingStore.matchAll(/\b(?:INTO|FROM|JOIN)\s+([a-z_]+)\b/g)].some(([, table]) => !['forward_path_bindings', 'current_path_bindings', 'forwards'].includes(table)) ||
     /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+forwards\b/.test(bindingStore) ||
@@ -355,7 +290,7 @@ if (multihopOptIn < 0 || multihopGuard <= multihopOptIn || ['await mkdir(', 'awa
 const observer = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-node-observation.ts'), 'utf8');
 const probeReader = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-read.ts'), 'utf8');
 const probeMachine = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-machine.ts'), 'utf8');
-const probeInstances = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-instances.ts'), 'utf8');
+const probeInstances = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-instance-store.ts'), 'utf8');
 if (/\b(?:createPool|createConnection|fetch)\s*\(/.test(probeInstances) ||
     [...probeInstances.matchAll(/\b(?:INTO|UPDATE|FROM)\s+([a-z_]+)\b(?!\s*=)/g)].some(([, table]) =>
       table !== 'probe_instances')) {
@@ -364,7 +299,7 @@ if (/\b(?:createPool|createConnection|fetch)\s*\(/.test(probeInstances) ||
 if (/\bprobeInstances\b|\bprobePermits\b/.test(apiSource)) {
   throw new Error('HTTP Probe registration must pass through the closed machine registry contract');
 }
-const permits = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-permits.ts'), 'utf8');
+const permits = readFileSync(resolve(root, 'apps/control/src/infrastructure/mysql-probe-permit-store.ts'), 'utf8');
 if (/\b(?:createPool|createConnection|fetch)\s*\(/.test(permits) ||
     [...permits.matchAll(/\b(?:INTO|UPDATE|FROM)\s+([a-z_]+)\b(?!\s*=)/g)].some(([, table]) =>
       !['probe_permits', 'probe_permit_budget', 'probe_permit_withdrawals', 'probe_results'].includes(table))) {

@@ -1,22 +1,12 @@
 package authorization
 
 import (
-	"fmt"
-	"time"
+	"github.com/tunex/vnext/agent/internal/executiontime"
+	"github.com/tunex/vnext/agent/internal/platformclock"
 )
 
-type Sample struct {
-	Wall   time.Time
-	Uptime time.Duration
-}
-type Clock func() (Sample, error)
+type Sample = executiontime.Sample
+type Clock = executiontime.Clock
 
-// SystemClock uses a platform uptime counter that includes suspend. The wall value
-// is read immediately after it so a resumed host cannot keep a pre-suspend lease.
-func SystemClock() (Sample, error) {
-	elapsed, err := uptime()
-	if err != nil {
-		return Sample{}, fmt.Errorf("CLOCK_UNCERTAIN: %w", err)
-	}
-	return Sample{Wall: time.Now().UTC(), Uptime: elapsed}, nil
-}
+// Legacy default-provider entry; timing decisions do not depend on platform code.
+func SystemClock() (Sample, error) { return platformclock.SystemClock() }

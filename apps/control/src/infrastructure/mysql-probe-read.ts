@@ -1,13 +1,13 @@
-import { parseRuntimeMessage } from '@tunex/contracts';
+import { parseRuntimeMessage } from '@tunex/contracts/runtime';
 import { json, rows } from './mysql.ts';
 import type { Transaction } from './mysql.ts';
-import type { PublishedProbeReader, PublishedProbeSnapshot } from '../modules/probe-ports.ts';
+import type { NativePublishedRuntimeReader as PublishedRuntimeReader, NativePublishedRuntimeEvidence as PublishedRuntimeEvidence } from '../compatibility/public.ts';
 
 /** One published Snapshot projection, scoped before any body leaves MySQL. No commands or network work. */
-export class MySqlProbeReader implements PublishedProbeReader<Transaction> {
+export class MySqlProbeReader implements PublishedRuntimeReader<Transaction> {
     private readonly locking: boolean;
     constructor(locking = false) { this.locking = locking; }
-    async read(tx: Transaction, scopeId: string, nodeId: string): Promise<PublishedProbeSnapshot | undefined> {
+    async read(tx: Transaction, scopeId: string, nodeId: string): Promise<PublishedRuntimeEvidence | undefined> {
         const [record] = await rows<{
             boot_id: string | null; session_epoch: number; snapshot_generation: number;
             credential_until: number | null; valid_until: number; body: unknown;

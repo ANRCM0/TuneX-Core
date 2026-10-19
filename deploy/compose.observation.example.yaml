@@ -1,0 +1,40 @@
+# Independent opt-in Linux service, not an Agent, business Relay or automatic probe.
+# Build/release/signature/scanning and real-host acceptance have NOT run for this source.
+name: tunex-observation-responder
+services:
+  observation-responder:
+    image: ${TUNEX_OBSERVATION_IMAGE:?Explicit reviewed image pinned by digest required}
+    restart: "no"
+    user: "10001:10001"
+    network_mode: host
+    read_only: true
+    command:
+      - --scope-id=${TUNEX_OBSERVATION_SCOPE:?Exact registered Scope identity required}
+      - --service-id=${TUNEX_OBSERVATION_SERVICE:?Exact dedicated service identity required}
+      - --server-name=${TUNEX_OBSERVATION_SERVER_NAME:?Exact lowercase DNS certificate and SNI name required}
+      - --listen=${TUNEX_OBSERVATION_LISTEN:?Exact host-owned numeric IP and unprivileged port required}
+      - --cert=/run/observation-identity/server.pem
+      - --key=/run/observation-identity/server.key
+      - --allow-cidrs=${TUNEX_OBSERVATION_ALLOW_CIDRS:?Explicit comma-separated source CIDRs required}
+      - --valid-until=${TUNEX_OBSERVATION_VALID_UNTIL:?Explicit absolute UTC millisecond expiry within seven days required}
+      - --max-connections=${TUNEX_OBSERVATION_MAX_CONNECTIONS:-16}
+      - --handshakes-per-second=${TUNEX_OBSERVATION_HANDSHAKES_PER_SECOND:-16}
+    volumes:
+      - type: bind
+        source: ${TUNEX_OBSERVATION_IDENTITY_DIR:?Independent operator directory owned by UID 10001 mode 0700 required}
+        target: /run/observation-identity
+        read_only: true
+        bind:
+          create_host_path: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 128m
+    cpus: "1.0"
+    ulimits:
+      nofile:
+        soft: 256
+        hard: 256
+    stop_grace_period: 5s

@@ -1,11 +1,11 @@
 import { isCounter, isId } from '@tunex/core';
 import type { Duplex } from 'node:stream';
-import { ControlError, notFound } from '../application/errors.ts';
-import type { ScopeAuthorization } from '../application/ports.ts';
+import { ControlError, notFound } from '../framework/public.ts';
+import type { ScopeAuthorization } from '../framework/public.ts';
 import { rows } from './mysql.ts';
 import type { MySqlUnitOfWork, Transaction } from './mysql.ts';
 import type { AgentReportProvenance, AuthorizedNodeReportReader, NodeObservationContext,
-    NodeReportEvidence } from '../modules/observation-ports.ts';
+    NodeReportEvidence } from '../framework/public.ts';
 
 interface ReportRow {
     id: string; scope_id: string; revoked: number; credential_until: number | null;
