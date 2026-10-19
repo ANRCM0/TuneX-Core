@@ -78,9 +78,30 @@ These static results do not claim a new functional CI result.
 
 ## Remaining Acceptance
 
+### B Candidate Update - 2026-10-20
+
+PR #112 candidate `4bb399f34600fca3e16613ef8a1d09fc93c06330` ran at actual
+Actions checkout `807983784be96861ae9f7b5c636dfec5d8d96e6d` in baseline run
+`39280558322`. The contracts job failed one newly added Identity audit assertion:
+it read SQL argument index 7 (details) instead of index 6 (created_at). The next
+candidate corrects the assertion. This run reported 922 TypeScript passes, one
+failure and 78 conditional skips; Go full tests/vet/race and Web suites passed
+within that job. Windows Agent, deployment tools, Probe and Relay isolation jobs
+and packaging run `39280558321` passed. The other integration jobs were still
+running at this update; this is not a complete passing baseline.
+
+The next source batch adds Journal uncertain-persistence/reload and complete
+native history projection, staged actual AtomicWrite failure effects, native
+platform/factory/registry contracts, Forward/Snapshot registry behavior, actual
+Control server construction/worker/shutdown traces and Core/Web source consumers.
+Local TypeScript and 950-source boundaries passed; Go vet passed for the cached
+pure packages. Other native-package vet attempts could not load uncached external
+dependencies with the proxy disabled and are not counted as passed. No local
+functional tests ran. All newly appended tests require their saved head's Actions.
+
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 31 cases have fully
-identified assertions; 189 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 49 cases have fully
+identified assertions; 171 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`

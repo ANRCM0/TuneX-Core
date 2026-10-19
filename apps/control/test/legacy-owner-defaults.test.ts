@@ -76,7 +76,7 @@ test('Identity audit resolves Date.now at each call and native account lookup ke
   await owner.audit(f.tx, 'scope-a', 'actor-a', 'subject-a', 'member_change', 2, { role: 'viewer' });
   t.mock.method(Date, 'now', () => 222);
   await owner.audit(f.tx, 'scope-a', 'actor-a', 'subject-a', 'member_change', 3, { role: 'removed' });
-  assert.equal(f.calls[0]!.args[7], 111); assert.equal(f.calls[1]!.args[7], 222);
+  assert.equal(f.calls[0]!.args[6], 111); assert.equal(f.calls[1]!.args[6], 222);
   for (const call of f.calls) {
     assert.equal(call.sql, 'INSERT INTO access_events(id,scope_id,actor_id,subject_id,kind,revision,created_at,details) VALUES(?,?,?,?,?,?,?,?)');
     assert.match(call.args[0] as string, /^[0-9a-f-]{36}$/);
