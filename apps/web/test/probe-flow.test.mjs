@@ -15,14 +15,14 @@ const result = () => ({ historical: true, expired: true, acceptedAt: Date.parse(
     consumedAt: issuedAt, source: 'agent-reported', applicationHealth: 'unknown',
     applicationPayloadBytes: 0, point: 'agent-direct-egress', status: 'connected', code: 'tcp-connected', timeoutMs: 500, issuedAt, expiresAt, elapsedMs: 0,
     measuredAt: issuedAt, validUntil: expiresAt } });
-function harness(handler = async () => ({ probeIssuanceEnabled: true }), confirm = () => true) {
+function harness(handler = async () => ({ probeIssuanceEnabled: true }), confirm = () => true, scope = '') {
   const elements = new Map(), calls = [], notices = [], views = [];
   const byId = id => {
     if (!elements.has(id)) elements.set(id, { value: '', checked: false, textContent: '', disabled: false, listeners: {},
       addEventListener(name, fn) { this.listeners[name] = fn; } });
     return elements.get(id);
   };
-  const api = initProbeConsole({ byId, confirm, display: view => views.push(view), delay: async () => {},
+  const api = initProbeConsole({ byId, confirm, getScope: () => scope, display: view => views.push(view), delay: async () => {},
     notify: (...args) => notices.push(args), request: async (...args) => { calls.push(args); return handler(...args); } });
   const el = name => byId('probe-' + name);
   return { api, el, calls, notices, views };
@@ -146,4 +146,56 @@ test('late acceptance cannot restore keys, receipt IDs or selection after connec
   h.api.clear(); assert.equal(h.calls.at(-1)[4].signal.aborted, true);
   resolve(acceptance); await pending;
   assert.equal(h.el('id').value, ''); assert.equal(h.el('acceptance').textContent, ''); assert.equal(h.el('issue').disabled, true);
+});
+
+function echoReceipt(protocol = 'tcp', state = 'consumed', outcome = 'echoed') {
+  const taskKind = protocol + '-ingress-echo';
+  const service = { scopeId: 'scope-a', serviceId: 'echo-service', revision: 1, configRevision: 1, configDigest: 'sha256:' + 'd'.repeat(64), contextDigest: 'sha256:' + 'e'.repeat(64) };
+  const description = { measurement: taskKind + '-v1', taskKind, point: 'agent-local-direct-ingress', capability: 'probe.' + taskKind + '.v1' };
+  const report = result();
+  Object.assign(report.body, description, { probeVersion: 4, kind: 'probe-echo-result', businessProtocol: protocol, service, tls: null,
+    challenge: { nonce: Buffer.alloc(32, 1).toString('base64'), invocationDigest: 'sha256:' + 'f'.repeat(64) },
+    status: outcome, code: outcome === 'echoed' ? 'nonce-echo-verified' : outcome === 'unverified' ? 'nonce-echo-rejected' : 'tcp-connect-failed',
+    echo: outcome === 'echoed' ? { algorithm: 'Ed25519', requestDigest: 'sha256:' + 'a'.repeat(64), signature: Buffer.alloc(64, 2).toString('base64'), verified: true } : null,
+    requestBytes: outcome === 'unreachable' ? 0 : 256, responseBytes: outcome === 'echoed' ? 256 : 0,
+    applicationPayloadBytes: outcome === 'echoed' ? 512 : outcome === 'unreachable' ? 0 : 256 });
+  return receipt({ ...description, service, state, result: state === 'consumed' ? report : null });
+}
+
+test('TCP and UDP Echo receipts display stored evidence with unknown health across terminal and pending states', async () => {
+  for (const protocol of ['tcp', 'udp']) for (const state of ['issued', 'consumed', 'revoked', 'quarantined']) {
+    const value = echoReceipt(protocol, state), h = harness(async () => value, () => true, 'scope-a');
+    h.el('id').value = 'probe-a'; await h.api.query();
+    const view = JSON.parse(h.el('receipt').textContent);
+    assert.equal(view.state, state); assert.equal(view.health, 'unknown'); assert.equal(view.executionEnabled, false);
+    assert.equal(view.businessProtocol, protocol); assert.equal(h.calls.length, 1); assert.equal(h.calls[0][0], 'GET');
+    if (state === 'consumed') {
+      assert.equal(view.report.proofVerification, 'stored-evidence-not-reverified-by-browser');
+      assert.equal(view.report.applicationPayloadBytes, 512); assert.equal(view.report.requestBytes, 256); assert.equal(view.report.responseBytes, 256);
+    } else assert.equal(view.report, null);
+  }
+  for (const [protocol, outcome] of [['tcp', 'unreachable'], ['tcp', 'unverified'], ['udp', 'unverified']]) {
+    const h = harness(async () => echoReceipt(protocol, 'consumed', outcome), () => true, 'scope-a');
+    h.el('id').value = 'probe-a'; await h.api.query();
+    assert.equal(JSON.parse(h.el('receipt').textContent).report.status, outcome);
+  }
+});
+
+test('Echo display rejects malformed scope, descriptor, binding, timing, proof and byte relationships without hidden requests', async () => {
+  const mutations = [
+    value => { value.extra = true; }, value => { value.service.scopeId = 'foreign'; }, value => { value.capability = 'wrong'; },
+    value => { value.result.body.binding.nodeId = 'other'; }, value => { value.result.body.service.contextDigest = 'invalid'; },
+    value => { value.result.body.challenge.nonce = 'invalid'; }, value => { value.result.body.echo.verified = false; },
+    value => { value.result.body.echo.signature = 'invalid'; }, value => { value.result.body.requestBytes = 255; },
+    value => { value.result.body.applicationPayloadBytes = 0; }, value => { value.result.body.status = 'unknown'; },
+    value => { value.result.acceptedAt = Date.parse(expiresAt); }, value => { value.result.body.validUntil = issuedAt; },
+    value => { value.result.body.instanceId = 'wrong'; }, value => { value.result.body.tls = {}; },
+    value => { value.result.body.source = 'independent'; }, value => { value.executionEnabled = true; },
+  ];
+  for (const mutate of mutations) {
+    const value = echoReceipt(); mutate(value);
+    const h = harness(async () => value, () => true, 'scope-a'); h.el('id').value = 'probe-a'; await h.api.query();
+    assert.equal(h.el('receipt').textContent, ''); assert.equal(h.el('revoke').disabled, true); assert.equal(h.calls.length, 1);
+    assert.match(h.el('state').textContent, /unknown/);
+  }
 });
