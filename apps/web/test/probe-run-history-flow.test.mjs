@@ -87,18 +87,40 @@ test('manual historical run reads validate legacy and TCP/UDP Echo summaries and
 });
 
 test('full stored digest and independent Echo invocation digest reject tampering even when outer summary is resealed', async t => {
+  const checked = [], nativeDigest = crypto.subtle.digest.bind(crypto.subtle);
+  t.mock.method(crypto.subtle, 'digest', async (algorithm, bytes) => {
+    checked.push(JSON.parse(new TextDecoder().decode(bytes)));
+    return nativeDigest(algorithm, bytes);
+  });
   const mutations = [
-    value => { value.actorId = 'actor-changed'; }, value => { value.binding.bindingFence++; },
-    value => { value.result.resultDigest = 'sha256:' + 'c'.repeat(64); },
-    value => { value.echoChallenge.nonce = Buffer.alloc(32, 3).toString('base64'); seal(value, false); },
-    value => { value.timeoutMs = 600; seal(value, false); },
-    value => { value.service.contextDigest = 'sha256:' + 'd'.repeat(64); seal(value, false); },
+    ['stored', value => { value.actorId = 'actor-changed'; }],
+    ['invocation', value => { value.binding.bindingFence++; }],
+    ['stored', value => { value.result.resultDigest = 'sha256:' + 'c'.repeat(64); }],
+    ['invocation', value => { value.echoChallenge.nonce = Buffer.alloc(32, 3).toString('base64'); seal(value, false); }],
+    ['invocation', value => { value.timeoutMs = 600; seal(value, false); }],
+    ['invocation', value => { value.service.contextDigest = 'sha256:' + 'd'.repeat(64); seal(value, false); }],
   ];
-  for (const mutate of mutations) {
+  for (const [kind, mutate] of mutations) {
+    checked.length = 0;
     const value = run(); mutate(value); const h = harness(t, async () => envelope({ run: value }));
     h.el('id').value = value.probeId; await h.click('read');
     assert.equal(h.el('detail').textContent, ''); assert.equal(h.notices.length, 1); assert.equal(h.calls.length, 1);
-    assert.match(h.notices[0][0], /summary digest/);
+    // Production clears the controller before notifying, so every rejected read
+    // uses the cancellation text. Observe the real digest boundary instead of
+    // inferring the rejection cause from that deliberately generic UI message.
+    const invocation = { domain: 'tunex.probe.echo.invocation.v1', probeVersion: 4, measurement: value.measurement, permitId: value.probeId,
+      binding: value.binding, instanceId: value.instanceId, instanceGeneration: value.instanceGeneration, timeoutMs: value.timeoutMs,
+      issuedAt: new Date(value.issuedAt).toISOString(), expiresAt: new Date(value.expiresAt).toISOString(), service: value.service, nonce: value.echoChallenge.nonce };
+    assert.deepEqual(checked[0], invocation, 'the real UI must verify the complete invocation before accepting history');
+    if (kind === 'invocation') {
+      assert.equal(checked.length, 1, 'invalid invocation must refuse before summary hashing');
+      assert.notEqual(digest(checked[0]), value.echoChallenge.invocationDigest);
+    } else {
+      const stored = Object.fromEntries([...keys, 'measurement', 'service', 'echoChallenge'].map(key => [key, value[key]]));
+      assert.equal(checked.length, 2); assert.deepEqual(checked[1], stored);
+      assert.equal(digest(checked[0]), value.echoChallenge.invocationDigest);
+      assert.notEqual(digest(checked[1]), value.contentDigest, 'the complete stored summary, including the changed field, must fail its digest');
+    }
   }
 });
 

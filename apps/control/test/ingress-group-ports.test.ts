@@ -109,11 +109,16 @@ test('historical ingress descriptions use persisted references but active resolu
 test('ingress requires distinct ingress Nodes and common protocols before committing definition state', async () => {
     for (const mismatch of ['ingress', 'protocol']) {
         const f = fixture(), first = f.templates.get('template-a')!, second = f.templates.get('template-z')!;
-        second.config = mismatch === 'ingress' ? first.config : parsePathTemplate({ ...second.config, protocols: ['udp'] });
+        second.config = mismatch === 'ingress'
+            ? parsePathTemplate({ ...first.config, transport: { ...first.config.transport, profileId: 'other-profile' } })
+            : parsePathTemplate({ ...second.config, protocols: ['udp'] });
         second.configDigest = digest({ config: second.config, profileDigest: second.profileDigest });
         f.input.members[0]!.template.configDigest = second.configDigest;
-        await assert.rejects(f.publish(), { code: 'INVALID_CONFIG', status: 422 });
+        await assert.rejects(f.publish(), { code: 'INVALID_CONFIG', status: 422,
+            message: 'Ingress members require distinct ingress Nodes and one business protocol set' });
         assert.equal(f.state.head, null); assert.equal(f.state.record, null); assert.equal(f.state.replies.size, 0);
         assert.equal(f.events.includes('publish'), false);
+        assert.deepEqual(f.events, ['begin', 'authorize', 'claim', 'lock-scope', 'head',
+            'template:template-a:true', 'references', 'template:template-z:true', 'references', 'rollback']);
     }
 });

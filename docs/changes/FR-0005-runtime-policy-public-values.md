@@ -105,5 +105,17 @@ remain unverified. Source relocation is not proof of alias or runtime acceptance
 
 ## Source Authorization And Acceptance Gate
 
+### B verification repair, 2026-10-19
+
+The Runtime package entry omitted the direct Policy type alias promised above.
+Add that type-only re-export from the same canonical lower declaration; this
+implements this request's already-authorized compatibility plan. It adds no
+runtime initialization, native default, policy field or validation behavior.
+The human's standing source and B verification authorization covers this repair.
+The B tests compare all thirteen mutable/required numeric fields through old/new
+entries, exact frozen native defaults, and host copy/validation/sample timing.
+Actual source scans found no declaration augmentations or source-text tooling
+targeting the former declaration location. Exact-revision Actions remain required.
+
 Implement under standing source authorization without repeated confirmation, then
 record authored/unverified status. All verification and feature gates stay separate.

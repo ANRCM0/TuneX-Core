@@ -79,12 +79,17 @@ These static results do not claim a new functional CI result.
 ## Remaining Acceptance
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. Only two cases have fully
-identified assertions; 218 remain partial. This classification does not report
+with actual suites and specific remaining obligations. Six cases have fully
+identified assertions; 214 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
 is superseded by later additions; record the final exact-source Actions separately.
+Later B repairs enforce native-platform refusal in non-binding Control/Go L3
+source and restore the Runtime Policy type alias already specified by FR-0005.
+The final suite also compares complete Probe permit validator and credential
+record representation/projection matrices. Earlier 422 and invalid test-fixture
+failures stay in Actions history; they are not accepted as passing evidence.
 
 These configured A5 CI results do not sign off readiness cases 1–220. Independent physical hosts,
 long-run/load, independent Responder build/publication, release and production

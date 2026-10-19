@@ -1,4 +1,5 @@
 // Current production execution contracts. ADP/2 parsing is a separate entrypoint.
+export type { Policy } from './policy.ts';
 export type { DirectConfig, Observation, Drain, Condition } from './types.ts';
 export type { RuntimeAssignment, RuntimeTombstone, RuntimeSnapshot, RuntimeMessages } from './adp3.ts';
 export { parseRuntimeMessage, validateRuntimeSnapshot } from './adp3.ts';

@@ -4,6 +4,7 @@ import { MAX_COUNTER } from '@tunex/core';
 import { DEFAULT_POLICY } from '@tunex/contracts/shared';
 import type { RuntimeAssignmentValue, RuntimeMessagesFor, RuntimeSnapshotValue } from '@tunex/contracts/execution-values';
 import { RuntimeHost } from '../src/framework/runtime-host.ts';
+import { runtimeCodec } from '../src/compatibility/public.ts';
 import type { RuntimeHostOptions, RuntimeNodeState, RuntimeWorkRecord } from '../src/framework/runtime-host-ports.ts';
 
 function fixture() {
@@ -176,4 +177,51 @@ test('Runtime report accepts current evidence after drains and never fails execu
     assert.deepEqual(f.events.slice(-4), ['drains', 'save-report', 'complete', 'commit']);
     f.events.length = 0; f.data.previous.validUntil = String(f.data.now); const input = f.report(); input.observations[0]!.condition = 'error';
     await f.host().report('node', 2, input); assert.equal(f.events.includes('fail-execution'), false);
+});
+
+test('Runtime copies default and explicit validated policies at construction then detaches every Hello response', async () => {
+    for (const explicit of [false, true]) {
+        const f = fixture(), defaults = { ...DEFAULT_POLICY }, supplied = { ...DEFAULT_POLICY, leaseSeconds: 200 };
+        const events: string[] = []; let received: unknown;
+        Object.assign(f.ports.codec, { defaultPolicy: defaults });
+        if (explicit) Object.assign(f.ports, { policy: supplied });
+        Object.assign(f.ports, { now: () => { events.push('now'); return f.data.now; } });
+        f.ports.codec.validatePolicy = function (policy, at) {
+            assert.equal(this, f.ports.codec); assert.equal(at, 10000); received = policy; events.push('validate'); return policy;
+        };
+        const host = f.host(); assert.deepEqual(events, ['now', 'validate']);
+        assert.equal(received === supplied, explicit); if (!explicit) assert.notEqual(received, defaults);
+        const expectedLease = explicit ? 200 : 300;
+        supplied.leaseSeconds = 1; defaults.leaseSeconds = 2;
+        const first = await host.hello('node', f.hello()); assert.equal(first.policy.leaseSeconds, expectedLease);
+        first.policy.leaseSeconds = 3;
+        const second = await host.hello('node', f.hello()); assert.equal(second.policy.leaseSeconds, expectedLease);
+        assert.notEqual(first.policy, second.policy); assert.equal(Object.isFrozen(first.policy), false);
+        assert.deepEqual(events, ['now', 'validate', 'now', 'now']);
+    }
+});
+
+test('Runtime retains policy validator receiver error identity and refuses weakened authority before any transaction', () => {
+    const f = fixture(), failure = new Error('native policy refusal'); let samples = 0;
+    Object.assign(f.ports, { now: () => { samples++; return 0; } });
+    f.ports.codec.validatePolicy = function (_policy, at) { assert.equal(this, f.ports.codec); assert.equal(at, 0); throw failure; };
+    assert.throws(() => f.host(), error => error === failure); assert.equal(samples, 1); assert.deepEqual(f.events, []);
+    for (const extra of [{ leaseSeconds: 301 }, { maxClockSkewSeconds: 6 }]) {
+        const current = fixture(); Object.assign(current.ports, { policy: { ...DEFAULT_POLICY, ...extra } });
+        assert.throws(() => current.host(), { message: 'Runtime policy cannot weaken the 300-second/5-second authorization baseline' });
+        assert.deepEqual(current.events, []);
+    }
+});
+
+test('native Policy validation retains constructor sample timing and original parser refusal for malformed values', () => {
+    for (const extra of [{ leaseSeconds: 0 }, { maxClockSkewSeconds: NaN }, { maxAssignmentsPerNode: 1.5 }, { extra: 1 }]) {
+        const f = fixture(), policy = { ...DEFAULT_POLICY, ...extra }; let samples = 0;
+        Object.assign(f.ports, { policy, now: () => { samples++; return 0; } }); f.ports.codec.validatePolicy = runtimeCodec.validatePolicy;
+        let expected: unknown;
+        try { runtimeCodec.validatePolicy(policy, 0); assert.fail('invalid fixture must fail native policy validation'); } catch (error) { expected = error; }
+        assert.throws(() => f.host(), error => error instanceof Error && expected instanceof Error && error.name === expected.name && error.message === expected.message);
+        assert.equal(samples, 1); assert.deepEqual(f.events, []);
+    }
+    const f = fixture(); f.ports.codec.validatePolicy = runtimeCodec.validatePolicy; Object.assign(f.ports, { now: () => NaN });
+    assert.throws(() => f.host(), RangeError); assert.deepEqual(f.events, []);
 });
