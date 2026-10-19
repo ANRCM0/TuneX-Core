@@ -78,8 +78,15 @@ These static results do not claim a new functional CI result.
 
 ## Remaining Acceptance
 
-These configured CI results do not sign off readiness cases 1–220. Reconcile
-actual assertions and evidence on the accepted source. Independent physical hosts,
+The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
+with actual suites and specific remaining obligations. Only two cases have fully
+identified assertions; 218 remain partial. This classification does not report
+execution success. PR #112 adds direct failure-order, owner-transaction, native
+and compatibility tests, a private notification cancellation/drain fix and distinct
+multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
+is superseded by later additions; record the final exact-source Actions separately.
+
+These configured A5 CI results do not sign off readiness cases 1–220. Independent physical hosts,
 long-run/load, independent Responder build/publication, release and production
 readiness require separate evidence. Multiple processes/namespaces on one runner
 are not independent physical-host evidence. Upper product-module work stays closed.

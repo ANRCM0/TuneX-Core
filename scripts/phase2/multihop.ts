@@ -77,7 +77,7 @@ try{
   const targetStatus=await ready(target);targetPID=targetStatus.pid;assert.equal(targetStatus.platform,'linux');
   const usedPorts=new Set<number>([targetStatus.port]);
   async function distinctPort(){for(let attempt=0;attempt<128;attempt++){const next=await port();if(!usedPorts.has(next)){usedPorts.add(next);return next;}}throw Error('Distinct fixture port selection exhausted');}
-  const listenPort=browserConsole?await distinctPort():await port(),copyPort=browserConsole?await distinctPort():undefined,batchPort=browserConsole?await distinctPort():undefined;
+  const listenPort=await distinctPort(),copyPort=browserConsole?await distinctPort():undefined,batchPort=browserConsole?await distinctPort():undefined;
   const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:5,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:128};
   assert.equal((await call('PUT','transport-profiles/multihop-profile',{expectedRevision:0,config:profile})).status,202);
   for(let i=0;i<count;i++){
@@ -86,7 +86,14 @@ try{
     try{const enroll=[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll'];if(lab)await lab.run(lab.namespaces[i]!,'/usr/bin/env',enroll);else await linux('env',enroll);}catch{throw Error('Multi-hop enrollment failed; token redacted');}
     const process=lab?lab.spawn(lab.namespaces[i]!,binary,args):spawnLinux(binary,args);const entry:typeof agents[number]={nodeId:node.body.nodeId,root,args,process,errors:''};process.stderr!.on('data',b=>{entry.errors=(entry.errors+b.toString()).slice(-16384);});agents.push(entry);
     await until(async()=>{const [r]=await control!.db.pool.query<any[]>('SELECT session_epoch,(SELECT COUNT(*) FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE) peers FROM runtime_nodes WHERE node_id=?',[entry.nodeId,entry.nodeId]);return r[0]?.session_epoch>0&&r[0]?.peers>0;},'current Node session and peer credential');
-    if(i>0){const peerPorts=browserConsole?await Promise.all(Array.from({length:6},()=>distinctPort())):[await port(),await port()];assert.equal((await call('PUT',`nodes/${entry.nodeId}/relay-endpoint`,{expectedRevision:0,config:{listenAddress:lab?lab.address(i):'127.0.0.1',advertisedHost:lab?lab.address(i):'127.0.0.1',allowedTcpPorts:peerPorts}})).status,202);}
+    if(i>0){
+      // The port fixture closes its temporary listener; the OS may return the same
+      // ephemeral port again, including for this endpoint's second TCP resource.
+      const peerPorts:number[]=[];for(let n=0;n<(browserConsole?6:2);n++)peerPorts.push(await distinctPort());
+      const config={listenAddress:lab?lab.address(i):'127.0.0.1',advertisedHost:lab?lab.address(i):'127.0.0.1',allowedTcpPorts:peerPorts};
+      const endpoint=await call('PUT',`nodes/${entry.nodeId}/relay-endpoint`,{expectedRevision:0,config});
+      assert.equal(endpoint.status,202,JSON.stringify({nodeId:entry.nodeId,config,response:endpoint.body}));
+    }
   }
   pass(`${count} independent Agent processes advertise the explicit execution extension`);
   const ingress=agents[0]!,spec={enabled:true,protocols:['tcp','udp'],ingress:{nodeId:ingress.nodeId,listen:{address:'127.0.0.1',port:listenPort}},target:{host:'127.0.0.1',port:targetStatus.port},path:{via:agents.slice(1).map(a=>a.nodeId)},transport:{profileId:'multihop-profile',configRevision:1}};

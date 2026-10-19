@@ -13,9 +13,12 @@ configured PR checks and was merged by PR #111 as
 `373c291a6ea4f04e5929796a6119eb3b60027c34`. Exact checkout identity and
 scope are recorded in [verification](foundation-verification-2026-10-19.md).
 This supersedes source-phase statements that verification has not started.
-Readiness 1-220 still requires a case-by-case evidence mapping and an acceptance
-decision; CI totals alone do not provide it. Cleanup revisions require their own
-checks. Upper product-module parallelism remains closed.
+Readiness 1-220 now has a case-by-case [assertion map](foundation-b-assertion-coverage.md):
+two requirements have complete identified assertions and 218 remain partial.
+These are coverage classifications, not execution passes. The map records actual
+suites and the remaining obligations; an acceptance decision is still pending.
+PR #112 carries the B tests and necessary private repairs and requires its own
+exact-source Actions. Upper product-module parallelism remains closed.
 
 The source-only sections below retain implementation rationale, consumer and
 planned-case details. Their no-check/unexecuted descriptions refer to each
