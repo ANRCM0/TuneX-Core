@@ -1,24 +1,31 @@
 # VNext 开发入口
 
-当前新工作区已实现 Core、ADP/3 在线 direct、离线 Planner 和 TCP/UDP 生命周期。
+当前源码包含 Core、ADP/3 在线 Direct TCP/UDP、TLS 1.3 Relay、默认关闭的多跳
+及其产品模块；准确进度与证据见 [progress.md](progress.md)。
 机器协议及受保护状态见 [ADP/3](../protocol/agent-deployment-v3.md)。ADP/2 样例
 保留为历史契约校验，在线入口不兼容。
-旧源码、安装脚本及工作流已隔离到 `legacy/v2/`，不参与当前构建。
+旧源码、安装脚本与工作流已移出当前树，历史版本通过 Git 检索。
 HTTP API 与在线 Agent 的启动和验收见 [Phase 1](phase1.md)。
 
 ## 工具与安装
 
 锁定开发工具：Node 24.14.1、npm 11.11.0、TypeScript 5.9.3、Go 1.26.3。
 依赖分别由根 `package-lock.json` 和 `agent/go.sum` 锁定。
-生产及网络验收平台仍为 Linux；Windows 可执行当前纯代码/协议测试。
+生产及网络验收平台仍为 Linux。本地仅运行获授权的静态检查；功能、MySQL、
+网络、容器与浏览器测试在 GitHub Actions 执行，并记录准确源码修订。
 
 ```sh
 npm ci --ignore-scripts
-npm run check
+npm run typecheck
+node scripts/check-web.mjs
+node scripts/check-boundaries.mjs
+npm run contracts:check
+node scripts/run-go.mjs build ./...
 node scripts/run-go.mjs vet ./...
 ```
 
 Windows PowerShell 如果限制执行 `.ps1`，使用 `npm.cmd`；不必降低系统执行策略。
+Windows 的 Go 静态检查在当前进程设置 `$env:GOARCH='amd64'`。
 Go 缓存由执行脚本放在忽略的 `agent/.cache/`，npm 可使用 `--cache .cache/npm`。
 
 协议 Schema 变更后同步生成 Go 类型和内嵌 Schema，并更新共享负面样例：
@@ -26,11 +33,12 @@ Go 缓存由执行脚本放在忽略的 `agent/.cache/`，npm 可使用 `--cache
 ```sh
 npm run contracts:generate
 node scripts/build-conformance-fixtures.mjs
-npm run check
+npm run contracts:check
 ```
 
 CI 检查生成内容、Core 依赖边界、文档链接，以及 Linux 上的 Go vet/race。
-本地测试通过与远程 CI 已运行是两个独立证据。
+`npm run check` 包含功能测试，交由 Actions 执行。本地静态通过、Actions 通过、
+逐项接受、合并与发布是不同状态；当前证据见 [progress.md](progress.md)。
 
 ## 离线编译与跨语言校验
 
@@ -38,7 +46,8 @@ CI 检查生成内容、Core 依赖边界、文档链接，以及 Linux 上的 G
 npm run plan -- docs/development/examples/direct-plan.json
 ```
 
-命令把一个已授权/已预留的示例 Forward 编译为完整 ADP/2 Snapshot。
+上述命令用于 Actions 中的离线开发示例：把一个已授权／已预留的示例 Forward
+编译为完整 ADP/2 Snapshot。本地源码阶段不执行该功能路径。
 示例时间固定，不是有效的当前执行授权；实际 Runtime 必须在数据库事务中
 提供全节点集合、会话、代次、租约及资源事实。该命令不会持久化或部署。
 
@@ -53,8 +62,8 @@ go run ./cmd/adp-validate Snapshot < ../snapshot.json
 ## MySQL 与实网验收入口
 
 当前实施切片使用全新的 MySQL 8.4.9 数据库，不重用或迁移旧 V2 表。
-本地数据库配置见 [compose.dev.yaml](../../deploy/compose.dev.yaml)。
-设置 `TUNEX_MYSQL_ROOT_PASSWORD` 后启动：
+数据库 fixture 配置见 [compose.dev.yaml](../../deploy/compose.dev.yaml)。
+Actions 的独立数据库环境使用以下模板，凭据从 CI 环境提供：
 
 ```sh
 docker compose -f deploy/compose.dev.yaml up -d --wait

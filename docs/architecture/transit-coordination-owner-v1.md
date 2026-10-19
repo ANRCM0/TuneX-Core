@@ -74,7 +74,7 @@ compatibility acceptance, not because the new constructor exists.
 
 The earlier missing-file interruption used an incorrect src/runtime path. Current
 source is under src/modules/runtime and did not need restoration. See the scoped
-[location inventory](../development/transit-source-location-inventory.md). No new
+[current Control source map](foundation-control-source-closure-v1.md). No new
 directory or competing legacy implementation was created to mask that error.
 
 ## Remaining Work And Evidence

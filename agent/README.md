@@ -1,34 +1,43 @@
-# VNext Go Agent workspace
+# Go Agent Development
 
-Fresh Go 1.26.3 module; old Agent is read-only under `legacy/v2/agent/`.
+The Go 1.26.3 module implements the current ADP/3 Agent, enrollment, mTLS sessions,
+protected RuntimeJournal/high-water, authorized execution and independent native
+platform adapters. Direct TCP/UDP and TLS 1.3 Relay use the existing execution
+registry; multihop remains explicitly opt-in. Restart requires online authority
+before restoring execution.
 
-`internal/contracts` validates ADP/2 direct structural/stateless semantic rules,
-exact safe integers, duplicate keys, JCS digests, resource collisions and report
-conditions. Schema and Go structs are generated from the authoritative JSON
-Schema. Run `npm run contracts:generate` at repository root after contract changes.
+Source boundaries and extension contracts are documented in
+[Agent source map](../docs/architecture/foundation-agent-source-closure-v1.md),
+[execution host](../docs/architecture/agent-execution-host-v1.md) and
+[native default bindings](../docs/architecture/agent-native-default-bindings-v1.md).
+Current evidence and independent remaining gates are in
+[project status](../docs/development/progress.md).
 
-`go run ./cmd/adp-validate Snapshot < snapshot.json` inspects an offline message.
-It does not authenticate, grant execution, load cached leases or forward traffic.
-The online `cmd/tunex-agent` now implements Phase 1 enrollment, mTLS Hello,
-Snapshot/Report/ACK, protected persistent high-water state and direct TCP. It does
-not restore listeners offline. Renewal keeps the same socket; authorization and
-certificate expiry stop tracked connections. DNS results are checked before
-numeric-IP dialing. This is an internal direct-TCP milestone, not a production
-release. The Phase 2 direct slice adds UDP client associations, TCP listener ownership
-transfer, bounded old-stream drain and per-instance cleanup reports. TCP is capped
-at 4096 streams per process, UDP at 4096 associations; each also obeys assignment
-limits. UDP queues have depth 4 and datagrams are capped at 16 KiB.
-Full fault/security and platform release gates remain outstanding.
+## Development Checks
 
-Setup and network verification: [Phase 1](../docs/development/phase1.md).
+Run authorized static checks from the repository root:
 
-Credential rotation and trusted atomic keypair reload: [Node security](../docs/development/node-security.md).
-Use `--rotate` after online Hello; counters and current listener state are preserved.
+```sh
+node scripts/run-go.mjs build ./...
+node scripts/run-go.mjs vet ./...
+```
 
-Suspend-aware immutable execution tickets now guard TCP/UDP data-plane IO as well
-as periodic cleanup. Fault and platform scope: [Authorization faults](../docs/development/authorization-faults.md).
+On Windows, set GOARCH=amd64 in the process environment. Functional/network/race
+and platform behavior tests run in Actions on their actual source revision.
 
-Agent startup and every execution check now require fresh bounded OS synchronization
-evidence. Linux queries kernel state; Windows queries W32Time or consumes a protected
-supervisor proof. A running service or matching Control timestamp alone is insufficient.
-Operational setup and current refusal/acceptance evidence: [System time](../docs/development/system-time.md).
+Protocol types and embedded schemas are synchronized from the root contract
+tooling; see [contracts](../packages/contracts/README.md). Historical ADP/2
+inspection is an explicit offline parser and never grants execution.
+
+## Safety And Native Inputs
+
+Preserve the original Runner, Guard, authority and authenticated Journal owners,
+strict deadlines, exact identity and failure ordering. Native time, credential,
+HTTP, JSON and platform differences belong to their named adapters.
+
+Authenticated readonly Journal inspection must stop before enrollment, instance
+lock or Runner creation. The observation responder is a separate bounded command
+and has its own deployment/release evidence requirements. Developer invariants:
+[upgrade/recovery](../docs/development/upgrade-recovery-development.md),
+[clock authority](../docs/development/system-time.md) and
+[execution faults](../docs/development/authorization-faults.md).

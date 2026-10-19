@@ -1,7 +1,8 @@
 # Foundation And Module Work Protocol
 
-Applies to current TuneX source. Historical `legacy/` and reference `Forwardx/`
-are not implementation dependencies. Read the more specific instructions for any
+Applies to current TuneX source. Historical and third-party reference checkouts
+are not implementation dependencies and are excluded from the current tree.
+Read the more specific instructions for any
 directory being changed, and follow the human's current task authorization.
 
 ## Layers And Public Dependencies
@@ -75,6 +76,12 @@ edits until integration. Do not commit, switch or discard this existing dirty
 foundation worktree merely to manufacture independent branches.
 
 ## Current Development And Evidence Agreement
+
+On 2026-10-19 the human subsequently authorized testing and pushing the complete
+A5 candidate, then merging PR #111 and cleaning obsolete documents and historical
+files with a further commit/push. That bounded authorization supersedes the
+source-only restriction below for those tasks. It does not accept the foundation,
+open parallel product development, or authorize a release.
 
 The current human agreement is source development first, concentrated verification
 after freezing. During this phase do necessary source reads/edits; do not run tests,

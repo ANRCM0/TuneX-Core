@@ -8,14 +8,18 @@ reviewable candidate records are closed**, including the application99/Runtime34
 top-level59 maps, full Control/Agent/assets ledgers and implemented-unverified
 FR-0023-0025. See
 [A5 source closure](../architecture/foundation-a5-source-closure-v1.md).
-This supersedes earlier source-inventory leftovers, not the DoD or any acceptance
-result. The human subsequently authorized organizing, testing and pushing this
-candidate on 2026-10-19. B verification is now in progress; local static results
-and pending Actions evidence are tracked in
-[verification candidate](foundation-verification-2026-10-19.md).
-The source-phase statements below describe the A5 handoff, not a prohibition on
-this authorized verification. Readiness cases remain unverified until matching
-evidence is recorded. Upper product-module parallelism remains closed.
+The saved head `9f1d78d939a59c1514d9bcca1591afa2e89e6754` passed all nine
+configured PR checks and was merged by PR #111 as
+`373c291a6ea4f04e5929796a6119eb3b60027c34`. Exact checkout identity and
+scope are recorded in [verification](foundation-verification-2026-10-19.md).
+This supersedes source-phase statements that verification has not started.
+Readiness 1-220 still requires a case-by-case evidence mapping and an acceptance
+decision; CI totals alone do not provide it. Cleanup revisions require their own
+checks. Upper product-module parallelism remains closed.
+
+The source-only sections below retain implementation rationale, consumer and
+planned-case details. Their no-check/unexecuted descriptions refer to each
+original source slice, not the overall verification status of the saved candidate.
 
 Source work from ADR-0047 and the first ADR-0048 extraction is present. The earlier
 phrase "source scope closed" does not satisfy the human's complete foundation DoD.
@@ -25,16 +29,18 @@ phrase "source scope closed" does not satisfy the human's complete foundation Do
 | Required criterion | L0 | L1 | L2 |
 | --- | --- | --- | --- |
 | Public document/version | Domain v1 plus runtime kernel interface 1 documented | Framework/resource1; Host3/Ledger3/evidence2; Relay5/runtime values2/configuration2/Transport2 (FR-0009), Node authority3 (FR-0010), BackgroundTasks2, policy/observation1, Agent executionstate3/runtimeplatform2 (FR-0013), PreparedInstance1 (FR-0014; driver HostVersion1 unchanged), runtimeobservation2/platformobservation2/wire1 (FR-0015), raw Runtime status storage1 (FR-0016), observation/publication/event recovery storage1 (FR-0017); all source-authored/unverified | Entry interface/target matrix and provided ports documented |
-| Automated critical-path/contract tests | Existing domain tests; new pure decisions await cases/verification | Existing owner tests; new host/lifecycle signatures and port cases await adaptation | Existing wire/storage tests; extracted adapters await matching-source validation |
-| Minimal runnable example | Consumed through L1 | Public extension example source exists | Flat adapter in example; real Runtime adapters wired |
+| Automated critical-path/contract tests | Configured domain/decision suite passes on the saved candidate; detailed case mapping pending | Configured owner/host/port/lifecycle suite passes; detailed case mapping pending | Configured wire/storage/MySQL suite passes; detailed case mapping pending |
+| Minimal runnable example | Consumed through L1 in the passing public example | Public extension compiles and runs in Actions on the saved candidate | Example adapter runs; real Runtime behavior uses separate integration evidence |
 | Extension point instructions | Public intent and decision boundary | Ports and module recipe | Named target/refusal recipe |
 | Error/log/config conventions | Pure decisions, no I/O | Common error/log ports and injected configuration documented | Adapter refusal, no hidden fallbacks or secrets in logs |
 | Explicit limitations/debt | Present below | Present below | Present below and in target matrix |
-| Upper module using public interfaces only | Example source exists, not run | Example source exists, not run | Example source exists, not run |
+| Upper module using public interfaces only | Public example passes in Actions | Public example passes in Actions | Public example passes in Actions |
 
-All current-source executed/pass columns are **unverified**. Source/read-only review
-does not substitute for automated acceptance or a demonstrated runnable example.
-No test/fixture/CI expansion or execution occurred during the A5 source phase.
+Configured CI evidence above is **passed on its identified source**. Cases below
+remain planned/unmapped until their actual assertions are associated with evidence;
+no individual case is marked passed from aggregate totals. Source/read-only review
+does not substitute for acceptance. No checks ran during the original A5 source
+phase; verification and its repairs followed under later explicit authorization.
 
 Latest independent A5 counters are cancellation1, Node report read2, Notification
 effects2, executiontime2/platformclock2, executionidentity2/agentidentity2 and
@@ -1344,7 +1350,7 @@ experiments, CI, commits/pushes or delegation ran; no acceptance gate opens.
 The human-authorized inventory found all seven Transit entries under
 apps/control/src/modules/runtime. The earlier missing-source interruption read
 the incorrect src/runtime path; no source recovery or new directory was needed.
-See [location inventory](transit-source-location-inventory.md). This limited read
+See [current Control source map](../architecture/foundation-control-source-closure-v1.md). This limited read
 is not repository-wide import closure or historical deletion evidence.
 
 Original coordination now uses public TransitCoordinationService over required
@@ -5136,6 +5142,6 @@ contracts or race on central composition. Record required foundation interface/
 semantic changes in their own FR under applicable source authorization; similar
 changes use the 2026-10-19 standing authorization without repeated confirmation.
 
-The current dirty foundation worktree stays intact. No branch switch, commit, push
-or release is authorized by writing this procedure. No new product feature is
-started by this layer-governance work.
+The saved candidate is merged; preserve any later unrelated dirty changes.
+This procedure does not itself authorize a branch switch, commit, push or release.
+No new product feature is started by this layer-governance work.

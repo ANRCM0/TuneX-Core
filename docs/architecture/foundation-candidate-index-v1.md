@@ -16,11 +16,13 @@ Existing compatibility constructors/aliases are retained deliberately.
 
 ## Candidate Identity And Scope
 
-The candidate is the integrated dirty worktree, including tracked modifications,
-untracked additions and intentional deletions. Existing HEAD does not identify
-that content. No commit, tree, generated snapshot, digest, build or CI run is
-created by this index. A later authorized freeze must identify all saved content
-and bind every acceptance result to that exact revision. Tables here index the
+The complete integrated candidate was saved as
+`9f1d78d939a59c1514d9bcca1591afa2e89e6754` and merged by PR #111 as
+`373c291a6ea4f04e5929796a6119eb3b60027c34`. Configured checks passed on the
+PR test merge identified in the verification record. This index originally
+recorded the source-phase dirty candidate; its no-check statements below retain
+that historical scope. Cleanup and later edits require their own evidence.
+Tables here index the
 complete named leaf/family ledgers below; omission from this short navigation
 table is not exclusion from the candidate or a directory exemption. Any actually
 omitted/new source discovered later reopens its source classification.
@@ -31,7 +33,7 @@ The navigation sources are:
 | --- | --- |
 | Layers and public dependency direction | foundation-layers-v1.md and foundation-boundaries-v1.json |
 | Production/support roots and protected Core | foundation-source-root-catalog-v1.md |
-| Current A5 disposition and known compatibility/consumer closure | foundation-a5-source-closure-v1.md and current scope ledgers; earlier foundation-remaining-source-inventory-2026-10-19.md remains historical |
+| Current A5 disposition and known compatibility/consumer closure | foundation-a5-source-closure-v1.md and current scope ledgers; superseded partial inventories removed |
 | Exact59 top-level Control module leaves, six original constructor/default bindings and five public type consumer changes | control-legacy-module-leaves-v1.md;200-202 unexecuted, full source scope joined by current A5 ledgers |
 | Exact34 legacy Runtime leaves, eight construction/callable bindings, one retained interface and25 forwarders | control-runtime-legacy-leaves-v1.md; five type forwarding paths and three Policy imports use existing public declarations;203-205 unexecuted |
 | Exact99 application leaves, original Control composition, request wrapper, versioned read aggregate and96 forwarders | control-application-legacy-leaves-v1.md; nineteen named type-forwarding sources and original Control Policy/Accepted references use existing public declarations;206-208 unexecuted |
@@ -147,7 +149,7 @@ Compose file, label or healthcheck has been executed or accepted by this review.
 | deploy/Dockerfile.control and deploy/control-liveness.mjs | TS production entry main.ts, runtime workspace/source/schema/static/ops inputs | Build-time contracts import is narrow; socket liveness is not DB/mTLS/lease/readiness or full module graph evidence |
 | deploy/Dockerfile.agent | Static Linux tunex-agent from cmd/tunex-agent; protected state/secret paths | Image/build/run/architecture/OS behavior unverified on candidate; same-host CI cannot satisfy physical gates |
 | deploy/Dockerfile.observation-responder | Independent opt-in native responder binary in scratch image | Separate source artifact; no responder publication/scan/signature/physical evidence inferred from Control/Agent image jobs |
-| .dockerignore | Excludes Git/caches/node_modules/bin/exe/artifacts/legacy/legal/.env and PEM/key inputs | Source rules were read; actual context and package extraction/secret absence remain later packaging cases |
+| .dockerignore | Excludes Git/caches/node_modules/bin/exe/artifacts/.env and PEM/key inputs | Removed obsolete directory rules after historical-tree cleanup; packaging checks remain bound to their actual revision |
 | deploy/compose.control.example.yaml / compose.agent.example.yaml | Separate Control/Agent host examples; protected mounts, pinned image inputs and explicit options | Their Echo/services flags do not establish complete live v4 machine input or UI/capability support |
 | deploy/compose.runtime.example.yaml / compose.dev.yaml | Internal runtime example with optional Agent profile; separate development MySQL8.4.9 volume | Distinct examples, not automatically equivalent option sets or safe production rollout evidence |
 | deploy/compose.observation.example.yaml | Independent explicit identity/host/SNI/address/CIDR/expiry responder | No automatic Agent/business Relay/probe; independent source/package/host acceptance |

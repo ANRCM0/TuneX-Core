@@ -9,8 +9,11 @@ Current A5 source classification is closed in
 [foundation-a5-source-closure-v1.md](foundation-a5-source-closure-v1.md).
 The complete named Control, Agent and asset/consumer ledgers there supersede
 older bounded-inventory leftovers below. Actual graph/type/private/asset/default/
-behavior acceptance, saving an exact revision and the foundation gate remain
-unverified. Source role closure is not a passing boundary report.
+behavior acceptance is tracked separately. The candidate was saved, its configured
+CI passed, and PR #111 merged; see
+[verification](../development/foundation-verification-2026-10-19.md).
+The detailed source-only table below records its original classification scope;
+readiness reconciliation and the foundation acceptance gate remain open.
 
 ## Production And Support Roots
 
@@ -32,8 +35,8 @@ unverified. Source role closure is not a passing boundary report.
 | Protocol/schema/catalog/SQL/native generated assets | Runtime-loaded versus specification/generated/fixture paths remain separately tracked; documents can be real runtime inputs, not automatically non-production |
 | Deployment/CI/config/lockfiles | Named manifests/locks/Compose/Docker/ignore and four workflow inputs assigned in foundation-assets-consumers-closure-v1.md; no image/build/deployment/CI acceptance inferred; Responder remains separate from current two-image workflows |
 
-Historical legacy/ and Forwardx/ remain reference/history, not implementation
-dependencies. Generated/native assets and tests are not excluded from the eventual
+Historical source/reference checkouts are removed from the current tree and remain
+outside implementation dependencies. Generated/native assets and tests are not excluded from the eventual
 candidate; they have different responsibility and evidence roles from product code.
 HEAD alone does not identify dirty additions/modifications/deletions. The actual
 saved revision/content identity belongs to the later authorized freeze/acceptance

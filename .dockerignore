@@ -5,8 +5,6 @@
 **/bin
 **/*.exe
 .artifacts
-legacy
-legal
 .env
 .env.*
 **/*.pem

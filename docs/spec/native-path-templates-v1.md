@@ -128,7 +128,7 @@ profile `adp3-path-templates-v1` has schema ceiling 0018; Agent profiles/Journal
 machine wire contracts and Core do not change. Full SQL backups preserve history
 and archival state. Recovery retains non-executable metadata, quarantines old
 request keys and applies the original identity/grant/intent isolation; it must
-not materialize fresh bindings. See [upgrade assessment](../operations/upgrade-assessment.md).
+not materialize fresh bindings. See [upgrade assessment](../development/upgrade-recovery-development.md).
 
 Subsequent [Path bindings v1](native-path-bindings-v1.md) pins the exact template
 revision/digest outside Core and persists the actual expanded ForwardSpec in

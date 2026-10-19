@@ -10,7 +10,9 @@ default/consumer/asset classification is closed in
 [foundation-a5-source-closure-v1.md](foundation-a5-source-closure-v1.md).
 FR-0023-0025 source-separate Agent timing/credential representation and common
 Control cancellation. Earlier paragraphs preserve extraction history; actual
-boundary/contract/example and physical/release acceptance is still unverified.
+configured boundary/contract/example checks passed on the saved PR #111 candidate.
+See [verification](../development/foundation-verification-2026-10-19.md).
+Full readiness acceptance and independent physical/release gates remain separate.
 
 ## 1. Meaning Of The Four Layers
 
@@ -731,7 +733,7 @@ sorted ownership, proof authentication, state transitions and recovery policy.
 Control binds explicit providers; the old single-argument journal forwards its
 own public async methods through a lazy db bridge to the single implementation.
 The current Transit entries are under modules/runtime; the earlier src/runtime
-lookup was wrong and required no recovery. See the [location inventory](../development/transit-source-location-inventory.md)
+lookup was wrong and required no recovery. See the [current Control source map](foundation-control-source-closure-v1.md)
 and [coordination boundary](transit-coordination-owner-v1.md). Readiness item 64
 is unexecuted. Staging/preparation/reservations, A1 residuals, Agent/native, Runner
 and whole-source classification remain open. No foundation/upper-module gate opens.
@@ -1147,11 +1149,10 @@ have precise native/public-consumer purposes, one same-owner multihop conversion
 direct existing egress policy and shared original budgets.156-158 unexecuted; see
 [Control chain](control-startup-client-native-v1.md) and [Agent chain](agent-native-engine-owner-v1.md).
 
-[Remaining source inventory](foundation-remaining-source-inventory-2026-10-19.md)
-identifies actual ops Recovery cross-owner writes, server bootstrap/native path
-preflight, auxiliary native contracts/CLI and tool/full consumer/removal/frozen
-candidate gaps. This is a manual source map, not a passed dependency/boundary check.
-Native adapter/public entries are not broad package exemptions or acceptance.
+[A5 source closure](foundation-a5-source-closure-v1.md) and its current ledgers
+supersede the earlier partial inventories for Recovery, server/native, auxiliary
+contracts/CLI and support consumers. Manual classification is not a whole-package
+exemption. Executed checks and remaining acceptance use the verification record.
 
 ## Recovery Owners And Complete Native Workflow (2026-10-19 Source Only)
 

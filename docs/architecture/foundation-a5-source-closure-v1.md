@@ -1,21 +1,21 @@
 # A5 Foundation Source Closure v1
 
 Date: 2026-10-19 (Asia/Shanghai).
-Status: **A5 source classification closed; reviewable dirty candidate ready for
-the separately authorized freeze and B acceptance stage.**
+Status: **A5 source classification closed; candidate saved, configured CI passed
+and PR #111 merged. Readiness acceptance remains pending.**
 Foundation status remains **not stable/accepted; upper parallel-development gate
-closed**. This is an authored source disposition, not a passing check, immutable
-revision, runnable-example result, merge, image publication or release approval.
+closed**. The source classification is distinct from the actual checks, source
+identity and merge recorded below; it does not itself approve publication or release.
 
-Subsequent stage: the human authorized organizing, testing and pushing this
-candidate on 2026-10-19. See
+The human subsequently authorized testing/pushing and then merge/cleanup on
+2026-10-19. The saved candidate is `9f1d78d`, merged main is `373c291`; see
 [verification record](../development/foundation-verification-2026-10-19.md).
-The no-check/no-commit statements in this A5 record describe its source handoff;
-they do not override that later verification authorization.
+The no-check/no-commit statements below describe the original source handoff,
+not the later executed verification. Cleanup revisions need their own checks.
 
 ## A5 Exit Scope And Records
 
-The governing A5 row is in development/forwardx-development-plan.md: assign
+The A5 scope, now summarized in development/development-plan.md, was to assign
 remaining source/type references, document actual compatibility consumers and
 defaults/removal conditions, and join the candidate source/version/acceptance
 records. A5 does not authorize running source checks, generating a snapshot,

@@ -13,8 +13,7 @@ agent/adp-validate
 *.key
 
 # Dependency/build artifacts
-# node_modules is a symlink to /opt/TuneX/backend/node_modules in this workspace;
-# `**/node_modules/` only matches real directories, so the symlink needs its own rule.
+# Ignore both a dependency-directory symlink and real dependency directories.
 node_modules
 **/node_modules/
 **/.next/
@@ -29,36 +28,3 @@ node_modules
 .DS_Store
 Thumbs.db
 agent/tunex-agent
-
-# Integration harness 运行期产物（密钥/口令/状态/证据，切勿提交）。
-# _bootstrap.py 是正式 harness 代码，不在忽略列表。
-scripts/v3-e2e/.env.wp14
-scripts/v3-e2e/.passwords.env
-scripts/v3-e2e/state.json
-scripts/v3-e2e/agent.Dockerfile.e2e
-scripts/v3-e2e/evidence/
-scripts/v3-e2e/__pycache__/
-
-# Backend E2E harness 运行期产物
-backend/tests/v3-e2e/.artifacts/
-backend/tests/v3-e2e/__pycache__/
-
-# 性能基线运行期产物；baseline/ 是提交进仓库的趋势锚点，必须保留。
-scripts/perf/.bin/
-scripts/perf/results/
-scripts/perf/results-profile/
-scripts/perf/__pycache__/
-
-# ForwardX 参考副本：只读研究用，永不进入提交
-Forwardx(参考项目，不进入git提交）/
-Forwardx/
-
-# Private acceptance fixtures and local generated evidence.
-scripts/integration/.env.integration
-scripts/integration/.agent.env
-scripts/integration/.passwords.env
-scripts/integration/state.json
-scripts/integration/evidence/
-scripts/integration/__pycache__/
-web/test-artifacts/
-web/.routing-browser-*/

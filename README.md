@@ -1,40 +1,37 @@
-# TuneX VNext
+# TuneX Core
 
-基于 Control（Node.js / MySQL）和独立 Go Agent 的 TCP/UDP Direct + TLS 1.3 Relay 转发系统。当前为 **Dev 测试版本**，不兼容旧 V2 数据库与 Agent。
+TuneX 是基于 TypeScript Control、MySQL 和独立 Go Agent 的 TCP/UDP 转发项目。
+当前在线协议为 ADP/3，包含 Direct、TLS 1.3 Relay 和默认关闭的多跳执行。
 
-## 快速部署（Docker / 1Panel）
+## 开发入口
 
-准备 Linux + Docker Compose v2、**外部 MySQL 8.4**、可信的 Control CA/HTTPS 证书和持久化目录。先从 [GitHub Actions 镜像发布](.github/workflows/images.yml) 的成功运行中取得两张镜像的完整 `@sha256:` Digest，将 `TUNEX_*` 变量保存在主机本地、权限受限的环境文件里。
+- [开发环境与验证规则](docs/development/getting-started.md)
+- [当前实现与验收状态](docs/development/progress.md)
+- [后续开发顺序](docs/development/development-plan.md)
+- [开发文档索引](docs/README.md)
+- [源码工作协议](AGENTS.md)
 
-**Control 主机（已完成首次 Authority 初始化）：**
+仓库保留当前开发所需的架构、公共接口、协议、变更决策、验收计划与示例。
+旧 V2 源码、第三方参考副本、阶段性盘点、部署和操作手册已退出当前工作树；
+历史版本可通过 Git 历史检索。
 
-```bash
-docker compose --env-file /secure/tunex-control.env -f deploy/compose.control.example.yaml config --quiet
-docker compose --env-file /secure/tunex-control.env -f deploy/compose.control.example.yaml up -d control
-```
+## 源码布局
 
-**Agent 主机（已完成一次性 Enrollment）：**
+| 路径 | 职责 |
+| --- | --- |
+| packages/core | L0 纯领域模型与决策 |
+| packages/contracts | 公共值类型、版本化协议与原生格式适配 |
+| apps/control | L1 Runtime/端口、L2 存储与协议适配、L3 产品模块 |
+| apps/web | Web 模块与浏览器适配 |
+| agent | Go Agent、执行宿主与平台适配 |
+| examples/foundation-extension | 仅消费公共接口的最小开发示例 |
+| scripts、deploy、.github | 开发、验收、打包与 CI 资产 |
 
-```bash
-docker compose --env-file /secure/tunex-agent.env -f deploy/compose.agent.example.yaml config --quiet
-docker compose --env-file /secure/tunex-agent.env -f deploy/compose.agent.example.yaml up -d agent
-```
+## 验证状态
 
-两个 Compose 模板**分别部署在对应主机**；Agent 使用 `host` 网络模式。首次部署不能跳过 Authority 初始化、Owner 创建、Node Enrollment 和证书信任配置，也不能用空目录覆盖旧状态。
+完整 A5 候选已通过 PR #111 的配置内 CI，并合并为 `373c291`。
+准确源码、测试合并修订与运行见[验证记录](docs/development/foundation-verification-2026-10-19.md)。
+清理后的修订需要自己的检查结果。
 
-**→ [完整部署与测试文档（首次初始化、节点注册、1Panel、Relay、备份恢复）](deploy/README.md)**
-
-[后续开发目标](docs/development/next-milestones.md) · [设计与协议文档](docs/README.md)
-
-Default-off multi-hop execution is under development:
-[implementation, deferred acceptance and release gates](docs/development/multihop-execution.md).
-No physical-host or production-readiness result is implied.
-
-Native path metadata authoring (immutable revisions, exact references and archive)
-is implemented separately from executable rules:
-[PathTemplate v1](docs/spec/native-path-templates-v1.md).
-[Exact bindings, bounded reference impact and explicit single-rule switching](docs/spec/native-path-bindings-v1.md)
-now enter the original Forward acceptance transaction.
-[Bounded explicit multi-rule path publication](docs/spec/path-publication-v1.md)
-reuses the original independent per-rule queue. Exact-commit Actions acceptance
-and measured switching interruption remain pending.
+地基 readiness 逐项接受、独立物理多主机、长稳／负载、独立 Responder 发布及正式发行
+仍有各自门槛；上层模块并行开发门禁保持关闭。

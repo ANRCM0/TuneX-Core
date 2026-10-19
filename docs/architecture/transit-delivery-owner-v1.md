@@ -98,7 +98,7 @@ and lower SQL store; see [coordination boundary](transit-coordination-owner-v1.m
 and planned item 64. Delivery's original peek-only contract and two transactions
 are unchanged. The source-location interruption used the wrong src/runtime path;
 the actual modules/runtime entries were present and needed no recovery. See the
-[limited inventory](../development/transit-source-location-inventory.md).
+[current Control source map](foundation-control-source-closure-v1.md).
 The remaining-work paragraph below records the earlier delivery slice; this
 follow-up supersedes only its coordination SQL extraction status, not acceptance.
 

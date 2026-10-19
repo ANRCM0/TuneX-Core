@@ -2,7 +2,7 @@
 
 Date: 2026-10-18 (Asia/Shanghai). Status: local source implementation, unverified.
 See [contract](../spec/observation-services-v1.md) and
-[operator deployment notes](../../deploy/README.md#independent-observation-responder).
+[responder development contract](../spec/observation-services-v1.md).
 
 ## Scope
 

@@ -5,7 +5,10 @@ Date: 2026-10-16. Baseline: `904c5aa1907948b3859652c80575268c796c4895`.
 The implementation follows the six-batch development sequence. Local runtime,
 container, isolated-network and physical-host tests were deliberately deferred
 at the user's request. Compilation and static checks are recorded separately in
-the [delivery ledger](multihop-delivery.md); no network success is claimed.
+the [current verification status](progress.md). Configured 3/4/8-node topology
+and namespace checks now pass on the identified PR #111 candidate; independent
+physical-host and release gates remain separate. Later source-only notes describe
+their original slice, not the current aggregate evidence.
 
 ## Implementation map
 

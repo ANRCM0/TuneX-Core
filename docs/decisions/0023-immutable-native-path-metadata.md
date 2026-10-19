@@ -5,7 +5,7 @@ functional acceptance remains pending for its exact commit.
 
 ## Context
 
-C1 in the [platform plan](../development/forwarding-platform-plan.md) requires
+C1 in the [platform plan](../development/development-plan.md) requires
 saved paths, immutable references, impact preview and explicit manual switching.
 The existing Core ForwardSpec, Forward owner acceptance and single Runtime
 already own executable intent, resource fences, Operations and cleanup. A saved

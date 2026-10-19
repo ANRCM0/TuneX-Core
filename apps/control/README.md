@@ -1,26 +1,41 @@
-# Control: Direct TCP/UDP Lifecycle
+# Control Development
 
-Hono HTTPS API, MySQL acceptance and persistent Runtime scanner publish ADP/2
-direct TCP snapshots to enrolled Go Agents. Public APIs create Nodes/Forwards and
-query desired/applied/health and Operation. Machine routes use verified Node mTLS
-credentials, online sessions and persisted report ACKs.
+Control uses TypeScript, Hono and MySQL to expose product commands/queries and
+publish authorized ADP/3 state to independent Go Agents. Current source includes
+Direct TCP/UDP, TLS 1.3 Relay, default-off multihop, owner-managed path/ingress
+metadata, diagnostics, telemetry and Probe workflows.
 
-Owner modules share a MySQL UnitOfWork. Idempotency response, intent/history,
-exclusive port and Operation commit together; complete prospective node snapshot
-capacity is checked before acceptance. Full snapshots are immutable and retained.
-The deterministic planner and offline inspection CLI remain available.
+## Source Boundaries
 
-See [Phase 1 development](../../docs/development/phase1.md) for setup, commands and
-actual verification boundaries. The direct lifecycle now supports TCP/UDP creation,
-CAS updates, enable/disable, deletion and explicit failed-Operation retry. Runtime
-persists retirement records and per-session execution leases before safe cleanup.
-See [Phase 2 direct slice](../../docs/development/phase2.md). Relay remains a later
-versioned transport milestone.
+| Source | Responsibility |
+| --- | --- |
+| src/kernel | L0 pure runtime publication decisions |
+| src/framework | L1 public ports, Runtime coordination and lifecycle |
+| src/compatibility and src/infrastructure | L2 native formats, platform, wire and storage |
+| src/modules/*-owner | L3 product commands and read models through public contracts |
+| src/main.ts, src/server.ts and explicit command roots | Composition of the declared implementations |
 
-Node credential rotation, revocation and versioned target-policy withdrawal now
-share the durable runtime authorization boundaries. Setup, routes and verification
-scope: [Node security](../../docs/development/node-security.md).
+Existing compatibility constructors/forwarders remain explicit entries with
+documented consumers and removal conditions. They do not grant access to private
+implementations or authorize reverse source dependencies.
 
-Scope-owner member management and Node-use grants have transactional CAS/replay,
-audit, withdrawal/redeployment and independent per-Forward execution authorizers.
-Routes, CLI and verified boundaries: [Access management](../../docs/development/access-management.md).
+Use [development setup](../../docs/development/getting-started.md),
+[public integration](../../docs/architecture/framework-integration-v1.md),
+[Control source map](../../docs/architecture/foundation-control-source-closure-v1.md)
+and [candidate versions](../../docs/architecture/foundation-candidate-index-v1.md).
+
+## Persistence And Authority
+
+Product owners share the supplied transaction where atomicity is required.
+Idempotency, intent/history, resources and Operation remain in their original
+acceptance path. Preserve one Runtime ledger, original credential/authorization
+owners, persistence-before-publication and recovery quarantine. No module writes
+another owner's tables outside a public same-transaction contract.
+
+## Verification
+
+Authorized local checks cover types, boundaries and generated asset parity.
+Real MySQL, mTLS, lifecycle, browser, fault and recovery evidence runs in Actions.
+Current saved source, passing checks and pending acceptance are recorded in
+[project status](../../docs/development/progress.md) and
+[verification](../../docs/development/foundation-verification-2026-10-19.md).

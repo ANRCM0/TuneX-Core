@@ -113,8 +113,8 @@ Control-only profile `adp3-forward-telemetry-v1` recognizes Schema 0021. Older C
 ceilings are blocked after migration even with both flags off. Agent ADP/Journal
 profiles are unchanged. New Compose flags need matching new Agent images; unknown
 false-valued flags do not make old binaries compatible. Never reenroll or erase state
-to enable telemetry. See [deployment](../../deploy/README.md) and
-[upgrade/recovery responsibilities](../operations/upgrade-assessment.md).
+to enable telemetry. See [upgrade/recovery development](../development/upgrade-recovery-development.md) and
+[upgrade/recovery responsibilities](../development/upgrade-recovery-development.md).
 
 Recovery retains the original maintenance/credential quarantine and protected-state
 requirements; then clears only ingestion heads and marks old points
