@@ -193,6 +193,10 @@ jobs:
         run: node --test apps/control/test/relay-owner-complete.test.ts
       - name: Original Ledger retirement, rollback and competing claim locks
         run: node --test apps/control/test/ledger-owner-complete.test.ts
+      - name: Original resource reservation rollback and physical slot predicates
+        run: node --test apps/control/test/resource-sql-complete.test.ts
+        - name: Original MySQL migration lock, partial DDL and uncertain commit outcomes
+          run: node --test apps/control/test/mysql-native-complete.test.ts
       - name: Probe history native family projection and MySQL0037 immutable capture
         run: node --test apps/control/test/probe-history-complete.test.ts
       - name: Read-only upgrade assessment with SELECT-only MySQL and authenticated Agent journal

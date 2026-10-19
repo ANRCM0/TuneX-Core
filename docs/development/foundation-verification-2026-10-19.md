@@ -117,16 +117,15 @@ Agent found an uninitialized timing policy in a new guard fixture. phase1 found
 the claim-competition fixture mixed expiry UPDATE scan locks into selector locks;
 the next fixture isolates SKIP LOCKED while retaining real expiry/claim checks.
 These corrections are authored in the following batch. Packaging, Probe, Relay
-isolation, deployment tools and 3/4-node integration passed; 8-node is still running
-at this update. No full passing baseline is claimed. Next failure artifacts retain
+isolation, deployment tools and 3/4/8-node integration passed. No full passing baseline is claimed. Next failure artifacts retain
 sanitized snapshot windows/instance identifiers and plan authorization deadlines,
 plus policy, local diagnostics and Agent error/exit timestamps, to distinguish
 short publication windows from delayed Agent progress without uploading wire or
 credential bodies.
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 85 cases have fully
-identified assertions; 135 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 98 cases have fully
+identified assertions; 122 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
@@ -141,3 +140,10 @@ These configured A5 CI results do not sign off readiness cases 1–220. Independ
 long-run/load, independent Responder build/publication, release and production
 readiness require separate evidence. Multiple processes/namespaces on one runner
 are not independent physical-host evidence. Upper product-module work stays closed.
+
+The next authored batch adds explicit resource SQL/rollback, native MySQL advisory
+lock and partial-DDL/uncertain-commit, Forward SQL, runtime machine/time codec,
+Agent pending-response recovery and observation provider/type witnesses. MySQL
+examples are routed to phase1. Local TypeScript passed; cached-only Go vet was
+blocked by two missing modules with GOPROXY=off, so no Go static pass is inferred.
+These tests require their own saved-source Actions and do not inherit 5107046.
