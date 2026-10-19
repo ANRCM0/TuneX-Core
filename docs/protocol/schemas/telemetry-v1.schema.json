@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:telemetry:1",
+  "title": "TuneX telemetry-v1 process and runtime samples",
+  "description": "Independent agent-reported operational measurements, not payload usage, billing evidence, host-resource coverage or execution authority. Transport readers must reject duplicate keys and cap samples at 8192 bytes and acknowledgments at 4096 bytes.",
+  "oneOf": [
+    { "$ref": "#/$defs/Sample" },
+    { "$ref": "#/$defs/Ack" }
+  ],
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$(?![\\s\\S])"
+    },
+    "Counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "CounterOrZero": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "Uint64Decimal": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "pattern": "^(0|[1-9][0-9]{0,19})$(?![\\s\\S])",
+      "description": "Canonical unsigned decimal integer in [0,18446744073709551615]. The normative telemetry parser additionally enforces the uint64 numeric upper bound using exact integer arithmetic; this structural pattern alone does not enforce that bound."
+    },
+    "NullableUint64Decimal": {
+      "oneOf": [
+        { "$ref": "#/$defs/Uint64Decimal" },
+        { "type": "null" }
+      ],
+      "description": "Null means unsupported or unavailable, never a measured zero."
+    },
+    "SampleEpoch": {
+      "type": "string",
+      "minLength": 32,
+      "maxLength": 32,
+      "pattern": "^[a-f0-9]{32}$(?![\\s\\S])",
+      "description": "Random exporter-run identity, independent of ADP report sequence and protected Journal state."
+    },
+    "Time": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 20,
+      "maxLength": 30,
+      "pattern": "^(?:19[7-9][0-9]|[2-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,9})?Z$(?![\\s\\S])",
+      "description": "UTC timestamp at or after 1970-01-01T00:00:00Z, optional 1-9 fractional digits. The normative parser additionally checks actual calendar validity; leap seconds and timezone offsets are rejected."
+    },
+    "Process": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goroutines", "heapAllocBytes", "runtimeBytes", "cpuTimeNanos", "maxRssBytes", "openFileDescriptors"],
+      "properties": {
+        "goroutines": { "type": "integer", "minimum": 0, "maximum": 10000000 },
+        "heapAllocBytes": { "$ref": "#/$defs/Uint64Decimal" },
+        "runtimeBytes": { "$ref": "#/$defs/Uint64Decimal" },
+        "cpuTimeNanos": { "$ref": "#/$defs/NullableUint64Decimal" },
+        "maxRssBytes": { "$ref": "#/$defs/NullableUint64Decimal" },
+        "openFileDescriptors": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 1000000000,
+          "description": "Null means unavailable; the process descriptor count is not a host-wide count."
+        }
+      }
+    },
+    "Runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshotGeneration", "authorizationActive", "tcpStreams", "udpAssociations", "drainingInstances"],
+      "properties": {
+        "snapshotGeneration": { "$ref": "#/$defs/CounterOrZero" },
+        "authorizationActive": {
+          "type": "boolean",
+          "description": "Agent-reported sampled authorization state; it does not grant, extend or replace execution authority."
+        },
+        "tcpStreams": { "$ref": "#/$defs/Uint64Decimal" },
+        "udpAssociations": { "$ref": "#/$defs/Uint64Decimal" },
+        "drainingInstances": { "type": "integer", "minimum": 0, "maximum": 1000000 }
+      }
+    },
+    "Sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["telemetryVersion", "kind", "nodeId", "bootId", "sessionEpoch", "sampleEpoch", "sequence", "capturedAt", "uptimeMs", "platform", "process", "runtime", "droppedSamples"],
+      "properties": {
+        "telemetryVersion": { "const": 1 },
+        "kind": { "const": "telemetry-sample" },
+        "nodeId": { "$ref": "#/$defs/Id" },
+        "bootId": { "$ref": "#/$defs/Id" },
+        "sessionEpoch": { "$ref": "#/$defs/Counter" },
+        "sampleEpoch": { "$ref": "#/$defs/SampleEpoch" },
+        "sequence": { "$ref": "#/$defs/Counter" },
+        "capturedAt": { "$ref": "#/$defs/Time" },
+        "uptimeMs": {
+          "$ref": "#/$defs/CounterOrZero",
+          "description": "Monotonic elapsed milliseconds since Runner.Run entry, not host uptime."
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["aix", "android", "darwin", "dragonfly", "freebsd", "illumos", "ios", "js", "linux", "netbsd", "openbsd", "plan9", "solaris", "wasip1", "windows"]
+        },
+        "process": { "$ref": "#/$defs/Process" },
+        "runtime": { "$ref": "#/$defs/Runtime" },
+        "droppedSamples": {
+          "$ref": "#/$defs/Uint64Decimal",
+          "description": "Cumulative failed or unacknowledged export attempts in this sampleEpoch before this attempt. No retry queue is implied."
+        }
+      }
+    },
+    "Ack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["telemetryVersion", "kind", "nodeId", "bootId", "sessionEpoch", "sampleEpoch", "sequence", "stored", "receivedAt", "source", "executionAuthorized"],
+      "properties": {
+        "telemetryVersion": { "const": 1 },
+        "kind": { "const": "telemetry-ack" },
+        "nodeId": { "$ref": "#/$defs/Id" },
+        "bootId": { "$ref": "#/$defs/Id" },
+        "sessionEpoch": { "$ref": "#/$defs/Counter" },
+        "sampleEpoch": { "$ref": "#/$defs/SampleEpoch" },
+        "sequence": { "$ref": "#/$defs/Counter" },
+        "stored": { "type": "boolean" },
+        "receivedAt": { "$ref": "#/$defs/Time" },
+        "source": { "const": "agent-reported" },
+        "executionAuthorized": { "const": false }
+      }
+    }
+  }
+}

@@ -42,6 +42,9 @@ jobs:
             agent/.cache/go-build
           key: vnext-go-${{ runner.os }}-${{ hashFiles('agent/go.sum') }}
       - run: npm ci --ignore-scripts --no-audit --no-fund
+        id: dependencies
+      - name: Public foundation extension preview through declared interfaces
+        run: node examples/foundation-extension/main.ts
       - name: Native execution registry and host authorization contracts
         run: node scripts/run-go.mjs test ./internal/control -run '^TestExecution' -count=1
       - name: Control query and Transport resolution port regressions
@@ -102,12 +105,24 @@ jobs:
         run: |
           node scripts/run-go.mjs test ./internal/probe ./internal/egress -count=1
           node scripts/run-go.mjs test ./internal/control -run '^TestProbe' -count=1
-      - run: npm run check
+      - name: Collect every independent candidate check group
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: |
+          result=0
+          for task in typecheck test test:web test:udp-smoke test:go build:go contracts:check test:boundaries; do
+            echo "::group::$task"
+            npm run "$task" || result=1
+            echo "::endgroup::"
+          done
+          node scripts/verify-offline-plan.mjs || result=1
+          exit "$result"
       - run: node scripts/run-go.mjs vet ./...
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       - run: node scripts/run-go.mjs test -race ./...
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
   phase1:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     services:
       mysql:
         image: mysql:8.4.9

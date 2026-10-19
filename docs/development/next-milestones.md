@@ -1,7 +1,1017 @@
 # TuneX VNext · 下一阶段开发目标
 
-更新：2026-10-17（Asia/Shanghai）。初次排期源码基线：
+更新：2026-10-19（Asia/Shanghai）。初次排期源码基线：
 `11b95451464c5adb0068a09cb976492850479b4e`。
+
+## 当前开发节奏（2026-10-18 起）
+
+2026-10-19 subsequent human authorization opens organizing/testing/pushing the
+complete A5 candidate. B verification is now active; see
+foundation-verification-2026-10-19.md. The source-phase descriptions below retain
+their original stage meaning. Matching Actions evidence, foundation acceptance,
+upper-module development and release remain distinct gates.
+
+2026-10-19 current handoff: A5 manual source classification and reviewable
+candidate records are complete. See ../architecture/foundation-a5-source-closure-v1.md
+for Control59/Runtime34/application99, full Control/Agent/assets/support scopes,
+actual compatibility consumers/removal conditions and public source versions.
+FR-0023-0025 implement the newly found lower timing/credential/native signal
+residuals; explicit breaking source and timing-cache impact remain unverified.
+Readiness206-220 and all prior current-source cases are planned/unexecuted.
+Next is separately authorized saving/freezing plus B check/contract/example/
+functional acceptance on the exact revision; no checks/CI/experiments/commits/
+pushes ran and no foundation/upper-module/physical/release gate opens. Earlier
+source-open snapshots below are historical, not remaining current A5 tasks.
+
+2026-10-19 current A5 continuation: the34 legacy modules/runtime leaves now have
+a complete bounded body map, exact construction/default/lifecycle roles and
+observed production/Recovery/support consumers. Five type-port forwarding paths
+and three Policy type imports now consume the same existing public declarations;
+no runtime body, value binding, signature or version changes. See
+../architecture/control-runtime-legacy-leaves-v1.md. Readiness203-205 is planned/
+unexecuted. Full application/nested-owner/Agent/Web/type/private/default/consumer/
+fixture/asset closure and a saved candidate remain open; B verification and upper
+module development gates stay closed. Source/docs only, no checks/tests/builds/
+CI/experiments/commits/pushes/delegation.
+
+2026-10-19 FR-0022源码已接入：完整读取并逐项映射22个旧Web文件，21个作为具名
+native view/form/response适配器保留；rule-console.js实际产品命令编排已拆到L3
+RuleCommands1，原DOM/input Set/JSON/编码/UUID/确认/abort/时钟归独立native view。
+旧initRuleConsole保持原参数默认和七个返回方法，由原入口绑定public factories；
+原单一selected Map/plan/generation/取消句柄、首次预检、未知重放、停止尾部、finally
+await refresh顺序保留为源码意图，尚未验证。三个固定JS资产/type/routes接齐，旧
+Rule/app/Relay VM源码提取需在集中验收适配canonical factories并保留覆盖。
+188人工源码映射已写入browser-native-leaf-inventory-v1.md；185–191与此前验收全部
+计划未执行。没有测试/类型/语法/静态/边界检查/格式化/生成/构建/CI/实验/Git写入/委派。
+完整A5源码/type/private/default/消费者/资产/版本/移除条件/冻结候选/公开示例仍需
+收口，尚未取得地基接受或上层并行开发资格；实时Echo v4接入仍是独立staged边界。
+
+此前2026-10-19 FR-0021源码已补齐既有Echo历史读取链：probe.js原未定义回执投影、
+原permit owner按族选择service context，以及同一事务中已有challenge/proof/字节/TLS
+摘要捕获。probe-runs.js识别既有Echo摘要，绑定invocation/content digest并显示实际
+TCP/UDP和字节数；HTTP/owner/browser/select接通既有echoed筛选。0037迁移与MySQL
+history adapter源码已包含对应表示，本片未改SQL/迁移/时钟/事务/history owner。
+公开machine API/receiveResult输入仍只声明v1/v2/v3；native v4存储解析不等于新增
+实时v4接入、签发UI或能力接受。185–188全计划未执行，188的22个Web逐leaf完整分类
+仍待完成。详见docs/architecture/browser-echo-receipt-history-v1.md与FR-0021；
+无测试/检查/格式化/生成/构建/CI/实验/Git写入/委派，A5与后续地基接受门禁仍开放。
+
+2026-10-19 FR-0020源码已接入：ConsoleRequest1归属原connected/version/JSON结果/
+未知结果幂等键Map；native HTTP保留原fetch/options/abort/JSON/UUID，解码后才判旧连接，
+再检查取消和HTTP。失败保留键，成功才删除，原reset在原位置清除，不增加重试或队列。
+app.js成为原index入口的实际组合；native main view保留原DOM/表单/24个Console初始化/
+页面auth-version/清理/监听顺序。Relay六个form函数与view body移到import-free原生
+adapter，原relay-model.js/relay.js保留精确public绑定，不作目录豁免或新增业务根。
+五个固定JS资产/type/routes已接齐。现有console-flow VM source harness依赖旧app/relay
+私有布局，集中验收需适配canonical factories/UI ports；未改未运行、不新增生产凭据hook。
+181–184全计划未执行；无tests/type/syntax/static/boundarychecks/format/generator/
+build/CI/browser/native/network/MySQL实验/Git写入/委派。其他具名Web及完整A5/消费者/
+type/private/default/公共版本/资产/移除条件/冻结候选与后续接受仍开放。
+此前A5源码根目录补齐发现实际生产apps/web与bootstrap入口缺口：原Control
+bootstrap已接到公共command/native1，保持argv/env首错、构造在try外、migrate后原
+Identity.bootstrap、输出与finally close。FR-0019在实现前记录后，ConsoleModel1与
+BrowserNative1分开原UI helper政策与Date/URL格式；旧model.js保持十个导出，三个
+固定JS资产路由/type与实际相对ESM import接齐，原CSP/MIME/固定reader保持。
+Core四个生产文件已读且未改，开发/生成/fixture/验收工具与生产roots分别记录；
+Docker COPY与ignore只做源码读取，没有构建。177–180全计划未执行；无tests/type/
+syntax/static/boundarychecks/format/generator/build/CI/browser/native/network/MySQL
+实验/Git写入/委派。其他具名Web源码以及完整Control/Agent/type/private/消费者/资产/
+公共版本/移除条件/冻结候选仍需逐项收口；本轮不是全仓分类完成或地基接受。
+此前FR-0018 源码已接入：agentplatform1 归属原生 Providers/Effects/LocalServices
+及 stateless defaults，Control 原名字保留精确别名、构造器/nil/fixture fallback。
+canonical named-struct 的声明包/反射身份变化已在FR实现前记录。Probe仍在Guard后调用
+原四种构造层级，native选择收口到原Control构造兼容桥；counter核心接收显式scheduler，
+两个生产调用点使用单独绑定的原生counter时钟，未改成Runner注入时钟，终态仍先采样。
+原L0/L1、协议/schema/Authority/Journal/ledger/预算不变；174–176全计划未执行。
+本轮无测试/类型/语法/静态/边界检查/格式化/生成器/构建/CI/实验/Git写入或子代理委派。
+完整A5 source/type/private/default/真实消费者/资产/移除条件/例子与冻结候选及所有接受门禁
+仍未完成；不得把三个具体source点迁移当成全仓闭合或地基接受。
+此前源码集成：UpgradeAssessment1 接齐原计划规则/报告与 native
+bounded file/catalog/Authority/CA/MySQL 只读检查，旧两个脚本仅经公开入口精确别名。
+OperatorCommand1/native1 接齐原 ops CLI 和 release evidence 入口，保留原环境/参数/
+错误白名单/输出退出/Recovery 与 Authority 调用顺序。packages/contracts 逐 leaf、
+11条exports及schema/catalog资产完成本片人工分类，三个L1版本1/1/2不变；其余native
+barrel未当作L1。Agent实际调用链已收窄到default/fallback、Probe默认构造与生产counter
+原生时钟采样，原JSON/time/echo旧残余已由后续源码迁移取代。167–173全计划未执行；
+只做源码读写，无tests/type/syntax/static/boundary checks/format/generator/build/CI/
+native/network/MySQL实验或Git写入。全A5/消费者/私有类型/资产分发/移除条件/例子与
+完整冻结候选及后续接受仍开放；地基与上层模块门禁未打开。
+此前并行源码集成：FR-0017 observation/publication/event storage1、各原 owner
+恢复操作、RecoveryQuarantine1 与完整 RecoveryWorkflow/native1 已接回旧 operator
+入口。原同Tx顺序、Notification端点后采样、publication共享时刻、未知发送结果、
+history与唯一ledger/Authority保留；备份/恢复原native body已迁出，提交后凭据再rebind。
+Server public preflight/raw bootstrap/native protected-path源码也已接齐；Agent native
+codec/generated/schema/alias/辅助CLI/responder精确分类完成本片人工记录。159–166
+计划未执行；无tests/type/syntax/static/boundarychecks/format/generator/build/CI/
+native/network/MySQL实验或Git写入。Ops CLI/upgrade、packages native格式/资产、
+剩余Agent/private/default、完整消费者/移除条件/例子/冻结候选仍需继续；未打开接受门禁。
+
+此前并行源码集成：FR-0016 raw Runtime status storage1/product queries1/native
+JSON-time 已接入两个原生产组合，旧 MySqlRuntimeObservations 构造/自有status/递归保留。
+Control startup1/client-command1 与 native effects 已接齐；Agent 原生 multihop 配置
+保留同 owner 单一实现，Relay 使用原 egress，Forward/Relay 共享原进程预算，Snapshot
+同包迁移。153–158 全计划未执行；源码子代理授权不打开验证或上层功能门禁。
+完整源码盘点定位下一真实缺口：ops Recovery 同事务跨 owner quarantine 写入、server
+bootstrap/secret-path、native contracts/辅助CLI/工具及全量消费者/移除条件/冻结候选。
+无 tests/checks/format/generator/build/CI/实验/提交推送；地基未接受。
+
+2026-10-19 Agent command/native CLI source follow-up: L3 agentcommand1 retains
+original mode/refusal/run-lock/Runner projection; L2 agentcli1 owns original global
+flags/path/proof/key/inspection/token/enrollment/secure boot/diagnostics/signals.
+Existing main/run/enrollment compose public Runner/Host/state; no L0/L1 contract or
+control.Options identity change. Control offline plan consumes public compiler/facts.
+150-152 planned/unexecuted; no checks/tests/CI/experiments/Git/delegation. Control
+startup/client/server/ops/MySQL, native dependencies/full candidate and independent
+foundation/example/physical/release acceptance remain open.
+
+2026-10-19 Agent observation source follow-up: FR-0015 runtimeobservation2 generic
+Host facts and native platformobservation2 explicitly bind observationwire1 DTOs.
+Four sample/ACK/body/native formats and local counter DTOs move to L2 with old
+aliases; samplers/worker/retention/generation/cursor/budget/timeout/close stay owner.
+Native UDP diagnostics preserves exact assertion/one Stats under old mutex/branch.
+147-149 planned/unexecuted; generic/reflection/serializer migration explicit. No
+checks/tests/CI/Git/delegation; full dependencies/CLI/default/consumer/candidate and
+foundation/example/physical/release acceptance remain open.
+
+2026-10-19 Offline Transit source follow-up: FR-0014 adds prepared Activate/Close1
+without changing driver HostVersion1. Original controller consumes native identity/
+intent/engine/error and existing time/Schedule; same pointer, nil/partial error and
+JSON-versus-Prepare branches preserved. Original authority/Journal/save-before-engine/
+phase/close remain, native bodies unedited and no Run/poll/driver insertion.
+144-146 planned/unexecuted; original mixed native dependencies and full Agent/Control/
+CLI/default/type/consumer/candidate/acceptance stay open. No checks/tests/CI/Git/delegation.
+
+2026-10-19 Journal facts/native source follow-up: FR-0013 executionstate3 removes
+RawMessage/tags/native protocol/import names from lower facts. Exact original native
+records stay under state with intentionally split type identity; all fields/references
+project at store/wrapper/Bootstrap/Runner boundaries. Bootstrap/provider2 reflects
+new output facts. Original native bytes/history/save-before-bind remain intended;
+141-143 planned/unexecuted. Direct lower/type/serializer consumers require migration.
+No checks/tests/CI/Git/delegation; full Agent/Control/CLI/default/consumer/candidate
+and foundation/example acceptance remain open.
+
+2026-10-19 Agent Journal source follow-up: FR-0012 executionstate2 requires native
+protocol/physical-slot codec methods at old host stages. State owns shared original
+physical/Transit keys and Runtime envelope; Runner drain tuple/URL/path use existing
+native owners. Lock/reload/validate/history/save-before-bind and Ticket/drain/ACK/
+tail/defaults remain.138-140 planned/unexecuted; no checks/tests/CI/Git/delegation.
+Lower Journal RawMessage/tags/metadata and full Agent/server/CLI/default/private/
+consumer/frozen candidate remain open; no whole foundation acceptance.
+
+2026-10-19 HTTP source follow-up: FR-0011 keeps original route coordination/options
+under L3 api/public.ts (HTTP1), with original Hono/Node/URL construction/types/context
+in L2 control-http/public.ts and epoch/Console/Probe formats in the existing codec.
+Old app/ports are exact aliases; server uses public with original services. Query
+string versus params.size, middleware/body/error/argument/lifecycle stages remain.
+135-137 planned/unexecuted; no checks/tests/CI/Git writes or delegation. Full Agent/
+server/CLI/default/private/consumer/frozen candidate and foundation acceptance remain.
+
+2026-10-19 Profile/Node native source follow-up: FR-0009 makes Profile an opaque
+family slot and explicitly specializes native Transport/Endpoint/Relay/multihop/
+Transit aliases. Native schemas/parsers remain original; Transport get formats its
+old createdAt property through the same codec after original reads/parse/digest in
+Tx. New required formatter refusal is intentional for custom construction. FR-0010
+moves original Node token/CSR/support predicates and fingerprint prefix into its
+existing native codec at original stages; authority/network/sign/replay/time/Tx
+remain in the host. Source candidates values2/Relay5/configuration2/Transport2/Node3,
+with Host3/Ledger3/evidence2 and native protocol/data unchanged.130-134 unexecuted;
+the named bounded type/format migration is not full A5 or acceptance. No checks/
+tests/formatters/generators/builds/CI/experiments/Git writes or delegation. Full
+HTTP/Agent/default/private/consumer/removal/candidate/example work remains.
+
+2026-10-19 Runtime family source follow-up: FR-0008 relocates original common
+assignment/resource/tombstone/snapshot/Hello/report/ACK fields into precise L1
+execution-values. Native declarations extend/alias them with existing closed
+driver/envelope fields; erased family parameters connect host/ledger/Relay/stores/
+assignment/evidence. Current native wrappers/compilers/MySQL/Forward/Probe/HTTP and
+old wire-bearing aliases explicitly bind NativeRuntimeFamily. Host's original
+protocol -> identity -> capability stages and Hello/ACK projection positions are
+retained through required codec methods; remaining publication/Tx/authority bodies
+stay original. Source candidates Host3/Ledger3/Relay4/evidence2/values1, no ADP/driver
+version change.127-129 unexecuted. ProfileConfig/transitive config and full A5/native/
+HTTP/Agent/default/consumer/candidate work remain; no type/boundary/behavior acceptance,
+checks/tests/formatters/generators/builds/CI/experiments/Git writes or delegation.
+
+2026-10-19 common-value/native-view source follow-up: FR-0005/0006 move the unique
+original Policy and Observation/Drain/Condition declarations into two precise
+public L1 leaves inside contracts, each interface1. Old native/public types alias
+them; DEFAULT_POLICY stays in its original owner. No Core/kernel or wire schema
+move. FR-0007 adds two required original-reference native assignment views to the
+existing Relay compiler, advancing only Relay to3. Original host pins/auth/bound
+loops retain lookup/digest/conditional clock/Tx/authority decisions; old constructor
+defaults/static recovery remain. Missing direct/custom projections intentionally
+refuse. Readiness124-126 planned/unexecuted; nine L1 files still use raw runtime
+wire types and Relay profile transitively. Full A5/native/HTTP/Agent/candidate work
+remains. No checks/tests/generators/builds/CI/experiments/Git writes or delegation.
+
+2026-10-19 lifecycle/time source follow-up: FR-0003 records and implements required
+BackgroundTaskEffects for direct L1 construction (background interface2). L2 native
+interval/monotonic effects and the old one-argument application wrapper share one
+original lifecycle; server explicitly binds effects with its five tasks/close order.
+FR-0004 records Ledger/Relay/Node authority interface2 and required time codecs;
+native providers replace the original Date expressions, including NodeService's
+post-commit provision and transaction-bound view. Old constructor/default clock
+capture stays; missing direct/custom effects intentionally refuse. Common error/
+RequestLifecycle aliases and six common types now use public framework. Manual
+source inventory records nine direct L1 shared/runtime type consumers and a Relay
+profile transitive dependency as unresolved debt, not exceptions. Readiness121-123
+planned/unexecuted; no checks/tests/build/CI/experiments/Git writes or agents. Full
+A5 classification/consumers/removal/frozen candidate and foundation gates stay open.
+
+2026-10-19 governance and FR-0002 source follow-up: the human explicitly confirmed
+Runtime host interface2, then granted standing authorization to select and implement
+similar foundation source proposals without repeated confirmation. AGENTS/template/
+plan now retain FR impact/migration/acceptance records and autonomous source work.
+RuntimeHost requires now and parseTime/formatTime; native fallback/Date operations
+move to supplied L2 effects, old RuntimeController positional constructor binds
+original dynamic native clock. Required-effect refusal is intentional for old direct
+host/custom codec clients. Runtime query/telemetry aliases now use explicit public
+exports; provider/default capture/consumer inventory recorded. Readiness119/120
+unexecuted; no checks/tests/build/CI/experiments/Git writes or feature gate opening.
+
+2026-10-19 newest Runtime policy source batch: original Forward executor/registry/
+native adapters and Snapshot registry/Relay source are canonical Forward public
+implementations. Profile/Access/Node reconcilers now belong to Transport/Identity/
+Node public. Full original authorization/resource/Relay/adapter and Node management/
+grant declarations have canonical owner leaves with exact old aliases. Control
+keeps original instances/callbacks/Tx and one ledger/collector; original L1 hosts
+and all storage bodies remain. Native compiler/catalog/clone are public L2.
+Runtime directory manual source table records actual wrappers/aliases/debt, not
+whole-A5 compliance. Readiness115-118 unexecuted; no checks/tests/format/generation/
+builds/CI/experiments/Git writes or agents. L1 RuntimeHost native clock fallback/
+Date formatting and full source/type/default/consumer/removal/freeze work remain.
+
+2026-10-19 newest source batch: Agent original v2/v3/v4 status and four-family ACK
+codecs, generic result field/JSON projection, two-stage echo context and shared
+native RFC3339Nano parsing now have public L2 implementations. Parent retains
+original family/receipt/equality/watch/Guard, once-only report, conservative time
+projection/entropy/cutoff and provider/history/short-circuit sample decisions.
+Original fifteen HTTP query files now have exact aliases to native codecs or
+Console public owner entry; same product validator timing, per-family duplicate/
+empty/revision/page/first-error differences and neutral lower record shapes.
+Readiness111-114 planned/unexecuted; no checks/tests/format/generation/builds/CI/
+experiments/Git writes or agents in this turn. Remaining HTTP URL/header/inline
+projection/types/default and native URL/protected-key/engine/wire/CLI/Runtime
+chains plus complete A5 source/type/consumer/removal/freeze inventory stay open.
+
+2026-10-19 latest source integration, authored/unverified: complete original Path
+and Ingress coordinator classes/APIs/flat contracts now have canonical public
+owners and precise old aliases; existing Control/HTTP roots bind same instances,
+stores and callbacks. Original Path references use public Node/Transport/Endpoint
+contracts; mixed limit definitions now have canonical Path/Ingress local owners.
+Complete HTTP entry was read; original TLS/body/error/console IO is public L2,
+without route/admission/auth/limit changes. Agent qualification/poll/claim/v1 status,
+wire times/service context and Runner report/drain/Snapshot/credential projections
+have original native leaves, preserving burn/samples/Guard/callback/history/order.
+Readiness106-110 planned only; no tests/checks/format/generate/builds/CI/experiments/
+Git writes. Remaining HTTP query/native-type/default and Runtime/private adapter
+chains, Agent execution status/result/echo/ACK and whole A5 candidate inventory stay
+open. B needs later human verification authorization, C/D gated, E separate scope.
+
+2026-10-19 current source batch, authored and unverified: original Profile grant
+and complete Forward command bodies now canonical/public with exact old aliases,
+original command ports/Tx/replay/provenance/retry/compensation/default fallbacks.
+Original passive Node observation has public product owner/raw L1 reader contracts
+and exact native lifecycle effects; lower MySQL body unchanged. Original root Relay
+preview delegates to required public owner over same RelayCoordinator. Agent original
+HTTP/JSON/bounded-body and v2/v3/v4 result-wire mechanics moved into native L2;
+claim/current-instance/clock/trust/report-once/authority and version differences stay.
+Readiness98-105 entirely planned/unexecuted. No tests/checks/format/generation/builds/
+CI/experiments/commits/pushes. Remaining Path/Ingress bodies/contracts, Runtime/private
+native defaults, full HTTP chain, Agent status/qualification/delivery/time/credential
+formats and whole A5 freeze inventory remain actual source work. B unexecuted and
+requires later human verification authorization; C/D not started, E separate approval.
+
+
+2026-10-19 next integrated source batch, authored and unverified: original Control
+Probe permit authority and five v1/v2/v3 machine adapters now have canonical public
+owner bodies and exact old leaves. Original Control/Transport/Tunnel read services
+and projections now use public owners; Identity Access/Node command/API/effects
+join their existing public owners. Native catalog/logical tunnel implementations
+and original Path/Forward command APIs have canonical owner leaves; same roots,
+providers, stores, effects, flags, defaults and transaction/receipt identities stay.
+Agent legacy header/declaration checks and echo endpoint mechanics move to native
+L2 at original points, preserving distinct duplicate/clone/strict-last/error order.
+Readiness86-97 entirely planned/unexecuted; no checks/tests/format/generation/builds/
+CI/experiments/commits/pushes. Source agents were explicitly authorized; feature
+parallelism/acceptance stays closed. Remaining Forward/Profile/Path/Ingress/HTTP
+and Agent body-I/O/JSON/wire/time/source-type-default inventory are explicit source
+blockers; whole A1-A5 and B-E not complete. No physical/release evidence inferred.
+
+
+2026-10-19 integrated source continuation, authored and unverified: A1 original
+instance/hello/qualification, preflight/command/Observation resolver and product
+contracts now live in the public Probe owner; inert Observation command/query
+chain is public. A2 Console query/rules/projections/API now has its own public
+owner with same original Control/HTTP/store bindings. A3 original native address,
+echo socket/format and default provider bodies moved to explicit probe/native L2;
+parent retains global admission/Gate/counter/authority. A4 original Runner wire,
+Direct/Relay assignment and native catalog/capability bodies moved into existing
+nativeexecution L2, with same original Runner lifecycle/state and legacy errors.
+Readiness78-85 is entirely planned/unexecuted. Original source/default/ordering
+compatibility is not proven by these moves. Human authorized source-task agents;
+no checks/tests/builds/experiments/CI/commits/pushes or gate opening. A1 permit/
+claim/delivery/result/type/service, A2 other queries/commands/full HTTP, A3/A4 public
+native references/authority/Journal/CLI and A5 whole classification remain open.
+
+
+2026-10-19 A1 instance/negotiation/qualification source continuation, authored and
+unverified: original five classes and exact machine/instance/evidence/measurement
+contracts now live under public Probe owner. Original per-path default clock and
+ACK timing, same-Tx generation/replay/expiry/credential/tombstone/recognition rules,
+lower SQL and precise leaf aliases remain. Readiness79/80 unexecuted; remaining
+A1 permit/command/plan/result/service coordination and A2/A3/A4/A5 remain open.
+Human explicitly authorized source-task subagents on 2026-10-19. Source-only
+agreement still excludes checks/tests/builds/experiments/CI/commits/pushes; no
+acceptance or parallel feature gate opens.
+
+
+2026-10-19 A2 twenty-sixth source slice, authored and unverified: original inert
+ObservationServices command/query, API, product contracts and storage values now
+live in the existing public declaration owner. Exact old leaf aliases, mutable
+limits, same root instances/SQL, archived identity/quota, CAS/replay/clock and
+immutable-revision/head/audit/receipt order remain source intent. Legacy wrapper
+head/count hooks/static recovery unchanged. Readiness78 unexecuted; no tests,
+checks, builds, experiments, CI, commits, pushes, delegation or gate opening.
+A1 Probe coordination and other application/HTTP, Agent/native, Runner and full
+source/type/default/bridge classification remain open.
+
+
+2026-10-19 A2 twenty-first through twenty-fifth source slices, authored and
+unverified: five original telemetry services and their shared API/contracts/
+policies, mapping/recorder/read shapes and rollup rules/provider now live under
+public telemetry-owner. Each class retains independent state/budgets/flags and
+original lower SQL/mappers/observation pool. L2 owns original four ACK projections
+and exact wire-type aliases; mapped count guards remain L3. Same root instances,
+raw-then-rollup same-Tx order, epoch/replay/clock, exact BigInt deltas and original
+quality/coverage/fold/query/capacity semantics remain source intent. Old paths
+are precise leaf aliases. Readiness75-77 unexecuted. A1, other application/HTTP,
+Agent/native, Runner and full classification remain open; no checks/tests/builds/
+experiments/CI/commits/pushes/delegation or gate opening.
+
+
+2026-10-19 A2 nineteenth/twentieth source slices, authored and unverified: original
+Probe history recorder/read and finite plan services, rules/APIs/contracts/policies/
+storage values now live in independent public owners. Probe-owned command API
+acceptance declarations moved with exact legacy aliases; existing issuer/recorder
+same-Tx roots, savepoint isolation, scheduling/expiry/replay/CAS and lower SQL stay
+unchanged in source intent. L2 owns original retained echo invocation framing and
+restores the missing original service-selection parser export. No new echo plan,
+issuer, status filter, permit authority or feature flag. Readiness73/74 unexecuted.
+Telemetry/rollup, A1 residuals, Agent/native, Runner and full classification remain
+open; no checks/tests/builds/experiments/CI/commits/pushes/delegation or gate opening.
+
+
+2026-10-19 A2 seventeenth/eighteenth source slices, authored and unverified:
+StationAlerts and Notification endpoint/delivery services, rules, APIs, policies
+and storage values now live in independent public owners. Station owns the same
+supplied-Tx event handoff; Notification consumes public Station contracts/rules.
+Original Vault/Sender declarations move to L1; native implementations import lower
+ports without product types. Existing lower SQL/native bodies and server instances
+stay unchanged. Original event/enqueue/policy atomicity, command replay/CAS, vault
+stage before SQL publish, claim/preflight/Fence/attempt guards, key zeroing and
+physical-idle-before-lease-release are source intent. Old paths directly alias
+canonical leaves. Readiness70-72 unexecuted. Probe history/plan, telemetry, A1
+residuals, Agent/native, Runner and full classification remain open; no tests/
+checks/builds/experiments/CI/commits/pushes/delegation or gate opening.
+
+
+2026-10-19 A2 fifteenth/sixteenth source slices, authored and unverified: the
+original Audit and passive Forward diagnostic classes, APIs, read contracts and
+policies now live in independent public owners. Audit read projection/policy stays
+L3 over the same lower SQL; Station consumes its public error vocabulary. Diagnostic
+Probe framing/body projection now uses separate original L2 functions, preserving
+the parse catch boundary and all L3 identity/trust/time/state checks. Old entries
+directly alias canonical leaves; server/HTTP use public owners. Per-instance
+admission, original transactions, query/cursor/order, redaction/bytes and disabled
+authority flags remain source intent. Readiness items 68/69 are unexecuted. Other
+mixed owners, A1 residuals, Agent/native, Runner and full classification remain
+open; no checks/tests/builds/experiments/CI/commits/pushes/delegation or gate opening.
+
+
+2026-10-19 A2 fourteenth source slice, authored and unverified: public
+TransitStagingService now owns original offline stage/abort coordination over
+required public transaction/Node/Forward/Transport/Endpoint/reservation providers.
+MySqlTransitStagingStore keeps original staging SQL and read-only Runtime/history
+observations; exact physical release remains with MySqlRuntimeResourceStore via
+the extracted RuntimeReservationRelease mode. Preserve all-slots-check before any
+release, owner/Fence/generation predicates and same-Tx stage CAS/rollback. The old
+five-argument coordinator retains own async methods, verifier/type aliases and
+lazy unused-collaborator behavior. No live registration/execution or history reset.
+Readiness item 67 is unexecuted. Other mixed owners, A1 residuals, Agent/native,
+Runner and whole-source classification remain open. No checks/tests/builds,
+experiments/CI/commits/pushes/delegation ran; no foundation or upper gate opens.
+
+
+2026-10-19 A2 twelfth/thirteenth source slices, authored and unverified: original
+preparation/resource-set rules now live in the public Transit owner, consuming
+public Profile/Endpoint contracts, L1 Node facts and pure L2 format providers. Old
+compile/type/validation entries directly alias the same implementations. Exclusive
+reservation now delegates to the same Runtime resource owner through required raw
+transactional storage and a late capacity provider. The existing MySQL resource
+store reuses ensureSlot/assignSlot and retains exact original Node/minimal-slot/raw
+count projections. It rejects even same-Forward owners; reserveRelay is unchanged.
+The old reservation function binds the original dynamic DEFAULT_POLICY and creates
+no pool, transaction or second ledger. Items 65/66 are planned only. Staging/abort
+SQL and protected release, A1 residuals, Agent/native, Runner and full classification
+remain open. No checks/tests/builds/experiments/CI/commits/pushes/delegation ran; no
+foundation, upper-module or phase B-E gate opens.
+
+
+2026-10-19 A2 eleventh source slice, authored and unverified: the location inventory
+corrected the assistant's wrong src/runtime lookup; all seven Transit entries were
+already under modules/runtime and needed no recovery. Original offline coordination
+now has a public TransitCoordinationService, required raw lower storage and one
+original SQL store. The old single-argument journal keeps its own public async
+methods and lazy db dispatch; Control binds explicit providers. Actor/stage checks,
+sorted sessions/physical ownership, proof-before-transition, exact revision/digest
+CAS, two distinct begin timestamps and withdrawal-only recovery remain source-
+intended unchanged. No default verifier, confirmation route, live execution or
+reservation release is added. Item 64 is unexecuted. Staging/preparation/reservations,
+A1 residuals, Agent/native, Runner and full classification stay open; no gate opens.
+No checks/tests/builds/experiments/CI/commits/pushes or delegation ran.
+
+
+2026-10-19 A2 tenth source slice, authored and unverified after explicit human
+continuation: original preview delivery now uses public TransitPreviewDelivery,
+required raw lower storage and the existing peek-only offline planner. One SQL
+store owns outbox/receipt queries and writes; the old one-argument class retains
+its own methods and lazy db/planner dispatch. Enqueue keeps its two original
+transactions, poll its LIMIT 16 and per-row clock, and report its current-machine
+before duplicate/high-water/freshness/CAS ordering. ACK never calls confirm or
+grants execution. Shared retained-stage validation, preparation/coordination types
+and offline step use public owner contracts. The restored coordination-step path
+directly exports the existing coordination-values implementation, without copying
+or deleting it. Item 63 is unexecuted. Staging/coordination SQL, preparation and
+reservations, A1 residuals, Agent/native, Runner and full classification remain
+open. No checks/tests/builds/experiments/CI/commits/pushes/delegation ran; no gate opens.
+
+
+2026-10-19 A2 ninth source slice, authored and unverified: contract-only Transit
+negotiation now uses a public product owner, a required raw machine-session lock
+reader and one original SQL implementation. Raw numeric/null evidence and deferred
+facts decoding retain original refusal order, FOR UPDATE and one dynamic clock
+sample. The pure ACK formatter retains the same capability tuple, mutable response
+and executionEnabled:false. Old one-argument construction/hello and API aliases
+remain precise entries; Control assembles explicit providers. Item 62 is planned
+only. Delivery/staging/coordination/reservations/preparation, A1 residuals, Agent/
+native, Runner and full classification remain open. No verification, CI, Git writes
+or delegation ran; no foundation, upper-module or phase B-E acceptance is claimed.
+
+
+2026-10-19 A2 eighth source slice, authored and unverified: IngressMigration uses
+lower parameterized Plan/Outcome/Failure contracts and one original SQL/savepoint
+store. Control binds the original public refusal provider and existing origin,
+group and Forward owners. Legacy zero-argument methods preserve lazy count/event
+hooks; same-group coherence still precedes quota dispatch, filtered COUNT stays
+direct, and original LIMIT 16/revision<20/CAS/recovery semantics remain. Apply and
+compensation retain distinct add/update/remove behavior; remove is irreversible.
+Readiness item 61 is planned only. Transit, A1 residuals, Agent/native, Runner and
+whole-source classification remain open. No checks/tests/builds/experiments/CI,
+commits/pushes or delegation ran; A2/foundation and upper-module gates stay closed.
+
+
+2026-10-19 A2 seventh slice: original deployment storage/savepoint and its precise
+legacy entry are authored over lower contracts. Shared origin/lineage/migration
+rules have a public owner; migration persistence and coordination remain separate
+work. Item 60 is planned only. Historical lineage is not a current Forward permit;
+conditional deletion, one Runtime ledger and all acceptance gates remain unchanged.
+
+2026-10-19 A2 sixth slice: original Ingress shared rules, lower group persistence
+and precise legacy count binding are authored. Public resolvers retain declaration
+semantics and original Forward authorization ownership; distinct ingress members
+are not PathGroup alternatives or shared physical connections. Item 59 is planned
+only; deployment/migration and other source/acceptance gates remain open.
+
+2026-10-19 A2 fifth slice: original publication rules, lower Plan/Outcome storage
+ports, SQL/savepoint owner and precise count/event legacy bindings are authored.
+Item 58 is planned only. Known refusal versus fatal-error propagation, original
+outer transaction and conditional compensation remain; no global atomicity, new
+execution authority, A2/foundation acceptance or phase-B verification is claimed.
+
+2026-10-19 A2 fourth slice: original group rules, metadata/provenance SQL and
+precise legacy count-override bindings are authored over public lower contracts.
+Item 57 is planned only. Explicit candidate selection and original Path history
+ownership remain; this does not add automatic selection or accept A2/foundation.
+
+2026-10-19 A2 third slice: original PathBinding rules, lower storage ports, single
+SQL store and legacy bindings are authored; complete Forward/Path/Group/Ingress
+owner chains and remaining storage debt are recorded. Item 56 is planned only.
+No phase-B verification, feature gate, foundation acceptance or release is claimed.
+
+2026-10-19 A2 second slice: original template SQL has parameterized lower ports
+and one lower implementation with explicit Control assembly and a precise legacy
+zero-argument wrapper. Item 55 is planned only. Other Path/Ingress/Transit owners
+and A1 residuals remain open; stages B-E and foundation acceptance are unchanged.
+
+2026-10-19 A2 first slice, source authored and unverified: original PathTemplate
+parser, requirements, limits and head/revision checks have one public Path owner.
+PathBindings, PathGroups and IngressGroups consume its public rules rather than
+private template application helpers. Old exports remain direct aliases; template
+coordinators reuse public pagination/digest/ISO/default-clock helpers at original
+call points. Item 54 is unexecuted. SQL storage and other Path/Ingress/Transit owners
+still need source work. Entering A2 neither accepts A1 nor exempts its remaining
+dependencies from the full foundation freeze. No verification, CI or Git writes.
+
+2026-10-19 A1 sixth slice: machine wire/ACK projections now have one L2 formatter
+with explicit public aliases, while all authority/freshness/transaction checks stay
+in the original adapters. Item 53 is planned only; direct wire/native/default and
+A2-A5 work remain, so this does not open B or the upper-module gate.
+
+2026-10-19 A1 fifth slice, resumed after explicit human restoration approval:
+source authored, unverified. The missing codec entry directly exports the existing
+single native result implementation. Original version dispatch, stored format
+checks and v1/v2/v3 result ACK projections live in L2; permit and machine adapters
+retain original binding/proof/budget/history, identity, clock/freshness and committed
+receipt checks. Wire aliases preserve the same types. Item 52 is unexecuted; no
+v4 ACK, broader issuance, verification, delegation, commit or push is included.
+A1 and the foundation remain unaccepted; the independent upper-module gate is closed.
+
+
+2026-10-19 A1 fourth slice: shared Probe and observation rules now live under
+explicit public owners, with original state/transaction boundaries and legacy
+aliases. The complete entry/rules/port/adapter/state chains are documented in
+[owner collaboration](../architecture/probe-owner-collaboration-v1.md). Item 51 is
+planned only. A1 remains implementing; B and later stages are not authorized by
+this source work, and the independent upper-module gate remains closed.
+
+
+2026-10-19 A1 第三片更新：permit/withdrawal/result 存储已有下层端口、唯一 SQL
+实现与原 L3 值规则，Control/恢复使用显式实现，旧零参/子类/静态入口保留。
+此前实例/资格及证据 reader 切片继续保留；item 48–50 均未执行。其余 Probe
+owner/private/wire 与后续 A2–A5 仍需源码工作，不把持久化拆分当成 A1 验收，
+也不授权检查、提交、CI 或上层并行功能。
+
+2026-10-19 用户确认以 [开发执行方案](forwardx-development-plan.md) 为后续目标：
+A 地基源码收口 → B 后续授权集中验收 → C 状态/能力/指标/运维闭环 → D 有证据
+的负载与固定拓扑优化 → E 自动策略/新驱动/导入另立项。当前 A1 实例/资格存储、
+时钟和 codec 首片已编写，item 48 未验收；Forward Probe 与其余 Probe SQL
+混合依赖仍待继续，A1 及地基整体未完成。允许同一地基任务内互斥子代理并行，
+共享修改指定单一写方并统一集成；不提前打开上层模块门禁，不授权检查/测试/CI
+或提交推送。
+### 最新收口标准：四层地基 DoD 与并行门禁
+
+用户已确认按四层职责、依赖边界、地基变更流程和最小公开接口样例继续推进。
+[ADR-0048](../decisions/0048-foundation-layer-boundaries.md) /
+[四层边界](../architecture/foundation-layers-v1.md) 优先于下方 ADR-0047 的较窄
+“源码收口”口径。当前[地基门禁](foundation-readiness.md)仍未通过，不开始上层并行功能开发。
+
+2026-10-19 已完成 [ForwardX 固定修订源码研究](../reference/forwardx-comparison-2026-10-19.md)，
+形成 [FXR 优化候选顺序](forwardx-optimization-backlog.md)。先沿既有顺序关闭地基 owner
+调用链、再取得冻结源码验收；后续优先复用现有诊断/能力/指标/运维契约改善工作流。
+该清单不重开已编写功能，不提前启用自动策略、新驱动或并行模块；候选均未实施。
+
+- 已编写根 AGENTS 六项任务协议、边界声明清单、兼容目标矩阵与 FR 申请/确认流程。
+- 首批真实源码拆分：纯发布保留/复用/截止决策进入独立 L0 runtime kernel；
+  RuntimeHost 经 L1 事务/状态/Node/Forward/ledger/Relay/authority/codec 端口协调，
+  SQL 与 ADP 校验/编译留在 L2；旧构造及导出路径兼容保留，现有权威和协议不变。
+- 公共错误/事务/授权/幂等契约及任务/请求生命周期归 L1；Agent 进程 CPU/RSS/FD
+  平台取值归独立观察适配器。独立 L3 导入预览样例只依赖公开 L1/L2，未运行。
+- 清单首项继续拆分：RuntimeResources 承接既有资源锁、预留、Fence/世代、容量与
+  释放协调，MySqlRuntimeResourceStore 承接事务内 SQL；主装配向 Node/ledger 注入同一
+  资源服务。Nodes 不再构造完整 Ledger；Relay 改依赖独立 owner 契约，并把 Operation/
+  槽位写入交还原 ledger。旧构造和类型路径保留兼容，新增源码仍未验证。
+- Ledger 继续提取：完整分配/claim/恢复隔离/退休租约/排空完成协调进入 L1
+  RuntimeLedgerHost，SQL 进入事务内 MySqlRuntimeLedgerStore；时钟、ID、编译/解码、
+  授权及分配来源显式注入。原 Ledger 类只保留兼容装配，后续仍需拆 Relay/Node 等。
+- Relay 协调进入 L1 RuntimeRelayHost；L2 部署写入与只读运行观测分开，原构造/
+  静态恢复入口保留。原生 Direct/Snapshot/Relay/多跳编译及端点/目标策略实现已迁入
+  L2 compatibility，旧模块路径保留导出，未扩大协议/Core/能力范围，源码仍未验证。
+- Node 凭据/运行授权进入 L1 NodeAuthorityHost，业务策略/授权/撤销命令保留独立
+  L3 node-owner；L2 承接事务存储、原 pool 机器查询、签发及令牌/哈希/原生校验。
+  原 Nodes/策略/凭据 helper 入口保留，不新建信任根；凭据/事务等仍待集中验收。
+- Agent Guard/Ticket/同步缓存进入 L1 executiontime，OS 时钟/状态查询进入 L2
+  platformclock；Journal 的锁定重读/高水位/Fence/阶段/保存协调进入 L1 executionstate，
+  原 state/MAC/native 适配继续持久同一文件。原子写入/平台锁归 L2 platformstate，
+  旧调用入口保留。Runner 凭据/TLS/HTTP、资源观察等平台耦合仍待继续，均未验证。
+- Agent 主凭据/Relay 凭据文件与校验经 executionidentity 端口进入 L2 agentidentity，
+  主 Control TLS/HTTP 经 executionchannel 进入 L2 controlchannel；Runner 保留原 Probe/
+  Guard/内存切换与重放顺序。默认构造及旧 helpers 保留，新增显式可信 provider 构造。
+  bootstrap/调度、Probe/telemetry 专用 HTTP 与其他平台耦合仍未完成，源码未验证。
+- bootstrap/接收者调度经 runtimeplatform 进入 L2 platformruntime；Probe instance/claim/
+  delivery 与四类遥测 HTTP/独立 pool 经 Auxiliary 进入 L2 controlchannel。响应限长读取/
+  关闭/ACK/one-use 仍归原 owner。主机采样迁入 L2 platformobservation，旧入口保留。
+  CLI enrollment、诊断/随机数/runtime helpers 及执行/Probe 内部仍待收口，均未验证。
+- 本地观测值/端口进入 L1 runtimeobservation，L2 Native 承接原 runtime/OS 采样；安全
+  熵源、测量文件和日志经 runtimeplatform 进入 L2 platformruntime.Local。Runner 保留
+  原 read/lock/失败顺序，四类遥测与 Probe ID 使用注入随机源，旧 helper/构造保留；
+  新显式本地服务构造要求完整 provider，尚未验证，不代表 Agent 整体已分层通过。
+- Identity 公共访问检查进入 L1 IdentityAccessHost；成员/恢复/列表/审计命令与 DTO 保留
+  L3 identity-owner，SQL 和独立 pool 查询归 L2。旧构造/helper/type 保留，HTTP identity
+  改用独立 Queries，相关 Scope/Node 消费者不再依赖 Identity 具体类，仍待集中验收。
+- Transport/Relay endpoint 原命令和 API 进入独立 L3 owner，SQL/native codec 进入 L2，
+  L1 仅声明端口；Node 审计/管理与 Forward 引用使用公共契约，旧构造/恢复/helper 保留。
+  活跃 endpoint 变更仍拒绝，事务内原子协调不变；源码未验证，不视为整体地基通过。
+- Forward 状态协调归 L3、幂等协调归 L1，持久化归 L2；旧构造和 Runtime/Transit/Relay/path
+  消费契约保留；过滤、锁、原始 JSON、修订冲突和 replay invalidation 保持源码意图，
+  尚未验证，不增加第二账本或重试。
+- 管理 HTTP 的 Node/Forward/access/Node 管理/Profile 授权/detail 接入独立接口声明，
+  响应 DTO 留 owner/application，旧类型路径保留；实现与路由不改，仍未验证。其余
+  console/Relay preview/path/ingress/Probe/可选观测接口尚待继续，不报告 HTTP 整体闭合。
+- Console/catalog/Profile 引用/Tunnel HTTP 已改用独立契约，旧类型入口保留，查询
+  实现与时钟不改。MySQL read-model 到 application 类型/helper 的旧反向依赖仍是
+  显式债务，不能用接口迁移宣称适配层合规；相关验收 item 24 未执行。
+- Relay preview、Transit HTTP 和被动 Node 观察已接独立契约，保留原响应/取消/
+  非执行与非健康语义，方法/SQL/路由不改。Transit 混合持久化/原生/时钟实现仍属
+  债务；item 25 未执行，不能报告 Runtime/HTTP 整体完成或打开并行门禁。
+- path/ingress 五组 HTTP API 已独立声明；部署/迁移通过原事务的入口解析端口
+  消费 Group owner。Template/Group 类型和原限额单源公开、旧路径保留；方法/SQL/
+  CAS/补偿/恢复规则不改，混合格式/应用依赖仍是债务，item 26 未执行。
+- Probe 十一组 HTTP 视图改为独立 API；wrapper 使用原 instance/permit 公共端口，
+  旧类型/metadata 导出保留。方法/协议/预算/一次消费/ACK 不改，staged echo 不接通；
+  item 27 未执行，混合平台/格式/存储及可选观测契约等仍须继续收口。
+- 三类 management read-model 已拆原始读取/SQL 与 L3 业务投影，主装配显式提供
+  store/格式/验证/观测值。旧 reader/helper 精确保留兼容而非扩大全文件豁免；SQL
+  分页消费者改用独立 L2 helper。item 28 未验证，不宣称全部存储/依赖已合规。
+- Agent 通用 executionhost 与 typed/native executiondriver、nativeexecution 已分开，
+  旧 helper/HostVersion/零值/实际 OS 语义保留，权威仍归原 Runner/Journal/Guard。
+  item 29 未验证，Control 私有兼容、Probe/trust/CLI 和 native 内部分类仍待继续。
+- 五类 telemetry/aggregate 可选 API 已独立声明，policy/旧导出保留，行为与 SQL 不改；
+  item 30 未执行，其余诊断/审计/告警/通知/历史/计划/service 接口及混合依赖仍待收口。
+- 随后八组可选观测服务已改为六个独立 L3 API 入口，显式 DTO/旧 receipt 别名与七组
+  限额/audit coverage 公开，原方法/SQL/路由/worker 不变；item 31 未执行。HTTP 的
+  实现类派生视图已替换，但 native/private helper、owner 内部格式/加密/存储和全仓
+  分类仍是未完成债务，不能据此宣布所有模块合规或打开并行门禁。
+- Agent 首次 enrollment 已拆 L1 协调和 L2 原生文件/PKI/HTTPS provider，旧 CLI 入口/
+  参数与 Journal 所有者保留，原发布/输出/关闭/失败顺序不改；item 32 未执行。
+  Control 私有 precheck/Probe/trust、其他 CLI/native composition 及 engine/wire 仍待收口。
+- 原生 Probe 配置/digest/地址投影已移入 nativeexecution，pinned TLS 实现移入
+  observationtrust，Runner 绑定/Guard/Ticket/实例/锁与 Probe 旧 denial/连接生命周期保留；
+  item 33 未执行。Probe executor/Gate/counters/echo 的原生依赖及其他 Control/engine/wire
+  仍未收口，不能把此次原生提取当作整个 Probe 或 Agent 已合规。
+- Probe executor/Gate/counter 已复用 L1 调度/熵/泛型拨号端口和 L2 原生 provider；
+  旧构造及 Runner 覆盖范围不变，显式效果入口不建立新 Gate/共享预算或重放重置。
+  item 34 未执行；net/address/wire/value/native default/echo 依赖仍须继续收口。
+- 通知端点/outbox 原 SQL 已移入只消费下层契约的新 L2 store，L3 parser 通过分开的
+  同步 provider 由现有 root 装配，旧零参/公开方法及 count/get 覆盖点保留；item 35
+  未执行。通知值/native/vault/sender、其他存储逆向依赖和全仓分类仍待继续。
+- Probe history/plan 两组 SQL 已拆到只消费下层契约的新 store，原同步 parser/immutable
+  和实际过期/失败分类规则由 L3 提供，旧零参/静态恢复/get/lock/put 入口保留；item 36
+  未执行。Probe 原生值/wire、其余观测 SQL 和全仓分类仍待继续，未扩功能或启用 echo。
+- 观察元数据/审计读取已拆原始端口、L2 SQL 与 L3 原投影/词表，保留原校验时点、
+  零参/head/count/静态恢复入口；item 37 未执行。诊断/站内告警 SQL 与原生值仍待继续。
+- 诊断/站点告警 SQL 已拆为下层读取/参数化存储与事实端口，L3 保留旧类型断言和
+  错误码 Set 映射，原完整业务校验仍在应用入口；旧零参方法和 policyCount 覆盖点
+  保留，server 显式装配同一 stationStore。item 38 未执行；其他应用/原生值/遥测
+  存储、HTTP、Agent 和全仓分类仍未完成，不能据此打开并行门禁。
+- 四族遥测 raw store/两个 mapping 已改用下层参数化记录/端口，原类/SQL/方法体保留；
+  聚合 SQL 通过 L3 原 parser/fold/限额同步绑定，旧零参入口与原始点/聚合同事务保留。
+  item 39 未执行，遥测应用/值/native/其他 owner 与全仓分类仍未完成。
+- 观察服务原生值/证书/地址/staged echo 解码已拆到 L2，L3 保留原 scoped trust 与
+  声明规则；UUID/digest/字节/时钟经公共 L2，L1 纯请求封装经原 digest 绑定。旧 helper/
+  共享函数/构造入口保留，HTTP 移除该私有值导入；item 40 未执行，其他混合依赖仍待继续。
+- 可选观测应用已复用 L2 UUID/digest/JSON/base64/UTC/ISO/单调时钟/bytes 与必要 wire
+  codec，保留原 constructor/default clock、cursor/framing、事务/replay/rollback、
+  sender key 清零、Probe/Runtime authority 和功能开关；item 41 未执行。
+- 观测值 helper 已继续收口：通知 URL 单份 L2 parser，Probe plan/run 与 telemetry
+  rollup 使用 L2 time/JSON/bytes/base64/clone/echo-frame，L3 规则与算术不变；item 42
+  未执行，剩余 HTTP/Agent/全仓分类仍未完成。
+- HTTP app 已改用 L2 JSON/UUID/body/observability wire codec，通用分页移入 L1，旧
+  consolePage 兼容；routes/auth/body/errors/filters 保留，item 43 未执行。
+- Probe observation service resolver 已改用 L2 context parser/digest，保留原 metadata
+  authorization、clock/refusal 与 no-network 语义；item 44 未执行，Probe native/private
+  wire 仍待继续。
+- Probe machine claim/negotiation/instance/delivery/result/types/services 已改用 L2 parser/
+  JSON/time/digest，保留 permit owner、freshness、session、commit-before-ack 和 disabled
+  execution；item 45 未执行。
+- 唯一 Probe permit owner 已改用 L2 parser/result/proof/time/fingerprint，保留预算、锁、
+  issue/consume/check/revoke/replay/history 与 authority；item 46 未执行。
+- permit state validator 已改用 L2 context/ISO/digest，保留字段 union、binding、TLS/echo
+  window 与纯拒绝规则；item 47 未执行。
+- 仍须收口其他 owner 内部持久化和跨模块具体类耦合、Agent 安全/平台混合实现、
+  部分业务/HTTP 公共契约及全仓分类/边界约束。边界 JSON 是声明，旧检查器尚未适配。
+- 类型/契约/行为/样例与最终源码 Actions 均留集中验证；本轮不运行检查/测试/
+  构建/生成器，不开发测试或 CI 工具，不提交/推送。源码接线不打开并行开发门禁。
+
+### 最新优先级：先完成 Core 与兼容接入框架收口
+
+用户于 2026-10-18 再次明确：先完成 Core 内核及兼容层，功能扩展后置。
+本节优先于下方继续 D1/D2/D3 或四主线功能的旧排期。
+
+- 最小 Core v1 的既定领域实现范围已齐备，[公共表面](../spec/core-v1-surface.md)
+  按源码范围冻结为后续开发基线；Runtime、驱动、Probe、指标及业务工作流仍在外层。
+  源码冻结不表示当前版本通过验收或正式发布。
+- [分类接入框架 v1](../architecture/framework-integration-v1.md) /
+  [ADR-0047](../decisions/0047-classified-integration-framework-v1.md) 本轮源码范围已收口：
+  管理详情查询应用服务、HTTP 窄服务与具名装配、契约分入口、Control 原生分类 adapter、
+  Agent 独立宿主契约及后台任务/请求排空均已接线，尚未验证。
+- 后续同类功能按接入步骤增加 owner/adapter 和显式装配，复用唯一 Runtime/Journal。
+  新协议、执行语义、持久 reader 或恢复变化仍需单独演进，不承诺所有功能成本极低。
+  框架对应类型/行为/权限/事务/原生生命周期/关闭与兼容验收统一留在源码冻结后的
+  集中验证阶段，不以旧版本 Actions 或接线存在代替通过证据。
+- 保留全部已有扩展源码；当前 TCP/UDP nonce echo 为未完整接通的开发中切片，
+  不记作完成，也不继续扩大扩展功能。后续扩展须在基础框架收口后再排期。
+- 继续遵守仅必要源码阅读/编辑、不逐批运行测试或静态检查、不擅自提交/推送的
+  当前约定；基础框架冻结与对应验证证据分开记录，未执行的验收仍明确待办。
+
+最新 D1 源码增量（2026-10-18）：[受控 Direct 入口 TLS](../spec/direct-ingress-tls-probes-v1.md)
+与 [ADR-0045](../decisions/0045-direct-ingress-tls-probes.md) 已接原 Probe owner/Gate/
+有限计划及 registry 当前信任端口，均未验证。真实 TLS 记录从当前原 listener 经
+既有 TCP Forward 到精确受控 target，不直接拨服务兜底，不借业务 Relay key；原两秒/
+256预算/watch/资格时间不延长。旧类型对象/hash保持，v3三类明确服务selection/proof，
+registry availability仅配置、不是活性。此前首片“没有issuer/client”的排期现已推进，
+下一步不重做本机connect或另一套计划；仍需独立邻接/外部观测与受控nonce echo、
+健康来源/实例/新鲜度聚合，之后才讨论满足前置验收的C3端口，不能跳过门禁。
+先继续约定开发、源码冻结后集中验收；本轮不运行检查/测试/脚本/fixtures/网络/build/
+CI/Git，不把 source wiring 记作集中验收或生产证据。
+
+D1 后续首片（2026-10-18，本地实现、未验证）：
+[Observation service 声明](../spec/observation-services-v1.md) /
+[ADR-0044](../decisions/0044-observation-service-authority.md) 已补 manager-only 有界
+endpoint/public TLS 叶 pin/不可变配置/metadata CAS、归档/恢复隔离、独立 Console，
+并新增有限独立 TLS-only operator responder 与未 build/release 的部署源码。
+这不是测量：无新 issuer/Agent TLS client/echo，GET/命令不联网，measurementAvailable
+false，证书声明不是 ownership/健康。历史修订不得作当前授权；未来执行 owner/watch
+须锁定当前 exact head/config/digest、权限/Node Grant/策略/时间窗，归档/恢复当前并不
+停止独立 responder。接下来仍须明确选择观测点与真实测量/撤权端口，不跳入健康/C3，
+也不重复实现原 ProbeRun/有限计划。无检查/测试/脚本/fixtures/CI/网络/build/Git。
+
+D1 最新增量（2026-10-18）：[typed Direct 入口 TCP](../spec/direct-ingress-probes-v1.md)
+与 [ADR-0043](../decisions/0043-typed-direct-ingress-probes.md) 已本地编写、未验证。
+它只连接同 Agent 当前 Direct 实际数字监听端点，受原 Resource/实例/Node listener
+和目标 CIDR 共同约束；不当作外部可达、应用健康、TLS/echo 或全路径。probeVersion2
+qualification 绑定原 Gate 代次并统一 poll 两类，旧 wire 保持原 egress，原两秒/预算/
+watch/报告和有限计划事务不变。Schema0034 类型化持久来源；v1 Probe 计数/遥测/聚合
+仍 egress-only，新入口不混入。新 Control/Agent ingress 开关默认关闭、须原执行/注册/
+严格 clock；恢复资格隔离而不重建或续跑。无检查/测试/脚本/fixtures/CI/网络/Git。
+接下来仍需按独立观测点契约完成其他 D1 类型及健康聚合，不重建已落历史/有限计划，
+也不提前 C3 自动切换；最终源码冻结后的集中验收、物理/生产门槛仍未通过。
+
+按用户最新要求，改为**先集中开发，后集中测试和修复**。本节优先于下方历史
+切片中“逐批运行静态检查”“随开发持续执行 CI”等旧节奏描述：
+
+- 开发阶段不运行测试，不触发、追跑或重跑验收 Actions，不逐项追修测试失败。
+  不再将逐批语法、类型、契约或边界检查作为推进前置；仅做必要代码阅读和差异核对。
+- 优先完成既定功能链路；新增回归用例、验收夹具与 CI 接线扩展统一记录为待办，
+  后期与已知失败、超时及兼容性缺口一起补齐，不让测试工具开发占据当前功能切片。
+- 保留已有测试、契约、安全不变量及发布门禁，不通过删断言、放宽校验或跳过门禁
+  获得“通过”。开发完成只记“已实现、未验证”，取消或未执行的任务不算成功。
+- 源码冻结后进入集中测试与修复阶段，再运行最终 SHA 的完整 Actions 矩阵；
+  修复后按最终 SHA 重新取证，不拼接旧版本成功。物理主机缺失的门槛仍保留未通过。
+- 当前开发变更默认留在本地，不因逐批推送自动触发测试或 Dev 发布；后续需要同步
+  时先明确工作流触发范围，不擅自关闭仓库工作流或绕过正式发布门禁。
+
+最新源码已推送至 `8f35889e13b09a19d215dc10bc6855a3ca98b366`，尚未取得完整验收通过。
+本次已对其主 CI `39047429043` 与关联 Dev 发布 `39047429209` 提交取消请求；
+停止继续追踪本轮结果。历史运行和修复记录保留，不再作为当前开发的阻塞队列。
+按用户随后确认的 [隧道与转发管理框架](../architecture/project-framework-and-boundaries.md)，
+先收口现有能力的隧道业务入口，再继续既定 D2 基础指标与有界历史及其余产品/运维功能。
+
+首批实现（2026-10-18，未验证）：按
+[ADR-0026](../decisions/0026-logical-tunnel-management.md) 新增 `NativeTunnels` 业务组合，
+通过原模板与绑定 owner 提供 `/tunnels` 列表/详情/发布/归档/引用影响和 Forward
+`tunnel-preview`/`tunnel-binding`。原 ID、修订、配额、幂等摘要与持久回执共用，
+不另开事务或执行台账。Console 将 Relay 入口收口为隧道管理，增加只读有序拓扑、
+锁定配置摘要和“载入精确修订”动作；未知绑定命令阻止替换目标。
+这是逻辑配置复用，不是独立 Tunnel 实体、常驻连接池或物理共享；Core、Agent、
+机器协议、数据库和 Journal 未改。当前仅本地源码开发与必要差异阅读，未运行测试
+或静态检查，未扩展测试/CI 工具，未提交或推送；别名等价性与浏览器场景留到冻结后。
+
+D2 首批实现（2026-10-18，未验证）：按
+[ADR-0027](../decisions/0027-independent-node-telemetry.md) 接入默认关闭的独立 Node
+进程遥测。Agent 十秒采样、独立 mTLS 传输、两秒超时且不排队重试；Control 以
+独立小 SQL 池保存 epoch/sequence 去重检查点和原始历史，不修改 ADP Report 或 Runtime
+台账。迁移 0020 同步新 Control 兼容 Profile、目录评估与恢复历史隔离。
+查询采用最近 24 小时/每次最多 512 点，持久硬上限每 Node 8640 点，过期物理清理
+每批最多 256 行并可能滞后；Console 增加只读进程指标对话框，明确来源、时区、
+缺测/重置/缺口和历史会话，不推导健康。Compose 两角色开关已接线、默认均关闭。
+当前仍仅本地开发，未运行测试/静态检查/浏览器/数据库/Compose 或 CI，也未增加
+测试工具、提交或推送。**D2 未完成**：下一步继续入口 TCP/UDP payload/连接累计
+计数与实例 epoch/尾部覆盖，随后主机基础资源、分钟/小时聚合和容量预算；不以本批
+节点存量之和代替规则流量或结算，不将源码存在作为验收通过。
+
+D2-B1 本地生产端（2026-10-18，已实现、未验证）：
+[原生 payload 累计计数](../spec/native-payload-counters-v1.md) 接入 Direct/Relay 入口，
+提供独立实例 epoch、完整绑定身份、Close 后冻结及有界内存尾部；diagnostics
+显式启用时每十秒写受保护本地 `forward-counters.json`，最多 256 项轮转覆盖，
+终态最多 128 项/十分钟，重启丢失。没有远程 payload Schema、导出、接收 API、
+MySQL 历史或 Console 消费，也不改封闭的 process telemetry-v1。下一步仍须完成
+独立版本化 Forward payload 远程接收、服务端映射/授权/去重、有界历史与 Console，
+然后继续主机基础资源、Probe 累计、聚合和容量。没有测试/静态检查/CI 或测试
+工具扩展，未提交/推送；D2 和全项目目标继续保持未完成。
+
+D2-B2 远程入口计数（2026-10-18，本地实现已接线、未验证）：
+[ADR-0028](../decisions/0028-independent-forward-telemetry.md) 与
+[Forward 遥测契约](../spec/forward-telemetry-v1.md) 承接此前 B1 的远程缺口，新增独立
+上报、Runtime 已发布/退役身份映射、有界 0021 原始点和单实例历史/Console，默认关闭。
+32 点/64 KiB 批次、十秒循环、两秒独立传输、共享两连接遥测池与 1.5 秒数据库期限；
+没有队列、重试或最终尾部送达承诺。每 Node 4096 点含恢复历史，24 小时逻辑 TTL，
+容量淘汰可能提前；24 MiB 仅逻辑 JSON，不含数据库物理开销。读取最多 512 点，
+缺口/重置/终态/截断明确，latest 不等于整规则总量，不用于健康或结算。
+没有测试、静态检查、生成器、浏览器/Compose、CI、提交或推送；新增源码和接线不是验收。
+后续继续主机资源、Probe 累计、分钟/小时聚合与容量，再按最终 SHA 集中测试修复，
+不回到逐批测试循环；**D2 和全项目目标继续开放**。
+
+D2-C Agent 可见 Host 遥测（2026-10-18，本地实现、未验证）：
+[Host 契约](../spec/host-telemetry-v1.md) 与 [ADR-0029](../decisions/0029-independent-host-telemetry.md)
+增加独立 Linux OS/根文件系统/网络命名空间来源、缺失/unsupported 和 CPU tick 连续性，
+不推 cgroup/物理主机额度或网卡速率。十秒采样、500 毫秒 OS 预算、单采样 worker、
+两秒独立传输、8 KiB/4 KiB sample/ACK；默认关闭，三个遥测族共享原两连接观察池。
+0022 head/raw、恢复隔离和部署开关已接线，8640 点含恢复数据、24 小时逻辑 TTL、
+67.5 MiB 仅逻辑 JSON，容量可提前淘汰；30 秒三族顺序清理各最多 256 点，读最多 512。
+本批不测试/检查/运行生成器或 CI，未提交/推送。下一步继续 Probe 有效尝试/成功累计、
+聚合和物理容量；最终源码集中验收与发布门禁保持开放，不据本批关闭 D2。
+
+D2-D Probe 累计（2026-10-18，本地实现、未验证）：
+[独立累计契约](../spec/probe-telemetry-v1.md) 和 [ADR-0030](../decisions/0030-independent-probe-telemetry.md)
+接入真实 dial 的尝试/有效成功失败/unknown/inFlight，不从 consumed permit 或结果行推分母。
+完整历史 Snapshot/绑定来源映射和 optional current instance 注解不授予执行权限，不改原 Probe
+claim/result 安全事实。0023 独立读模型/恢复/部署接线，32 点/两 Snapshot/64 KiB批，
+共享两连接、四族顺序清理；4096点含恢复、逻辑TTL24小时/24MiB JSON，query最多512。
+Close 不是立即终态：最多8个纯数值退休源各256绑定/600秒，等待已登记调用退出后冻结，
+不等待指标关闭、不保留Gate/Runner/授权对象，总扫描2432点，输出32点/两Snapshot。
+默认关闭、10秒/2秒无重试队列或最终尾部保证。没有检查/测试/生成器/新fixture/CI，
+未提交/推送。后续继续聚合/物理容量与其他功能，全部冻结后集中测试修复，D2仍开放。
+
+D2-E 分钟/小时聚合与容量策略（2026-10-18，本地实现、未验证）：
+[契约](../spec/telemetry-rollups-v1.md) 和 [ADR-0031](../decisions/0031-bounded-telemetry-rollups.md)
+将新接收点以exact-series同原事务折叠到7天分钟/30天小时桶，cursor独立于raw，不异步追扫已淘汰点。
+默认Control-only开关关闭，无Agent协议或执行权威改变；跨桶有效区间全归结束receipt桶，不插值或伪p95。
+0024 Scope/Node-family行数+8192body配额、可见自身淘汰/Scope拒收、cursor过期、恢复sticky历史，
+UTC对齐半开窗/512点/keyset分页和逻辑容量报告已本地接线。逻辑上限非物理磁盘测量，raw无新增Scope硬上限。
+未测试/检查/生成器/新fixtures/浏览器/Compose/CI或提交推送；下一批继续 C2 组/备用路径与
+D3 诊断/基础告警等未交付功能，不因本批转入逐项测试。代表性容量/争用/故障恢复、
+最终 SHA 验收与发布证据留到全部约定功能源码冻结后的集中阶段，不以此关闭 D2。
+
+C2-A 出口候选组与固定优先级备用路径（2026-10-18，本地实现、未验证）：
+[组契约](../spec/path-groups-v1.md) 与 [ADR-0032](../decisions/0032-bounded-path-groups.md)
+将一至八条完整的精确模板引用保存为有序不可变修订，限制每 Scope 64 组、每组 64
+修订，归档项仍计配额；相同入口/业务协议，出口候选组另要求不同终端 Node。
+组发布不自动修改已有规则，也不自动选择首个或健康候选；观察表达为完整分支 OR、
+每分支必经节点 AND，当前健康保持 unknown，不从指标或 Operation 成功推导健康。
+单规则预览/显式候选应用接入原 ForwardCommands，同一事务完成原路径绑定、
+组来源历史、CAS、幂等回执、资源与 Operation；展开不变仅更新来源，不虚增执行。
+普通拓扑编辑脱离当前组，历史保留；明确应用普通路径也脱离组，即使展开配置相同。
+0025 元数据/来源、升级兼容和恢复保留语义已接线，Console 提供元数据与单规则入口。
+本批没有测试、静态检查、生成器、夹具或 CI 扩展，未提交/推送。入口组多 Forward
+部署、持久跨规则 saga 的逐项结果/取消/条件补偿和其界面仍待后续功能切片；已有浏览器
+内存队列不冒充持久 saga。**C2 及整个功能目标仍未完成**，C3 自动切换前置验收仍未满足。
+后续先完成上述 C2 缺口，再继续 D3 诊断/告警及其余产品/运维功能；全部源码冻结后
+集中补齐测试、边界接线、真实数据库/浏览器、容量/恢复与最终 SHA/发布证据。
+
+C2-B 持久多规则组发布（2026-10-18，本地实现、未验证）：
+[持久发布契约](../spec/path-publications-v1.md) 与
+[ADR-0033](../decisions/0033-durable-path-publications.md) 为一个精确组候选保存最多十条
+Forward 的不可变源状态、路径/组来源序号及目标展开；预览摘要确认后只创建计划，
+不立即修改 Forward。每次明确确认只推进一项，原 Forward supplied-Tx 接受、Runtime
+Operation、逐项接受/拒绝、审计和外层幂等回执同事务，不再有提交后补记批次的窗口。
+每项 apply/compensate 各至多一次；预期域拒绝先回滚保存点内全部原命令修改，再保存
+脱敏拒绝决定；数据库、完整性、恢复和提交未知不冒充普通失败。Scope 最多 64 批次，
+终态与恢复批次仍计入，不删除历史重置额度。取消与推进串行，只停止剩余未接受项，
+不撤销原 Operation。补偿复核完整接受后的 revision/spec/路径及组序号和空指针，
+重新验证旧路径授权并恢复完整源意图/新来源；实际回切是新原生接受，元数据撤回不虚增执行。
+0026 三表、兼容 Profile、恢复禁续执行、手动 Console 查询/逐项推进/条件补偿已接线。
+原浏览器内存队列保持原样，没有后台 Worker、自动续跑、选路或跨规则原子保证。
+没有测试、静态检查、生成器、新夹具、CI、提交或推送。并发/保存点/响应丢失/撤权/
+恢复/历史配额和 Console 兼容统一留到功能冻结后集中验收。
+下一片继续入口组多 Forward 的原 owner 创建与精确路径来源原子接受，再推进 D3；
+**C2/全项目仍未完成，C3 前置验收与物理/发布门禁仍未通过**。
+
+C2-C 第一片：入口定义与独立创建（2026-10-18，本地实现、未验证）：
+[入口组契约](../spec/ingress-groups-v1.md) /
+[ADR-0034](../decisions/0034-bounded-ingress-groups.md) 新增独立的入口定义，不把原出口候选
+的 OR 语义改成多入口展开。每组至多八条完整锁版模板、不同入口 Node、相同业务协议；
+Scope 最多 64 组（含归档）、每组 64 修订。发布/归档只改元数据，不改变已部署规则。
+操作者逐成员填写明确监听地址/端口及共享目标和启用意图，不生成成员与目标的笛卡尔积。
+服务器预览、摘要确认后只保存持久创建计划；每次手动创建一个成员，原 owner 才分配
+Forward ID，并在同事务完成原创建资源/Operation、精确 PathBinding、批次来源与回执。
+每个入口是独立 Forward/Operation，无端口或物理连接共享；不是 VIP、DNS 切流或入口 HA。
+原键不确定重放、取消未来创建及条件删除补偿延续持久协调边界；后者必须精确匹配原
+接受后的 revision/spec/来源序号，只请求原删除 Operation，不证明资源或连接已清理。
+最多 64 创建批次/Scope、每批八项/每项创建及删除补偿各一次，终态/恢复历史不清零额度。
+入口来源是不可变创建计划/成员/原接受回执的历史归因，没有新的“当前入口组绑定”指针。
+0027 六表、Control-only Profile、原恢复隔离与手动 Console 已接线，Agent/Core/Journal 不变。
+本片没有测试、静态检查、生成器、新夹具、CI、提交或推送；行为仍须冻结后集中验证。
+**仍待开发：已有入口部署到新组修订的成员差异/影响预览和显式 add/update/remove 迁移**；
+不能用再次创建相同成员或旧创建回执冒充当前组成员状态。先完成此缺口，再继续 D3。
+C2/D2/项目目标、C3 前置验收和物理/发布门禁继续开放。
+
+C2-C 第二片：已有入口修订迁移（2026-10-18，本地实现、未验证）：
+[显式迁移契约](../spec/ingress-migrations-v1.md) /
+[ADR-0035](../decisions/0035-explicit-ingress-migrations.md) 将上述已有部署缺口接入源码。
+输入为同一入口定义的两个精确修订、最多八个明确历史来源和最多八个总操作；服务器
+读取创建或前次迁移的直接接受/恢复回执，另向原 Forward owner 锁定并比对当前完整
+revision/spec/nullable 路径与组来源序号，不将旧回执冒充当前成员或允许静默 rebase。
+预览保存源/目标定义、完整成员并集差异、所选来源基线与显式 add/update/remove；
+差异最多十六行不等于可以自动生成十六个操作。确认后仅建持久计划，不修改规则。
+每次手动一步仍通过原 owner：add 新建独立规则；update 只换精确 path/Profile，保留
+监听/目标/启用/协议/入口；remove 请求原删除。节点或业务意图替换须明确 remove+add，
+两条独立 Operation，顺序可能带来重叠或中断，端口重用仍等原 Runtime 安全清理。
+已接受 add 可条件删除，已接受 update 可在完整接受态匹配且旧路径重新授权后恢复；
+**remove 不可补偿**，不复活旧 ID、墓碑或 Snapshot。取消只停止未来动作。
+每 Scope 64 个迁移批次（终态/恢复仍计入）、八个来源/八个操作/最多十六次决定；
+来源只解析直接回执、不递归历史。0028 三表、原键/保存点/逐项原子接受、恢复隔离和
+手动 Console 已接线，没有 current ingress pointer、Worker 或跨规则原子切换。
+普通人工改动后的来源显式 rebase 尚不提供：精确基线不匹配即拒绝，不强行纳入迁移。
+该有界工作流不声称发现全部现存组成员或使全部入口已收敛，更不提供 VIP/DNS/全局 HA。
+没有测试、静态检查、生成器、新夹具、CI、提交或推送；集中验证与物理/发布门禁仍开放。
+接下来推进 D3 诊断/告警与其他产品/运维功能；C3 必须继续等待 C1/C2/Probe 历史验收，
+不能因上述源码存在而启动自动故障转移或宣布 C2/D2/项目完成。
+
+D3-A 第一片：被动 Forward 诊断与脱敏支持包（2026-10-18，本地实现、未验证）：
+[诊断契约](../spec/forward-diagnostics-v1.md) /
+[ADR-0036](../decisions/0036-passive-forward-diagnostics.md) 从原 owner 表投影七层链路、
+最多八条 Operation、八个路径节点、十六项当前发布资源/预留、各三十二项退役/租约和
+八项短时 Probe 回执。精确原身份、代次、Fence、phase、报告来源与当前节点的匹配，
+与真实网络/目标健康分开；缺测/历史/截断和读取期间变化不伪造健康或已清理。
+GET、Bearer 短事务和 Scope 投影复用独立 observation pool，不回退 Runtime 池；
+没有 Probe 签发、网络拨号、数据库写入、通知或恢复动作。闭合白名单支持 JSON 同次
+生成、别名化且移除网络地址、原 ID、摘要/配置/策略/凭据；不是备份或完整事件审计。
+Console 有独立只读面板、手动刷新/取消和确认后的支持包展示；不混用可回滚的部署面板。
+保持 Schema0028、原升级/恢复和唯一执行权威。本片未运行测试/静态检查，未扩展夹具/
+CI、提交或推送。下一步继续只读审计查询、站内事件及独立有界受控 webhook；D3 和
+整个目标仍未完成，功能源码冻结后的集中验收及物理/发布门禁保持未通过。
+
+D3-A 第二片：管理审计查询（2026-10-18，本地实现、未验证）：
+[只读审计契约](../spec/audit-events-v1.md) /
+[ADR-0037](../decisions/0037-bounded-audit-query.md) 以 manager-only 同事务授权组合十五类
+原 owner 来源。固定 UTC 半开窗口最多三十一天，精确交集在每来源 limit 前应用，
+最多五十项/keyset 页；游标绑定窗口/Scope/筛选/页长，不等于授权或完整一致快照。
+Node 历史关联来自本源不可变修订，批次事件不伪造逐规则关联，恢复操作者不可推断，
+Operation 最新可变状态不冒充迁移日志。没有 raw details/config/凭据、全局恢复归属、
+审计重写、导出或执行命令。独立 Console 手动读取/翻页，清除旧页和认证隔离；复用
+有界 observation pool，不回退 Runtime。无测试、静态检查、新夹具/CI、提交或推送。
+下一片推进站内事件与独立受控通知；D3/项目和集中验收、SQL 容量/物理/发布证据仍开放。
+
+D3-B 第一片：站内事件与固定告警政策（2026-10-18，本地实现、未验证）：
+[站内告警契约](../spec/station-alerts-v1.md) /
+[ADR-0038](../decisions/0038-bounded-station-alerts.md) 新增单个明确目标的部署失败、报告
+失鲜与凭据临期三规则，manager 原幂等/CAS 发布及有期限静默，viewer 读取持久事件。
+独立默认关闭 observer 每次仅评价一个政策，当前管理权限、条件去重/严格恢复、事件
+和下次时间同事务；不读取即不评价，GET 不生成事件。坏政策条件延期/全局退避不进入
+Runtime 正确性链。静默保留条件和事件，ack 不恢复；未知、缺测、换实例不伪造健康。
+六十四政策/一千零二十四事件/二百五十六管理审计的 Scope 上限、淘汰计数、Schema0029、
+Control-only Profile、恢复挂起和独立 Console 已接线。恢复显式重新发布推进配置修订，
+不自动恢复观察或重放事件。本片未测试、未静态检查、未扩展夹具/CI、提交或推送。
+下一片继续独立受控 webhook/outbox、限速/重试和凭据/SSRF 保护；D3/全项目尚未完成。
+
+D3-B2 第一片：受保护通知端点与发送边界（2026-10-18，本地实现、未验证）：
+[端点契约](../spec/notification-endpoints-v1.md) /
+[ADR-0039](../decisions/0039-protected-notification-endpoints.md) 新增独立 manager-only
+元数据/原键/CAS/有界管理审计，显式 PUT 轮换完整目的 URL 与签名密钥，停用不依赖
+vault 可读性。GET 与 Console 不回显秘密或发请求；写入未知只保留模块内原请求同键重放。
+Linux vault 使用独立预置密钥、AEAD 身份绑定、单 writer、严格文件/目录权限和有界 orphan
+保存/清理，不更改原 Authority/Journal/high-water。Schema0030/Control-only Profile 和
+原恢复挂起接线；SQL 仅保存不透明引用及非秘密配置，文件密钥不随 SQL 备份导出。
+SSRF 防护的固定公网 HTTPS adapter 已编写但尚未被服务调用，没有外发/测试 API 或
+发送定时器；`deliveryAvailable:false` 不得解释为排队或可靠投递已实现。独立通知队列、
+事件原子交接/溢出记账、当前身份/静默复核、速率/重试上限和死信仍在下一片。
+本片未测试、未静态检查，未扩展夹具/CI、提交或推送；所有功能验收和物理/发布门禁仍开放。
+
+D3-B2 第二片：有界 outbox 与独立投递循环（2026-10-18，本地实现、未验证）：
+[投递契约](../spec/notification-deliveries-v1.md) /
+[ADR-0040](../decisions/0040-bounded-notification-delivery.md) 已接新站内事件同事务 handoff，
+稳定投递 ID、固定脱敏摘要/修订快照和分别抑制/溢出/保留损失；不回扫或补发旧历史。
+默认关闭的独立 worker 在持久 claim/rate/fence 后才读凭据和联网，DNS 后再次复核当前
+政策/端点/凭据/管理权/静默/恢复身份。当前引用 pin 到真实网络 drain 后释放，不以
+超时结果释放仍活动依赖；迟到结果不能越过旧 fence。Scope 一千零二十四头/二百五十六
+尝试、两项活跃 claim、六次尝试/一小时寿命和三十秒至五分钟退避均为源码约束，
+不是容量证据。HTTP 接受不代表业务完成，无 exactly-once 或顺序保证，接收方必须去重。
+Schema0031/Control-only Profile、原恢复隔离、默认关闭 Compose、manager-only 历史
+GET 与只读 Console 已接线；恢复取消旧待发，保留终态/速率/损失且不自动补队列。
+七天终态保留为新入队时惰性清理，尝试可提前淘汰并显式计数，不能宣称完整投递历史。
+没有发送/测试/重驱写 API，配置可用不等于 worker 存活或健康。本片未运行测试、静态
+检查、脚本、网络功能请求、数据库/浏览器/CI，也未扩展夹具/工作流、提交或推送。
+下一步继续核对约定范围中剩余产品/运维入口；源码冻结后再集中补并发/权限/SSRF/TLS、
+崩溃/恢复、容量/保留/关闭及浏览器验收。D3/全项目未完成；C3 仍须 C1/C2/Probe 历史
+验收，不能把当前未验证源码当作自动切换的安全前置，物理/发布门禁仍未通过。
+
+D1 历史片：独立有界 ProbeRun（2026-10-18，本地实现、未验证）：
+[逐次历史契约](../spec/probe-runs-v1.md) /
+[ADR-0041](../decisions/0041-bounded-probe-run-history.md) 补现有 Direct TCP 单次 Probe 的
+独立持久历史：原许可 owner 的接受/消费/撤销/withdraw/结果同事务白名单捕获，既有
+两秒许可、预算/prune、机器协议和执行权不变，不补扫旧收据或在读取时生成工作。
+一千零二十四 Run/Scope、七天逻辑查询和惰性清理/最老任意状态淘汰均有损失计数，
+后续生命周期缺头只记 updatesWithoutHead，绝不重建许可/历史起点或退款。原结果及
+完整绑定只是历史来源，不追认当前拓扑/授权；未收到结果始终 unknown，不是失败率。
+Manager 列表/详情、固定 UTC 窗口/精确筛选/keyset、独立手动 Console 和 Schema0032/
+Control-only Profile/恢复 sticky 已接线。恢复保留状态/结果事实，首次只加标记和历史修订。
+读取不占原执行预算/Runtime 池，不签发、重试或撤销 Probe，不保存原 wire/地址/凭据。
+本片无测试、静态检查、脚本、夹具/CI 扩展、网络/数据库/浏览器、提交或推送，源码
+存在不代替原两秒报告预算/并发/删除/淘汰/权限/恢复/浏览器的集中证据。
+盘点同时确认：原 backup/restore/maintenance/resume/只读升级评估已有入口，不重建；
+D2 聚合/遥测、D3 诊断/审计/事件/投递、C1/C2 手工路径/组/迁移已有未验证源码，
+不能将历史早期“待开发”当作仍须从零实现。D1 其他 Probe 类型/计划和健康聚合仍是
+明确功能缺口；按单独契约分片，不把累计指标冒充逐次结果或把局部连接冒充完整路径。
+C3 仍待 C1/C2/Probe 历史验收及版本化 Runtime 接受端口，不提前自动改 Forward 意图；
+P6 新驱动/物理共享/其他通知渠道后置，最终源码冻结后再集中测试与修复。
+
+D1 有限持久计划（2026-10-18，本地实现、未验证）：
+[ProbePlan 契约](../spec/probe-plans-v1.md) /
+[ADR-0042](../decisions/0042-bounded-probe-plans.md) 补上上一片明确缺少的持久计划，
+不是扩充 Probe 协议或自动路由。不可变精确 Forward 修订/Direct TCP 配置和原始绑定，
+最多三十二计划/Scope、十六次决策/计划、一小时寿命；显式预览/创建不发行许可。
+手动 run/CAS 使用操作人当前 Node 权限且创建者仍有管理权；scheduled 明确委托原
+创建者，每次重新走其原授权/实例/绑定检查及两秒许可预算，期限只能缩短至计划末端。
+独立默认关闭 worker 一秒最多一候选，不补 tick；未知事务错误不冒充拒绝，conditional
+defer 不替代 decision。取消只停未来、恢复 sticky 挂起且无 resume/rearm，旧收据仅
+幂等重放。接受/拒绝耗决策槽，不从 completed 推执行/成功；原 Run 历史独立查询。
+Manager API/独立手动 Console、Schema0033/Control-only Profile 和升级/恢复/部署接线，
+有限终态保留及损失明确。无 Runtime 池回退、控制端网络、测试/静态检查/脚本/CI、
+夹具扩展、提交或推送；全部待集中验收。D1 其他观测点/协议与健康聚合仍须独立安全
+契约，不能因为有限调度有源码而关闭 C3 的接受/证据前置或自动启用切换。
+
+## 历史推进与证据记录
 
 最新推送状态（2026-10-17）：经明确授权，原十个本地提交已快进同步到远端
 `main`，源码为 `bd3e8f40c78a317a3557459884e01a0119edd6be`；无额外合并提交，
@@ -226,10 +1236,10 @@ Direct、双节点 Relay 和默认关闭的 3–8 节点多跳已经有实现。
 验收夹具/请求修复已提交为 `95315f8`；分角色预检为 `73b019d`，
 统一发布门禁为 `c9629e4`。这些后续变更等待完整新 SHA 的 Actions 结果。
 
-历史切片的通过记录不能自动覆盖本次源码。测试统一放在
-CI / GitHub Actions：新增回归用例随实现接入工作流，本地只运行语法、类型和
-文档等静态检查，不启动本地功能、MySQL、网络、容器或浏览器验收。
-最终冻结版本后仍需集中核对完整矩阵。暂无独立物理主机，对应验收保持待执行，
+历史切片的通过记录不能自动覆盖本次源码。按上方最新开发节奏，开发期间不运行
+测试，也不逐批扩展或追踪验收接线；测试统一留到源码冻结后的
+CI / GitHub Actions 集中执行和修复。本地不启动功能、MySQL、网络、容器或浏览器验收。
+最终冻结版本后集中核对完整矩阵。暂无独立物理主机，对应验收保持待执行，
 不重复索要主机，不以托管 CI 的同宿主机环境替代。
 
 ## 1. 当前基线与实际缺口
@@ -258,7 +1268,8 @@ CI / GitHub Actions：新增回归用例随实现接入工作流，本地只运�
 | E | P0 | 冻结源码后的集中验收与缺陷修复 | A–D 开发完成后启动；无物理主机时保留对应门槛未通过 |
 | F | P1 | RC 决策、供应链与正式发布 | E 的声明范围全部通过，三项既有 P0 和安全审阅完成后才推进 |
 
-关键路径为 0 → A/B → C/D → 源码冻结 → E → F；C 批中的 candidate
+原排期关键路径为 0 → A/B → C/D → 源码冻结 → E → F；当前按上方新节奏先推进
+可独立开发的 A/B/C/D 功能，将 0 中的测试追修并入冻结后的 E。C 批中的 candidate
 门禁修复是独立的早期 P0，在任何下一次内部 candidate 发布之前完成。
 交错推进表示可独立拆 PR，
 不要求多代理执行。每次修复都记录受影响范围，按新 SHA 重新取得相关证据，
@@ -283,7 +1294,8 @@ CI / GitHub Actions：新增回归用例随实现接入工作流，本地只运�
 | 8 | 冻结版本集中验收与发布决策 | 待前述交付完成 | 按 E/F 对最终 SHA 和镜像取证；物理主机不可用的项保持未通过，多跳继续默认关闭 |
 
 每项只以实际证据升级状态；工作量和时间估算在对应 PR 的范围审阅后给出。
-既有 CI 回归随开发提交持续执行，不等同于提前宣布最终冻结验收完成。
+开发期间不持续执行 CI 回归；既有测试和新增缺口留待冻结后的集中验收，
+不影响继续独立功能开发，也不提前宣布最终冻结验收完成。
 
 ## 3. A · 部署、升级与恢复保护
 

@@ -1,24 +1,28 @@
 package control
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
+	"github.com/tunex/vnext/agent/internal/nativeexecution"
+	"github.com/tunex/vnext/agent/internal/observationtrust"
 	"github.com/tunex/vnext/agent/internal/probe"
 	"github.com/tunex/vnext/agent/internal/probeclaim"
+	"github.com/tunex/vnext/agent/internal/probeecho"
 )
 
 // A verified consumption receipt is NOT a probe.Permit/Grant and cannot execute.
 // The execution adapter must independently recheck it through the monitor and one-use Gate.
 type probeClaimReceipt struct {
 	permitID                        string
+	measurement                     string
+	typed                           bool
+	services                        bool
+	echo                            bool
+	echoInput                       *probeecho.Execution
+	service                         *observationtrust.Context
+	instance                        execution
 	binding                         probe.Binding
 	until                           time.Time
 	timeout                         time.Duration
@@ -74,60 +78,42 @@ func (runner *Runner) claimProbe(ctx context.Context, permitID string, binding p
 	skew := time.Duration(runner.hello.Policy.MaxClockSkewSeconds) * time.Second
 	runner.mutex.Unlock()
 
-	started := time.Now()
-	work, cancel := context.WithTimeout(ctx, 2*time.Second)
+	started := runner.scheduler().Now()
+	work, cancel := runner.scheduler().WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	stop := context.AfterFunc(session.ctx, cancel)
+	stop := runner.scheduler().AfterFunc(session.ctx, cancel)
 	defer stop()
-	raw, err := json.Marshal(request)
+	raw, err := nativeexecution.EncodeProbeRequest(request)
 	if err != nil {
 		return nil, err
 	}
-	message, err := http.NewRequestWithContext(work, "POST", strings.TrimRight(runner.options.URL, "/")+"/agent/v3/probe/claim", bytes.NewReader(raw))
+	response, err := runner.auxiliary().ProbeClaim(work, runner.client, runner.options.URL, raw, session.epoch)
 	if err != nil {
-		return nil, err
-	}
-	if message.URL.Scheme != "https" || runner.client == nil {
-		return nil, probe.ErrDenied
-	}
-	message.Header.Set("Content-Type", "application/json")
-	message.Header.Set("X-TuneX-Session-Epoch", strconv.FormatUint(session.epoch, 10))
-	client := *runner.client
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return fmt.Errorf("Probe claim redirects are forbidden") }
-	response, err := client.Do(message)
-	if err != nil {
-		return nil, err
+		return nil, probeChannelError(err)
 	}
 	defer response.Body.Close()
-	raw, err = io.ReadAll(io.LimitReader(response.Body, 4097))
+	raw, oversized, err := nativeexecution.ReadProbeResponseBody(response.Body, 4096)
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) > 4096 {
+	if oversized {
 		return nil, probe.ErrInvalid
 	}
 	if response.StatusCode != http.StatusOK {
-		var problem struct {
-			Code string `json:"code"`
-		}
-		_ = json.Unmarshal(raw, &problem)
-		return nil, httpError{response.StatusCode, problem.Code}
+		return nil, httpError{response.StatusCode, nativeexecution.ProbeResponseErrorCode(raw)}
 	}
-	ack, err := probeclaim.ParseResponse(raw)
+	ack, err := nativeexecution.DecodeProbeClaimResponse(*request, raw)
 	if err != nil {
-		return nil, err
-	}
-	if err := probeclaim.CheckResponse(*request, *ack); err != nil {
 		return nil, err
 	}
 	if claimBinding(ack.Binding) != binding {
 		return nil, probe.ErrDenied
 	}
-	server, err := time.Parse(time.RFC3339Nano, ack.ServerTime)
+	server, err := nativeexecution.ParseProbeWireTime(ack.ServerTime)
 	if err != nil || session.guard.ValidateServerTime(server) != nil {
 		return nil, probe.ErrDenied
 	}
-	expires, err := time.Parse(time.RFC3339Nano, ack.ExpiresAt)
+	expires, err := nativeexecution.ParseProbeWireTime(ack.ExpiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -150,13 +136,13 @@ func (runner *Runner) claimProbe(ctx context.Context, permitID string, binding p
 		return nil, err
 	}
 	until = minProbeDeadline(until, minProbeDeadline(session.until, target.ExecutionUntil))
-	if !time.Now().Before(until) {
+	if !runner.scheduler().Now().Before(until) {
 		return nil, probe.ErrDenied
 	}
 	receipt := &probeClaimReceipt{permitID: permitID, binding: binding, until: until,
 		timeout: time.Duration(ack.TimeoutMs) * time.Millisecond, session: session,
 		issuedAt: ack.IssuedAt, expiresAt: ack.ExpiresAt, consumedAt: ack.ConsumedAt,
-		serverAt: server, requestedAt: started, receivedAt: time.Now()}
+		serverAt: server, requestedAt: started, receivedAt: runner.scheduler().Now()}
 	if session.receipts == nil {
 		session.receipts = make(map[string]*probeClaimReceipt)
 	}

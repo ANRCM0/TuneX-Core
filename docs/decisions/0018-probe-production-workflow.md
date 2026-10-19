@@ -1,5 +1,10 @@
 # ADR-0018: Default-off Probe management and serial Agent workflow
 
+Historical scope note: [ADR-0043](0043-typed-direct-ingress-probes.md) later adds
+an explicitly typed same-Agent Direct ingress point and unified v2 poll. This
+document's original v1 egress wire/authority remains unchanged; self-connect does
+not add external/full-path/application-health evidence.
+
 Date: 2026-10-17 (Asia/Shanghai).
 Status: accepted incremental direction, working-tree implementation;
 functional acceptance pending matching-SHA Actions.
@@ -19,6 +24,16 @@ The detailed [management contract](../spec/forward-probe-management-v1.md) defin
 the request/response and operator boundaries. Direct TCP/IP literals only;
 DNS, UDP, Relay, multihop probes, durable history, Console controls, telemetry,
 health aggregation and automatic switching remain separate work.
+
+Historical slice boundary: [ADR-0041](0041-bounded-probe-run-history.md) subsequently
+adds independent bounded Run history through same-owner transaction capture and
+manager reads. It does not change this short-lived permit authority or retroactively
+validate the original workflow; scheduling/new Probe types remain separate work.
+
+Later [ADR-0042](0042-bounded-probe-plans.md) adds finite immutable plans for THIS
+existing Direct TCP type, using original-owner per-decision issuance. That limited
+default-off schedule does not change this workflow's permit lifetime/authority or
+add other Probe types, current-health aggregation or automatic routing.
 
 ## Single authority and atomic management acceptance
 

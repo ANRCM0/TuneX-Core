@@ -11,6 +11,7 @@ import (
 
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/egress"
+	"github.com/tunex/vnext/agent/internal/payloadstats"
 )
 
 // MaxTCPConnections bounds live client streams, including streams still
@@ -43,6 +44,7 @@ type TCP struct {
 	timeout       time.Duration
 	done          sync.WaitGroup
 	closeOnce     sync.Once
+	payload       *payloadstats.Counters
 }
 
 func validateTCPAssignment(assignment contracts.Assignment) error {
@@ -57,7 +59,7 @@ func newTCP(slot *tcpListenerSlot, assignment contracts.Assignment, permits chan
 	config := assignment.Driver.Config
 	config.AllowedDestinationCidrs = append([]string(nil), config.AllowedDestinationCidrs...)
 	return &TCP{slot: slot, binding: assignment.Listener, config: config, ctx: ctx, cancel: cancel,
-		connections: make(map[net.Conn]net.Conn), permits: permits, timeout: timeout}
+		connections: make(map[net.Conn]net.Conn), permits: permits, timeout: timeout, payload: payloadstats.New()}
 }
 
 func Start(assignment contracts.Assignment, policy contracts.Policy) (*TCP, error) {
@@ -158,6 +160,7 @@ func (slot *tcpListenerSlot) accept() {
 		}
 		stream.mutex.Lock()
 		stream.connections[client] = nil
+		stream.payload.TCPAccept()
 		// Close holds slot.mutex before stopping ownership, so no Add can race
 		// with a Wait after the final admission of this execution instance.
 		stream.done.Add(1)
@@ -180,6 +183,7 @@ func (stream *TCP) copy(client net.Conn) {
 		<-stream.permits
 		delete(stream.connections, client)
 		stream.mutex.Unlock()
+		stream.payload.TCPClose()
 	}()
 	ctx, cancel := context.WithTimeout(stream.ctx, stream.timeout)
 	defer cancel()
@@ -208,9 +212,10 @@ func (stream *TCP) copy(client net.Conn) {
 	}
 	stream.connections[client] = target
 	stream.mutex.Unlock()
+	stream.payload.TCPConnect()
 	finished := make(chan struct{}, 1)
 	go func() {
-		_, err := io.Copy(authorizedWriter{target, &stream.authorization}, authorizedReader{client, &stream.authorization})
+		_, err := io.Copy(authorizedWriter{payloadWriter{target: target, counters: stream.payload}, &stream.authorization}, authorizedReader{client, &stream.authorization})
 		if tcp, ok := target.(*net.TCPConn); ok {
 			tcp.CloseWrite()
 		}
@@ -219,7 +224,7 @@ func (stream *TCP) copy(client net.Conn) {
 		}
 		finished <- struct{}{}
 	}()
-	_, err = io.Copy(authorizedWriter{client, &stream.authorization}, authorizedReader{target, &stream.authorization})
+	_, err = io.Copy(authorizedWriter{payloadWriter{target: client, counters: stream.payload, received: true}, &stream.authorization}, authorizedReader{target, &stream.authorization})
 	if tcp, ok := client.(*net.TCPConn); ok {
 		tcp.CloseWrite()
 	}

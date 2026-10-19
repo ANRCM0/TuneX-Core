@@ -1,19 +1,13 @@
 package control
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/tunex/vnext/agent/internal/authorization"
+	"github.com/tunex/vnext/agent/internal/nativeexecution"
 	"github.com/tunex/vnext/agent/internal/probe"
 	"github.com/tunex/vnext/agent/internal/probeinstance"
 )
@@ -30,6 +24,12 @@ type registeredProbe struct {
 	done              chan struct{}
 	claims            map[string]struct{}           // Runner mutex; never evict under the same instance identity.
 	receipts          map[string]*probeClaimReceipt // Runner mutex; accepted receipts and one-start monitoring tombstones.
+	typesPending      bool
+	types             *qualifiedProbeTypes
+	services          *qualifiedProbeServices
+	echo              *qualifiedProbeEcho
+	originalExpiresAt time.Time
+	originalServerAt  time.Time
 }
 
 // Caller holds runner.mutex. Gate closure never calls back into Runner.
@@ -38,48 +38,36 @@ func (runner *Runner) closeProbeLocked() *registeredProbe {
 	runner.probeRegistration = nil
 	if previous != nil {
 		previous.gate.Close()
+		runner.retainProbeCountersLocked(previous)
 		previous.cancel()
 	}
 	return previous
 }
 
 func (runner *Runner) probeInstanceExchange(ctx context.Context, request probeinstance.Request) (*probeinstance.Response, error) {
-	work, cancel := context.WithTimeout(ctx, 2*time.Second)
+	work, cancel := runner.scheduler().WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	raw, err := json.Marshal(request)
+	raw, err := nativeexecution.EncodeProbeRequest(request)
 	if err != nil {
 		return nil, err
 	}
-	message, err := http.NewRequestWithContext(work, "POST", strings.TrimRight(runner.options.URL, "/")+"/agent/v3/probe/instance", bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
-	}
-	message.Header.Set("Content-Type", "application/json")
-	message.Header.Set("X-TuneX-Session-Epoch", strconv.FormatUint(request.SessionEpoch, 10))
-	response, err := runner.client.Do(message)
+	response, err := runner.auxiliary().ProbeInstance(work, runner.client, runner.options.URL, raw, request.SessionEpoch)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
-	raw, err = io.ReadAll(io.LimitReader(response.Body, 4097))
+	raw, oversized, err := nativeexecution.ReadProbeResponseBody(response.Body, 4096)
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) > 4096 {
+	if oversized {
 		return nil, probe.ErrInvalid
 	}
 	if response.StatusCode != http.StatusOK {
-		var problem struct {
-			Code string `json:"code"`
-		}
-		_ = json.Unmarshal(raw, &problem)
-		return nil, httpError{response.StatusCode, problem.Code}
+		return nil, httpError{response.StatusCode, nativeexecution.ProbeResponseErrorCode(raw)}
 	}
-	ack, err := probeinstance.ParseResponse(raw)
+	ack, err := nativeexecution.DecodeProbeInstanceResponse(request, raw)
 	if err != nil {
-		return nil, err
-	}
-	if err := probeinstance.CheckResponse(request, *ack); err != nil {
 		return nil, err
 	}
 	if work.Err() != nil {
@@ -89,7 +77,7 @@ func (runner *Runner) probeInstanceExchange(ctx context.Context, request probein
 }
 
 func (runner *Runner) probeCurrentLocked(session *registeredProbe) bool {
-	return !runner.probeStopped && session.ctx.Err() == nil && time.Now().Before(session.until) &&
+	return !runner.probeStopped && session.ctx.Err() == nil && runner.scheduler().Now().Before(session.until) &&
 		runner.options.NodeID == session.node && runner.options.BootID == session.boot &&
 		runner.hello.SessionEpoch == session.epoch && runner.credentialFingerprint == session.fingerprint &&
 		runner.guard == session.guard && session.guard != nil && session.guard.Check() == nil
@@ -130,21 +118,21 @@ func (runner *Runner) registerProbe(ctx context.Context) (*registeredProbe, erro
 	if err != nil {
 		return nil, err
 	}
-	serverTime, err := time.Parse(time.RFC3339Nano, inspection.ServerTime)
+	serverTime, err := nativeexecution.ParseProbeWireTime(inspection.ServerTime)
 	if err != nil || guard.ValidateServerTime(serverTime) != nil {
 		return nil, probe.ErrDenied
 	}
 	request.Action, request.ExpectedGeneration = "register", inspection.Generation
-	started := time.Now()
+	started := runner.scheduler().Now()
 	ack, err := runner.probeInstanceExchange(ctx, *request)
 	if err != nil {
 		return nil, err
 	}
-	serverTime, err = time.Parse(time.RFC3339Nano, ack.ServerTime)
+	serverTime, err = nativeexecution.ParseProbeWireTime(ack.ServerTime)
 	if err != nil || guard.ValidateServerTime(serverTime) != nil {
 		return nil, probe.ErrDenied
 	}
-	expires, err := time.Parse(time.RFC3339Nano, *ack.ExpiresAt)
+	expires, err := nativeexecution.ParseProbeWireTime(*ack.ExpiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +143,8 @@ func (runner *Runner) registerProbe(ctx context.Context) (*registeredProbe, erro
 	}
 	work, cancel := context.WithCancel(ctx)
 	session := &registeredProbe{gate: negotiated.gate, node: node, boot: boot, epoch: epoch, generation: ack.Generation,
-		fingerprint: fingerprint, guard: guard, until: started.Add(remaining), ctx: work, cancel: cancel, done: make(chan struct{})}
+		fingerprint: fingerprint, guard: guard, until: started.Add(remaining), ctx: work, cancel: cancel, done: make(chan struct{}),
+		typesPending: runner.options.ProbeIngress, originalExpiresAt: expires, originalServerAt: serverTime}
 	runner.mutex.Lock()
 	if !runner.probeCurrentLocked(session) {
 		runner.mutex.Unlock()
@@ -165,6 +154,26 @@ func (runner *Runner) registerProbe(ctx context.Context) (*registeredProbe, erro
 	runner.probeRegistration = session
 	go runner.monitorProbe(session)
 	runner.mutex.Unlock()
+	if runner.options.ProbeIngress {
+		var err error
+		if runner.options.ProbeEcho {
+			err = runner.qualifyProbeEcho(ctx, session)
+		} else if runner.options.ProbeServices {
+			err = runner.qualifyProbeServices(ctx, session)
+		} else {
+			err = runner.qualifyProbeTypes(ctx, session)
+		}
+		if err != nil {
+			runner.mutex.Lock()
+			if runner.probeRegistration == session {
+				runner.closeProbeLocked()
+			}
+			runner.mutex.Unlock()
+			session.cancel()
+			<-session.done
+			return nil, err
+		}
+	}
 	accepted = true
 	return session, nil
 }
@@ -173,17 +182,17 @@ func (runner *Runner) monitorProbe(session *registeredProbe) {
 	defer close(session.done)
 	defer session.gate.Close()
 	defer session.cancel()
-	ticker := time.NewTicker(25 * time.Millisecond)
+	ticker := runner.scheduler().NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
-	deadline := time.NewTimer(time.Until(session.until))
+	deadline := runner.scheduler().NewTimer(runner.scheduler().Until(session.until))
 	defer deadline.Stop()
 	for {
 		select {
 		case <-session.ctx.Done():
 			return
-		case <-deadline.C:
+		case <-deadline.C():
 			return
-		case <-ticker.C:
+		case <-ticker.C():
 			runner.mutex.Lock()
 			current := runner.probeRegistration == session && runner.probeCurrentLocked(session)
 			runner.mutex.Unlock()
@@ -214,7 +223,7 @@ func (runner *Runner) revokeProbe(ctx context.Context) error {
 
 func (runner *Runner) maintainProbe(ctx context.Context) {
 	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		cleanup, cancel := runner.scheduler().WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = runner.revokeProbe(cleanup)
 	}()
@@ -223,17 +232,17 @@ func (runner *Runner) maintainProbe(ctx context.Context) {
 		session, err := runner.registerProbe(ctx)
 		wait := delay
 		if err == nil {
-			wait = max(time.Until(session.until)-2*time.Second, time.Second)
+			wait = max(runner.scheduler().Until(session.until)-2*time.Second, time.Second)
 			delay = 5 * time.Second
 		} else {
 			var problem httpError
 			if errors.As(err, &problem) && (problem.status == 401 || problem.status == 403 || problem.code == "SESSION_SUPERSEDED") {
 				return
 			}
-			fmt.Fprintln(os.Stderr, "Probe instance registration pending")
+			runner.localLog().Warn("Probe instance registration pending")
 			delay = min(delay*2, 30*time.Second)
 		}
-		timer := time.NewTimer(wait)
+		timer := runner.scheduler().NewTimer(wait)
 		var ended <-chan struct{}
 		if session != nil {
 			ended = session.done
@@ -242,7 +251,7 @@ func (runner *Runner) maintainProbe(ctx context.Context) {
 		case <-ctx.Done():
 			timer.Stop()
 			return
-		case <-timer.C:
+		case <-timer.C():
 		case <-ended:
 			timer.Stop()
 		}

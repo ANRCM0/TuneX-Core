@@ -5,7 +5,7 @@ import type { ConsoleFixture } from './probe-console.ts';
 /** Metadata follow-up within the existing real multi-hop browser session, not another execution path. */
 export async function verifyPathTemplateConsole(page: Page, context: BrowserContext, fixture: ConsoleFixture,
     nodes: string[], profileId: string) {
-    const base = '/api/v1/scopes/' + fixture.scope + '/', templateId = 'console-native-path', resource = 'path-templates/' + templateId;
+    const base = '/api/v1/scopes/' + fixture.scope + '/', templateId = 'console-native-path', resource = 'tunnels/' + templateId;
     const pathname = base + resource, headers = { authorization: 'Bearer ' + fixture.token };
     const attempts: { method: string; key: string | undefined; body: unknown }[] = [];
     let capturedReads = 0;

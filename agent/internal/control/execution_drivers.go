@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/tunex/vnext/agent/internal/adp3"
+	"github.com/tunex/vnext/agent/internal/executiondriver"
+	"github.com/tunex/vnext/agent/internal/nativeexecution"
 	"github.com/tunex/vnext/agent/internal/relay"
 )
 
@@ -18,18 +20,26 @@ type execution interface {
 
 type executionFeatures struct {
 	relay, multihop bool
+	probeIngress    bool
+	probeServices   bool
+	probeEcho       bool
 }
 
 type executionDescriptor struct {
 	id                              string
+	hostInterfaceVersion            uint64
 	schemaVersion                   uint64
 	roles, phases, protocols        []string
 	capabilities                    []string
+	platforms                       []string
+	probeCapabilities               []string
 	requiresRelay, requiresMultihop bool
 }
 
 func (descriptor executionDescriptor) enabled(features executionFeatures) bool {
-	return (!descriptor.requiresRelay || features.relay) && (!descriptor.requiresMultihop || features.multihop)
+	return executiondriver.EnabledOnCurrentPlatform(executiondriver.Descriptor{Platforms: descriptor.platforms,
+		RequiresRelay: descriptor.requiresRelay, RequiresMultihop: descriptor.requiresMultihop},
+		executiondriver.Features{Relay: features.relay, Multihop: features.multihop})
 }
 
 // Drivers receive execution inputs, not the Runner, journal, or authority issuer.
@@ -48,11 +58,19 @@ func (host executionHost) peerIdentity() (relay.Identity, time.Time, error) {
 }
 
 type executionDriver struct {
-	descriptor executionDescriptor
-	start      func(executionHost, adp3.Assignment, func() error) (execution, error)
-	replace    func(execution, adp3.Assignment, func() error) (execution, error)
-	phase      func(execution, string) error
-	classify   func(error) (string, bool)
+	descriptor      executionDescriptor
+	start           func(executionHost, adp3.Assignment, func() error) (execution, error)
+	replace         func(execution, adp3.Assignment, func() error) (execution, error)
+	phase           func(execution, string) error
+	classify        func(error) (string, bool)
+	probeIngress    func(execution) (executionProbeTarget, error)
+	probeUDPIngress func(execution) (executionProbeTarget, error)
+}
+
+type executionProbeTarget struct {
+	address string
+	port    uint64
+	check   func() error
 }
 
 func (driver executionDriver) replaceInstance(old running, next adp3.Assignment, check func() error) (execution, error) {
@@ -63,75 +81,69 @@ func (driver executionDriver) replaceInstance(old running, next adp3.Assignment,
 }
 
 type executionRegistry struct {
-	ordered []executionDriver
-	byID    map[string]executionDriver
+	ordered  []executionDriver
+	byID     map[string]executionDriver
+	contract *executiondriver.Registry
 }
 
 func newExecutionRegistry(drivers ...executionDriver) (*executionRegistry, error) {
 	registry := &executionRegistry{byID: make(map[string]executionDriver)}
+	shared := make([]executiondriver.Driver, 0, len(drivers))
 	for _, driver := range drivers {
 		descriptor := driver.descriptor
-		if descriptor.id == "" || descriptor.schemaVersion == 0 || driver.start == nil || driver.phase == nil || driver.classify == nil {
-			return nil, fmt.Errorf("INVALID_CONFIG: Incomplete execution driver")
+		declaration := publicExecutionDescriptor(descriptor)
+		if err := nativeexecution.ValidateLegacyDriverHeader(declaration, driver.start != nil, driver.phase != nil, driver.classify != nil); err != nil {
+			return nil, err
 		}
 		if _, exists := registry.byID[descriptor.id]; exists {
 			return nil, fmt.Errorf("INVALID_CONFIG: Duplicate execution driver %s", descriptor.id)
 		}
-		for _, values := range [][]string{descriptor.roles, descriptor.phases, descriptor.protocols, descriptor.capabilities} {
-			seen := make(map[string]bool)
-			if len(values) == 0 {
-				return nil, fmt.Errorf("INVALID_CONFIG: Empty execution driver declaration")
-			}
-			for _, value := range values {
-				if value == "" || seen[value] {
-					return nil, fmt.Errorf("INVALID_CONFIG: Invalid execution driver declaration")
-				}
-				seen[value] = true
-			}
-		}
-		if !slices.Contains(descriptor.capabilities, descriptor.id) || descriptor.requiresMultihop && !descriptor.requiresRelay {
-			return nil, fmt.Errorf("INVALID_CONFIG: Inconsistent execution driver requirements")
+		if err := nativeexecution.ValidateLegacyDriverDeclaration(declaration, driver.probeIngress != nil); err != nil {
+			return nil, err
 		}
 		descriptor.roles = slices.Clone(descriptor.roles)
 		descriptor.phases = slices.Clone(descriptor.phases)
 		descriptor.protocols = slices.Clone(descriptor.protocols)
 		descriptor.capabilities = slices.Clone(descriptor.capabilities)
+		descriptor.platforms = slices.Clone(descriptor.platforms)
+		descriptor.probeCapabilities = slices.Clone(descriptor.probeCapabilities)
 		driver.descriptor = descriptor
 		registry.byID[descriptor.id] = driver
 		registry.ordered = append(registry.ordered, driver)
+		shared = append(shared, publicExecutionDriver(driver))
 	}
+	contract, err := executiondriver.NewRegistry(shared...)
+	if err != nil {
+		return nil, err
+	}
+	registry.contract = contract
 	return registry, nil
 }
 
 // Selection supplements strict ADP parsing; it never accepts new wire shapes.
 func (registry *executionRegistry) resolve(assignment adp3.Assignment, features executionFeatures) (executionDriver, error) {
-	driver, exists := registry.byID[assignment.Driver.Id]
-	descriptor := driver.descriptor
-	if !exists || !descriptor.enabled(features) || assignment.Driver.SchemaVersion != descriptor.schemaVersion ||
-		!slices.Contains(descriptor.roles, assignment.Role) || !slices.Contains(descriptor.phases, assignment.Phase) ||
-		!slices.Contains(descriptor.protocols, assignment.Protocol) {
-		return executionDriver{}, fmt.Errorf("UNSUPPORTED_CAPABILITY: Execution driver, version, role, phase or protocol unavailable")
+	driver, err := registry.contract.Resolve(assignment, executiondriver.Features{Relay: features.relay, Multihop: features.multihop})
+	if err != nil {
+		return executionDriver{}, err
 	}
-	return driver, nil
+	return adaptExecutionDriver(driver), nil
 }
 
 func (registry *executionRegistry) capabilities(features executionFeatures) []string {
-	capabilities := []string{"adp.3"}
+	drivers := make([]executiondriver.Driver, 0, len(registry.ordered))
 	for _, driver := range registry.ordered {
-		if !driver.descriptor.enabled(features) {
-			continue
-		}
-		for _, capability := range driver.descriptor.capabilities {
-			if !slices.Contains(capabilities, capability) {
-				capabilities = append(capabilities, capability)
-			}
-		}
+		drivers = append(drivers, publicExecutionDriver(driver))
 	}
-	return capabilities
+	return nativeexecution.Capabilities(drivers, executiondriver.Features{Relay: features.relay, Multihop: features.multihop}, features.probeIngress, features.probeServices, features.probeEcho)
 }
 
 var builtinExecutionDrivers = func() *executionRegistry {
-	registry, err := newExecutionRegistry(nativeDirectDriver(), nativeRelayDriver(), nativeMultihopDriver())
+	native := nativeexecution.BuiltinDrivers()
+	drivers := make([]executionDriver, 0, len(native))
+	for _, driver := range native {
+		drivers = append(drivers, adaptExecutionDriver(driver))
+	}
+	registry, err := newExecutionRegistry(drivers...)
 	if err != nil {
 		panic(err)
 	}
@@ -139,7 +151,7 @@ var builtinExecutionDrivers = func() *executionRegistry {
 }()
 
 func (runner *Runner) executionFeatures() executionFeatures {
-	return executionFeatures{relay: runner.options.Relay, multihop: runner.options.Multihop}
+	return executionFeatures{relay: runner.options.Relay, multihop: runner.options.Multihop, probeIngress: runner.options.ProbeIngress, probeServices: runner.options.ProbeServices, probeEcho: runner.options.ProbeEcho}
 }
 
 func (runner *Runner) executionHost(driver executionDriver) executionHost {

@@ -1,0 +1,67 @@
+-- Durable, bounded Probe history only; execution permits keep their original owner and expiry.
+CREATE TABLE probe_run_scopes (
+ scope_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+ rows_expired BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ rows_evicted BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ updates_without_head BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ FOREIGN KEY(scope_id) REFERENCES scopes(id),
+ CHECK(rows_expired<=9007199254740991),
+ CHECK(rows_evicted<=9007199254740991),
+ CHECK(updates_without_head<=9007199254740991)
+);
+CREATE TABLE probe_runs (
+ scope_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ probe_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ actor_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ forward_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ node_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ binding JSON NOT NULL,
+ instance_id CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ instance_generation BIGINT UNSIGNED NOT NULL,
+ timeout_ms INT UNSIGNED NOT NULL,
+ issued_at BIGINT UNSIGNED NOT NULL,
+ expires_at BIGINT UNSIGNED NOT NULL,
+ state ENUM('issued','consumed','revoked','quarantined') NOT NULL,
+ closed_at BIGINT UNSIGNED NULL,
+ revision BIGINT UNSIGNED NOT NULL,
+ updated_at BIGINT UNSIGNED NOT NULL,
+ withdrawn_at BIGINT UNSIGNED NULL,
+ result_status ENUM('connected','unreachable') NULL,
+ result_code ENUM('tcp-connected','tcp-connect-failed') NULL,
+ result_elapsed_ms INT UNSIGNED NULL,
+ result_measured_at BIGINT UNSIGNED NULL,
+ result_valid_until BIGINT UNSIGNED NULL,
+ result_accepted_at BIGINT UNSIGNED NULL,
+ result_digest CHAR(71) CHARACTER SET ascii COLLATE ascii_bin NULL,
+ recovery_suspended BOOLEAN NOT NULL DEFAULT FALSE,
+ PRIMARY KEY(scope_id,probe_id),
+ INDEX probe_run_window(scope_id,issued_at,probe_id),
+ INDEX probe_run_forward_window(scope_id,forward_id,issued_at,probe_id),
+ INDEX probe_run_node_window(scope_id,node_id,issued_at,probe_id),
+ FOREIGN KEY(scope_id) REFERENCES probe_run_scopes(scope_id),
+ CHECK(JSON_TYPE(binding)='OBJECT' AND OCTET_LENGTH(binding)<=2048),
+ CHECK(JSON_EXTRACT(binding,'$.forwardId') IS NOT NULL AND JSON_TYPE(JSON_EXTRACT(binding,'$.forwardId'))='STRING'),
+ CHECK(JSON_EXTRACT(binding,'$.nodeId') IS NOT NULL AND JSON_TYPE(JSON_EXTRACT(binding,'$.nodeId'))='STRING'),
+ CHECK(CAST(JSON_UNQUOTE(JSON_EXTRACT(binding,'$.forwardId')) AS BINARY)=CAST(forward_id AS BINARY)),
+ CHECK(CAST(JSON_UNQUOTE(JSON_EXTRACT(binding,'$.nodeId')) AS BINARY)=CAST(node_id AS BINARY)),
+ CHECK(instance_generation BETWEEN 1 AND 9007199254740991),
+ CHECK(timeout_ms BETWEEN 100 AND 2000),
+ CHECK(issued_at<=253402300799999 AND expires_at<=253402300799999),
+ CHECK(expires_at>issued_at AND expires_at<=issued_at+2000),
+ CHECK((state='issued' AND closed_at IS NULL) OR (state<>'issued' AND closed_at IS NOT NULL AND closed_at>=issued_at)),
+ CHECK(closed_at IS NULL OR closed_at<=updated_at),
+ CHECK(state<>'consumed' OR closed_at<expires_at),
+ CHECK(revision BETWEEN 1 AND 9007199254740991),
+ CHECK(updated_at BETWEEN issued_at AND 253402300799999),
+ CHECK(withdrawn_at IS NULL OR (state='consumed' AND closed_at IS NOT NULL AND withdrawn_at BETWEEN closed_at AND updated_at)),
+ CHECK((result_status IS NULL AND result_code IS NULL AND result_elapsed_ms IS NULL AND result_measured_at IS NULL
+    AND result_valid_until IS NULL AND result_accepted_at IS NULL AND result_digest IS NULL)
+    OR (result_status IS NOT NULL AND result_code IS NOT NULL AND result_elapsed_ms IS NOT NULL AND result_measured_at IS NOT NULL
+    AND result_valid_until IS NOT NULL AND result_accepted_at IS NOT NULL AND result_digest IS NOT NULL)),
+ CHECK(result_status IS NULL OR (state='consumed' AND closed_at IS NOT NULL AND result_measured_at>=closed_at
+    AND result_elapsed_ms<=timeout_ms AND result_valid_until>result_measured_at AND result_valid_until<=expires_at
+    AND result_accepted_at>=result_measured_at AND result_accepted_at<result_valid_until AND result_accepted_at<=updated_at)),
+ CHECK(result_status IS NULL OR (result_status='connected' AND result_code='tcp-connected') OR (result_status='unreachable' AND result_code='tcp-connect-failed')),
+ CHECK(result_status IS NULL OR withdrawn_at IS NULL OR result_accepted_at<=withdrawn_at),
+ CHECK(recovery_suspended IN (0,1))
+);

@@ -3,8 +3,59 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { randomUUID } from 'node:crypto';
-import * as model from '../model.js';
-import * as relayModel from '../relay-model.js';
+
+// Evaluate the real named-module graph in the harness realm so native DOM/fetch
+// factories use its environment. Each module keeps its own lexical scope.
+async function loadConsoleModule(url, context, modules) {
+  if (modules.has(url.href)) return modules.get(url.href);
+  let source = await readFile(url, 'utf8');
+  const imports = {}, exported = {};
+  const named = names => names.split(',').map(name => name.trim()).filter(Boolean).map(name => {
+    assert.match(name, /^[A-Za-z_$][\w$]*$/, 'unsupported named-module binding');
+    return name;
+  });
+  const declarations = [...source.matchAll(/^import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"];[\t ]*$/gm)];
+  for (const declaration of declarations) {
+    const dependency = await loadConsoleModule(new URL(declaration[2], url), context, modules);
+    for (const name of named(declaration[1])) {
+      assert.ok(Object.hasOwn(dependency, name), 'missing import ' + name + ' in ' + declaration[2]);
+      imports[name] = dependency[name];
+    }
+  }
+  source = source.replace(/^import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"];[\t ]*$/gm, '');
+  const reexports = [...source.matchAll(/^export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"];[\t ]*$/gm)];
+  for (const declaration of reexports) {
+    const dependency = await loadConsoleModule(new URL(declaration[2], url), context, modules);
+    for (const name of named(declaration[1])) {
+      assert.ok(Object.hasOwn(dependency, name), 'missing re-export ' + name + ' in ' + declaration[2]);
+      exported[name] = dependency[name];
+    }
+  }
+  source = source.replace(/^export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"];[\t ]*$/gm, '');
+  const localExports = [...source.matchAll(/^export\s+(?:function|const)\s+([A-Za-z_$][\w$]*)/gm)].map(match => match[1]);
+  source = source.replace(/^export\s+(?=function|const)/gm, '');
+  source = source.replace(/^export\s+\{([^}]+)\};[\t ]*$/gm, (_, names) => {
+    localExports.push(...named(names));
+    return '';
+  });
+  assert.doesNotMatch(source, /^\s*(?:import|export)\b/m, 'unsupported module syntax in ' + url.pathname);
+  if (url.pathname.endsWith('/browser-native/control-console.js')) {
+    assert.match(source, /\n}\s*$/, 'native composition closing scope');
+    // Expose existing closures only in this test copy, never in production code.
+    source = source.replace(/\n}\s*$/, `
+      globalThis.flow={load,loadOverview,editor,saveForward,action,refreshDirectCandidates,relayConsole,request,
+        connect(scope='scope-a'){clearConnectionData();auth.scope=scope;auth.token='x'.repeat(40);},
+        setPage(kind,value){page[kind]=value;},setFilters(kind,value){filters[kind]=value;},
+        candidates,page,store,clearConnectionData};
+    }`);
+  }
+  const factory = vm.runInContext(`(function(moduleImports){
+    'use strict';\nconst {${Object.keys(imports).join(',')}} = moduleImports;\n${source}\nreturn {${localExports.join(',')}};
+  })`, context, { filename: url.pathname });
+  const namespace = { ...exported, ...factory(imports) };
+  modules.set(url.href, namespace);
+  return namespace;
+}
 
 // A minimal DOM contract harness, not a real browser/layout/end-to-end acceptance.
 class Element {
@@ -20,6 +71,15 @@ class Element {
     }
   }
   replaceChildren(...children) { this.children = []; if (this.tag === 'select') this.value = ''; this.append(...children); }
+  querySelectorAll(selector) {
+    const match = selector.match(/^([a-z]+)(?:\[value="([^"]+)"\])?$/);
+    assert.ok(match, 'unsupported harness selector ' + selector);
+    return this.children.flatMap(child => [
+      ...(child.tag === match[1] && (match[2] === undefined || child.value === match[2]) ? [child] : []),
+      ...child.querySelectorAll(selector),
+    ]);
+  }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
   addEventListener(name, fn) { this.listeners[name] = fn; }
   setAttribute() {}
   scrollIntoView() {}
@@ -37,6 +97,16 @@ async function harness(handler) {
   const elements = new Map();
   for (const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g))
     elements.set(match[2], new Element(match[1]));
+  for (const match of html.matchAll(/<select\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g)) {
+    for (const option of match[2].matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option>/g)) {
+      const child = new Element('option');
+      child.value = option[1].match(/\bvalue="([^"]*)"/)?.[1] ?? option[2];
+      child.selected = /\bselected\b/.test(option[1]);
+      child.disabled = /\bdisabled\b/.test(option[1]);
+      child.textContent = option[2];
+      elements.get(match[1]).append(child);
+    }
+  }
   for (const match of html.matchAll(/<form\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/form>/g)) {
     const fields = new Map();
     for (const input of match[2].matchAll(/<(input|select)\b([^>]*)>/g)) {
@@ -54,7 +124,7 @@ async function harness(handler) {
     getElementById(id) { assert.ok(elements.has(id), 'unknown HTML id ' + id); return elements.get(id); },
     createElement: tag => new Element(tag), querySelectorAll: () => [], addEventListener() {},
   };
-  const context = vm.createContext({ ...model, ...relayModel, document, URLSearchParams, AbortSignal, AbortController, setTimeout, clearTimeout,
+  const context = vm.createContext({ document, URLSearchParams, AbortSignal, AbortController, setTimeout, clearTimeout,
     crypto: { randomUUID }, console, confirm: () => true,
     fetch: async (url, options) => {
       const resource = url.split('/scope-a/')[1] ?? url.split('/scope-b/')[1];
@@ -63,21 +133,7 @@ async function harness(handler) {
       return { ok: true, status: 200, json: async () => result };
     }
   });
-  const relay = (await readFile(new URL('../relay.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '').replace('export function', 'function');
-  const probe = (await readFile(new URL('../probe.js', import.meta.url), 'utf8')).replace('export function', 'function');
-  const transport = (await readFile(new URL('../transport-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
-  const rules = (await readFile(new URL('../rule-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
-  const tunnels = (await readFile(new URL('../tunnel-console.js', import.meta.url), 'utf8')).replace('export function', 'function');
-  const paths = 'const { initPathTemplates, initPathSwitch } = (() => {\n' +
-    (await readFile(new URL('../path-templates.js', import.meta.url), 'utf8')).replaceAll('export function', 'function') +
-    '\nreturn { initPathTemplates, initPathSwitch }; })();';
-  const app = (await readFile(new URL('../app.js', import.meta.url), 'utf8')).replace(/^import .*\n/gm, '');
-  vm.runInContext(relay + '\n' + probe + '\n' + transport + '\n' + rules + '\n' + tunnels + '\n' + paths + '\n' + app + `
-    globalThis.flow={load,loadOverview,editor,saveForward,action,refreshDirectCandidates,relayConsole,request,
-      connect(scope='scope-a'){clearConnectionData();auth.scope=scope;auth.token='x'.repeat(40);},
-      setPage(kind,value){page[kind]=value;},setFilters(kind,value){filters[kind]=value;},
-      candidates,page,store,clearConnectionData};
-  `, context);
+  await loadConsoleModule(new URL('../app.js', import.meta.url), context, new Map());
   return { flow: context.flow, elements, calls };
 }
 const page = (items = [], total = items.length) => ({ page: 1, limit: 25, items, total });

@@ -1,6 +1,9 @@
 # TuneX VNext Control host only. Use a private test database and retained CA.
 # First authority initialization must be a one-time explicit compose run -e
 # TUNEX_AUTHORITY_INITIALIZE=1. Never retain that flag in the steady service.
+# Current Control targets Schema 0037 / adp3-probe-echo-v1; Agent profiles are unchanged.
+# Probe scheduling is default-off and requires Probe execution plus verified clock skew of 1 second.
+# Groups/publications use manual original-owner commands, not another runtime flag or executor.
 name: tunex-vnext-control
 services:
   control:
@@ -19,6 +22,23 @@ services:
       TUNEX_AUTHORITY_INITIALIZE: "0"
       TUNEX_MULTIHOP_EXECUTION: ${TUNEX_MULTIHOP_EXECUTION:-0}
       TUNEX_PROBE_EXECUTION: ${TUNEX_PROBE_EXECUTION:-0}
+      # Local Direct ingress connect requires original execution and explicit 1-second clock skew.
+      TUNEX_PROBE_INGRESS: ${TUNEX_PROBE_INGRESS:-0}
+      # Controlled TLS requires ingress, original execution and the explicit 1-second clock policy.
+      TUNEX_PROBE_SERVICES: ${TUNEX_PROBE_SERVICES:-0}
+      # Echo also requires services, ingress, execution and the original 1-second clock policy.
+      TUNEX_PROBE_ECHO: ${TUNEX_PROBE_ECHO:-0}
+      TUNEX_PROBE_SCHEDULE: ${TUNEX_PROBE_SCHEDULE:-0}
+      TUNEX_TELEMETRY: ${TUNEX_TELEMETRY:-0}
+      TUNEX_FORWARD_TELEMETRY: ${TUNEX_FORWARD_TELEMETRY:-0}
+      TUNEX_HOST_TELEMETRY: ${TUNEX_HOST_TELEMETRY:-0}
+      TUNEX_PROBE_TELEMETRY: ${TUNEX_PROBE_TELEMETRY:-0}
+      TUNEX_TELEMETRY_ROLLUPS: ${TUNEX_TELEMETRY_ROLLUPS:-0}
+      TUNEX_STATION_ALERTS: ${TUNEX_STATION_ALERTS:-0}
+      # Delivery requires an explicitly provisioned TUNEX_NOTIFICATION_SECRETS directory below.
+      TUNEX_WEBHOOK_DELIVERY: ${TUNEX_WEBHOOK_DELIVERY:-0}
+      # Optional endpoint credentials only, not delivery enablement. Uncomment together with the bind below.
+      # TUNEX_NOTIFICATION_SECRETS: /run/tunex-notification-secrets
       TUNEX_PROBE_CLOCK_SKEW_SECONDS: ${TUNEX_PROBE_CLOCK_SKEW_SECONDS:-}
     volumes:
       - type: bind
@@ -28,6 +48,12 @@ services:
         source: ${TUNEX_CONTROL_PKI_DIR:?Pre-create protected Control PKI directory}
         target: /run/tunex/pki
         read_only: true
+      # Linux-only opt-in: pre-provision this independent directory, outside state/PKI/backups.
+      # Root and records/ must be UID 10001 mode 0700; key is an independent raw 32-byte file mode 0600.
+      # No auto-init/rekey. Exclusive writer.lock after a crash requires reviewed operator maintenance.
+      # - type: bind
+      #   source: ${TUNEX_NOTIFICATION_SECRETS_DIR:?Pre-provision independent notification credentials}
+      #   target: /run/tunex-notification-secrets
     # Loopback host publish only: remote Agents need trusted end-to-end TLS
     # via deliberate private bind or an L4 TCP pass-through (never L7 TLS termination).
     ports:

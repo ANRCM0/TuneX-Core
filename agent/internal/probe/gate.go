@@ -2,7 +2,6 @@ package probe
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"sync"
@@ -29,6 +28,7 @@ type Gate struct {
 	executor             *Executor
 	closed               bool
 	claims               map[string]context.CancelFunc
+	counters             *CounterSet
 }
 
 func NewGate(node, boot string, epoch uint64, executor *Executor) (*Gate, error) {
@@ -37,7 +37,7 @@ func NewGate(node, boot string, epoch uint64, executor *Executor) (*Gate, error)
 		return nil, ErrInvalid
 	}
 	var random [32]byte
-	if _, err := rand.Read(random[:]); err != nil {
+	if _, err := executor.randomSource().ReadRandom(random[:]); err != nil {
 		return nil, ErrDenied
 	}
 	return &Gate{node: node, boot: boot, epoch: epoch, instance: hex.EncodeToString(random[:]),
@@ -48,11 +48,14 @@ func (gate *Gate) InstanceID() string { return gate.instance }
 
 func (gate *Gate) Run(ctx context.Context, grant Grant) (Result, error) {
 	p := grant.Permit
-	if !idPattern.MatchString(grant.PermitID) || !p.Binding.Valid() ||
+	if probeEcho := p.Echo; probeEcho != nil && (probeEcho.Invocation.PermitId != grant.PermitID || probeEcho.Invocation.InstanceId != gate.instance) {
+		return Result{}, ErrDenied
+	}
+	if !idPattern.MatchString(grant.PermitID) || !p.Binding.Valid() || !validMeasurement(p.Measurement) ||
 		grant.Timeout < 100*time.Millisecond || grant.Timeout > 2*time.Second {
 		return Result{}, ErrInvalid
 	}
-	now := time.Now()
+	now := gate.executor.scheduler().Now()
 	if grant.InstanceID != gate.instance || p.Binding.NodeID != gate.node || p.Binding.BootID != gate.boot ||
 		p.Binding.SessionEpoch != gate.epoch || p.Check == nil || !p.Until.After(now) ||
 		p.Until.After(now.Add(2*time.Second)) || p.Check() != nil {
@@ -74,7 +77,12 @@ func (gate *Gate) Run(ctx context.Context, grant Grant) (Result, error) {
 		return Result{}, ErrBusy
 	}
 	gate.claims[grant.PermitID] = cancel
+	var invocation *counterInvocation
+	if p.Measurement == "" || p.Measurement == MeasurementEgress {
+		invocation = gate.counters.enter(p.Binding)
+	}
 	gate.mutex.Unlock()
+	defer invocation.leave()
 	defer func() {
 		gate.mutex.Lock()
 		gate.claims[grant.PermitID] = nil // Keep the ID even on busy, denial or cancellation.
@@ -89,12 +97,13 @@ func (gate *Gate) Run(ctx context.Context, grant Grant) (Result, error) {
 		}
 		return grant.Permit.Check()
 	}
-	return gate.executor.Run(work, p, grant.Timeout)
+	return gate.executor.run(work, p, grant.Timeout, invocation)
 }
 
 func (gate *Gate) Close() {
 	gate.mutex.Lock()
 	gate.closed = true
+	gate.counters.seal()
 	cancels := make([]context.CancelFunc, 0)
 	for _, cancel := range gate.claims {
 		if cancel != nil {

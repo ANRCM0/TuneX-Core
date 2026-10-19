@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:host-telemetry:1",
+  "title": "TuneX host-telemetry-v1 agent-visible operating system observations",
+  "description": "Independent default-off operational observations, not process telemetry-v1, cgroup limits, verified physical host resources, health, payload traffic, billing or execution authority. Duplicate JSON keys are rejected by the normative raw parser. Sample bodies are limited to 8192 UTF-8 bytes and acknowledgments to 4096 bytes; byte limits and exact arithmetic are enforced by normative TypeScript/Agent parsers, not structural Schema alone.",
+  "oneOf": [{ "$ref": "#/$defs/Sample" }, { "$ref": "#/$defs/Ack" }],
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$(?![\\s\\S])" },
+    "Counter": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "CounterOrZero": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "Epoch": { "type": "string", "minLength": 32, "maxLength": 32, "pattern": "^[a-f0-9]{32}$(?![\\s\\S])" },
+    "Uint64Decimal": {
+      "type": "string", "minLength": 1, "maxLength": 20,
+      "pattern": "^(0|[1-9][0-9]{0,19})$(?![\\s\\S])",
+      "description": "Canonical decimal uint64 in [0,18446744073709551615], no whitespace or leading zeroes. Normative parsers enforce the exact numeric upper bound without floating-point conversion."
+    },
+    "NullableUint64": { "oneOf": [{ "$ref": "#/$defs/Uint64Decimal" }, { "type": "null" }] },
+    "LogicalProcessors": { "type": "integer", "minimum": 1, "maximum": 65536 },
+    "Time": {
+      "type": "string", "minLength": 20, "maxLength": 30,
+      "pattern": "^(?:19[7-9][0-9]|[2-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,9})?Z$(?![\\s\\S])",
+      "description": "Strict UTC timestamp, years 1970..9999, optional 1..9 fractional digits, no leap seconds/offset/whitespace. Normative parsers validate the actual Gregorian calendar date and nonnegative epoch time."
+    },
+    "Availability": { "enum": ["available", "unavailable", "unsupported"] },
+    "Cpu": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "logicalProcessors", "totalTicks", "idleTicks", "ioWaitTicks"],
+      "properties": {
+        "availability": { "$ref": "#/$defs/Availability" },
+        "logicalProcessors": { "oneOf": [{ "$ref": "#/$defs/LogicalProcessors" }, { "type": "null" }] },
+        "totalTicks": { "$ref": "#/$defs/NullableUint64" },
+        "idleTicks": { "$ref": "#/$defs/NullableUint64" },
+        "ioWaitTicks": { "$ref": "#/$defs/NullableUint64" }
+      },
+      "allOf": [{
+        "if": { "properties": { "availability": { "const": "available" } } },
+        "then": { "properties": {
+          "logicalProcessors": { "$ref": "#/$defs/LogicalProcessors" },
+          "totalTicks": { "$ref": "#/$defs/Uint64Decimal" }, "idleTicks": { "$ref": "#/$defs/Uint64Decimal" }, "ioWaitTicks": { "$ref": "#/$defs/Uint64Decimal" }
+        } },
+        "else": { "properties": { "logicalProcessors": { "type": "null" }, "totalTicks": { "type": "null" }, "idleTicks": { "type": "null" }, "ioWaitTicks": { "type": "null" } } }
+      }],
+      "description": "Cumulative OS-visible CPU ticks. Normative exact integer validation requires idleTicks+ioWaitTicks<=totalTicks. Tick frequency is not inferred. CPU source unavailable/unsupported means all measurements null, not zero."
+    },
+    "Memory": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "totalBytes", "availableBytes"],
+      "properties": { "availability": { "$ref": "#/$defs/Availability" }, "totalBytes": { "$ref": "#/$defs/NullableUint64" }, "availableBytes": { "$ref": "#/$defs/NullableUint64" } },
+      "allOf": [{
+        "if": { "properties": { "availability": { "const": "available" } } },
+        "then": { "properties": { "totalBytes": { "$ref": "#/$defs/Uint64Decimal" }, "availableBytes": { "$ref": "#/$defs/Uint64Decimal" } } },
+        "else": { "properties": { "totalBytes": { "type": "null" }, "availableBytes": { "type": "null" } } }
+      }],
+      "description": "Agent-visible OS memory, not process heap or cgroup allowance. Normative parser requires availableBytes<=totalBytes using exact integers."
+    },
+    "Load": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "oneMilli", "fiveMilli", "fifteenMilli"],
+      "properties": { "availability": { "$ref": "#/$defs/Availability" }, "oneMilli": { "$ref": "#/$defs/NullableUint64" }, "fiveMilli": { "$ref": "#/$defs/NullableUint64" }, "fifteenMilli": { "$ref": "#/$defs/NullableUint64" } },
+      "allOf": [{
+        "if": { "properties": { "availability": { "const": "available" } } },
+        "then": { "properties": { "oneMilli": { "$ref": "#/$defs/Uint64Decimal" }, "fiveMilli": { "$ref": "#/$defs/Uint64Decimal" }, "fifteenMilli": { "$ref": "#/$defs/Uint64Decimal" } } },
+        "else": { "properties": { "oneMilli": { "type": "null" }, "fiveMilli": { "type": "null" }, "fifteenMilli": { "type": "null" } } }
+      }],
+      "description": "OS load average scaled by 1000, not CPU utilization or workload capacity."
+    },
+    "Filesystem": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "scope", "totalBytes", "availableBytes"],
+      "properties": { "availability": { "$ref": "#/$defs/Availability" }, "scope": { "const": "agent-root-filesystem" }, "totalBytes": { "$ref": "#/$defs/NullableUint64" }, "availableBytes": { "$ref": "#/$defs/NullableUint64" } },
+      "allOf": [{
+        "if": { "properties": { "availability": { "const": "available" } } },
+        "then": { "properties": { "totalBytes": { "$ref": "#/$defs/Uint64Decimal" }, "availableBytes": { "$ref": "#/$defs/Uint64Decimal" } } },
+        "else": { "properties": { "totalBytes": { "type": "null" }, "availableBytes": { "type": "null" } } }
+      }],
+      "description": "Root filesystem visible to the Agent; not all mounts, physical disk inventory or a capacity guarantee. Normative parser requires availableBytes<=totalBytes."
+    },
+    "Interface": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "rxBytes", "txBytes"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 63, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,62}$(?![\\s\\S])" },
+        "rxBytes": { "$ref": "#/$defs/Uint64Decimal" }, "txBytes": { "$ref": "#/$defs/Uint64Decimal" }
+      }
+    },
+    "Network": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "scope", "limit", "available", "returned", "omitted", "truncated", "interfaces"],
+      "properties": {
+        "availability": { "$ref": "#/$defs/Availability" }, "scope": { "const": "agent-network-namespace" }, "limit": { "const": 16 },
+        "available": { "type": "integer", "minimum": 0, "maximum": 128 }, "returned": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "omitted": { "type": "integer", "minimum": 0, "maximum": 128 }, "truncated": { "type": "boolean" },
+        "interfaces": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/Interface" } }
+      },
+      "allOf": [{
+        "if": { "properties": { "availability": { "not": { "const": "available" } } } },
+        "then": { "properties": { "available": { "const": 0 }, "returned": { "const": 0 }, "omitted": { "const": 0 }, "truncated": { "const": false }, "interfaces": { "type": "array", "maxItems": 0 } } }
+      }],
+      "description": "Agent network namespace counters, not per-rule payload or physical host NIC totals. Normative parser requires strictly increasing binary-ASCII unique interface names, returned=interfaces.length=min(available,16), omitted=available-returned and truncated=(omitted>0). Interface recreation prevents trustworthy rate derivation from names alone: no network deltas or throughput are defined. Unavailable/unsupported has all-zero coverage and empty interfaces, which is not measured zero traffic."
+    },
+    "Host": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scope", "cpu", "memory", "load", "filesystem", "network"],
+      "properties": {
+        "scope": { "const": "agent-visible-os" }, "cpu": { "$ref": "#/$defs/Cpu" }, "memory": { "$ref": "#/$defs/Memory" },
+        "load": { "$ref": "#/$defs/Load" }, "filesystem": { "$ref": "#/$defs/Filesystem" }, "network": { "$ref": "#/$defs/Network" }
+      }
+    },
+    "Sample": {
+      "type": "object", "additionalProperties": false,
+      "required": ["hostTelemetryVersion", "kind", "nodeId", "bootId", "sessionEpoch", "sampleEpoch", "sequence", "capturedAt", "uptimeMs", "platform", "droppedSamples", "host"],
+      "properties": {
+        "hostTelemetryVersion": { "const": 1 }, "kind": { "const": "host-telemetry-sample" },
+        "nodeId": { "$ref": "#/$defs/Id" }, "bootId": { "$ref": "#/$defs/Id" }, "sessionEpoch": { "$ref": "#/$defs/Counter" },
+        "sampleEpoch": { "$ref": "#/$defs/Epoch" }, "sequence": { "$ref": "#/$defs/Counter" }, "capturedAt": { "$ref": "#/$defs/Time" },
+        "uptimeMs": { "$ref": "#/$defs/CounterOrZero" }, "droppedSamples": { "$ref": "#/$defs/Uint64Decimal" },
+        "platform": { "enum": ["aix", "android", "darwin", "dragonfly", "freebsd", "illumos", "ios", "js", "linux", "netbsd", "openbsd", "plan9", "solaris", "wasip1", "windows"] },
+        "host": { "$ref": "#/$defs/Host" }
+      },
+      "allOf": [{
+        "if": { "properties": { "platform": { "not": { "const": "linux" } } } },
+        "then": { "properties": { "host": { "type": "object", "properties": {
+          "cpu": { "type": "object", "properties": { "availability": { "const": "unsupported" } } },
+          "memory": { "type": "object", "properties": { "availability": { "const": "unsupported" } } },
+          "load": { "type": "object", "properties": { "availability": { "const": "unsupported" } } },
+          "filesystem": { "type": "object", "properties": { "availability": { "const": "unsupported" } } },
+          "network": { "type": "object", "properties": { "availability": { "const": "unsupported" } } }
+        } } } }
+      }]
+    },
+    "Ack": {
+      "type": "object", "additionalProperties": false,
+      "required": ["hostTelemetryVersion", "kind", "nodeId", "bootId", "sessionEpoch", "sampleEpoch", "sequence", "stored", "receivedAt", "source", "executionAuthorized"],
+      "properties": {
+        "hostTelemetryVersion": { "const": 1 }, "kind": { "const": "host-telemetry-ack" }, "nodeId": { "$ref": "#/$defs/Id" }, "bootId": { "$ref": "#/$defs/Id" },
+        "sessionEpoch": { "$ref": "#/$defs/Counter" }, "sampleEpoch": { "$ref": "#/$defs/Epoch" }, "sequence": { "$ref": "#/$defs/Counter" },
+        "stored": { "const": true }, "receivedAt": { "$ref": "#/$defs/Time" }, "source": { "const": "agent-reported" }, "executionAuthorized": { "const": false }
+      },
+      "description": "Transport sender must match all Node/session/exporter identity fields to its submitted sample. Acknowledgment is only bounded observation storage, never host health or execution authorization."
+    }
+  }
+}

@@ -8,6 +8,10 @@ import { ControlApplication } from '../src/application/control.ts';
 import { ForwardProbePlans } from '../src/application/forward-probe-plans.ts';
 import { ProbePermits } from '../src/application/probe-permits.ts';
 import { MySqlUnitOfWork } from '../src/infrastructure/mysql.ts';
+import type { Transaction } from '../src/infrastructure/mysql.ts';
+import { MySqlProbeHistoryStore } from '../src/infrastructure/mysql-probe-history-store.ts';
+import { ProbeRunHistoryRecorder, probeRunStorageValues } from '../src/modules/probe-history-owner/public.ts';
+import type { ProbeRunRecorder } from '../src/modules/probe-history-owner/public.ts';
 import { MySqlProbeMachineReader } from '../src/infrastructure/mysql-probe-machine.ts';
 import { MySqlProbeInstances } from '../src/infrastructure/mysql-probe-instances.ts';
 import { MySqlProbePermits } from '../src/infrastructure/mysql-probe-permits.ts';
@@ -28,7 +32,8 @@ async function digest(db: Connection, excludeOwned = false) {
     const inventory = [];
     for (const table of tables) {
         assert.match(table.name, /^[a-z0-9_]+$/);
-        if (excludeOwned && ['probe_permits', 'probe_permit_budget', 'probe_permit_withdrawals'].includes(table.name)) continue;
+        // The workflow delegates historical capture to its own owner in the same Tx.
+        if (excludeOwned && ['probe_permits', 'probe_permit_budget', 'probe_permit_withdrawals', 'probe_run_scopes', 'probe_runs'].includes(table.name)) continue;
         const [records] = await db.query<RowDataPacket[]>(`SELECT * FROM \`${table.name}\``);
         inventory.push([table.name, records.map(r => JSON.stringify(r)).sort()]);
     }
@@ -80,19 +85,24 @@ async function fixture() {
         await admin.query(`GRANT INSERT,UPDATE,DELETE ON \`${name}\`.probe_permits TO ?@'%'`, [username]);
         await admin.query(`GRANT UPDATE ON \`${name}\`.probe_permit_budget TO ?@'%'`, [username]);
         await admin.query(`GRANT INSERT,DELETE ON \`${name}\`.probe_permit_withdrawals TO ?@'%'`, [username]);
+        await admin.query(`GRANT INSERT,UPDATE ON \`${name}\`.probe_run_scopes TO ?@'%'`, [username]);
+        await admin.query(`GRANT INSERT,UPDATE,DELETE ON \`${name}\`.probe_runs TO ?@'%'`, [username]);
         const limited = new URL(url); limited.username = username; limited.password = password;
         db = new MySqlUnitOfWork(limited.toString()); peer = new MySqlUnitOfWork(limited.toString());
-        await assert.rejects(db.pool.query('UPDATE nodes SET revoked=TRUE'));
-        await assert.rejects(db.pool.query("UPDATE probe_instances SET state='revoked'"));
+        for(const sql of ['UPDATE nodes SET revoked=TRUE', "UPDATE probe_instances SET state='revoked'",
+            'UPDATE forwards SET revision=revision', 'UPDATE snapshots SET generation=generation',
+            'UPDATE execution_leases SET valid_until=valid_until', 'DELETE FROM probe_run_scopes', 'DELETE FROM probe_results'])
+            await assert.rejects(db.pool.query(sql), {code:'ER_TABLEACCESS_DENIED_ERROR'});
         const assemble = (uow: MySqlUnitOfWork) => {
             const identity = new Identity(uow);
             return new ControlApplication(uow, identity, new Nodes(uow, identity, {} as NodeCertificateAuthority));
         };
-        const internal = (store: MySqlProbePermits) => {
+        const internal = (store: MySqlProbePermits,
+            history:ProbeRunRecorder<Transaction>=new ProbeRunHistoryRecorder(new MySqlProbeHistoryStore(probeRunStorageValues))) => {
             const identity = new Identity(db!);
             return new ProbePermits(db!, identity, new ForwardProbePlans(db!, identity, new MySqlProbePermitIntents(),
                 new Nodes(db!, identity, {} as NodeCertificateAuthority), new MySqlProbeReader(true), 5000),
-            new MySqlProbeMachineReader(), new MySqlProbeInstances(), store);
+            new MySqlProbeMachineReader(), new MySqlProbeInstances(), store, undefined, history);
         };
         const host = assemble(db).probePermits, other = assemble(peer).probePermits;
         return { db, peer, writer, owner, close, host, other, internal,
@@ -103,7 +113,7 @@ async function fixture() {
     } catch (error) { await close(); throw error; }
 }
 
-test('real MySQL shares issuance/consumption budgets across application instances and writes only permit-owned state',
+test('real MySQL shares budgets and writes only permit state plus delegated same-transaction history',
     { skip: !databaseUrl, timeout: 60000 }, async () => {
         const f = await fixture();
         try {
@@ -116,6 +126,9 @@ test('real MySQL shares issuance/consumption budgets across application instance
             assert.equal(result.filter(r => r.status === 'fulfilled').length, 1);
             const [rows] = await f.writer.query<RowDataPacket[]>('SELECT state,closed_at FROM probe_permits');
             assert.equal(rows.length, 1); assert.equal(rows[0]!.state, 'consumed'); assert.ok(rows[0]!.closed_at > 0);
+            const [history]=await f.writer.query<RowDataPacket[]>('SELECT probe_id,state,revision,closed_at,result_status,withdrawn_at FROM probe_runs');
+            assert.deepEqual(history.map(row=>({...row})),[{probe_id:winner.value.id,state:'consumed',revision:2,
+                closed_at:rows[0]!.closed_at,result_status:null,withdrawn_at:null}]);
             await assert.rejects(f.consume(winner.value.id), { code: 'PROBE_PERMIT_UNAVAILABLE' });
             await assert.rejects(f.issue(), { code: 'PROBE_PERMIT_LIMIT' });
             assert.equal(await digest(f.writer, true), before);
@@ -157,6 +170,15 @@ test('real MySQL owner/post-acceptance failures roll back permit insertion, clai
             const before = await digest(f.writer);
             await assert.rejects(f.internal(new FailingInsert()).issue('owner', 'scope-a', 'forward-a', command));
             assert.equal(await digest(f.writer), before);
+            let ownerTx:Transaction|undefined;
+            class CapturingInsert extends MySqlProbePermits {
+                override async insert(...args:Parameters<MySqlProbePermits['insert']>) {ownerTx=args[0];await super.insert(...args);}
+            }
+            const history=new ProbeRunHistoryRecorder(new MySqlProbeHistoryStore(probeRunStorageValues));
+            await assert.rejects(f.internal(new CapturingInsert(),{recordIn:async(tx,capture)=>{
+                assert.equal(tx,ownerTx);await history.recordIn(tx,capture);throw new Error('after history capture');
+            }}).issue('owner','scope-a','forward-a',command),/after history capture/);
+            assert.equal(await digest(f.writer),before);
             let calls = 0; f.db.guard = async () => { if (++calls === 2) throw new Error('maintenance'); };
             await assert.rejects(f.issue()); f.db.guard = undefined;
             assert.equal(await digest(f.writer), before);

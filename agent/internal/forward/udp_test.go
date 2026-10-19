@@ -195,11 +195,15 @@ func TestUDPNewAuthorizationAfterIdleReclaimsClientPort(t *testing.T) {
 	policy.UdpIdleTimeoutSeconds = 1
 	assignment := udpTestAssignment(t, target)
 	stream, err := StartUDPAuthorized(assignment, policy, func() error { return nil })
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(stream.Close)
 	client := udpTestClient(t, stream)
 	udpWrite(t, client, []byte("old-authority"))
-	if got := string(udpRead(t, client)); got != "reply:old-authority" { t.Fatal(got) }
+	if got := string(udpRead(t, client)); got != "reply:old-authority" {
+		t.Fatal(got)
+	}
 	udpWait(t, func() bool { return stream.Remaining() == 0 }, "previous UDP association still active")
 	stream.SetAuthorization(func() error { return nil })
 	udpWrite(t, client, []byte("new-authority"))

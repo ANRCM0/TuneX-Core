@@ -7,16 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 )
 
-type Journal struct {
-	Snapshot   json.RawMessage   `json:"snapshot"`
-	Generation uint64            `json:"generation"`
-	Digest     string            `json:"digest"`
-	Fences     map[string]uint64 `json:"fences"`
-	Retired    map[string]uint64 `json:"retired"`
-}
 type envelope struct {
 	Payload json.RawMessage `json:"payload"`
 	MAC     string          `json:"mac"`
@@ -58,39 +50,4 @@ func Load(path string, key []byte) (Journal, error) {
 		return Journal{}, fmt.Errorf("INTEGRITY_FAILURE: invalid journal body")
 	}
 	return value, nil
-}
-func AtomicWrite(path string, raw []byte) error {
-	file, err := os.CreateTemp(filepath.Dir(path), ".state-")
-	if err != nil {
-		return err
-	}
-	name := file.Name()
-	defer os.Remove(name)
-	if err = file.Chmod(0600); err == nil {
-		_, err = file.Write(raw)
-	}
-	if err == nil {
-		err = file.Sync()
-	}
-	closeErr := file.Close()
-	if err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return err
-	}
-	if err = os.Rename(name, path); err != nil {
-		return err
-	}
-	// Windows does not support directory fsync. POSIX persistence includes the renamed directory entry.
-	if directory, openErr := os.Open(filepath.Dir(path)); openErr == nil {
-		syncErr := directory.Sync()
-		directory.Close()
-		if syncErr != nil && os.PathSeparator != '\\' {
-			return syncErr
-		}
-	} else if os.PathSeparator != '\\' {
-		return openErr
-	}
-	return nil
 }

@@ -6,20 +6,13 @@ import (
 	"fmt"
 	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/executionstate"
 	"maps"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 )
-
-type RuntimeJournal struct {
-	ProtocolVersion       uint64  `json:"protocolVersion"`
-	NodeID                string  `json:"nodeId"`
-	Journal               Journal `json:"journal"`
-	ExecutionExtension    *uint64 `json:"executionExtension,omitempty"`
-	ImportedTransitDigest string  `json:"importedTransitDigest,omitempty"`
-}
 
 func InitializeRuntimeJournal(path string, key []byte, node string) error {
 	if len(key) != 32 || !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`).MatchString(node) {
@@ -36,7 +29,7 @@ func InitializeRuntimeJournal(path string, key []byte, node string) error {
 	if err := file.Close(); err != nil {
 		return err
 	}
-	record := RuntimeJournal{ProtocolVersion: 3, NodeID: node, Journal: Journal{Snapshot: json.RawMessage("null"), Fences: map[string]uint64{}, Retired: map[string]uint64{}}}
+	record := NativeRuntimeJournal(node, Journal{Snapshot: json.RawMessage("null"), Fences: map[string]uint64{}, Retired: map[string]uint64{}})
 	return saveRuntimeJournal(path, key, record)
 }
 func saveRuntimeJournal(path string, key []byte, value RuntimeJournal) error {
@@ -118,7 +111,7 @@ func LoadRuntimeJournal(path string, key []byte, node string) (RuntimeJournal, e
 			return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: Stored Snapshot differs")
 		}
 		for _, a := range s.Assignments {
-			slot := fmt.Sprintf("%s/%d", a.Resource.Protocol, a.Resource.Port)
+			slot := PhysicalSlotKey(a.Resource.Protocol, a.Resource.Port)
 			if record.Journal.Fences[slot] < a.BindingFence || record.Journal.Retired[slot] >= a.BindingFence {
 				return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: Stored physical fence differs")
 			}
@@ -129,95 +122,12 @@ func LoadRuntimeJournal(path string, key []byte, node string) (RuntimeJournal, e
 
 // AcceptRuntimeSnapshot persists complete high-water/fences before any caller may change sockets. It never executes cached authority.
 func AcceptRuntimeSnapshot(path string, key []byte, current RuntimeJournal, snapshot adp3.Snapshot) (RuntimeJournal, error) {
-	release, err := AcquireLock(path + ".lock")
+	host := executionstate.RuntimeHost{Store: runtimeFileStore{path: path, key: key}, Codec: runtimeSnapshotCodec{}}
+	next, err := host.Accept(RuntimeJournalFacts(current), runtimeSnapshotInput{snapshot: snapshot})
 	if err != nil {
 		return current, err
 	}
-	defer release()
-	durable, err := LoadRuntimeJournal(path, key, current.NodeID)
-	if err != nil {
-		return current, err
-	}
-	if durable.ProtocolVersion != current.ProtocolVersion || !sameExtension(durable.ExecutionExtension, current.ExecutionExtension) || durable.ImportedTransitDigest != current.ImportedTransitDigest || durable.Journal.Generation != current.Journal.Generation || durable.Journal.Digest != current.Journal.Digest || !maps.Equal(durable.Journal.Fences, current.Journal.Fences) || !maps.Equal(durable.Journal.Retired, current.Journal.Retired) {
-		return current, fmt.Errorf("INTEGRITY_FAILURE: Caller Runtime state is stale")
-	}
-	raw, err := json.Marshal(snapshot)
-	if err != nil {
-		return current, err
-	}
-	if _, err := adp3.Parse("Snapshot", raw); err != nil {
-		return current, err
-	}
-	if snapshot.ExecutionExtension != nil && current.ExecutionExtension == nil {
-		return current, fmt.Errorf("UNSUPPORTED_CAPABILITY: Explicit durable execution migration required")
-	}
-	if current.ProtocolVersion != 3 || current.NodeID != snapshot.NodeId || snapshot.SnapshotGeneration < current.Journal.Generation || snapshot.SnapshotGeneration == current.Journal.Generation && snapshot.SnapshotDigest != current.Journal.Digest {
-		return current, fmt.Errorf("INTEGRITY_FAILURE: Runtime history/binding differs")
-	}
-	if snapshot.SnapshotGeneration == current.Journal.Generation {
-		return current, nil
-	}
-	next := current
-	if snapshot.ExecutionExtension != nil {
-		version := *snapshot.ExecutionExtension
-		next.ExecutionExtension = &version
-	}
-	next.Journal.Fences = maps.Clone(current.Journal.Fences)
-	next.Journal.Retired = maps.Clone(current.Journal.Retired)
-	incoming := map[string]bool{}
-	var prior adp3.Snapshot
-	if current.Journal.Generation > 0 {
-		if err := json.Unmarshal(current.Journal.Snapshot, &prior); err != nil {
-			return current, fmt.Errorf("INTEGRITY_FAILURE: Prior runtime Snapshot")
-		}
-		if snapshot.SessionEpoch < prior.SessionEpoch {
-			return current, fmt.Errorf("SESSION_SUPERSEDED: Persisted session cannot regress")
-		}
-	}
-	for _, a := range snapshot.Assignments {
-		slot := fmt.Sprintf("%s/%d", a.Resource.Protocol, a.Resource.Port)
-		incoming[slot] = true
-		if a.BindingFence < next.Journal.Fences[slot] || a.BindingFence <= next.Journal.Retired[slot] {
-			return current, fmt.Errorf("FENCING_REJECTED")
-		}
-		for _, old := range prior.Assignments {
-			if old.Resource.Protocol != a.Resource.Protocol || old.Resource.Port != a.Resource.Port {
-				continue
-			}
-			if a.BindingFence == old.BindingFence && (old.AssignmentId != a.AssignmentId || old.ForwardId != a.ForwardId || old.DeploymentGeneration != a.DeploymentGeneration || old.Role != a.Role || old.Driver.Id != a.Driver.Id) {
-				return current, fmt.Errorf("FENCING_REJECTED: New physical owner requires a new Fence")
-			}
-			if old.AssignmentId == a.AssignmentId && old.DeploymentGeneration == a.DeploymentGeneration && old.BindingFence == a.BindingFence {
-				if old.Driver.ConfigDigest != a.Driver.ConfigDigest || old.Resource != a.Resource || old.Protocol != a.Protocol {
-					return current, fmt.Errorf("INTEGRITY_FAILURE: Immutable execution changed")
-				}
-				if old.Phase == "draining" && a.Phase != "draining" || old.Phase == "active" && a.Phase == "prepared" {
-					return current, fmt.Errorf("FENCING_REJECTED: Execution phase regressed")
-				}
-			}
-		}
-		next.Journal.Fences[slot] = a.BindingFence
-	}
-	for slot, fence := range next.Journal.Fences {
-		if !incoming[slot] {
-			next.Journal.Retired[slot] = max(next.Journal.Retired[slot], fence)
-		}
-	}
-	for _, t := range snapshot.Tombstones {
-		slot := fmt.Sprintf("%s/%d", t.PhysicalProtocol, t.Port)
-		next.Journal.Retired[slot] = max(next.Journal.Retired[slot], t.BindingFence)
-	}
-	next.Journal.Generation = snapshot.SnapshotGeneration
-	next.Journal.Digest = snapshot.SnapshotDigest
-	next.Journal.Snapshot = raw
-	if err := saveRuntimeJournal(path, key, next); err != nil {
-		return current, fmt.Errorf("PERSISTENCE_FAILURE: %w", err)
-	}
-	return next, nil
-}
-
-func sameExtension(a, b *uint64) bool {
-	return a == nil && b == nil || a != nil && b != nil && *a == *b
+	return RuntimeJournalFromFacts(next), nil
 }
 
 // EnableRuntimeExecution atomically upgrades the existing authoritative journal.
@@ -273,7 +183,7 @@ func EnableRuntimeExecution(path string, key []byte, node, transitPath string) (
 		}
 		for slot, cutoff := range legacy {
 			for _, a := range snapshot.Assignments {
-				if fmt.Sprintf("%s/%d", a.Resource.Protocol, a.Resource.Port) == slot && a.BindingFence <= cutoff {
+				if PhysicalSlotKey(a.Resource.Protocol, a.Resource.Port) == slot && a.BindingFence <= cutoff {
 					return current, fmt.Errorf("RESOURCE_CONFLICT: Legacy Transit history overlaps live Runtime ownership")
 				}
 			}

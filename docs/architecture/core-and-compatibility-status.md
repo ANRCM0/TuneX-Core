@@ -1,5 +1,34 @@
 # Core 与兼容接入层现状
 
+Current source disposition, 2026-10-19: A5 manual source classification and
+reviewable candidate records are closed in
+[foundation-a5-source-closure-v1.md](foundation-a5-source-closure-v1.md).
+FR-0023-0025 resolve the newly found lower timing/credential/signal representation
+residuals. The dated source-open statements below are historical snapshots;
+all current-source boundary/contract/example and physical/release acceptance
+remains unverified, and the foundation/upper-module gate stays closed.
+
+## 2026-10-18 四层地基 DoD 复核与首批提取
+
+用户已明确更严格的 L0/L1/L2/L3、公开契约及并行开发 DoD。
+[四层边界](foundation-layers-v1.md) /
+[ADR-0048](../decisions/0048-foundation-layer-boundaries.md) 已落实治理约定和第一批源码拆分：
+独立纯运行时决策、L1 RuntimeHost/共用契约、L2 MySQL/ADP/进程观察适配与公开接口样例。
+这不表示严格地基已完成；[就绪清单](../development/foundation-readiness.md) 仍列旧 owner
+持久化/具体类、Agent 安全平台、业务公共契约和全仓边界缺口，集中验收尚未执行。
+下方 ADR-0047 的“源码收口”只对应其原范围，不能用于打开新的上层并行门禁。
+
+## 2026-10-18 最新源码收口
+
+[ADR-0047](../decisions/0047-classified-integration-framework-v1.md) 的本轮实现范围
+已在当前工作树收口，集中验收未执行。以
+[分类接入框架 v1](framework-integration-v1.md) 和
+[Core v1 公共表面](../spec/core-v1-surface.md) 为后续开发入口。
+管理详情查询、HTTP/机器窄服务、具名装配、契约分入口、Control/Agent 原生适配
+契约及后台任务/请求排空已接线；源码表面冻结不等于验证通过或正式发布。
+下文保留初次盘点和分批历史，“尚未完成统一接入框架”等描述对应当时范围；
+具体产品功能、未完整 echo 与最终 SHA/物理/长期运行门槛仍不由本次收口关闭。
+
 日期：2026-10-17（Asia/Shanghai）。
 初次盘点源码基线：`03513a941177afcb84a5a1e6eab025c830d63300`。
 性质：**现状盘点与待决策清单，不是新协议或模块接口的 Accepted ADR**。

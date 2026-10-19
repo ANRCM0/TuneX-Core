@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tunex:forward-telemetry:1",
+  "title": "TuneX forward-telemetry-v1 native ingress payload observations",
+  "description": "Independent closed operational sample and acknowledgment messages, not execution authority, health, host traffic or billing evidence. Duplicate JSON keys must be rejected before structural validation. Normative TypeScript parsers enforce exact uint64 bounds, semantic bindings, arithmetic and time comparisons. Raw samples are limited to 65536 UTF-8 bytes, raw acknowledgments to 4096 bytes, and normalized individual points to 4096 bytes; these are parser/application byte limits, not JSON Schema character limits. Existing process telemetry-v1 and ADP execution messages are unchanged.",
+  "oneOf": [
+    { "$ref": "#/$defs/Sample" },
+    { "$ref": "#/$defs/Ack" }
+  ],
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$(?![\\s\\S])"
+    },
+    "Counter": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "CounterOrZero": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "Uint64Decimal": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20,
+      "pattern": "^(0|[1-9][0-9]{0,19})$(?![\\s\\S])",
+      "description": "Canonical unsigned decimal in [0,18446744073709551615], without whitespace or leading zeroes. The normative telemetryUint64 TypeScript predicate additionally enforces the exact uint64 numeric upper bound using integer arithmetic; this structural pattern alone does not."
+    },
+    "Epoch": {
+      "type": "string",
+      "minLength": 32,
+      "maxLength": 32,
+      "pattern": "^[a-f0-9]{32}$(?![\\s\\S])"
+    },
+    "Digest": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[a-f0-9]{64}$(?![\\s\\S])"
+    },
+    "UtcNano": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 30,
+      "pattern": "^(?:197[0-9]|19[89][0-9]|[2-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,9})?Z$(?![\\s\\S])",
+      "description": "Strict uppercase UTC RFC3339 with optional 1..9 fractional digits, years 1970..9999, no leap seconds or whitespace. The normative parser validates the actual Gregorian calendar date and nonnegative epoch time; nanosecond comparisons must not truncate to Date milliseconds."
+    },
+    "Resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "address", "port"],
+      "properties": {
+        "protocol": { "enum": ["tcp", "udp"] },
+        "address": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 127,
+          "pattern": "^[0-9A-Fa-f:.]+$(?![\\s\\S])",
+          "anyOf": [
+            { "format": "ipv4" },
+            { "format": "ipv6" }
+          ],
+          "description": "Valid ADP listen IPv4/IPv6 address as checked by the existing Core ipBytes helper; no host names, zone identifiers or whitespace. Format assertion alone is not a substitute for the normative helper."
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "Identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "bootId", "sessionEpoch", "assignmentId", "forwardId", "forwardRevision", "deploymentGeneration", "bindingFence", "role", "protocol", "driverId", "driverSchemaVersion", "configDigest", "resource"],
+      "properties": {
+        "nodeId": { "$ref": "#/$defs/Id" },
+        "bootId": { "$ref": "#/$defs/Id" },
+        "sessionEpoch": { "$ref": "#/$defs/Counter" },
+        "assignmentId": { "$ref": "#/$defs/Id" },
+        "forwardId": { "$ref": "#/$defs/Id" },
+        "forwardRevision": { "$ref": "#/$defs/Counter" },
+        "deploymentGeneration": { "$ref": "#/$defs/Counter" },
+        "bindingFence": { "$ref": "#/$defs/Counter" },
+        "role": { "enum": ["direct", "relay-ingress", "multihop-ingress"] },
+        "protocol": { "enum": ["tcp", "udp"] },
+        "driverId": { "enum": ["native.direct.v1", "native.relay.v1", "native.multihop.v1"] },
+        "driverSchemaVersion": { "const": 1 },
+        "configDigest": { "$ref": "#/$defs/Digest" },
+        "resource": { "$ref": "#/$defs/Resource" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "role": { "const": "direct" } } },
+          "then": { "properties": { "driverId": { "const": "native.direct.v1" } } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "relay-ingress" } } },
+          "then": { "properties": { "driverId": { "const": "native.relay.v1" } } }
+        },
+        {
+          "if": { "properties": { "role": { "const": "multihop-ingress" } } },
+          "then": { "properties": { "driverId": { "const": "native.multihop.v1" } } }
+        },
+        {
+          "if": { "properties": { "protocol": { "const": "tcp" } } },
+          "then": { "properties": { "resource": { "type": "object", "properties": { "protocol": { "const": "tcp" } } } } },
+          "else": { "properties": { "resource": { "type": "object", "properties": { "protocol": { "const": "udp" } } } } }
+        }
+      ],
+      "description": "Complete published native ingress binding identity. Role must match its native driver, resource protocol must match the business protocol, and the point nodeId/bootId/sessionEpoch must equal the enclosing sample. Outer equality is a normative parser check, not an execution authorization claim."
+    },
+    "Counters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["payloadSentBytes", "payloadReceivedBytes", "tcpAccepted", "tcpConnected", "tcpClosed", "udpAssociationsCreated", "udpAssociationsClosed", "udpDatagramsSent", "udpDatagramsReceived"],
+      "properties": {
+        "payloadSentBytes": { "$ref": "#/$defs/Uint64Decimal" },
+        "payloadReceivedBytes": { "$ref": "#/$defs/Uint64Decimal" },
+        "tcpAccepted": { "$ref": "#/$defs/Uint64Decimal" },
+        "tcpConnected": { "$ref": "#/$defs/Uint64Decimal" },
+        "tcpClosed": { "$ref": "#/$defs/Uint64Decimal" },
+        "udpAssociationsCreated": { "$ref": "#/$defs/Uint64Decimal" },
+        "udpAssociationsClosed": { "$ref": "#/$defs/Uint64Decimal" },
+        "udpDatagramsSent": { "$ref": "#/$defs/Uint64Decimal" },
+        "udpDatagramsReceived": { "$ref": "#/$defs/Uint64Decimal" }
+      },
+      "description": "Individually atomic cumulative counters, not a multi-field atomic transaction. Inapplicable protocol counters are the exact string zero. Do not impose accepted/connected/closed conservation relations, derive billing, or add independent instances together."
+    },
+    "Point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "state", "phase", "capturedAt", "endedAt", "availability", "counterEpoch", "counters", "overflowed"],
+      "properties": {
+        "identity": { "$ref": "#/$defs/Identity" },
+        "state": { "enum": ["current", "draining", "terminal"] },
+        "phase": { "enum": ["prepared", "active", "draining"] },
+        "capturedAt": { "$ref": "#/$defs/UtcNano" },
+        "endedAt": { "oneOf": [{ "$ref": "#/$defs/UtcNano" }, { "type": "null" }] },
+        "availability": { "enum": ["available", "unavailable"] },
+        "counterEpoch": { "oneOf": [{ "$ref": "#/$defs/Epoch" }, { "type": "null" }] },
+        "counters": { "oneOf": [{ "$ref": "#/$defs/Counters" }, { "type": "null" }] },
+        "overflowed": { "type": ["boolean", "null"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "availability": { "const": "available" } } },
+          "then": {
+            "properties": {
+              "counterEpoch": { "$ref": "#/$defs/Epoch" },
+              "counters": { "$ref": "#/$defs/Counters" },
+              "overflowed": { "type": "boolean" }
+            }
+          },
+          "else": {
+            "properties": {
+              "counterEpoch": { "type": "null" },
+              "counters": { "type": "null" },
+              "overflowed": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "state": { "const": "terminal" } } },
+          "then": { "properties": { "endedAt": { "$ref": "#/$defs/UtcNano" } } },
+          "else": { "properties": { "endedAt": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "identity": { "type": "object", "properties": { "role": { "const": "direct" } } } } },
+          "then": { "properties": { "phase": { "const": "active" } } }
+        },
+        {
+          "if": { "properties": { "availability": { "const": "available" }, "identity": { "type": "object", "properties": { "protocol": { "const": "tcp" } } } } },
+          "then": {
+            "properties": {
+              "counters": {
+                "type": "object",
+                "properties": {
+                  "udpAssociationsCreated": { "const": "0" },
+                  "udpAssociationsClosed": { "const": "0" },
+                  "udpDatagramsSent": { "const": "0" },
+                  "udpDatagramsReceived": { "const": "0" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "availability": { "const": "available" }, "identity": { "type": "object", "properties": { "protocol": { "const": "udp" } } } } },
+          "then": {
+            "properties": {
+              "counters": {
+                "type": "object",
+                "properties": {
+                  "tcpAccepted": { "const": "0" },
+                  "tcpConnected": { "const": "0" },
+                  "tcpClosed": { "const": "0" }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "description": "The normative parser additionally requires terminal endedAt to equal capturedAt exactly, point capturedAt not later than enclosing sample capturedAt using nanosecond comparison, outer machine identity equality, and at most 4096 normalized UTF-8 bytes. Direct phase is always active. Unavailable means unsupported or unavailable, never measured zero. Terminal retention and Close do not guarantee remote delivery."
+    },
+    "Coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "available", "returned", "omitted", "truncated", "offset", "nextOffset", "unavailableSources", "tailLimit", "tailRetentionSeconds", "tailsEvicted", "tailsExpired", "historyComplete"],
+      "properties": {
+        "limit": { "const": 32 },
+        "available": { "$ref": "#/$defs/CounterOrZero" },
+        "returned": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "omitted": { "$ref": "#/$defs/CounterOrZero" },
+        "truncated": { "type": "boolean" },
+        "offset": { "$ref": "#/$defs/CounterOrZero" },
+        "nextOffset": { "$ref": "#/$defs/CounterOrZero" },
+        "unavailableSources": { "$ref": "#/$defs/CounterOrZero" },
+        "tailLimit": { "const": 128 },
+        "tailRetentionSeconds": { "const": 600 },
+        "tailsEvicted": { "$ref": "#/$defs/Uint64Decimal" },
+        "tailsExpired": { "$ref": "#/$defs/Uint64Decimal" },
+        "historyComplete": { "const": false }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "available": { "type": "integer", "maximum": 32 } } },
+          "then": { "properties": { "offset": { "const": 0 }, "nextOffset": { "const": 0 }, "omitted": { "const": 0 }, "truncated": { "const": false } } },
+          "else": { "properties": { "returned": { "const": 32 }, "omitted": { "type": "integer", "minimum": 1 }, "truncated": { "const": true } } }
+        }
+      ],
+      "description": "Normative parser arithmetic: returned=items.length=min(32,available), omitted=available-returned, truncated=(omitted>0), unavailableSources<=available. Available includes unavailable observations, not just usable counters. For available<=32, offset=nextOffset=0; otherwise offset<available and nextOffset=(offset+returned) mod available using exact integer arithmetic. No complete history promise; frozen tails are memory-only, bounded to 128 records/600 seconds, and lost on restart."
+    },
+    "Sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forwardTelemetryVersion", "kind", "nodeId", "bootId", "sessionEpoch", "sampleEpoch", "sequence", "capturedAt", "uptimeMs", "snapshotGeneration", "droppedSamples", "coverage", "items"],
+      "properties": {
+        "forwardTelemetryVersion": { "const": 1 },
+        "kind": { "const": "forward-telemetry-sample" },
+        "nodeId": { "$ref": "#/$defs/Id" },
+        "bootId": { "$ref": "#/$defs/Id" },
+        "sessionEpoch": { "$ref": "#/$defs/Counter" },
+        "sampleEpoch": { "$ref": "#/$defs/Epoch" },
+        "sequence": { "$ref": "#/$defs/Counter" },
+        "capturedAt": { "$ref": "#/$defs/UtcNano" },
+        "uptimeMs": { "$ref": "#/$defs/CounterOrZero" },
+        "snapshotGeneration": { "$ref": "#/$defs/CounterOrZero" },
+        "droppedSamples": { "$ref": "#/$defs/Uint64Decimal" },
+        "coverage": { "$ref": "#/$defs/Coverage" },
+        "items": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/Point" } }
+      },
+      "description": "Maximum raw UTF-8 body 65536 bytes, duplicate keys forbidden. Normative parser rejects duplicate (complete identity,counterEpoch) pairs even when other point fields differ; uniqueItems alone cannot express this. Every point machine identity must equal the sample nodeId/bootId/sessionEpoch, every point timestamp must not exceed sample time, and coverage.returned must equal items.length. Source is agent-reported operational observation only; server authorization, mapping and receive-time budgets are separate application checks."
+    },
+    "Ack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forwardTelemetryVersion", "kind", "nodeId", "bootId", "sessionEpoch", "sampleEpoch", "sequence", "receivedAt", "stored", "acceptedPoints", "rejectedPoints", "source", "executionAuthorized"],
+      "properties": {
+        "forwardTelemetryVersion": { "const": 1 },
+        "kind": { "const": "forward-telemetry-ack" },
+        "nodeId": { "$ref": "#/$defs/Id" },
+        "bootId": { "$ref": "#/$defs/Id" },
+        "sessionEpoch": { "$ref": "#/$defs/Counter" },
+        "sampleEpoch": { "$ref": "#/$defs/Epoch" },
+        "sequence": { "$ref": "#/$defs/Counter" },
+        "receivedAt": { "$ref": "#/$defs/UtcNano" },
+        "stored": { "const": true },
+        "acceptedPoints": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "rejectedPoints": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "source": { "const": "agent-reported" },
+        "executionAuthorized": { "const": false }
+      },
+      "description": "Maximum raw UTF-8 body 4096 bytes, duplicate keys forbidden. Normative parser requires acceptedPoints+rejectedPoints<=32; transport sender additionally binds all machine/export identities and requires that sum to equal the submitted items.length. stored=true acknowledges bounded operational intake, not payload delivery, health or execution authority."
+    }
+  }
+}

@@ -1,5 +1,6 @@
 # TuneX VNext Agent host only. Enroll exactly once outside this steady service.
 # Host network is the verified native listener/Relay deployment mode.
+# Controlled observation TLS is a separate default-off source feature, not acceptance evidence.
 name: tunex-vnext-agent
 services:
   agent:
@@ -19,6 +20,16 @@ services:
       - --multihop=${TUNEX_MULTIHOP_AGENT:-false}
       - --probe-registration=${TUNEX_PROBE_REGISTRATION:-false}
       - --probe-execution=${TUNEX_PROBE_AGENT_EXECUTION:-false}
+      # Local ingress connect can trigger the existing listener's ordinary downstream dial.
+      - --probe-ingress=${TUNEX_PROBE_AGENT_INGRESS:-false}
+      # Requires all three original Probe options above; TLS records are actual Forward payload.
+      - --probe-services=${TUNEX_PROBE_AGENT_SERVICES:-false}
+      # Explicit bounded TCP/UDP nonce payload; requires services and all original Probe options.
+      - --probe-echo=${TUNEX_PROBE_AGENT_ECHO:-false}
+      - --telemetry=${TUNEX_TELEMETRY_AGENT:-false}
+      - --forward-telemetry=${TUNEX_FORWARD_TELEMETRY_AGENT:-false}
+      - --host-telemetry=${TUNEX_HOST_TELEMETRY_AGENT:-false}
+      - --probe-telemetry=${TUNEX_PROBE_TELEMETRY_AGENT:-false}
       - --diagnostics
     volumes:
       - type: bind

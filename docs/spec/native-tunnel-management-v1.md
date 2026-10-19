@@ -3,6 +3,11 @@
 Status: Implemented and statically checked; exact-commit functional/MySQL/browser
 acceptance remains pending in Actions. Decision: [ADR-0021](../decisions/0021-native-tunnel-read-model.md).
 
+This contract describes Node-level persisted tunnel metadata. The separate
+[logical tunnel management v1](logical-tunnel-management-v1.md) business entry
+composes immutable definitions and explicit Forward bindings; it does not turn
+this Node read model into a live physical-tunnel registry or health authority.
+
 ## 1. Read Ownership and Authorization
 
 `TunnelQueries<Tx>` uses the existing `TransactionBoundary` and `ScopeAuthorization`.

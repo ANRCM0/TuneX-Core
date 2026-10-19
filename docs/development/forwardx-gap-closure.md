@@ -2,6 +2,13 @@
 
 状态：**Planned / incremental delivery**。建立于 2026-10-14 的 VNext ADP/3 基线之上。本文只定义差距、优先级、验收门槛；没有真实代码和带 commit 的实网证据时，不把功能标记为已实现。
 
+2026-10-19 参考更新：本地独立 `Forwardx/` 已快进至
+`8a3e70ccd62fbfee301f3b919120d51e9892de28`（包版本 2.3.285，含后续 main 修复）。
+实际源码对比、已有 TuneX 能力核对及适配限制见
+[研究报告](../reference/forwardx-comparison-2026-10-19.md)，后续采用
+[优化候选顺序](forwardx-optimization-backlog.md)。本文原参考版本保留为历史基线；
+此次研究没有实现新产品功能，也不改变当前地基优先和未验收状态。
+
 2026-10-16 排期说明：本文保留产品方向及原始切片，近期基线收口以
 [下一阶段开发目标](next-milestones.md) 为准；后续功能主线以
 [转发平台四主线适配方案](forwarding-platform-plan.md) 为准。
@@ -10,7 +17,7 @@
 运行证据按对应 SHA 的交付台账及 Actions 核对，物理主机与生产门槛单独验收；
 下文 Link/Path 的历史先后顺序不再作为多跳前置要求。
 
-参考产品：[ForwardX](https://github.com/poouo/Forwardx)；仅借鉴其公开产品设计思路、用户工作流和对转发资源的分类。**不得复制 AGPL-3.0-only 源码、资产、组件实现、文档段落或未经许可的衍生代码**。历史 V2 许可证审查继续以 [legal/NOTICE.md](../../legal/NOTICE.md) 为准。
+参考产品：[ForwardX](https://github.com/poouo/Forwardx)。2026-10-19 用户明确允许参考、改写或复用适用成熟代码以加快开发；具体来源、修订、适配差异和版权/许可记录随片段保留，按 [复用映射](reference-code-reuse-map.md) 落到 TuneX 对应 owner。参考目录不成为构建或运行依赖；原 Runtime、权限、事务和阶段门禁保持。历史 V2 来源记录继续以 [legal/NOTICE.md](../../legal/NOTICE.md) 为准。
 
 ## 0. 方向与不可退让的边界
 

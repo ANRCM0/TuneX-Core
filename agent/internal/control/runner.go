@@ -1,25 +1,22 @@
 package control
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/authorization"
 	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/controlchannel"
+	"github.com/tunex/vnext/agent/internal/executionchannel"
+	"github.com/tunex/vnext/agent/internal/nativeexecution"
+	"github.com/tunex/vnext/agent/internal/runtimeplatform"
 	"github.com/tunex/vnext/agent/internal/state"
 )
 
@@ -30,9 +27,16 @@ type Options struct {
 	Multihop                                                              bool
 	ProbeRegistration                                                     bool
 	ProbeExecution                                                        bool
+	ProbeIngress                                                          bool
+	ProbeServices                                                         bool
+	ProbeEcho                                                             bool
 	ImportTransitJournal                                                  string
 	TimeProof, TimeProofKey                                               string
 	Diagnostics                                                           string
+	Telemetry                                                             bool
+	ForwardTelemetry                                                      bool
+	HostTelemetry                                                         bool
+	ProbeTelemetry                                                        bool
 }
 type httpError struct {
 	status int
@@ -40,7 +44,7 @@ type httpError struct {
 }
 
 func (problem httpError) Error() string {
-	return fmt.Sprintf("Control HTTP %d: %s", problem.status, problem.code)
+	return (executionchannel.HTTPError{Status: problem.status, Code: problem.code}).Error()
 }
 
 type running struct {
@@ -61,7 +65,7 @@ func (runner *Runner) assignmentCheck(driver executionDriver, ticket *authorizat
 		if err := ticket.Allow(); err != nil {
 			return err
 		}
-		if !time.Now().Before(until) {
+		if !runner.scheduler().Now().Before(until) {
 			return fmt.Errorf("LEASE_EXPIRED: Relay credential authorization ended")
 		}
 		return nil
@@ -74,113 +78,123 @@ type draining struct {
 	deadline time.Time
 }
 type Runner struct {
-	options               Options
-	client                *http.Client
-	key                   []byte
-	journal               state.Journal
-	runtimeState          state.RuntimeJournal
-	hello                 adp3.HelloResponse
-	sequence              uint64
-	pending               []byte
-	instances             map[string]running
-	drains                map[string]draining
-	observations          []adp3.Observation
-	mutex                 sync.Mutex
-	deadline              time.Time
-	guard                 *authorization.Guard
-	ticket                *authorization.Ticket
-	clock                 authorization.Clock
-	certificate           tls.Certificate
-	credentialUntil       time.Time
-	credentialFingerprint [32]byte
-	roots                 *x509.CertPool
-	relayCertificate      tls.Certificate
-	relayUntil            time.Time
-	relayRenewAfter       time.Time
-	probeChange           sync.Mutex
-	probeRegistration     *registeredProbe
-	probeStopped          bool
+	providers                  Providers
+	effects                    Effects
+	local                      LocalServices
+	probeCounterClock          runtimeplatform.Scheduler
+	options                    Options
+	client                     *http.Client
+	key                        []byte
+	journal                    state.Journal
+	runtimeState               state.RuntimeJournal
+	hello                      adp3.HelloResponse
+	sequence                   uint64
+	pending                    []byte
+	instances                  map[string]running
+	drains                     map[string]draining
+	observations               []adp3.Observation
+	mutex                      sync.Mutex
+	deadline                   time.Time
+	guard                      *authorization.Guard
+	ticket                     *authorization.Ticket
+	clock                      authorization.Clock
+	certificate                tls.Certificate
+	credentialUntil            time.Time
+	credentialFingerprint      [32]byte
+	roots                      *x509.CertPool
+	relayCertificate           tls.Certificate
+	relayUntil                 time.Time
+	relayRenewAfter            time.Time
+	probeChange                sync.Mutex
+	probeRegistration          *registeredProbe
+	probeStopped               bool
+	forwardCounterTails        []forwardCounterTail
+	forwardCounterTailsEvicted uint64
+	forwardCounterTailsExpired uint64
+	forwardCounterCursor       uint64
+	forwardTelemetryCursor     uint64
+	probeCounterTails          []probeCounterTail
+	probeCounterRetiring       []probeCounterSource
+	probeCounterTailsEvicted   uint64
+	probeCounterTailsExpired   uint64
+	probeCounterCursor         uint64
 }
 
-func New(options Options) (*Runner, error) {
+func New(options Options) (*Runner, error) { return newRunner(options, defaultProviders()) }
+
+func newRunner(options Options, providers Providers) (*Runner, error) {
+	return newRunnerWithEffects(options, providers, defaultEffects())
+}
+
+func newRunnerWithEffects(options Options, providers Providers, effects Effects) (*Runner, error) {
+	return newRunnerWithLocalServices(options, providers, effects, defaultLocalServices())
+}
+
+func newRunnerWithLocalServices(options Options, providers Providers, effects Effects, local LocalServices) (*Runner, error) {
+	if options.ProbeEcho && (!options.ProbeServices || !options.ProbeIngress || !options.ProbeExecution || !options.ProbeRegistration) {
+		return nil, fmt.Errorf("INVALID_CONFIG: Echo Probe requires explicit services, ingress, execution and registration")
+	}
+	if options.ProbeServices && (!options.ProbeIngress || !options.ProbeExecution || !options.ProbeRegistration) {
+		return nil, fmt.Errorf("INVALID_CONFIG: Service Probe requires explicit ingress, execution and registration")
+	}
+	if options.ProbeIngress && (!options.ProbeExecution || !options.ProbeRegistration) {
+		return nil, fmt.Errorf("INVALID_CONFIG: Ingress Probe requires explicit Probe execution and registration")
+	}
 	if options.ProbeExecution && !options.ProbeRegistration {
 		return nil, fmt.Errorf("INVALID_CONFIG: Probe execution requires explicit Probe registration")
 	}
 	if options.Multihop && !options.Relay || options.ImportTransitJournal != "" && !options.Multihop {
 		return nil, fmt.Errorf("INVALID_CONFIG: Multi-hop requires Relay and explicit journal migration")
 	}
-	if !strings.HasPrefix(options.URL, "https://") {
-		return nil, fmt.Errorf("HTTPS Control URL required")
-	}
-	if err := authorization.ValidateProofBoundary(options.TimeProof, options.TimeProofKey, filepath.Dir(options.Journal)); err != nil {
+	if err := controlchannel.ValidateControlURL(options.URL); err != nil {
 		return nil, err
 	}
-	ca, err := os.ReadFile(options.CA)
+	if err := effects.Bootstrap.ValidateProofBoundary(options.TimeProof, options.TimeProofKey, options.Journal); err != nil {
+		return nil, err
+	}
+	roots, err := effects.Bootstrap.LoadRoots(options.CA)
 	if err != nil {
 		return nil, err
 	}
-	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM(ca) {
-		return nil, fmt.Errorf("Invalid Control CA")
-	}
-	key, err := os.ReadFile(options.JournalKey)
-	if err != nil || len(key) != 32 {
-		return nil, fmt.Errorf("INTEGRITY_FAILURE: journal protection key unavailable")
-	}
-	runtimeJournal, err := state.LoadRuntimeJournal(options.Journal, key, options.NodeID)
+	key, err := effects.Bootstrap.LoadProtectionKey(options.JournalKey)
 	if err != nil {
 		return nil, err
 	}
+	loadedRuntime, err := effects.Bootstrap.LoadRuntime(options.Journal, key, options.NodeID)
+	if err != nil {
+		return nil, err
+	}
+	runtimeJournal := state.RuntimeJournalFromFacts(loadedRuntime)
 	if runtimeJournal.ExecutionExtension != nil && !options.Multihop {
 		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY: Migrated journal requires multi-hop-aware Runner")
 	}
-	runner := &Runner{options: options, key: key, journal: runtimeJournal.Journal, runtimeState: runtimeJournal, instances: make(map[string]running), roots: roots}
+	runner := &Runner{providers: providers, effects: effects, local: local, probeCounterClock: nativeProbeCounterScheduler(), options: options, key: key, journal: runtimeJournal.Journal, runtimeState: runtimeJournal, instances: make(map[string]running), roots: roots}
 	if err := runner.reloadCredential(); err != nil {
 		return nil, err
 	}
 	if options.Multihop {
-		runtimeJournal, err = state.EnableRuntimeExecution(options.Journal, key, options.NodeID, options.ImportTransitJournal)
+		loadedRuntime, err = effects.Bootstrap.EnableRuntime(options.Journal, key, options.NodeID, options.ImportTransitJournal)
 		if err != nil {
 			return nil, err
 		}
+		runtimeJournal = state.RuntimeJournalFromFacts(loadedRuntime)
 		runner.journal = runtimeJournal.Journal
 		runner.runtimeState = runtimeJournal
 	}
-	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+	runner.client = runner.channelProvider().NewClient(roots, func() tls.Certificate {
 		runner.mutex.Lock()
 		defer runner.mutex.Unlock()
-		certificate := runner.certificate
-		return &certificate, nil
-	}, MinVersion: tls.VersionTLS13}}
-	runner.client = &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("Control redirects are forbidden") }}
+		return runner.certificate
+	})
 	return runner, nil
 }
 func (runner *Runner) request(ctx context.Context, method, path string, body []byte, epoch bool) ([]byte, error) {
-	request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(runner.options.URL, "/")+path, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
+	raw, err := runner.channelProvider().Request(ctx, runner.client, runner.options.URL, method, path, body, epoch, runner.hello.SessionEpoch)
+	var problem executionchannel.HTTPError
+	if errors.As(err, &problem) {
+		return nil, httpError{status: problem.Status, code: problem.Code}
 	}
-	request.Header.Set("Content-Type", "application/json")
-	if epoch {
-		request.Header.Set("X-TuneX-Session-Epoch", strconv.FormatUint(runner.hello.SessionEpoch, 10))
-	}
-	response, err := runner.client.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 4194305))
-	if err != nil {
-		return nil, err
-	}
-	if response.StatusCode != 200 {
-		var problem struct {
-			Code string `json:"code"`
-		}
-		json.Unmarshal(raw, &problem)
-		return nil, httpError{response.StatusCode, problem.Code}
-	}
-	return raw, nil
+	return raw, err
 }
 func (runner *Runner) stop() {
 	runner.mutex.Lock()
@@ -189,20 +203,23 @@ func (runner *Runner) stop() {
 	runner.closeProbeLocked()
 	for key, instance := range runner.instances {
 		instance.stream.Close()
+		runner.retainForwardCounterTailLocked(instance)
 		delete(runner.instances, key)
 	}
 	for key, drain := range runner.drains {
 		drain.instance.stream.Close()
+		runner.retainForwardCounterTailLocked(drain.instance)
 		delete(runner.drains, key)
 	}
 }
 func (runner *Runner) Run(ctx context.Context) error {
+	started := runner.scheduler().Now()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer runner.stop()
-	defer runner.client.CloseIdleConnections()
+	defer runner.channelProvider().CloseIdleConnections(runner.client)
 	hello := adp3.HelloRequest{ProtocolVersion: 3, NodeId: runner.options.NodeID, BootId: runner.options.BootID, AgentBuild: "vnext-adp3-direct", Capabilities: builtinExecutionDrivers.capabilities(runner.executionFeatures()), LastStoredSnapshotGeneration: runner.journal.Generation}
-	body, _ := json.Marshal(hello)
+	body, _ := nativeexecution.EncodeRunnerHello(hello)
 	var raw []byte
 	var err error
 	for delay := time.Second; ; delay = min(delay*2, 30*time.Second) {
@@ -217,14 +234,14 @@ func (runner *Runner) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(delay):
+		case <-runner.scheduler().After(delay):
 		}
 	}
-	message, err := adp3.Parse("HelloResponse", raw)
+	message, err := nativeexecution.DecodeRunnerHello(raw)
 	if err != nil {
 		return err
 	}
-	runner.hello = message.(adp3.HelloResponse)
+	runner.hello = message
 	if runner.hello.NodeId != runner.options.NodeID || runner.hello.BootId != runner.options.BootID {
 		return fmt.Errorf("AUTHORIZATION_DENIED: Hello identity mismatch")
 	}
@@ -235,27 +252,59 @@ func (runner *Runner) Run(ctx context.Context) error {
 		diagnosticDone := make(chan struct{})
 		go func() {
 			defer close(diagnosticDone)
-			ticker := time.NewTicker(500 * time.Millisecond)
+			ticker := runner.scheduler().NewTicker(500 * time.Millisecond)
 			defer ticker.Stop()
+			counterTicker := runner.scheduler().NewTicker(10 * time.Second)
+			defer counterTicker.Stop()
 			for {
 				select {
 				case <-ctx.Done():
 					return
-				case <-ticker.C:
+				case <-ticker.C():
 					if err := runner.writeDiagnostics(false); err != nil {
-						fmt.Fprintln(os.Stderr, "Local diagnostics unavailable")
+						runner.localLog().Warn("Local diagnostics unavailable")
+					}
+				case <-counterTicker.C():
+					if err := runner.writeForwardCounters(false); err != nil {
+						runner.localLog().Warn("Local forward counters unavailable")
 					}
 				}
 			}
 		}()
-		defer func() { cancel(); <-diagnosticDone; runner.stop(); runner.writeDiagnostics(true) }()
+		defer func() {
+			cancel()
+			<-diagnosticDone
+			runner.stop()
+			runner.writeDiagnostics(true)
+			runner.writeForwardCounters(true)
+		}()
 	}
-	serverTime, err := time.Parse(time.RFC3339Nano, runner.hello.ServerTime)
+	serverTime, err := nativeexecution.ParseWireTime(runner.hello.ServerTime)
 	if err != nil {
 		return err
 	}
 	if err := runner.guard.ValidateServerTime(serverTime); err != nil {
 		return err
+	}
+	if runner.options.Telemetry {
+		telemetryDone := make(chan struct{})
+		go func() { defer close(telemetryDone); runner.maintainTelemetry(ctx, started) }()
+		defer func() { cancel(); <-telemetryDone }()
+	}
+	if runner.options.ForwardTelemetry {
+		forwardTelemetryDone := make(chan struct{})
+		go func() { defer close(forwardTelemetryDone); runner.maintainForwardTelemetry(ctx, started) }()
+		defer func() { cancel(); <-forwardTelemetryDone }()
+	}
+	if runner.options.HostTelemetry {
+		hostTelemetryDone := make(chan struct{})
+		go func() { defer close(hostTelemetryDone); runner.maintainHostTelemetry(ctx, started) }()
+		defer func() { cancel(); <-hostTelemetryDone }()
+	}
+	if runner.options.ProbeTelemetry {
+		probeTelemetryDone := make(chan struct{})
+		go func() { defer close(probeTelemetryDone); runner.maintainProbeTelemetry(ctx, started) }()
+		defer func() { cancel(); <-probeTelemetryDone }()
 	}
 	if runner.options.Relay {
 		if err := runner.ensureRelayCredential(ctx); err != nil {
@@ -265,14 +314,14 @@ func (runner *Runner) Run(ctx context.Context) error {
 	// Credential validity and wall/monotonic drift are checked independently of network retry/poll intervals.
 	guardDone := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(100 * time.Millisecond)
+		ticker := runner.scheduler().NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 		defer close(guardDone)
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-ticker.C():
 				runner.mutex.Lock()
 				problem := runner.guard.Check()
 				if problem == nil && runner.ticket != nil {
@@ -281,14 +330,16 @@ func (runner *Runner) Run(ctx context.Context) error {
 				expired := problem != nil
 				if expired {
 					runner.closeProbeLocked()
-					fmt.Fprintln(os.Stderr, "Agent authorization ended:", problem)
+					runner.localLog().Warn("Agent authorization ended:", problem)
 					cancel()
 					for key, instance := range runner.instances {
 						instance.stream.Close()
+						runner.retainForwardCounterTailLocked(instance)
 						delete(runner.instances, key)
 					}
 					for key, drain := range runner.drains {
 						drain.instance.stream.Close()
+						runner.retainForwardCounterTailLocked(drain.instance)
 						delete(runner.drains, key)
 					}
 				}
@@ -328,16 +379,16 @@ func (runner *Runner) Run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(time.Second):
+			case <-runner.scheduler().After(time.Second):
 				continue
 			}
 		}
 		runner.mutex.Lock()
-		machineDue := time.Until(runner.credentialUntil) <= runner.credentialRenewalLead()
+		machineDue := runner.scheduler().Until(runner.credentialUntil) <= runner.credentialRenewalLead()
 		runner.mutex.Unlock()
 		if rotateRequested || machineDue {
 			if err := runner.rotate(ctx); err != nil {
-				fmt.Fprintln(os.Stderr, "Credential rotation retry pending:", err)
+				runner.localLog().Warn("Credential rotation retry pending:", err)
 			} else {
 				rotateRequested = false
 			}
@@ -347,19 +398,19 @@ func (runner *Runner) Run(ctx context.Context) error {
 		}
 		if runner.options.Relay && runner.relayRenewalDue() {
 			if err := runner.renewRelayCredential(ctx); err != nil {
-				fmt.Fprintln(os.Stderr, "Relay credential renewal retry pending:", err)
+				runner.localLog().Warn("Relay credential renewal retry pending:", err)
 				// A response may be lost after issuance. Replaying the same durable CSR
 				// before reconciling prevents a successor engine from capturing the old key.
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-time.After(time.Duration(runner.hello.Policy.PollIntervalSeconds) * time.Second):
+				case <-runner.scheduler().After(time.Duration(runner.hello.Policy.PollIntervalSeconds) * time.Second):
 				}
 				continue
 			}
 		}
 		if err := runner.poll(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, "Agent reconcile failed:", err)
+			runner.localLog().Warn("Agent reconcile failed:", err)
 			var problem httpError
 			if errors.As(err, &problem) && (problem.status == 401 || problem.status == 403 || problem.code == "SESSION_SUPERSEDED") {
 				retired = true
@@ -369,13 +420,13 @@ func (runner *Runner) Run(ctx context.Context) error {
 			}
 		} else if len(runner.pending) > 0 {
 			if err := runner.report(ctx); err != nil {
-				fmt.Fprintln(os.Stderr, "Agent report retry pending:", err)
+				runner.localLog().Warn("Agent report retry pending:", err)
 			}
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Duration(runner.hello.Policy.PollIntervalSeconds) * time.Second):
+		case <-runner.scheduler().After(time.Duration(runner.hello.Policy.PollIntervalSeconds) * time.Second):
 		}
 	}
 }
@@ -395,15 +446,14 @@ func (runner *Runner) poll(ctx context.Context) error {
 			return err
 		}
 	}
-	raw, err := runner.request(ctx, "GET", "/agent/v3/snapshot?sinceGeneration="+strconv.FormatUint(runner.journal.Generation, 10), nil, true)
+	raw, err := runner.request(ctx, "GET", controlchannel.RuntimeSnapshotPath(runner.journal.Generation), nil, true)
 	if err != nil {
 		return err
 	}
-	value, err := adp3.Parse("Snapshot", raw)
+	snapshot, err := nativeexecution.DecodeRunnerSnapshot(raw)
 	if err != nil {
 		return err
 	}
-	snapshot := value.(adp3.Snapshot)
 	if snapshot.ExecutionExtension != nil && !runner.options.Multihop {
 		return fmt.Errorf("UNSUPPORTED_CAPABILITY: Multi-hop execution disabled")
 	}
@@ -413,12 +463,8 @@ func (runner *Runner) poll(ctx context.Context) error {
 	if snapshot.SnapshotGeneration < runner.journal.Generation || (snapshot.SnapshotGeneration == runner.journal.Generation && snapshot.SnapshotDigest != runner.journal.Digest) {
 		return fmt.Errorf("INTEGRITY_FAILURE: Snapshot history changed")
 	}
-	now := time.Now()
-	valid, err := time.Parse(time.RFC3339Nano, snapshot.ValidUntil)
-	if err != nil {
-		return err
-	}
-	issued, err := time.Parse(time.RFC3339Nano, snapshot.IssuedAt)
+	now := runner.scheduler().Now()
+	issued, valid, err := nativeexecution.RunnerSnapshotWindow(snapshot)
 	if err != nil {
 		return err
 	}
@@ -444,7 +490,8 @@ func (runner *Runner) poll(ctx context.Context) error {
 	incoming := make(map[string]bool)
 	var prior adp3.Snapshot
 	if len(runner.journal.Snapshot) > 0 {
-		if err := json.Unmarshal(runner.journal.Snapshot, &prior); err != nil {
+		prior, err = nativeexecution.DecodeRetainedRunnerSnapshot(runner.journal.Snapshot)
+		if err != nil {
 			return fmt.Errorf("INTEGRITY_FAILURE: persisted snapshot corrupted")
 		}
 	}
@@ -460,7 +507,7 @@ func (runner *Runner) poll(ctx context.Context) error {
 				return err
 			}
 		}
-		key := fmt.Sprintf("%s/%d", assignment.Resource.Protocol, assignment.Resource.Port)
+		key := state.PhysicalSlotKey(assignment.Resource.Protocol, assignment.Resource.Port)
 		for _, old := range prior.Assignments {
 			if old.AssignmentId == assignment.AssignmentId && old.DeploymentGeneration == assignment.DeploymentGeneration && old.BindingFence == assignment.BindingFence && (old.Driver.ConfigDigest != assignment.Driver.ConfigDigest || old.Resource != assignment.Resource || old.Protocol != assignment.Protocol) {
 				return fmt.Errorf("INTEGRITY_FAILURE: execution configuration changed without a new generation/fence")
@@ -481,7 +528,7 @@ func (runner *Runner) poll(ctx context.Context) error {
 		}
 	}
 	for _, tombstone := range snapshot.Tombstones {
-		key := fmt.Sprintf("%s/%d", tombstone.PhysicalProtocol, tombstone.Port)
+		key := state.PhysicalSlotKey(tombstone.PhysicalProtocol, tombstone.Port)
 		next.Retired[key] = max(next.Retired[key], tombstone.BindingFence)
 	}
 	next.Generation = snapshot.SnapshotGeneration
@@ -490,7 +537,7 @@ func (runner *Runner) poll(ctx context.Context) error {
 	if changed {
 		current := runner.runtimeState
 		if current.NodeID == "" {
-			current = state.RuntimeJournal{ProtocolVersion: 3, NodeID: runner.options.NodeID, Journal: runner.journal}
+			current = state.NativeRuntimeJournal(runner.options.NodeID, runner.journal)
 		}
 		stored, err := state.AcceptRuntimeSnapshot(runner.options.Journal, runner.key, current, snapshot)
 		if err != nil {
@@ -518,7 +565,7 @@ func (runner *Runner) poll(ctx context.Context) error {
 		if ctx.Err() != nil || ticket.Allow() != nil {
 			return fmt.Errorf("LEASE_EXPIRED: Authorization ended before bind")
 		}
-		key := fmt.Sprintf("%s/%d", assignment.Resource.Protocol, assignment.Resource.Port)
+		key := state.PhysicalSlotKey(assignment.Resource.Protocol, assignment.Resource.Port)
 		driver := drivers[assignment.AssignmentId]
 		check, err := runner.assignmentCheck(driver, ticket)
 		if err != nil {
@@ -594,20 +641,17 @@ func (runner *Runner) poll(ctx context.Context) error {
 			count = 0
 			condition = "removed"
 		}
-		drains = append(drains, adp3.Drain{AssignmentId: a.AssignmentId, DeploymentGeneration: a.DeploymentGeneration, BindingFence: a.BindingFence, StartedAt: drain.started.UTC().Format(time.RFC3339Nano), Deadline: drain.deadline.UTC().Format(time.RFC3339Nano), RemainingConnections: count, Condition: condition})
+		drains = append(drains, nativeexecution.RunnerDrain(a, drain.started, drain.deadline, count, condition))
 	}
-	report := adp3.ReportRequest{ProtocolVersion: 3, NodeId: runner.options.NodeID, BootId: runner.options.BootID, SessionEpoch: runner.hello.SessionEpoch, ReportSequence: runner.sequence, ObservedAt: now.UTC().Format(time.RFC3339Nano), AcceptedSnapshotGeneration: runner.journal.Generation, Observations: runner.observations, Drains: drains}
-	if report.Observations == nil {
-		report.Observations = []adp3.Observation{}
-	}
-	runner.pending, err = json.Marshal(report)
+	runner.pending, err = nativeexecution.EncodeRunnerReportAt(runner.options.NodeID, runner.options.BootID,
+		runner.hello.SessionEpoch, runner.sequence, now, runner.journal.Generation, runner.observations, drains)
 	return err
 }
 func (runner *Runner) beginDrain(instance running, now, previousCutoff time.Time) {
 	if runner.drains == nil {
 		runner.drains = make(map[string]draining)
 	}
-	key := fmt.Sprintf("%s/%d/%d", instance.assignment.AssignmentId, instance.assignment.DeploymentGeneration, instance.assignment.BindingFence)
+	key := nativeexecution.RunnerDrainKey(instance.assignment.AssignmentId, instance.assignment.DeploymentGeneration, instance.assignment.BindingFence)
 	if _, exists := runner.drains[key]; exists {
 		return
 	}
@@ -640,20 +684,22 @@ func (runner *Runner) report(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	value, err := adp3.Parse("ReportAck", raw)
+	ack, err := nativeexecution.DecodeRunnerReportAck(raw)
 	if err != nil {
 		return err
 	}
-	ack := value.(adp3.ReportAck)
 	if ack.NodeId != runner.options.NodeID || ack.BootId != runner.options.BootID || ack.SessionEpoch != runner.hello.SessionEpoch || ack.ReportSequence != runner.sequence {
 		return fmt.Errorf("INTEGRITY_FAILURE: ACK mismatch")
 	}
-	var sent adp3.ReportRequest
-	json.Unmarshal(runner.pending, &sent)
+	sent := nativeexecution.DecodePendingRunnerReport(runner.pending)
 	runner.mutex.Lock()
 	for _, drain := range sent.Drains {
 		if drain.Condition == "removed" {
-			delete(runner.drains, fmt.Sprintf("%s/%d/%d", drain.AssignmentId, drain.DeploymentGeneration, drain.BindingFence))
+			key := nativeexecution.RunnerDrainKey(drain.AssignmentId, drain.DeploymentGeneration, drain.BindingFence)
+			if entry, exists := runner.drains[key]; exists {
+				runner.retainForwardCounterTailLocked(entry.instance)
+			}
+			delete(runner.drains, key)
 		}
 	}
 	runner.mutex.Unlock()

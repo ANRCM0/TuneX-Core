@@ -6,13 +6,14 @@ import (
 	"context"
 	"errors"
 	"net"
-	"net/netip"
 	"regexp"
-	"strconv"
 	"sync"
 	"time"
 
-	"github.com/tunex/vnext/agent/internal/egress"
+	"github.com/tunex/vnext/agent/internal/observationtrust"
+	probenative "github.com/tunex/vnext/agent/internal/probe/native"
+	"github.com/tunex/vnext/agent/internal/probeecho"
+	"github.com/tunex/vnext/agent/internal/runtimeplatform"
 )
 
 type Binding struct {
@@ -24,13 +25,19 @@ type Binding struct {
 // Permit must come from an independent Probe authority. An execution ticket alone
 // is insufficient. No issuer or remote dispatch is supplied by this package.
 type Permit struct {
-	Binding Binding
-	Until   time.Time
-	Check   func() error
+	Binding     Binding
+	Measurement string
+	Service     *observationtrust.Context
+	Echo        *probeecho.Execution
+	Until       time.Time
+	Check       func() error
 }
 
 type Target struct {
 	Binding                 Binding
+	Measurement             string
+	Service                 *observationtrust.Context
+	Echo                    *probeecho.Execution
 	Host                    string
 	Port                    int
 	AllowedDestinationCIDRs []string
@@ -40,9 +47,17 @@ type Target struct {
 
 // Resolver returns host-owned, detached current execution facts, never caller targets.
 type Resolver func(context.Context, Binding) (Target, error)
+type ServiceResolver func(context.Context, Binding, observationtrust.Context) (Target, error)
+type EchoResolver func(context.Context, Binding, probeecho.Execution) (Target, error)
 
 type Result struct {
 	Binding                                Binding
+	Measurement                            string
+	Service                                *observationtrust.Context
+	TLS                                    *observationtrust.Verification
+	Echo                                   *probeecho.Proof
+	EchoInput                              *probeecho.Execution
+	RequestBytes, ResponseBytes            uint64
 	Point, Status, Code, ApplicationHealth string
 	IndependentProbe                       bool
 	MeasuredAt, ValidUntil                 time.Time
@@ -58,16 +73,78 @@ var (
 )
 
 type Executor struct {
-	resolve Resolver
-	dial    func(context.Context, string, string) (net.Conn, error)
+	resolve        Resolver
+	resolveIngress Resolver
+	resolveService ServiceResolver
+	resolveEcho    EchoResolver
+	dial           func(context.Context, string, string) (net.Conn, error)
+	schedule       runtimeplatform.Scheduler
+	entropy        runtimeplatform.Entropy
+}
+
+const MeasurementEgress = "tcp-connect-v1"
+const MeasurementIngress = "tcp-ingress-connect-v1"
+const MeasurementIngressTLS = "tcp-ingress-tls-v1"
+const MeasurementIngressTCPEcho = "tcp-ingress-echo-v1"
+const MeasurementIngressUDPEcho = "udp-ingress-echo-v1"
+
+func validMeasurement(value string) bool {
+	return value == "" || value == MeasurementEgress || value == MeasurementIngress || value == MeasurementIngressTLS ||
+		value == MeasurementIngressTCPEcho || value == MeasurementIngressUDPEcho
+}
+
+func sameMeasurement(a, b string) bool {
+	if a == "" {
+		a = MeasurementEgress
+	}
+	if b == "" {
+		b = MeasurementEgress
+	}
+	return a == b
 }
 
 func New(resolve Resolver) (*Executor, error) {
 	if resolve == nil {
 		return nil, ErrInvalid
 	}
-	dialer := &net.Dialer{}
-	return &Executor{resolve: resolve, dial: dialer.DialContext}, nil
+	return NewWithEffects(resolve, nativeEffects())
+}
+
+// Only the host supplies the second resolver; a wire caller never supplies a target.
+func NewWithIngress(resolve, ingress Resolver) (*Executor, error) {
+	if ingress == nil {
+		return nil, ErrInvalid
+	}
+	executor, err := New(resolve)
+	if err != nil {
+		return nil, err
+	}
+	executor.resolveIngress = ingress
+	return executor, nil
+}
+
+func NewWithServices(resolve, ingress Resolver, service ServiceResolver) (*Executor, error) {
+	if service == nil {
+		return nil, ErrInvalid
+	}
+	executor, err := NewWithIngress(resolve, ingress)
+	if err != nil {
+		return nil, err
+	}
+	executor.resolveService = service
+	return executor, nil
+}
+
+func NewWithEcho(resolve, ingress Resolver, service ServiceResolver, echo EchoResolver) (*Executor, error) {
+	if echo == nil {
+		return nil, ErrInvalid
+	}
+	executor, err := NewWithServices(resolve, ingress, service)
+	if err != nil {
+		return nil, err
+	}
+	executor.resolveEcho = echo
+	return executor, nil
 }
 
 func (binding Binding) Valid() bool {
@@ -86,37 +163,108 @@ func (binding Binding) Valid() bool {
 }
 
 func (executor *Executor) Run(parent context.Context, permit Permit, timeout time.Duration) (Result, error) {
-	if !permit.Binding.Valid() || timeout < 100*time.Millisecond || timeout > 2*time.Second {
+	return executor.run(parent, permit, timeout, nil)
+}
+
+func (executor *Executor) run(parent context.Context, permit Permit, timeout time.Duration, invocation *counterInvocation) (Result, error) {
+	if !permit.Binding.Valid() || !validMeasurement(permit.Measurement) || timeout < 100*time.Millisecond || timeout > 2*time.Second {
 		return Result{}, ErrInvalid
 	}
-	start := time.Now()
+	start := executor.scheduler().Now()
+	echo := probeecho.IsEcho(permit.Measurement)
+	if echo {
+		if permit.Echo == nil || executor.resolveEcho == nil || permit.Service != nil {
+			return Result{}, ErrDenied
+		}
+		copy := probeecho.CloneExecution(*permit.Echo)
+		permit.Echo = &copy
+		if validateEchoExecution(copy, permit.Binding, permit.Measurement, start) != nil || copy.Invocation.TimeoutMs != uint64(timeout/time.Millisecond) {
+			return Result{}, ErrDenied
+		}
+	} else if permit.Echo != nil {
+		return Result{}, ErrInvalid
+	}
+	var trust *observationtrust.Trust
+	if permit.Measurement == MeasurementIngressTLS {
+		if permit.Service == nil || executor.resolveService == nil {
+			return Result{}, ErrDenied
+		}
+		copy := *permit.Service
+		permit.Service = &copy
+		var err error
+		trust, err = observationtrust.New(copy, start)
+		if err != nil {
+			return Result{}, ErrDenied
+		}
+	} else if permit.Service != nil {
+		return Result{}, ErrInvalid
+	}
 	if permit.Check == nil || !permit.Until.After(start) || permit.Until.After(start.Add(2*time.Second)) ||
 		permit.Check() != nil {
 		return Result{}, ErrDenied
 	}
-	ctx, cancel := context.WithDeadline(parent, minTime(start.Add(timeout), permit.Until))
+	ctx, cancel := executor.scheduler().WithDeadline(parent, minTime(start.Add(timeout), permit.Until))
 	defer cancel()
 	if ctx.Err() != nil {
 		return Result{}, ctx.Err()
 	}
-	target, err := executor.resolve(ctx, permit.Binding)
+	resolve := executor.resolve
+	if permit.Measurement == MeasurementIngress {
+		if executor.resolveIngress == nil {
+			return Result{}, ErrDenied
+		}
+		resolve = executor.resolveIngress
+	}
+	var target Target
+	var err error
+	if echo {
+		target, err = executor.resolveEcho(ctx, permit.Binding, probeecho.CloneExecution(*permit.Echo))
+	} else if trust != nil {
+		target, err = executor.resolveService(ctx, permit.Binding, trust.Context())
+	} else {
+		target, err = resolve(ctx, permit.Binding)
+	}
 	if err != nil {
 		return Result{}, ErrDenied
 	}
-	address, err := netip.ParseAddr(target.Host)
-	if err != nil || address.Zone() != "" || target.Port < 1 || target.Port > 65535 {
+	if trust != nil {
+		if target.Service == nil || *target.Service != trust.Context() {
+			return Result{}, ErrDenied
+		}
+		copy := *target.Service
+		target.Service = &copy
+		target.ExecutionUntil = minTime(target.ExecutionUntil, trust.ValidUntil())
+	} else if target.Service != nil {
 		return Result{}, ErrDenied
 	}
-	address = address.Unmap()
-	if target.Binding != permit.Binding || target.Check == nil || !target.ExecutionUntil.After(time.Now()) ||
-		!egress.Allowed(address, target.AllowedDestinationCIDRs, false) ||
-		address.Is4() && address.As4()[0] >= 224 {
+	if echo {
+		if target.Echo == nil || !sameEchoExecution(*target.Echo, *permit.Echo) {
+			return Result{}, ErrDenied
+		}
+		copy := probeecho.CloneExecution(*target.Echo)
+		target.Echo = &copy
+		target.ExecutionUntil = minTime(target.ExecutionUntil, time.UnixMilli(int64(copy.Context.Config.ValidUntil)))
+	} else if target.Echo != nil {
 		return Result{}, ErrDenied
 	}
-	ctx, stop := context.WithDeadline(ctx, target.ExecutionUntil)
+	destination, validDestination := probenative.ParseDestination(target.Host, target.Port)
+	if !validDestination {
+		return Result{}, ErrDenied
+	}
+	if target.Binding != permit.Binding || !sameMeasurement(target.Measurement, permit.Measurement) || target.Check == nil || !target.ExecutionUntil.After(executor.scheduler().Now()) ||
+		!destination.Allowed(target.AllowedDestinationCIDRs) {
+		return Result{}, ErrDenied
+	}
+	ctx, stop := executor.scheduler().WithDeadline(ctx, target.ExecutionUntil)
 	defer stop()
 	check := func() error {
-		if !time.Now().Before(permit.Until) || !time.Now().Before(target.ExecutionUntil) ||
+		if trust != nil && trust.Current(executor.scheduler().Now()) != nil {
+			return ErrDenied
+		}
+		if echo && validateEchoExecution(*permit.Echo, permit.Binding, permit.Measurement, executor.scheduler().Now()) != nil {
+			return ErrDenied
+		}
+		if !executor.scheduler().Now().Before(permit.Until) || !executor.scheduler().Now().Before(target.ExecutionUntil) ||
 			permit.Check() != nil || target.Check() != nil {
 			return ErrDenied
 		}
@@ -125,7 +273,7 @@ func (executor *Executor) Run(parent context.Context, permit Permit, timeout tim
 	if err := check(); err != nil {
 		return Result{}, err
 	}
-	release, err := admissions.acquire(permit.Binding.NodeID, time.Now())
+	release, err := admissions.acquireWith(permit.Binding.NodeID, executor.scheduler().Now(), executor.scheduler())
 	if err != nil {
 		return Result{}, err
 	}
@@ -134,13 +282,13 @@ func (executor *Executor) Run(parent context.Context, permit Permit, timeout tim
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(25 * time.Millisecond)
+		ticker := executor.scheduler().NewTicker(25 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-work.Done():
 				return
-			case <-ticker.C:
+			case <-ticker.C():
 				if check() != nil {
 					revoke()
 					return
@@ -152,10 +300,16 @@ func (executor *Executor) Run(parent context.Context, permit Permit, timeout tim
 	if err := check(); err != nil {
 		return Result{}, err
 	}
-	// Numeric literal only, exactly one connection, no payload writes or reads.
-	connection, dialErr := executor.dial(work, "tcp", net.JoinHostPort(address.String(), strconv.Itoa(target.Port)))
-	if connection != nil {
+	// Numeric literal only and exactly one connection. Only the service kind may send TLS handshake records.
+	attempt := invocation.begin()
+	defer attempt.finish("unknown")
+	network := destination.Network(permit.Measurement == MeasurementIngressUDPEcho)
+	connection, dialErr := executor.dial(work, network, destination.Address())
+	if connection != nil && trust == nil && !echo {
 		_ = connection.Close()
+	}
+	if connection != nil && (trust != nil || echo) {
+		defer connection.Close()
 	}
 	if err := check(); err != nil {
 		return Result{}, err
@@ -164,15 +318,62 @@ func (executor *Executor) Run(parent context.Context, permit Permit, timeout tim
 		return Result{}, err
 	}
 	status, code := "connected", "tcp-connected"
+	var verification *observationtrust.Verification
+	var proof *probeecho.Proof
+	var requestBytes, responseBytes uint64
 	if dialErr != nil {
+		if permit.Measurement == MeasurementIngressUDPEcho {
+			return Result{}, ErrDenied
+		}
+		if trust != nil || echo {
+			var timed net.Error
+			if errors.As(dialErr, &timed) && timed.Timeout() {
+				return Result{}, ErrDenied
+			}
+		}
 		status, code = "unreachable", "tcp-connect-failed"
+	} else if echo {
+		if connection == nil {
+			return Result{}, ErrDenied
+		}
+		proof, requestBytes, responseBytes, err = exchangeEcho(work, connection, *permit.Echo, check)
+		if err != nil {
+			return Result{}, err
+		}
+		status, code = "echoed", "nonce-echo-verified"
+		if proof == nil {
+			status, code = "unverified", "nonce-echo-rejected"
+		}
+	} else if trust != nil {
+		if connection == nil {
+			return Result{}, ErrDenied
+		}
+		verification, err = handshakeService(work, connection, trust, check)
+		if err != nil {
+			return Result{}, err
+		}
+		status, code = "verified", "tls-handshake-verified"
+		if verification == nil {
+			status, code = "unverified", "tls-handshake-failed"
+		}
 	}
-	now := time.Now()
+	now := executor.scheduler().Now()
 	deadline, _ := work.Deadline()
 	if !now.Before(deadline) || !now.Before(permit.Until) || !now.Before(target.ExecutionUntil) {
 		return Result{}, ErrDenied
 	}
-	return Result{Binding: permit.Binding, Point: "agent-direct-egress", Status: status, Code: code,
+	if dialErr == nil {
+		attempt.finish("succeeded")
+	} else {
+		attempt.finish("failed")
+	}
+	point := "agent-direct-egress"
+	if permit.Measurement == MeasurementIngress || permit.Measurement == MeasurementIngressTLS || echo {
+		point = "agent-local-direct-ingress"
+	}
+	return Result{Binding: permit.Binding, Measurement: permit.Measurement, Point: point, Status: status, Code: code,
+		Service: permit.Service, TLS: verification,
+		Echo: proof, EchoInput: permit.Echo, RequestBytes: requestBytes, ResponseBytes: responseBytes,
 		ApplicationHealth: "unknown", IndependentProbe: true, MeasuredAt: now,
 		ValidUntil: minTime(now.Add(5*time.Second), minTime(permit.Until, target.ExecutionUntil)),
 		Elapsed:    now.Sub(start)}, nil
@@ -199,6 +400,10 @@ type budget struct {
 var admissions = budget{nodes: make(map[string]admission)}
 
 func (budget *budget) acquire(node string, now time.Time) (func(), error) {
+	return budget.acquireWith(node, now, probenative.Schedule())
+}
+
+func (budget *budget) acquireWith(node string, now time.Time, schedule runtimeplatform.Scheduler) (func(), error) {
 	budget.mutex.Lock()
 	defer budget.mutex.Unlock()
 	for key, slot := range budget.nodes {
@@ -215,6 +420,6 @@ func (budget *budget) acquire(node string, now time.Time) (func(), error) {
 		budget.mutex.Lock()
 		defer budget.mutex.Unlock()
 		budget.active--
-		budget.nodes[node] = admission{until: time.Now().Add(time.Second)}
+		budget.nodes[node] = admission{until: schedule.Now().Add(time.Second)}
 	}, nil
 }

@@ -7,5 +7,5 @@
     "verbatimModuleSyntax": true, "allowImportingTsExtensions": true, "noEmit": true,
     "skipLibCheck": true, "types": ["node"]
   },
-  "include": ["packages/**/*.ts", "apps/**/*.ts", "scripts/phase1/**/*.ts", "scripts/phase2/**/*.ts", "scripts/ops/**/*.ts"]
+  "include": ["packages/**/*.ts", "apps/**/*.ts", "examples/**/*.ts", "scripts/phase1/**/*.ts", "scripts/phase2/**/*.ts", "scripts/ops/**/*.ts"]
 }

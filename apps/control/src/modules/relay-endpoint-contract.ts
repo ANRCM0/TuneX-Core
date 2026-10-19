@@ -1,20 +1,2 @@
-import { isPort, ipBytes, normalizeIp, normalizeTargetHost } from '@tunex/core';
-import { invalid } from '../application/errors.ts';
-
-export interface RelayEndpoint { listenAddress: string; advertisedHost: string; allowedTcpPorts: number[] }
-export interface ResolvedEndpoint { nodeId: string; revision: number; config: RelayEndpoint }
-
-export function parseRelayEndpoint(input: unknown): RelayEndpoint {
-    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).sort().join(',') !== 'advertisedHost,allowedTcpPorts,listenAddress')
-        invalid('Explicit Relay endpoint fields required');
-    const value = input as Record<string, unknown>;
-    const address = typeof value.listenAddress === 'string' ? normalizeIp(value.listenAddress) : undefined;
-    const host = typeof value.advertisedHost === 'string' ? normalizeTargetHost(value.advertisedHost) : undefined;
-    const bytes = host ? ipBytes(host) : undefined;
-    if (bytes && (bytes.every(byte => byte === 0) || bytes.length === 4 && bytes[0]! >= 224 || bytes.length === 16 && bytes[0] === 255))
-        invalid('Relay endpoint must identify a unicast host');
-    if (!address || !host || !Array.isArray(value.allowedTcpPorts) || value.allowedTcpPorts.length < 1 || value.allowedTcpPorts.length > 256 ||
-        value.allowedTcpPorts.some(p => !isPort(p)) || new Set(value.allowedTcpPorts).size !== value.allowedTcpPorts.length)
-        invalid('Canonical IP listener, reachable host and bounded unique TCP ports required');
-    return { listenAddress: address, advertisedHost: host, allowedTcpPorts: [...value.allowedTcpPorts as number[]].sort((a, b) => a - b) };
-}
+export type { RelayEndpoint, ResolvedEndpoint, RelayEndpointResolver } from './relay-endpoint-owner/public.ts';
+export { parseRelayEndpoint } from '../compatibility/public.ts';

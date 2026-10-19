@@ -1,8 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { parseForward } from '@tunex/core';
-import { parseJson } from '@tunex/contracts';
-import { compileDirect, compileSnapshot } from './modules/runtime/planner.ts';
-import type { AuthorizedNodeFacts, ReservedSlot, SnapshotInput } from './modules/runtime/planner.ts';
+import { parseJson } from '@tunex/contracts/shared';
+import { compileDirect, compileSnapshot } from './compatibility/public.ts';
+import type { SnapshotInput } from './compatibility/public.ts';
+import type { AuthorizedNodeFacts, ReservedSlot } from './framework/public.ts';
 
 // Offline plan inspection only. This command cannot reserve resources, issue authorization or deploy an Agent.
 async function main(): Promise<void> {

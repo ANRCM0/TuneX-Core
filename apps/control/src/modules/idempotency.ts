@@ -1,35 +1,12 @@
-import { ControlError } from '../application/errors.ts';
-import { json, rows, write } from '../infrastructure/mysql.ts';
+import { IdempotencyHost } from '../framework/public.ts';
+import { MySqlIdempotencyStore } from '../infrastructure/mysql-intent-store.ts';
+import { nativeStoredValues } from '../compatibility/public.ts';
 import type { Transaction } from '../infrastructure/mysql.ts';
-import type { IdempotentRequests, RequestIdentity } from '../application/ports.ts';
-import type { ForwardAccepted as Accepted } from '../application/forward-commands.ts';
-export type { RequestIdentity } from '../application/ports.ts';
-export type { ForwardAccepted as Accepted } from '../application/forward-commands.ts';
-export class Idempotency implements IdempotentRequests<Transaction> {
-    async quarantineRecovery(tx:Transaction):Promise<void>{await write(tx,'UPDATE idempotency SET recovery_invalidated=TRUE');}
-    async claim<R extends {
-        status: 200 | 202;
-        body: unknown;
-    } = Accepted>(tx: Transaction, request: RequestIdentity): Promise<R | undefined> {
-        const args = [request.scopeId, request.actorId, request.key];
-        await write(tx, 'INSERT INTO idempotency(scope_id,actor_id,request_key,request_digest) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE request_key=request_key', [...args, request.digest]);
-        const record = (await rows<{
-            request_digest: string;
-            http_status: number | null;
-            response: unknown;
-            recovery_invalidated:number;
-        }>(tx, 'SELECT * FROM idempotency WHERE scope_id=? AND actor_id=? AND request_key=? FOR UPDATE', args))[0]!;
-        if(record.recovery_invalidated)throw new ControlError('RECOVERY_REPLAY_REQUIRES_REVIEW',409,'Restored request history cannot be automatically replayed');
-        if (record.request_digest !== request.digest)
-            throw new ControlError('IDEMPOTENCY_CONFLICT', 409, 'Idempotency key was used for another request');
-        if (record.http_status !== null)
-            return { status: record.http_status as Accepted['status'], body: json(record.response) } as R;
-        return undefined;
-    }
-    async respond(tx: Transaction, request: RequestIdentity, response: {
-        status: 200 | 202;
-        body: unknown;
-    }): Promise<void> {
-        await write(tx, 'UPDATE idempotency SET http_status=?,response=? WHERE scope_id=? AND actor_id=? AND request_key=?', [response.status, JSON.stringify(response.body), request.scopeId, request.actorId, request.key]);
-    }
+import type { ForwardAccepted as Accepted } from './forward-owner/public.ts';
+export type { RequestIdentity } from '../framework/public.ts';
+export type { ForwardAccepted as Accepted } from './forward-owner/public.ts';
+
+/** Retain the old default response type without coupling the lower host to Forward commands. */
+export class Idempotency extends IdempotencyHost<Transaction,Accepted> {
+    constructor(){super(new MySqlIdempotencyStore(),nativeStoredValues);}
 }

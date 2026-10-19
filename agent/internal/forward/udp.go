@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/payloadstats"
 )
 
 const (
@@ -73,6 +74,7 @@ type UDP struct {
 	datagrams     atomic.Uint64
 	queues        atomic.Uint64
 	amplified     atomic.Uint64
+	payload       *payloadstats.Counters
 }
 
 type udpAssociation struct {
@@ -99,7 +101,7 @@ func newUDP(slot *udpListenerSlot, assignment contracts.Assignment, maximum uint
 	config := assignment.Driver.Config
 	config.AllowedDestinationCidrs = append([]string(nil), config.AllowedDestinationCidrs...)
 	return &UDP{slot: slot, binding: assignment.Listener, config: config, ctx: ctx, cancel: cancel,
-		sessions: make(map[netip.AddrPort]*udpAssociation), maximum: maximum, permits: permits, timeout: timeout, idle: idle}
+		sessions: make(map[netip.AddrPort]*udpAssociation), maximum: maximum, permits: permits, timeout: timeout, idle: idle, payload: payloadstats.New()}
 }
 
 func StartUDP(assignment contracts.Assignment, policy contracts.Policy) (*UDP, error) {
@@ -225,6 +227,7 @@ func (slot *udpListenerSlot) receive() {
 			ctx, cancel := context.WithCancel(stream.ctx)
 			association = &udpAssociation{stream: stream, client: client, ctx: ctx, cancel: cancel, packets: make(chan []byte, UDPQueueDepth)}
 			stream.sessions[client] = association
+			stream.payload.UDPCreate()
 			// Positive Add is serialized with Close through listener ownership.
 			stream.done.Add(1)
 			go association.run()
@@ -270,6 +273,7 @@ func (association *udpAssociation) run() {
 		}
 		stream.mutex.Unlock()
 		<-stream.permits
+		stream.payload.UDPClose()
 	}()
 	target, err := association.connect()
 	if err != nil {
@@ -310,9 +314,13 @@ func (association *udpAssociation) run() {
 				return
 			}
 			target.SetWriteDeadline(time.Now().Add(stream.timeout))
-			if _, err := target.Write(packet); err != nil {
+			n, err := target.Write(packet)
+			if err != nil {
 				stream.mutex.Unlock()
 				return
+			}
+			if n == len(packet) {
+				stream.payload.UDPSent(n)
 			}
 			association.lastActivity = time.Now()
 			if !association.initialized {
@@ -371,8 +379,12 @@ func (association *udpAssociation) replies() {
 			continue
 		}
 		stream.slot.listener.SetWriteDeadline(time.Now().Add(stream.timeout))
-		_, err = stream.slot.listener.WriteToUDPAddrPort(packet[:n], association.client)
+		written, writeErr := stream.slot.listener.WriteToUDPAddrPort(packet[:n], association.client)
+		err = writeErr
 		if err == nil {
+			if written == n {
+				stream.payload.UDPReceived(written)
+			}
 			association.credit -= max(n, 64)
 			association.lastActivity = time.Now()
 		}

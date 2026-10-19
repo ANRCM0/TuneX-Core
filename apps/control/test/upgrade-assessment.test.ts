@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import { assessUpgrade, inspectSchema, parseUpgradePlan, schemaMarkers } from '../../../scripts/ops/upgrade.ts';
 import type { UpgradeInspection, UpgradePlan } from '../../../scripts/ops/upgrade.ts';
 import { upgradeSchemaCatalog } from '../../../scripts/ops/upgrade-inspect.ts';
+import { runOperatorCommand } from '../src/modules/operator-command-owner/public.ts';
+import type { OperatorAuthority, OperatorCommandEffects } from '../src/modules/operator-command-owner/public.ts';
 
 const hash = 'sha256:' + 'a'.repeat(64);
 function fixture(): { plan: UpgradePlan; inspection: UpgradeInspection } {
@@ -151,7 +153,9 @@ test('plan parsing rejects duplicates, unknown fields, unsafe counters, legacy p
 });
 test('known migration footprints cover tables, multi-column DDL and superseded enums', async () => {
     const catalog = await upgradeSchemaCatalog();
-    assert.equal(catalog.files.length, 19);
+    assert.equal(catalog.files.length, 37);
+    assert.equal(catalog.files.at(-1)?.name, '0037-probe-echo.sql');
+    assert.ok(catalog.markers.some(m => m.migration === '0037-probe-echo.sql' && m.table === 'probe_runs' && m.column === 'result_response_bytes'));
     assert.ok(catalog.markers.some(m => m.migration === '0019-path-bindings.sql' && m.table === 'forward_path_bindings'));
     assert.ok(catalog.markers.some(m => m.migration === '0019-path-bindings.sql' && m.table === 'current_path_bindings'));
     assert.ok(catalog.markers.some(m => m.migration === '0018-path-templates.sql' && m.table === 'path_templates'));
@@ -309,11 +313,45 @@ test('immutable path provenance requires its own Control-only ceiling and detect
 
 test('CLI dispatch and CI wiring keep assessment read-only and separate real MySQL acceptance', async () => {
     const cli = await readFile(new URL('../../../scripts/ops/cli.ts', import.meta.url), 'utf8');
-    assert.ok(cli.indexOf("command==='assess-upgrade'") < cli.indexOf('const authority=new AuthorityStore'));
-    const collector = await readFile(new URL('../../../scripts/ops/upgrade-inspect.ts', import.meta.url), 'utf8');
+    assert.match(cli, /runOperatorCommand\(\{\.\.\.nativeOperatorCommandEffects,assessUpgrade:runUpgradeAssessment/);
+    const command = await readFile(new URL('../src/modules/operator-command-owner/service.ts', import.meta.url), 'utf8');
+    const assessment = command.indexOf("command==='assess-upgrade'"), authority = command.indexOf('const authority=effects.createAuthority');
+    assert.ok(assessment >= 0 && authority > assessment);
+    const collector = await readFile(new URL('../src/compatibility/native-upgrade-inspection.ts', import.meta.url), 'utf8');
     assert.ok(!collector.includes('new MySqlUnitOfWork'));
     assert.ok(!collector.includes('.migrate('));
     assert.ok(collector.includes('WITH CONSISTENT SNAPSHOT, READ ONLY'));
+    assert.match(collector, /finally\s*\{\s*await db\.rollback\(\)/);
+    const workflow = await readFile(new URL('../src/modules/upgrade-assessment-owner/inspection.ts', import.meta.url), 'utf8');
+    assert.match(workflow, /finally\s*\{\s*await db\.end\(\)/);
     const ci = await readFile(new URL('../../../.github/workflows/ci.yml', import.meta.url), 'utf8');
     assert.ok(ci.includes('node --test apps/control/test/upgrade-mysql-acceptance.test.ts'));
+});
+
+test('public assessment dispatch never constructs or mutates Authority and preserves decision exit codes', async () => {
+    for (const [decision, code] of [['compatible', 0], ['review-required', 2], ['blocked', 1]] as const) {
+        const events: string[] = [], reports: unknown[] = [], exits: number[] = [];
+        const forbidden = (): never => { throw new Error('mutating operator path invoked'); };
+        const effects: OperatorCommandEffects<OperatorAuthority, string> = {
+            arguments: () => ['assess-upgrade', 'plan.json'],
+            env: name => ({ DATABASE_URL: 'mysql://readonly/db', TUNEX_CONTROL_STATE: '/protected', TUNEX_CA_CERT: '/trust.pem' })[name],
+            createAuthority: forbidden, readCertificate: async () => forbidden(), trustDigest: forbidden,
+            resolve: forbidden, parseClockArgs: forbidden, backup: async () => forbidden(), restore: async () => forbidden(),
+            stringify: JSON.stringify, error: forbidden,
+            log: value => { reports.push(JSON.parse(value!)); }, exitCode: value => { exits.push(value); },
+            assessUpgrade: async options => {
+                events.push('assess');
+                assert.deepEqual(options, { planPath: 'plan.json', databaseUrl: 'mysql://readonly/db', stateDirectory: '/protected', caPath: '/trust.pem' });
+                return { decision };
+            },
+        };
+        await runOperatorCommand(effects);
+        assert.deepEqual(events, ['assess']); assert.deepEqual(reports, [{ decision }]); assert.deepEqual(exits, [code]);
+        effects.assessUpgrade = async () => { throw new Error('SECRET database credential'); };
+        reports.length = exits.length = 0;
+        await runOperatorCommand(effects);
+        assert.deepEqual(exits, [1]);
+        assert.deepEqual(reports, [{ version: 1, scope: 'read-only-compatibility', decision: 'blocked', runtimeReady: false,
+            productionApproved: false, checks: [{ code: 'UPGRADE_INSPECTION_FAILED', status: 'block', subject: 'input-or-protected-state' }] }]);
+    }
 });

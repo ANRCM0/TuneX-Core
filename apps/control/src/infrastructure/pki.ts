@@ -1,11 +1,12 @@
 import { X509Certificate, randomBytes,createPublicKey } from 'node:crypto';
-import { ControlError } from '../application/errors.ts';
+import { ControlError } from '../framework/public.ts';
+import type { NodeCertificateSigner } from '../framework/public.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 const run = promisify(execFile);
-export class NodeCertificateAuthority {
+export class NodeCertificateAuthority implements NodeCertificateSigner {
   private readonly openssl:string;private readonly caCert:string;private readonly caKey:string;private readonly stateDirectory:string;
   constructor(openssl: string, caCert: string, caKey: string, stateDirectory: string) { this.openssl=openssl;this.caCert=caCert;this.caKey=caKey;this.stateDirectory=stateDirectory; }
   async sign(nodeId: string, csr: string,purpose:'control'|'relay'='control'): Promise<{ certificate: string; ca: string; fingerprint: string; until: number }> {

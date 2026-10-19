@@ -1,7 +1,10 @@
 import { createPool } from 'mysql2/promise';
 import type { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { readFile, readdir } from 'node:fs/promises';
-import type { TransactionBoundary } from '../application/ports.ts';
+import { mysqlMigrationStatements } from './mysql-migration-statements.ts';
+import type { TransactionBoundary } from '../framework/public.ts';
+import { readStoredValue as json } from '../compatibility/public.ts';
+export { readStoredValue as json } from '../compatibility/public.ts';
 export type Transaction = PoolConnection;
 export async function rows<T>(tx: Pool | Transaction, sql: string, args: unknown[] = []): Promise<T[]> {
     const [result] = await tx.execute<RowDataPacket[]>(sql, args);
@@ -54,6 +57,10 @@ export class MySqlUnitOfWork implements TransactionBoundary<Transaction> {
             if (locked[0]?.acquired !== 1)
                 throw new Error('Migration lock unavailable');
             migrationLocked=true;
+            const [settings]=await connection.query<RowDataPacket[]>('SELECT @@SESSION.sql_mode AS sql_mode');
+            if(typeof settings[0]?.sql_mode!=='string')throw new Error('Migration SQL mode unavailable');
+            const sqlMode=new Set(settings[0].sql_mode.split(',').map((value:string)=>value.trim().toUpperCase()));
+            const quoteMode={noBackslashEscapes:sqlMode.has('NO_BACKSLASH_ESCAPES'),ansiQuotes:sqlMode.has('ANSI_QUOTES')};
             await connection.query('CREATE TABLE IF NOT EXISTS vnext_migrations(name VARCHAR(128) PRIMARY KEY,applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)');
             const directory = new URL('../../migrations/', import.meta.url);
             for (const name of (await readdir(directory)).filter(name => name.endsWith('.sql')).sort()) {
@@ -61,7 +68,7 @@ export class MySqlUnitOfWork implements TransactionBoundary<Transaction> {
                     continue;
                 const sql = await readFile(new URL(name, directory), 'utf8');
                 // MySQL DDL commits implicitly. A partially failed migration stops startup for operator repair.
-                for (const statement of sql.split(';').map(value => value.trim()).filter(Boolean))
+                for (const statement of mysqlMigrationStatements(sql,quoteMode))
                     await connection.query(statement);
                 if (name === '0002-lifecycle.sql') {
                     const history = await rows<{
@@ -92,4 +99,3 @@ export class MySqlUnitOfWork implements TransactionBoundary<Transaction> {
     }
     async close(): Promise<void> { await this.pool.end(); }
 }
-export function json<T>(value: unknown): T { return (typeof value === 'string' ? JSON.parse(value) : value) as T; }

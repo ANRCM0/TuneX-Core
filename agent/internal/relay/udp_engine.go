@@ -44,6 +44,7 @@ func (e *Engine) receiveClients() {
 			ctx, cancel := context.WithCancel(e.ctx)
 			session = &association{engine: e, client: address, queue: make(chan []byte, 16), last: time.Now(), credit: int(e.assignment.Driver.Config.Profile.MaxUdpDatagramBytes), ctx: ctx, cancel: cancel}
 			e.sessions[address] = session
+			e.payload.UDPCreate()
 			e.workers.Add(1)
 			go func() { defer e.workers.Done(); defer release(); session.run() }()
 		}
@@ -59,6 +60,7 @@ func (s *association) run() {
 	e := s.engine
 	defer func() {
 		s.cancel()
+		e.payload.UDPClose()
 		e.mutex.Lock()
 		if e.sessions[s.client] == s {
 			delete(e.sessions, s.client)
@@ -94,6 +96,7 @@ func (s *association) run() {
 			if err := WriteFrame(peer, FrameUDP, packet, "udp", int(e.assignment.Driver.Config.Profile.MaxUdpDatagramBytes)); err != nil {
 				return
 			}
+			e.payload.UDPSent(len(packet))
 			e.mutex.Lock()
 			s.last = time.Now()
 			s.credit = min(4*int(e.assignment.Driver.Config.Profile.MaxUdpDatagramBytes), s.credit+3*max(len(packet), 64))
@@ -135,8 +138,12 @@ func (s *association) replies() {
 			continue
 		}
 		e.udp.SetWriteDeadline(time.Now().Add(time.Second))
-		if _, err := e.udp.WriteToUDPAddrPort(packet, s.client); err != nil {
+		n, err := e.udp.WriteToUDPAddrPort(packet, s.client)
+		if err != nil {
 			return
+		}
+		if n == len(packet) {
+			e.payload.UDPReceived(n)
 		}
 	}
 }

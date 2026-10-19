@@ -10,8 +10,9 @@ import (
 	"fmt"
 	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/adp3relay"
-	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/egress"
 	"github.com/tunex/vnext/agent/internal/forward"
+	"github.com/tunex/vnext/agent/internal/payloadstats"
 	"github.com/tunex/vnext/agent/internal/relaycontracts"
 	"io"
 	"net"
@@ -28,6 +29,7 @@ type Identity struct {
 	Roots       *x509.CertPool
 }
 type Engine struct {
+	payload         *payloadstats.Counters
 	multihop        *adp3.HopConfig
 	assignment      adp3relay.Assignment
 	identity        Identity
@@ -132,6 +134,9 @@ func prepare(assignment adp3relay.Assignment, identity Identity, maximum int, al
 	identity.Roots = identity.Roots.Clone()
 	ctx, cancel := context.WithCancel(context.Background())
 	engine := &Engine{multihop: hop, assignment: checked, identity: identity, credentialUntil: leaf.NotAfter, peers: map[*tls.Conn]time.Time{}, ctx: ctx, cancel: cancel, allow: allow, maximum: maximum, connections: map[net.Conn]net.Conn{}, sessions: map[netip.AddrPort]*association{}, guardDone: make(chan struct{})}
+	if checked.Role == "relay-ingress" {
+		engine.payload = payloadstats.New()
+	}
 	if checked.Role == "relay-egress" {
 		listener, err := net.Listen("tcp", net.JoinHostPort(checked.Resource.Address, fmt.Sprint(checked.Resource.Port)))
 		if err != nil {
@@ -149,6 +154,11 @@ func prepare(assignment adp3relay.Assignment, identity Identity, maximum int, al
 	}
 	go engine.watch()
 	return engine, nil
+}
+
+// Only the client ingress owns payload usage; transit and egress are not additive.
+func (e *Engine) PayloadCounters() (payloadstats.Snapshot, bool) {
+	return e.payload.Snapshot()
 }
 func (e *Engine) check() error {
 	if e.ctx.Err() != nil || !time.Now().Before(e.credentialUntil) {
@@ -467,10 +477,9 @@ func (e *Engine) dialTarget(protocol string, target adp3relay.Target) (net.Conn,
 		return nil, err
 	}
 	config := e.assignment.Driver.Config
-	policy := contracts.DirectConfig{AllowedDestinationCidrs: config.AllowedDestinationCidrs, AllowMetadataTargets: config.AllowMetadataTargets}
 	authorized := false
 	for _, address := range addresses {
-		if !forward.Allowed(address, policy) || e.check() != nil {
+		if !egress.Allowed(address, config.AllowedDestinationCidrs, config.AllowMetadataTargets) || e.check() != nil {
 			continue
 		}
 		authorized = true
@@ -577,7 +586,14 @@ func (e *Engine) acceptClients() {
 		go func() {
 			defer e.workers.Done()
 			defer release()
-			defer func() { closeSocket(client); e.mutex.Lock(); delete(e.connections, client); e.mutex.Unlock() }()
+			defer func() {
+				closeSocket(client)
+				e.payload.TCPClose()
+				e.mutex.Lock()
+				delete(e.connections, client)
+				e.mutex.Unlock()
+			}()
+			e.payload.TCPAccept()
 			peer, err := e.dialPeer("tcp")
 			if err != nil {
 				e.rejected.Add(1)
@@ -591,6 +607,7 @@ func (e *Engine) acceptClients() {
 				return
 			}
 			e.connections[client] = peer
+			e.payload.TCPConnect()
 			e.mutex.Unlock()
 			e.bridgeTCP(client, &framedTCP{Conn: peer, maximum: int(e.assignment.Driver.Config.Profile.MaxFrameBytes), allow: func() error { return e.peerCheck(peer) }})
 		}()
@@ -618,6 +635,19 @@ type gateWriter struct {
 	allow func() error
 }
 
+type payloadWriter struct {
+	out   io.Writer
+	count func(int)
+}
+
+func (w payloadWriter) Write(buffer []byte) (int, error) {
+	n, err := w.out.Write(buffer)
+	if n > 0 {
+		w.count(n)
+	}
+	return n, err
+}
+
 func (w gateWriter) Write(buffer []byte) (int, error) {
 	if err := w.allow(); err != nil {
 		return 0, err
@@ -625,6 +655,7 @@ func (w gateWriter) Write(buffer []byte) (int, error) {
 	return w.out.Write(buffer)
 }
 func (e *Engine) bridgeTCP(local net.Conn, tunnel *framedTCP) {
+	tunnel.payloadWritten = e.payload.Sent
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
@@ -636,7 +667,7 @@ func (e *Engine) bridgeTCP(local net.Conn, tunnel *framedTCP) {
 			tunnel.Close()
 		}
 	}()
-	_, err := io.Copy(gateWriter{local, e.check}, gateReader{tunnel, e.check})
+	_, err := io.Copy(payloadWriter{gateWriter{local, e.check}, e.payload.Received}, gateReader{tunnel, e.check})
 	if tcp, ok := local.(*net.TCPConn); ok {
 		tcp.CloseWrite()
 	}

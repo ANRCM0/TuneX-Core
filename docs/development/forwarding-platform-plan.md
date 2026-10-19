@@ -1,12 +1,31 @@
 # TuneX 转发平台四主线适配方案
 
+四层地基优先级（2026-10-18）：用户已确认先按
+[ADR-0048](../decisions/0048-foundation-layer-boundaries.md) 收口严格地基，
+[DoD 与并行门禁](foundation-readiness.md) 仍未通过。以下产品主线排期继续保留，
+不因有端口或扩展示例源码就提前并行开发功能；当前仅首批源码拆分、未集中验收。
+
 日期：2026-10-16（Asia/Shanghai）。
 状态：**Proposed / 分批实施方案**。四条产品主线来自本轮需求；本文不等同于
 已接受的新协议 ADR，不将计划中的 API、表或驱动标记为已实现。
 
-实施前先完成 [Core 与兼容接入层现状](../architecture/core-and-compatibility-status.md)
-所列边界确认与接入契约评审，优先用已有原生能力验证框架，不继续向中心类堆分支。
-这不删除既有审计/支持包、证据与生产验收责任，也不表示本轮已经开始重构。
+开发节奏更新（2026-10-18）：按用户要求先集中开发，后集中测试和修复。
+开发期间不运行或追跑测试，不逐项修复 CI 失败，也不为每个功能切片扩展验收脚本；
+测试、夹具、静态检查和证据缺口留到源码冻结后统一处理。
+具体约定以 [当前开发节奏](next-milestones.md#当前开发节奏2026-10-18-起) 为准。
+此调整不取消授权、安全边界、已有测试或正式发布门禁；未验证实现不记为通过。
+
+框架收口更新（2026-10-18）：用户确认
+[隧道与转发管理框架](../architecture/project-framework-and-boundaries.md) 作为后续增量方向。
+首批 [逻辑隧道入口](../spec/logical-tunnel-management-v1.md) 已在本地实现、未验证：
+复用原路径模板身份/修订、绑定与 Forward 接受，增加统一 API、只读拓扑及精确修订
+载入绑定面板。没有新增物理共享、独立 Tunnel 实体或执行器。以下四主线继续作为
+能力排期，不能将原生入口收口等同于 B/C/D 全部完成。
+
+基础框架更新（2026-10-18）：
+[分类接入框架 v1](../architecture/framework-integration-v1.md) 已完成本轮源码收口，
+以现有原生能力接通分类端口、契约入口与宿主生命周期，尚未集中验证。
+后续按接入步骤增加模块和显式装配；既有审计/支持包、产品功能及生产验收责任保留。
 
 源码基线：TuneX `03513a941177afcb84a5a1e6eab025c830d63300`；
 ForwardX `v2.3.284` / `11487874b133cdb7ad54a0f9071601092f5d9060`。
@@ -183,6 +202,40 @@ TCP 老连接按 drain 边界处理，UDP 允许重建关联并记录丢包，�
 
 ### C2. 组与备用路径
 
+2026-10-18 C2-A 已本地编写、未验证：[组契约](../spec/path-groups-v1.md) 提供
+出口候选组/固定备用完整路径的不可变元数据、精确候选预览与单规则显式应用。
+每组一至八个完整模板修订，不做节点集合笛卡尔展开；当前只支持相同入口和业务协议。
+绑定与组来源在原 Forward/CAS/幂等/Runtime 事务提交，修订发布不自动更新已绑定规则。
+健康表达为 OR 完整替代分支、AND 必经节点，当前只显示 unknown。Console 单规则未知
+写入只允许同键同请求重放，不进行自动选择。入口批量部署、持久 saga、取消及条件补偿
+仍待开发，本片不代表完整 C2，也不满足 C3 前置验收；未测试/检查/新增验收工具或 CI。
+
+2026-10-18 C2-B [持久组发布](../spec/path-publications-v1.md) 进一步本地实现、未验证：
+最多十条精确源 Forward/CAS/spec/来源序号与目标候选，经预览摘要确认后保存计划。
+每项独立、显式推进原 Forward 接受，与尝试/审计/幂等回执同事务；允许名单内的域拒绝
+先回滚保存点，不把未知提交伪装成失败。取消只停止待执行项，条件补偿重新授权并比较
+完整接受后的 Forward 与来源指针；实际回切创建新原生接受，元数据撤回不虚增 Operation。
+Console 不自动轮询、派发尾部或恢复批次；旧内存队列不等同持久 saga。入口组的多 Forward
+创建/来源原子绑定仍待下一片，C3 验收前置不变；当前仍不运行检查、测试、夹具或 CI。
+
+2026-10-18 C2-C 第一片 [入口定义/独立创建](../spec/ingress-groups-v1.md) 已本地编写、未验证：
+独立有界入口定义保存一至八条完整锁版模板，入口互异、协议相同；每个明确选择成员只
+展开一条完整规则。逐项填写监听、共享目标/启用意图，预览不预留资源或分配 Forward ID。
+确认只建持久计划，每次手动一步才由原 owner 创建独立 Forward/Operation，并与精确
+路径来源、批次历史归因/尝试及外层原键回执同事务。取消未来项，完整状态守卫的条件
+补偿只请求原删除，不清历史或提前释放。0027、兼容/恢复和 Console 均为源码未验证。
+来源是历史创建记录，不是当前入口成员指针；没有 VIP、DNS、入口 HA 或物理共享。
+已有入口部署到新组修订的成员差异/影响分析与显式增改删迁移仍待后续，不用重复创建
+代替。C2/C3 验收、D2 容量和物理/发布门禁尚未通过，开发期间仍不运行检查/测试/CI。
+
+随后 C2-C 第二片 [已有入口显式迁移](../spec/ingress-migrations-v1.md) 已本地编写、未验证：
+精确源/目标修订全成员差异与所选历史来源分开呈现，当前完整 Forward/来源基线由原
+owner 同事务锁定复核。最多八个来源、八个显式总操作，经预览摘要确认后仅保存计划。
+逐项 add 新建、update 仅改 path/Profile、remove 原删除，入口或业务意图替换明确
+remove+add；不会根据十六行并集差异自动派发。add/update 各有受完整状态/授权约束的
+条件补偿，remove 不可补偿，已删规则不能复活。没有当前组成员指针、递归来源、
+自动 rebase 或全局原子收敛；0028/恢复/Console 仍需冻结后的集中验证，不声称 C2 验收完成。
+
 先交付出口候选组和固定优先级备用路径，每次解析成单一具体路径。
 入口组首版是受控批量部署到多个入口，每入口仍是独立 Forward/Operation；
 不自动提供公网 VIP、DNS 切流或全局入口高可用。
@@ -217,6 +270,42 @@ TCP 老连接按 drain 边界处理，UDP 允许重建关联并记录丢包，�
 
 ### D1. Probe 先于自动路由
 
+2026-10-18 后续 [真实 Direct 入口 TLS](../spec/direct-ingress-tls-probes-v1.md) /
+[ADR-0045](../decisions/0045-direct-ingress-tls-probes.md) 已本地源码接线、未验证。
+原Probe owner经当前原listener和TCP Forward抵达精确受控target，按当前服务metadata
+CAS/config revision/digest、专用publicpin/SNI/scopedURI/ALPN/有效期验证握手。
+服务resolver每阶段只读复核原权限/策略/时间，不mint许可、不借业务Relay密钥；原
+Gate/256/两秒/单次watch/报告/有限计划仍唯一。probeVersion3显式强化原slot且不续期，
+无v2失败回退；fullcontext只offer/permit，结果/history只compactselection+TLSproof。
+旧两kind/hash不扩义，v1telemetry仍egress-only。TLSrecords计实际业务payload和下游
+拨号，不等于零流量、外部入口或应用健康。registryavailability现为发行配置bool，
+本身仍不联网/签发/证明ownership；下方0035未有client只描述当时首片范围。
+无检查/测试/脚本/fixtures/网络/build/CI/Git，集中与物理/生产验收待后续；相邻TLS、
+外部观测、受控TCP/UDP nonceecho、Relay/多跳Probe和健康聚合仍未交付，不启动C3。
+
+2026-10-18 新增 [观测服务声明首片](../spec/observation-services-v1.md) /
+[ADR-0044](../decisions/0044-observation-service-authority.md)，**本地实现、未验证**。
+独立 manager 声明数字 endpoint 与专用公有 TLS 叶 pin，保存不可变修订/摘要及当前
+metadata CAS、归档/恢复隔离；不拨号、不读秘密、不授测量权或证明归属/健康。
+独立有限 TLS-only responder 与显式 opt-in 部署源码不复用 Agent/Relay 私钥，只有
+SNI/ALPN TLS 握手，无 echo/应用 I/O/mTLS/UDP；来源 CIDR 不是 Scope client 授权。
+Registry 不控制 responder 进程的启动/kill/续期，首片当时 measurementAvailable=false；
+当前bool配置与后续真实TLS接线见前节，不作为活性证明。
+后续真正 issuer/watch 仍须当前 exact head/config/digest 与权限/NodeGrant/网络策略/
+有效期，不能拿历史可读 pin 或旧声明当执行权。本片不交付 D1 TLS/echo 测量、外部
+观察或健康聚合，无检查/测试/脚本/网络/CI/build/release/Git，C3 前置继续开放。
+
+2026-10-18 后续本地增量：[ADR-0043](../decisions/0043-typed-direct-ingress-probes.md) /
+[Direct ingress 契约](../spec/direct-ingress-probes-v1.md) 新增同 Agent namespace 当前
+Direct TCP 数字实际监听端点 connect，point 明确为 agent-local-direct-ingress；原
+agent-direct-egress 保留原意。精确 Resource/活实例与 Node listener/目标 CIDR 共同
+约束，零应用数据仍可能触发业务 accept/下游拨号。闭合 probeVersion2 qualification/
+统一 poll/claim/status/result 与原 Gate/预算/期限共用，不是新执行权或 v1 静默扩义。
+Schema0034 类型化历史及原有限计划 kind 选择不改变计划预算/取消/恢复；现 v1 Probe
+计数/遥测/聚合明确仅 egress，入口暂不导出。默认关闭 opt-in 和未验证源码不能证明
+公网入口、监听 owner、全路径或应用健康。此片无检查/测试/脚本/网络/CI/Git；相邻/
+远端观测、TLS、nonce echo、UDP/Relay/多跳和健康聚合仍开放，不能关闭 D1/C3 前置。
+
 新增应用层 `ProbePlan/ProbeRun/ProbeResult`，区分三类观察：
 
 | 种类 | 能证明什么 | 不证明什么 |
@@ -246,7 +335,96 @@ Probe 是独立、限时、限次数的探测授权，不续期 Forward、不启
 组健康按 AND 必经段、OR 可选分支表达；只剩备用分支成功可为 degraded，
 不能把所有替代分支都当作串行必经节点。
 
+2026-10-18 [有界 ProbeRun 历史](../spec/probe-runs-v1.md) /
+[ADR-0041](../decisions/0041-bounded-probe-run-history.md) 已本地实现、未验证：补现有
+单次 Direct TCP/IP-literal/agent-direct-egress 的历史缺口，不扩大其测试范围。
+原许可 owner 实际修改与白名单 history capture 同事务，保留原绑定/实例/状态/结果，
+不保留机器 fingerprint、requestId、原 wire、目标地址或配置。原两秒许可、全局预算、
+到期清理和 Agent 执行都不变；历史与短期 permit 无 cascade 关系，过期或删除规则后
+仍可在自身有限保留期内按原身份查询。Scope 一千零二十四头/七天逻辑窗口、惰性清理
+和容量淘汰计损失，后续更新缺头不重建，不承诺完整七天或物理准时擦除。
+Manager-only GET/Console 通过既有 observation pool 手动读固定窗口与 keyset，
+不由读请求创建任务/写历史/访问原执行预算。缺结果为未收到，消费不证明 socket 发生，
+历史 connected 不表示当前入口/应用健康或本次新测试通过。原结果 digest 只是捕获，
+当前绑定未比对；恢复只 sticky 标记，不反向修改原许可、Journal 或高水位。
+Schema0032/Control-only Profile 与原升级/恢复入口接线。本片无测试、静态检查、
+夹具/CI 扩展、真实网络/数据库/浏览器、提交或推送，全部仍待源码冻结后集中验收。
+本片不交付邻接/TLS/受控 echo/UDP/Relay、多跳、持久计划或健康聚合；D1 和 C3 前置
+不能据此完成，后续必须按真实观测点、授权/协议与来源契约继续，不静默回退。
+
+2026-10-18 [有限持久 ProbePlan](../spec/probe-plans-v1.md) /
+[ADR-0042](../decisions/0042-bounded-probe-plans.md) 随后补上计划缺口，**本地实现、未验证**。
+只复用已有 Direct TCP/IP-literal/agent-direct-egress；预览与创建仅存不可变配置/原始
+绑定和精确 Forward 修订。手动 run 逐次 CAS，scheduled 显式委托创建者且每次重查
+当前 Scope/Node Grant，不以旧预览授权、自动重基、同 Service identity 代签或修改规则。
+三十二计划/Scope、十六次决策/计划、一小时寿命、至少三十秒间隔；原两秒许可的
+新 trusted deadline 仅缩短至计划末端，原全局预算、实例复核与 Agent 执行保持原 owner。
+默认关闭独立 worker 一秒最多一候选，不补 tick；许可/原 Run 捕获/计划决策/head
+同事务，未知 SQL/commit 失败不被记录为业务拒绝。取消仅阻止未来，恢复 sticky
+挂起且不自动重放。completed 表示有限决策槽用完，非网络执行或成功；结果仍独立
+ProbeRun 来源，读取不造任务。终态惰性七天清理/容量淘汰有 loss，active 不被淘汰。
+独立 observation pool、Manager API/手动 Console、Schema0033/Control-only Profile 和
+运维接线不扩 Core/ADP/Journal。本片无任何检查、测试、脚本、网络/数据库/浏览器、
+CI、夹具扩展、提交或推送；邻接/TLS/受控 echo/其他协议/健康聚合和 C3 验收仍待后续。
+
 ### D2. 指标、计数与历史
+
+2026-10-18 首批已在本地编写、未验证：
+[Node 进程遥测与原始历史](../spec/node-telemetry-v1.md) 通过独立版本化 mTLS 通道、
+Agent 独立十秒采样和 Control 独立有界 SQL 读模型接入现有可测进程资源/本地存量。
+原始查询限制最近 24 小时及最多 512 点，持久硬上限每 Node 8640 点，过期物理删除
+分批进行且可能滞后。Console 只读显示来源、缺测与连续性；没有运行测试/静态检查
+或 Actions。此首片不包含下述主机资源、规则 payload、Probe 计数或分钟/小时聚合，
+不能据此关闭 D2；旧本地 diagnostics 也不替代远程指标链路。
+
+2026-10-18 D2-B1 继续在本地实现、未验证：
+[原生入口 payload 计数生产端](../spec/native-payload-counters-v1.md) 增加实例 epoch、
+TCP/UDP 累计字节/连接/包计数、完整绑定身份及 Close 后冻结的 128 项/十分钟内存尾部。
+显式 diagnostics 启用时每十秒写独立、最多 256 项的轮转本地 companion 文件；
+来源、截断和尾部淘汰明确，不把本地文件当远程流量产品。现有进程 telemetry-v1
+不变，未新增 payload 远程 Schema/API/MySQL/Console。下一片继续独立版本化远程
+Forward payload 接收/历史/Console；主机资源、Probe 计数、聚合和容量仍待开发。
+本批没有测试/静态检查/CI 或测试夹具扩展，不据此关闭 D2 或发布门禁。
+
+2026-10-18 D2-B2 继续本地实现并接线、未验证：
+[独立 Forward 遥测](../spec/forward-telemetry-v1.md) 承接 B1 生产端，增加独立 mTLS
+32 点/64 KiB 上报、完整身份的 Runtime 已发布/退役来源映射、0021 规范化历史与单实例
+Console 读取。进程 telemetry-v1 保持不变；两侧独立开关默认关闭，复用既有两连接
+非排队遥测池，十秒采样、两秒传输、1.5 秒数据库硬期限，不保证尾部送达或失败重传。
+每 Node 4096 点（包括恢复点）、逻辑 24 小时/最多 24 MiB JSON；物理开销另计，容量
+淘汰可早于 24 小时，查询最多 512 点。恢复只清 head 并隔离旧点，不清原始历史或授权水位。
+Delta 只跨精确同实例/epoch、相邻序号和无丢失/截断的连续点；缺测不是零流量，
+latest 不代表整规则汇总。没有测试、检查、生成器、Compose/浏览器或 CI，未提交/推送。
+主机资源、Probe 尝试/成功累计、分钟/小时聚合、容量及集中验收仍待，**D2 未完成**。
+
+2026-10-18 D2-C 本地实现、未验证：
+[独立 Host 遥测](../spec/host-telemetry-v1.md) 增加 Linux Agent 可见 OS/根文件系统/
+网络命名空间来源，unsupported/null 明确；不采 cgroup 限制，不承诺物理主机视角。
+默认关闭、独立协议/epoch/sequence，500 毫秒单 worker OS 预算、十秒循环、两秒传输，
+8 KiB sample/4 KiB ACK；0022 原始历史/恢复隔离/升级与部署接线复用原两连接观察池。
+每 Node 8640 点含恢复点、逻辑 24 小时/67.5 MiB JSON，物理开销另计且容量可提前淘汰。
+CPU 仅在精确 ticks 连续时推 ratio，网络只 raw 无速率；三族清理顺序各最多 256 点。
+没有检查/测试/生成器/浏览器/Compose/CI 或提交/推送，Probe 累计、聚合与容量仍待，D2 未完成。
+
+2026-10-18 D2-D 本地实现、未验证：
+[独立 Probe 累计](../spec/probe-telemetry-v1.md) 记录实际 dial attempt、有效成功失败、
+unknown/inFlight，Close 先把在途转 unknown，已登记调用之后才 dial 仍计 attempt+unknown，
+全部调用退出才冻结终态。最多8纯数值退休源各256绑定/600秒，pending点仍current，
+总扫描最多2432点；无Gate/Runner/授权引用，32输出/128value-tail不是全部内存成本。
+完整 Binding/instance/epoch 的历史 Snapshot
+来源只读验证，不将 consumed/result 行数当分母，不新增权威路径指标历史写入。
+0023/恢复/默认关部署接线，32 点/两 Snapshot/64 KiB上报，10秒/2秒无队列重试尾部保证；
+共享两观察连接，四族每30秒顺序各清256，4096点含恢复/24小时逻辑TTL/24MiB JSON，
+容量可提前淘汰、物理开销另计。无检查/测试/生成器/新夹具/浏览器/Compose/CI或提交推送。
+聚合与容量、功能全冻结后的集中验收仍待；不声称 D2、生产就绪、健康或结算完成。
+
+2026-10-18 D2-E 本地实现、未验证：
+[双层精确series聚合](../spec/telemetry-rollups-v1.md) 同原raw/head事务提交新观察，
+cursor不依赖保留raw，7天分钟/30天小时直接fold且有明确样本/覆盖/缺口/重置质量。
+累计值不累加用量，合法区间全归结束receipt桶、boundaryIntervals显式，不插值、不伪p95/健康/结算。
+0024 Scope/Node-family配额与有界自身淘汰/Scope拒收、恢复sticky历史、对齐半开UTC/keyset查询，
+Control-only默认关闭，无Agent协议变化。逻辑JSON预算不是物理磁盘证据，原raw不新增Scope硬容量。
+没有检查/测试/生成器/新fixture/浏览器/Compose/CI或提交推送；容量与集中最终源码验收仍待，D2未完成。
 
 先收集 Agent 进程资源、主机基础资源和原生 Forward 吞吐/连接计数，
 明确来源；主机网卡字节与规则 payload 不是同一口径。
@@ -270,9 +448,67 @@ UTC 存储、界面明确时区；清理分批、查询限制时间窗与点数�
 
 详情按“意图 → 部署 → 节点 → 物理监听 → 邻接段 → 最终目标 → Probe”下钻，
 提供对应 Operation、失败码、时间与脱敏支持包。
-先做站内事件及受控 webhook；投递独立队列，支持去重、恢复通知、静默期、
-限速/重试上限。Webhook 目标同样防 SSRF 和私网滥用，凭据不进入日志/支持包。
-邮件、Telegram 等具体渠道后置，不把通知发送失败当转发部署失败。
+
+2026-10-18 第一片 [被动 Forward 诊断](../spec/forward-diagnostics-v1.md) /
+[ADR-0036](../decisions/0036-passive-forward-diagnostics.md) 已本地编写、未验证：
+Scope viewer 可读取一个原 Forward 的七层有界投影、最多八条原 Operation 和独立
+清理/历史租约窗口；不借用 Runtime 命令或资源锁，不签发 Probe、拨号或写入通知。
+服务与 Bearer 查询走既有两槽 observation pool，无 Runtime 池回退。报告必须匹配
+Node/Boot/Session/sequence/Snapshot，观察再按 assignment/generation/Fence/phase 对齐；
+多语句期间变化保留各自来源并降为未匹配，不借早期缓存时间给后来的观察背书。
+预留端口不等于实际 socket；邻接配置、局部 ready 和短时 Direct TCP 出口结果均不能
+证明端到端健康。完整 Snapshot/config 摘要未在该投影重算，来源标记不可冒充认证。
+同次读取生成白名单别名化支持 JSON，移除地址/端口、原 ID、配置和凭据等敏感材料；
+它不是备份或完整法证。Console 仅手动读取、取消等待和明确确认后展示脱敏包。
+本片无测试、静态检查、夹具/CI 扩展、提交或推送；审计查询、站内事件与受控通知
+仍待下一片，D3/项目未完成，C3 前置验收和物理/发布门禁未通过。
+
+2026-10-18 第二片 [只读审计查询](../spec/audit-events-v1.md) /
+[ADR-0037](../decisions/0037-bounded-audit-query.md) 已本地编写、未验证：当前 manager
+同事务授权下合并十五类原 owner 记录，固定 UTC 窗口与精确交集/keyset 有界读取，
+不另建事件执行器或重写历史。归属取本源不可变配置，保留未归因/缺关联；批次事件
+不伪造 Forward/Operation，最新 Operation 不是状态迁移日志。没有全局恢复的 Scope
+推断、原 details/config/凭据/自由异常或支持包导出，输出边界不证明 SQL 成本与历史
+完整性。独立 Console 仅手动读取/翻页，复用独立 observation pool，不调用 Runtime。
+本片无测试、静态检查、新夹具/CI、提交或推送；站内事件/通知和全项目目标仍开放。
+
+2026-10-18 第三片 [站内事件与固定告警](../spec/station-alerts-v1.md) /
+[ADR-0038](../decisions/0038-bounded-station-alerts.md) 已本地编写、未验证：独立政策/
+条件/事件 owner，按明确目标评价当前部署失败、报告失鲜或凭据临期。默认关闭的
+observer 与原 Runtime worker 分离，逐政策复核管理身份，条件/事件/去重/下次时间
+同事务，有有界保存、条件延期和失败退避。初次事件为当前采样检测，不倒填完整历史；
+缺测/旧实例/未知不恢复，部署成功和报告新鲜度不表示端到端健康。静默不清状态，ack
+不改部署，换实例是 invalidated 而非 recovered。Schema0029/Control-only Profile、
+原恢复事务挂起和手动 Console 已接线；没有投递队列或外发，仍未运行检查或测试。
+
+2026-10-18 第四片 [受保护通知端点](../spec/notification-endpoints-v1.md) /
+[ADR-0039](../decisions/0039-protected-notification-endpoints.md) 已本地编写、未验证：
+独立 manager-only 元数据、完整替换/凭据轮换与安全停用走原授权/幂等/CAS。完整 URL
+和签名密钥由单独预置密钥的 Linux vault 保护，SQL/查询/回执/审计不包含秘密；恢复挂起
+且必须显式重新发布。固定公网 HTTPS adapter 逐尝试校验全部 DNS、固定 IP 并保留 TLS
+主机名校验，限制并发/字节/超时；它还没有接入服务、事件队列或任何发送/测试路由。
+手动 Console 不使用全局敏感请求缓存，未知提交只原请求同键重放；Schema0030 和原运维
+边界接线。当前 `deliveryAvailable:false`，不以端点配置冒充通知已经投递，未运行任何
+检查或测试，也未提交/推送。
+
+2026-10-18 第五片 [有界通知投递](../spec/notification-deliveries-v1.md) /
+[ADR-0040](../decisions/0040-bounded-notification-delivery.md) 已本地编写、未验证：仅新
+站内事件经原事务 handoff，固定非秘密摘要/端点和凭据修订快照、稳定去重身份、
+抑制/队满/保留损失进入独立通知 owner，不扫描旧事件或在 GET 时生成工作。
+默认关闭的独立 worker 将当前管理权/政策/订阅/静默/恢复身份检查、持久速率与
+claim/fence 原子接受后才在事务外读凭据和联网；全部 DNS 检查后再授权、固定公网 IP
+并保留原 TLS 主机身份。轮换/停用/失权取消旧队列，最多六次/一小时、退避三十秒至
+五分钟，过期 claim 先记 unknown，迟到结果不能越 fence。当前 vault 引用 pin 到真实
+DNS/guard/socket drain，不拿五秒 sender 超时冒充物理完成或承诺瞬时撤回。
+每 Scope 一千零二十四头/二百五十六明细/两活跃 claim，有限终态惰性清理和明细淘汰
+明确披露；Manager 历史 GET/Console 仅手动查询，不提供发送测试或重驱写 API。
+Schema0031/Control-only Profile 与原恢复隔离接线，恢复取消旧待发并保留历史/速率，
+不自动补发；HTTP 2xx 不是远端业务完成，无 exactly-once/顺序保证，接收方必须去重。
+本片无测试、静态检查、新夹具/CI、真实网络/数据库/浏览器、提交或推送，全部待最终
+源码冻结后的集中验收；D3/项目、C3 前置验收与物理/发布门禁均未因此通过。
+
+邮件、Telegram 等具体渠道后置；有界队列不承诺零漏报/可靠送达，不把通知发送失败
+当转发部署失败，也不赋予通知 worker 任何 Runtime/Agent/Probe 执行权限。
 
 ## 8. 代码落点与数据演进
 
@@ -312,15 +548,18 @@ Probe 计划/执行/结果；指标原始点/聚合；告警事件/投递。
 
 顺序表示依赖与默认优先级，不承诺工期。P6 的离线设计可提前，
 但不让未验收驱动进入 P5 自动路由候选。每批拆为小的纵向 PR：
-契约/领域决策 → Control/Agent → Console → Actions 证据；不能只做 UI 就标记完成。
+契约/领域决策 → Control/Agent → Console；开发阶段先完成实现并记录未验证状态，
+Actions 证据在源码冻结后集中补齐，不能只做 UI 就标记完成。
 当前 [近期队列](next-milestones.md) 负责 P0 收口；
 后续按上述主线增加切片，冻结验收以实际纳入该版本的功能为界。
 不因增加长期主线而无限推迟已有 native 版本，也不为赶发布跳过相应门禁。
 
 ## 10. 统一 Actions 验收与发布边界
 
-功能、数据库、网络、容器和浏览器测试全部在 GitHub Actions；
-本地仅做文档链接、语法、类型等静态检查。
+本节是源码冻结后的集中验收要求，不是逐批开发门槛。开发阶段不运行测试、
+不追跑 Actions，不将逐批静态检查或扩展验收工具作为功能实现的前置工作。
+冻结后功能、数据库、网络、容器和浏览器测试统一在 GitHub Actions 执行，
+集中修复失败并重新核对最终 SHA；本地不启动这些验收。
 保留现有 contracts、MySQL、Go vet/race、Direct/Relay、
 3/4/8 节点及网络隔离矩阵，新增切片必须防止这些基线回退。
 

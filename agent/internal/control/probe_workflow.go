@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/tunex/vnext/agent/internal/nativeexecution"
 	"github.com/tunex/vnext/agent/internal/probe"
-	"github.com/tunex/vnext/agent/internal/proberesult"
 )
 
 // One serial task, with all admission and target selection still owned by the existing gates.
@@ -13,18 +13,28 @@ func (runner *Runner) runProbeTask(ctx context.Context) error {
 	if !runner.options.ProbeExecution || !runner.options.ProbeRegistration {
 		return probe.ErrDenied
 	}
-	offer, err := runner.pollProbe(ctx)
+	offer, err := runner.pollProbeTask(ctx)
 	if err != nil || offer == nil {
 		return err
 	}
-	if !time.Now().Before(offer.until) {
+	if !runner.scheduler().Now().Before(offer.until) {
 		return probe.ErrDenied
 	}
-	receipt, err := runner.claimProbe(ctx, offer.permitID, offer.binding)
+	var receipt *probeClaimReceipt
+	if offer.echo {
+		receipt, err = runner.claimProbeEcho(ctx, *offer)
+	} else if offer.services {
+		receipt, err = runner.claimProbeServices(ctx, *offer)
+	} else if offer.typed {
+		receipt, err = runner.claimProbeTypes(ctx, *offer)
+	} else {
+		receipt, err = runner.claimProbe(ctx, offer.permitID, offer.binding)
+	}
 	if err != nil {
 		return err
 	}
-	if receipt.timeout != offer.timeout {
+	if receipt.timeout != offer.timeout || receipt.typed != offer.typed || receipt.services != offer.services || receipt.echo != offer.echo || receipt.measurement != offer.measurement ||
+		!sameProbeServiceSelection(probeServiceSelection(receipt.service), probeServiceSelection(offer.service)) || !sameProbeEchoInput(receipt.echoInput, offer.echoInput) {
 		return probe.ErrDenied
 	}
 	runner.mutex.Lock()
@@ -43,24 +53,30 @@ func (runner *Runner) reportProbe(execution *probeExecution) error {
 	if !execution.reported.CompareAndSwap(false, true) {
 		return probe.ErrReplay
 	}
+	if execution.watch.receipt.echo {
+		return runner.reportProbeEcho(execution)
+	}
+	if execution.watch.receipt.services {
+		return runner.reportProbeServices(execution)
+	}
+	if execution.watch.receipt.typed {
+		return runner.reportProbeTypes(execution)
+	}
 	request, err := execution.resultRequest()
 	if err != nil {
 		return err
 	}
-	work, cancel := context.WithDeadline(execution.watch.ctx, execution.reportUntil)
+	work, cancel := runner.scheduler().WithDeadline(execution.watch.ctx, execution.reportUntil)
 	defer cancel()
 	raw, _, err := runner.probeDeliveryExchange(work, execution.watch.receipt.session, "/agent/v3/probe/result", request)
 	if err != nil {
 		return err
 	}
-	ack, err := proberesult.ParseResponse(raw)
+	ack, err := nativeexecution.DecodeProbeResultResponse(request, raw)
 	if err != nil {
 		return err
 	}
-	if err := proberesult.CheckResponse(request, *ack); err != nil {
-		return err
-	}
-	server, err := time.Parse(time.RFC3339Nano, ack.ServerTime)
+	server, err := nativeexecution.ParseProbeWireTime(ack.ServerTime)
 	if err != nil || execution.watch.receipt.session.guard.ValidateServerTime(server) != nil {
 		return probe.ErrDenied
 	}
@@ -72,12 +88,12 @@ func (runner *Runner) maintainProbeExecution(ctx context.Context) {
 	for ctx.Err() == nil {
 		// A failed task stays failed. Future polls may discover only other, independently issued IDs.
 		_ = runner.runProbeTask(ctx)
-		timer := time.NewTimer(time.Second)
+		timer := runner.scheduler().NewTimer(time.Second)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return
-		case <-timer.C:
+		case <-timer.C():
 		}
 	}
 }

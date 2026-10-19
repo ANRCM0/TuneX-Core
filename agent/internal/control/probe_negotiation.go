@@ -2,9 +2,9 @@ package control
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
+	"github.com/tunex/vnext/agent/internal/nativeexecution"
 	"github.com/tunex/vnext/agent/internal/probe"
 	"github.com/tunex/vnext/agent/internal/probenegotiation"
 )
@@ -22,13 +22,16 @@ func (runner *Runner) negotiateProbe(ctx context.Context) (*probeSession, error)
 	if guard == nil || guard.Check() != nil {
 		return nil, probe.ErrDenied
 	}
-	executor, err := probe.New(runner.resolveProbeTarget)
+	executor, err := runner.newNativeProbeExecutor()
 	if err != nil {
 		return nil, err
 	}
 	gate, err := probe.NewGate(node, boot, epoch, executor)
 	if err != nil {
 		return nil, err
+	}
+	if runner.options.ProbeTelemetry {
+		gate.EnableCounters()
 	}
 	accepted := false
 	defer func() {
@@ -40,24 +43,21 @@ func (runner *Runner) negotiateProbe(ctx context.Context) (*probeSession, error)
 	if err != nil {
 		return nil, err
 	}
-	raw, err := json.Marshal(request)
+	raw, err := nativeexecution.EncodeProbeRequest(request)
 	if err != nil {
 		return nil, err
 	}
-	work, cancel := context.WithTimeout(ctx, 2*time.Second)
+	work, cancel := runner.scheduler().WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	raw, err = runner.request(work, "POST", "/agent/v3/probe/hello", raw, true)
 	if err != nil {
 		return nil, err
 	}
-	response, err := probenegotiation.ParseResponse(raw)
+	response, err := nativeexecution.DecodeProbeNegotiationResponse(*request, raw)
 	if err != nil {
 		return nil, err
 	}
-	if err := probenegotiation.CheckResponse(*request, *response); err != nil {
-		return nil, err
-	}
-	serverTime, err := time.Parse(time.RFC3339Nano, response.ServerTime)
+	serverTime, err := nativeexecution.ParseProbeWireTime(response.ServerTime)
 	if err != nil || work.Err() != nil {
 		return nil, probe.ErrDenied
 	}
