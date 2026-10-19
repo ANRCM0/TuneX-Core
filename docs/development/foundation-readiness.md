@@ -14,7 +14,7 @@ configured PR checks and was merged by PR #111 as
 scope are recorded in [verification](foundation-verification-2026-10-19.md).
 This supersedes source-phase statements that verification has not started.
 Readiness 1-220 now has a case-by-case [assertion map](foundation-b-assertion-coverage.md):
-eleven requirements have complete identified assertions and 209 remain partial.
+31 requirements have complete identified assertions and 189 remain partial.
 These are coverage classifications, not execution passes. The map records actual
 suites and the remaining obligations; an acceptance decision is still pending.
 PR #112 carries the B tests and necessary private repairs and requires its own

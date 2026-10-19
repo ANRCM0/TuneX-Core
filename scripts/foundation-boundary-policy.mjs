@@ -75,6 +75,8 @@ export function sourceViolations(path, source, inventory) {
       if (targetClass?.layer === 'L0' && !contains('packages/core/src', path) && !contains('apps/control/src/kernel', path) &&
           !['packages/core/src/index.ts', 'apps/control/src/kernel/public.ts'].includes(target)) errors.push('private Core dependency: ' + reference);
     }
+    if (layer === 'L2' && !classified.binding && targetClass?.layer === 'L3')
+      errors.push('adapter imports product implementation or type: ' + reference);
     const fromOwner = owner(path), toOwner = target && owner(target);
     if (toOwner && !/\/public\.(?:ts|js)$/.test(target) &&
         (!classified.binding && layer === 'L3' && fromOwner !== toOwner || path.startsWith('scripts/ops/'))) errors.push('cross-owner private dependency: ' + reference);

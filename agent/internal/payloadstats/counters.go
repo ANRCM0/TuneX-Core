@@ -3,6 +3,7 @@ package payloadstats
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"sync/atomic"
 )
 
@@ -23,7 +24,7 @@ type Counters struct {
 // New may return nil: unavailable measurement identity must never stop forwarding.
 func New() *Counters {
 	var epoch [16]byte
-	if _, err := rand.Read(epoch[:]); err != nil {
+	if _, err := io.ReadFull(rand.Reader, epoch[:]); err != nil {
 		return nil
 	}
 	return &Counters{epoch: hex.EncodeToString(epoch[:])}

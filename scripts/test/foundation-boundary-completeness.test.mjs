@@ -48,6 +48,24 @@ test('L0 infrastructure globals and L1 root or private package subpaths cannot b
     rejects('apps/control/src/framework/boundary-completeness.ts', 'export type { Value } from "' + reference + '";', /private package subpath/);
 });
 
+test('L2 native adapters refuse reverse product value and type references while retaining lower contracts', () => {
+  for (const path of ['apps/web/browser-native/rule-console.js', 'apps/control/src/compatibility/boundary-completeness.ts']) {
+    const reference = path.startsWith('apps/web/') ? '../rule-command-owner/public.js' : '../modules/forward-owner/public.ts';
+    for (const source of [
+      `import { Product } from '${reference}';`, `import type { Product } from '${reference}';`,
+      `export { Product } from '${reference}';`, `export type { Product } from '${reference}';`,
+      `export * from '${reference}';`, `type Product = import('${reference}').Product;`,
+      `const product = import('${reference}');`, `const product = require('${reference}');`,
+    ]) rejects(path, source, /adapter imports product implementation or type/);
+  }
+  rejects('agent/internal/platformclock/boundary_completeness.go',
+    'package platformclock\nimport "github.com/tunex/vnext/agent/internal/agentcommand"', /adapter imports product implementation or type/);
+  assert.deepEqual(sourceViolations('apps/control/src/compatibility/boundary-completeness.ts',
+    'import type { RuntimeHost } from "../framework/public.ts";', inventory), []);
+  assert.deepEqual(sourceViolations('agent/internal/platformclock/boundary_completeness.go',
+    'package platformclock\nimport "github.com/tunex/vnext/agent/internal/executiontime"', inventory), []);
+});
+
 test('Control and browser product owners reject native platform branches including computed and aliased reads', () => {
   const sources = [
     'if (process.platform === "win32") windows();',

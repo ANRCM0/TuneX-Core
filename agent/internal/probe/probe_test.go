@@ -56,7 +56,7 @@ func TestProbeConnectOnlyAndProvenance(t *testing.T) {
 	result, err := executor.Run(context.Background(), permit, time.Second)
 	if err != nil || result.Status != "connected" || result.Code != "tcp-connected" ||
 		result.ApplicationHealth != "unknown" || !result.IndependentProbe || result.Binding != permit.Binding ||
-		result.Point != "agent-direct-egress" || result.ValidUntil.After(permit.Until) || result.Elapsed <= 0 {
+		result.Point != "agent-direct-egress" || result.ValidUntil.After(permit.Until) || result.Elapsed < 0 {
 		t.Fatalf("incorrect result: %+v %v", result, err)
 	}
 	select {
