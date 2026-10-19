@@ -67,7 +67,8 @@ classified in the manual source ledger.
 At authoring time, verification is in progress. Local TypeScript (including the
 public example), Windows amd64 Go build/vet, Linux amd64 Go cross-build, Web syntax
 and generated contract/fixture synchronization have passed on the working
-candidate. The static boundary check passes over 949 production TS/JS/Go files
+candidate. After the migration repair, the static boundary check passes over
+950 production TS/JS/Go files
 plus the original authority/table/readonly/documentation safeguards. Eleven
 boundary regression tests are authored for Actions; they have only been parsed
 locally. No local functional test or integration experiment has run. Actions
@@ -77,6 +78,40 @@ The TS/JS checker follows AST module/type references; Go imports/tags/calls use
 lexical scanning. This is not full type resolution or an algorithm/serializer
 equivalence proof. Native restrictions cover L0/L1 and independent Web owners;
 the historical mixed Control/Agent L3 native views retain their declared debt.
+
+### First Saved Candidate
+
+Head `de5285b639903d10fa827713200c7c7d69710267` was pushed to
+`verify/foundation-a5-20261019` in draft PR #111. The PR test merge was
+`2c3c617a5ba3cd77a7b1f78d3955eb2854a3fbc4` against the baseline above.
+Contract run `39246628891` and container run `39246628762` both failed.
+
+- Deployment preflight passed; container packaging stopped at an outdated
+  Agent CLI source-text assertion before image builds.
+- The public extension and targeted contract steps passed. The full TypeScript
+  test step reported 624 passing, one failing and 78 skipped cases; its Operation
+  detail fixture/projection failure prevented later sequential checks.
+- MySQL/Probe/Relay/multihop jobs stopped at the same migration error: the old
+  SQL semicolon splitter treated semicolons in standalone comments as statements.
+- Skips in the no-database contract job are not MySQL evidence. Later Web, Go
+  full-suite/race, boundary negative and image checks were not reached.
+
+These failures require fixes and a new saved revision. They do not validate that
+later revision. Run conclusions for the latest PR head remain authoritative.
+
+### First Failure Repairs
+
+The subsequent revision fixes the private L2 SQL splitter with native comment,
+quote/escape and session quote-mode handling while retaining the original DDL
+and migration lock/ordering. Pure regression cases include the four actual
+migration headers, executable comments, escaped/doubled quoted semicolons and
+unterminated input. MySQL acceptance still requires Actions.
+
+The Operation fixture now supplies the real public ControlQueries owner over
+typed same-transaction fake ports; authorization-before-ledger-read and denial
+assertions remain. Container inspection checks follow main/command/native owners,
+with new Agent fake-port cases proving readonly inspection never reaches
+enrollment, instance locks or Runner creation, including every conflicting flag.
 
 Use the saved revision's Actions job logs and final run conclusions for actual
 passing/failing/skipped cases. This record does not mark readiness cases 1-220 as

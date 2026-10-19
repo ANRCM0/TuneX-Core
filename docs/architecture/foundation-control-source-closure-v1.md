@@ -77,6 +77,13 @@ limited lock retries, release/rollback and migration advisory lock/DDL semantics
 It is not an L1 transaction type. Schema and protected authority ownership remain
 unchanged; partial DDL is not globally rolled back.
 
+Verification adds private L2 `mysql-migration-statements.ts` under that same
+owner. It preserves SQL slices and ordered DDL while excluding comment/quoted
+semicolons from statement boundaries, reads the connection's quote mode without
+changing it, and refuses malformed or client-DELIMITER input. It creates no new
+transaction, authority or public service. Its pure cases and fresh-MySQL migration
+acceptance are recorded with the verification candidate.
+
 | L2 provider family | Exact leaves | Binding/consumer |
 | --- | --- | --- |
 | Authority/platform/security | `authority.ts`, `identity-secrets.ts`, `pki.ts`, `multihop-release.ts`, `notification-https.ts`, `notification-secrets.ts`, `station-alert-storage-native.ts` | Existing server/ops/native assembly; AuthorityStore remains the original protected store; PKI/credential files and controlled HTTPS keep native boundaries |

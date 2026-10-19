@@ -5,17 +5,23 @@ import { ControlError } from '../src/application/errors.ts';
 import type { ControlApplication } from '../src/application/control.ts';
 import type { RuntimeController } from '../src/modules/runtime/controller.ts';
 import type { AuthorityStore } from '../src/infrastructure/authority.ts';
+import type { TransactionBoundary } from '../src/framework/public.ts';
+import { ControlQueries } from '../src/modules/control-query-owner/public.ts';
 
 function fixture() {
     const events: unknown[][] = [], tx = Symbol('read-transaction');
+    const db:TransactionBoundary<symbol>={transaction:async action=>action(tx)};
+    const identity={
+        authenticate: async (header: string|undefined) => { if (header !== 'Bearer test-token') throw new ControlError('UNAUTHENTICATED', 401, 'Bearer required'); return 'actor-a'; },
+        scope: async (...args:[symbol,string,string,boolean?]) => { events.push(['scope', ...args]); if (args[2] !== 'scope-a') throw new ControlError('AUTHORIZATION_DENIED', 403, 'Scope denied'); },
+    };
+    const unused=async():Promise<never>=>assert.fail('operation detail must not access unrelated collaborators');
+    const ledger={latest:unused,get:async(...args:[symbol,string,string])=>{events.push(['read', ...args]);return {id:'source-a',forward_id:'rule-a',kind:'update',
+        requested_by:'actor-a',source_operation_id:null,status:'failed',recovery_invalidated:0,target_revision:3,cleanup_pending:1,last_error:{code:'TARGET_UNAVAILABLE'}};}};
+    const details=new ControlQueries(db,identity,{get:unused,record:unused,revisions:unused},{status:unused},ledger,{status:unused},
+        {multihopEnabled:false,maxPathNodes:8,executionExtension:1,probeIssuanceEnabled:false,probeIngressIssuanceEnabled:false,probeServicesIssuanceEnabled:false});
     const control = {
-        db: { transaction: async (action: (value: symbol) => Promise<unknown>) => action(tx) },
-        identity: {
-            authenticate: async (header: string) => { if (header !== 'Bearer test-token') throw new ControlError('UNAUTHENTICATED', 401, 'Bearer required'); return 'actor-a'; },
-            scope: async (...args: unknown[]) => { events.push(['scope', ...args]); if (args[2] !== 'scope-a') throw new ControlError('AUTHORIZATION_DENIED', 403, 'Scope denied'); },
-        },
-        ledger: { get: async (...args: unknown[]) => { events.push(['read', ...args]); return { id: 'source-a', forward_id: 'rule-a', kind: 'update',
-            requested_by: 'actor-a', source_operation_id: null, status: 'failed', recovery_invalidated: 0, target_revision: 3, cleanup_pending: 1, last_error: { code: 'TARGET_UNAVAILABLE' } }; } },
+        db,identity,ledger,details,
         retry: async (...args: unknown[]) => { events.push(['retry', ...args]); return { status: 202, body: { forwardId: 'rule-a', revision: 3, operationId: 'retry-a', sourceOperationId: 'source-a' } }; },
     } as unknown as ControlApplication;
     const app = createApp(control, {} as RuntimeController, { allow: async () => undefined } as unknown as AuthorityStore);
