@@ -26,6 +26,42 @@ async function database(action:(db:MySqlUnitOfWork)=>Promise<void>){
 async function snapshot(db:MySqlUnitOfWork){const tables=await rows<{name:string}>(db.pool,'SELECT TABLE_NAME name FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME');return Object.fromEntries(await Promise.all(tables.map(async({name})=>[name,(await rows(db.pool,`SELECT * FROM \`${name}\``)).map(row=>JSON.stringify(row)).sort()])));}
 function readQuery(filters:AuditFilters={},from=0,to=1000):AuditReadQuery{return {from,to,limit:50,filters,before:null};}
 async function read(tx:Transaction,source:AuditSource,filters:AuditFilters={},scope='scope',from=0,to=1000){return new MySqlAuditReadStore(auditStoragePolicy).source(tx,scope,source,readQuery(filters,from,to),row=>row);}
+/** Failure-only evidence: keep original expectations and compare the exact prepared statement with independent SQL phases. */
+async function attributionDiagnostic(tx:Transaction,source:AuditSource,nodeId:string,scope='scope'){
+ const output:Record<string,unknown>={source,nodeId,scope},captured:{statement?:{sql:string;args:unknown[]}}={};
+ const summarize=(values:unknown)=>Array.isArray(values)?values.map((row:any)=>({entityId:row.entityId,revision:row.revision,kind:row.kind,matched:row.matched,memberCount:row.memberCount,collectionType:row.collectionType,eventScope:row.eventScope,templateScope:row.templateScope,templateId:row.templateId,templateRevision:row.templateRevision,configDigest:row.configDigest,joinedDigest:row.joinedDigest,nodes:row.nodes,specType:row.specType,ingressType:row.ingressType,ingressNode:row.ingressNode,via:row.via})):values;
+ const attempt=async(label:string,action:()=>Promise<unknown>)=>{try{output[label]=await action();}catch(error){output[label]={code:(error as {code?:unknown}).code,message:(error as Error).message};}};
+ await attempt('server',async()=>rows(tx,'SELECT VERSION() version,@@SESSION.optimizer_switch optimizerSwitch,@@SESSION.sql_mode sqlMode,@@SESSION.collation_connection connectionCollation'));
+ const proxy=new Proxy(tx,{get(target,key,receiver){if(key==='execute')return async function(sql:string,args:unknown[]){captured.statement={sql,args:[...args]};return Reflect.apply(target.execute,target,[sql,args]);};return Reflect.get(target,key,receiver);}});
+ await attempt('actualExecute',async()=>summarize(await read(proxy,source,{nodeId},scope)));
+ if(captured.statement){const statement=captured.statement;output.statement=statement;await attempt('actualTextQuery',async()=>{const [result]=await tx.query(statement.sql,statement.args);return summarize(result);});await attempt('explain',async()=>{const [result]=await tx.query('EXPLAIN FORMAT=TREE '+statement.sql,statement.args);return JSON.stringify(result).slice(0,12000);});}
+ if(source==='path-group'||source==='ingress-group'){
+  const family=source==='path-group'?'path':'ingress',collection=family==='path'?'candidates':'members';
+  const members=`JSON_TABLE(r.config,'$.${collection}[*]' COLUMNS (template_id VARCHAR(128) PATH '$.template.templateId',template_revision BIGINT PATH '$.template.revision',config_digest VARCHAR(71) PATH '$.template.configDigest'))`;
+  const base=`${family}_group_events e JOIN ${family}_group_revisions r ON r.scope_id=e.scope_id AND r.group_id=e.group_id AND r.revision=e.revision`;
+  const join='path_template_revisions t ON t.scope_id=e.scope_id AND t.template_id=m.template_id AND t.revision=m.template_revision AND t.config_digest=m.config_digest';
+  const predicate="JSON_CONTAINS(JSON_EXTRACT(t.config,'$.nodes'),JSON_QUOTE(?))";
+  const lateral=`SELECT e.scope_id eventScope,e.group_id entityId,e.revision,JSON_TYPE(JSON_EXTRACT(r.config,'$.${collection}')) collectionType,m.template_id templateId,m.template_revision templateRevision,m.config_digest configDigest,t.scope_id templateScope,t.config_digest joinedDigest,JSON_EXTRACT(t.config,'$.nodes') nodes,${predicate} matched FROM ${base} LEFT JOIN ${members} m ON TRUE LEFT JOIN ${join} WHERE e.scope_id=? ORDER BY e.group_id,e.revision`;
+  await attempt('groupDirectLateralExecute',async()=>summarize(await rows(tx,lateral,[nodeId,scope])));
+  await attempt('groupDirectLateralText',async()=>{const [result]=await tx.query(lateral,[nodeId,scope]);return summarize(result);});
+  const scalar=`SELECT e.group_id entityId,e.revision,(SELECT COUNT(*) FROM ${members} m JOIN ${join} WHERE ${predicate}) matched,(SELECT COUNT(*) FROM ${members} m) memberCount FROM ${base} WHERE e.scope_id=? ORDER BY e.group_id,e.revision`;
+  await attempt('groupScalarProjectionExecute',async()=>summarize(await rows(tx,scalar,[nodeId,scope])));
+  await attempt('groupScalarProjectionText',async()=>{const [result]=await tx.query(scalar,[nodeId,scope]);return summarize(result);});
+ }else{
+  const family=families.find(value=>value.source===source);
+  if(family){const selections=source==='path-publication'?[['$.items[*]','$.source.spec'],['$.items[*]','$.proposedSpec']]:source==='ingress-deployment'?[['$.items[*]','$.spec']]:[['$.items[*]','$.spec'],['$.sources[*]','$.state.spec']];
+   for(const [index,selection] of selections.entries()){const [collection,path]=selection,table=`JSON_TABLE(p.plan,'${collection}' COLUMNS (spec JSON PATH '${path}'))`,base=`${family.prefix}_events e JOIN ${family.head} p ON p.scope_id=e.scope_id AND p.batch_id=e.batch_id`,predicate="(CAST(CASE WHEN JSON_TYPE(JSON_EXTRACT(m.spec,'$.ingress.nodeId'))='STRING' THEN JSON_UNQUOTE(JSON_EXTRACT(m.spec,'$.ingress.nodeId')) ELSE NULL END AS BINARY)=CAST(? AS BINARY) OR JSON_CONTAINS(JSON_EXTRACT(m.spec,'$.path.via'),JSON_QUOTE(?)))";
+    const lateral=`SELECT e.scope_id eventScope,e.batch_id entityId,e.revision,JSON_TYPE(m.spec) specType,JSON_TYPE(JSON_EXTRACT(m.spec,'$.ingress.nodeId')) ingressType,JSON_EXTRACT(m.spec,'$.ingress.nodeId') ingressNode,JSON_EXTRACT(m.spec,'$.path.via') via,${predicate} matched FROM ${base} LEFT JOIN ${table} m ON TRUE WHERE e.scope_id=? ORDER BY e.batch_id,e.revision`;
+    await attempt('planDirectLateralExecute'+index,async()=>summarize(await rows(tx,lateral,[nodeId,nodeId,scope])));
+    await attempt('planDirectLateralText'+index,async()=>{const [result]=await tx.query(lateral,[nodeId,nodeId,scope]);return summarize(result);});
+    const scalar=`SELECT e.batch_id entityId,e.revision,(SELECT COUNT(*) FROM ${table} m WHERE ${predicate}) matched,(SELECT COUNT(*) FROM ${table} m) memberCount FROM ${base} WHERE e.scope_id=? ORDER BY e.batch_id,e.revision`;
+    await attempt('planScalarProjectionExecute'+index,async()=>summarize(await rows(tx,scalar,[nodeId,nodeId,scope])));
+    await attempt('planScalarProjectionText'+index,async()=>{const [result]=await tx.query(scalar,[nodeId,nodeId,scope]);return summarize(result);});
+   }
+  }
+ }
+ return JSON.stringify(output);
+}
 function safe(value:unknown){assert.doesNotMatch(JSON.stringify(value),new RegExp(secret+'|request_digest|request_key|plan_digest|expanded_spec|password|certificate'));}
 async function seedMetadata(tx:Transaction){
  for(const scope of ['scope','foreign']){
@@ -46,7 +82,7 @@ test('68 populated MySQL template and group attribution uses exact historical re
  });
  const before=await snapshot(db);
  await db.transaction(async tx=>{
-  for(const source of ['path-template','path-group','ingress-group'] as const){for(const [node,revision] of [['old-node',1],['new-node',2]] as const){const result=await read(tx,source,{nodeId:node});assert.equal(result.length,1,source+' '+node);assert.equal(result[0]!.revision,revision);assert.equal(result[0]!.kind,revision===1?'publish':'archive');safe(result);}
+  for(const source of ['path-template','path-group','ingress-group'] as const){for(const [node,revision] of [['old-node',1],['new-node',2]] as const){const result=await read(tx,source,{nodeId:node});assert.equal(result.length,1,source+' '+node+(result.length===1?'':' '+await attributionDiagnostic(tx,source,node)));assert.equal(result[0]!.revision,revision);assert.equal(result[0]!.kind,revision===1?'publish':'archive');safe(result);}
    for(const node of ['OLD-NODE','foreign-node','foreign-only-node'])assert.deepEqual(await read(tx,source,{nodeId:node}),[],source+' '+node);const foreign=await read(tx,source,{nodeId:'foreign-node'},'foreign');assert.equal(foreign.length,2);safe(foreign);
    const all=await read(tx,source);assert.equal(all.length,source==='path-template'?2:6);assert.ok(all.every(row=>row.nodeAssociation===(source==='path-template'?'immutable-template-config':'immutable-group-definition')));safe(all);
   }
@@ -82,7 +118,7 @@ test('68 populated MySQL batches attribute plan source proposed and add nodes wh
  const before=await snapshot(db);
  await db.transaction(async tx=>{for(const family of families){const source=(family.source+'-attempt') as AuditSource;
   const eventNodes=family.source==='path-publication'?['baseline-node-1','proposed-node-1']:family.source==='ingress-deployment'?['planned-node-1']:['add-node-1','migration-baseline-node'];
-  for(const nodeId of eventNodes){const records=await read(tx,family.source,{nodeId});assert.equal(records.length,2,family.source+' '+nodeId);assert.deepEqual(records.map(row=>[row.kind,row.actorId,row.actorAttribution,row.forwardId,row.operationId,row.position,row.recoveryInvalidated]),[['recovery',null,'unattributed-recovery',null,null,null,true],['create','recorded-actor','initiator',null,null,null,true]]);safe(records);}
+  for(const nodeId of eventNodes){const records=await read(tx,family.source,{nodeId});assert.equal(records.length,2,family.source+' '+nodeId+(records.length===2?'':' '+await attributionDiagnostic(tx,family.source,nodeId)));assert.deepEqual(records.map(row=>[row.kind,row.actorId,row.actorAttribution,row.forwardId,row.operationId,row.position,row.recoveryInvalidated]),[['recovery',null,'unattributed-recovery',null,null,null,true],['create','recorded-actor','initiator',null,null,null,true]]);safe(records);}
   assert.deepEqual(await read(tx,family.source,{nodeId:'accepted-node'}),[]);assert.deepEqual(await read(tx,family.source,{nodeId:'never-present'}),[]);
   const baseline=family.source==='path-publication'?['baseline-1',7]:[null,null],baselineNode=family.source==='path-publication'?'baseline-node-1':family.source==='ingress-deployment'?'planned-node-1':'add-node-1';
   assert.deepEqual(tuples(await read(tx,source,{nodeId:baselineNode})),[[1,family.first,...baseline,null,'rejected','CONNECT_FAILED',false]]);
@@ -140,7 +176,7 @@ test('68 multi-row MySQL group and batch node attribution matches independent ca
      'JOIN path_template_revisions t ON t.scope_id=e.scope_id '+
      `AND JSON_CONTAINS(r.config,JSON_OBJECT('template',JSON_OBJECT('templateId',t.template_id,'revision',t.revision,'configDigest',t.config_digest)),'$.${collection}') `+
      "WHERE e.scope_id=? AND JSON_CONTAINS(JSON_EXTRACT(t.config,'$.nodes'),JSON_QUOTE(?))",[scope,nodeId]);
-    const actual=await read(tx,source,{nodeId},scope);assert.deepEqual(identity(actual),identity(canonical),source+' '+scope+' '+nodeId);safe(actual);
+    const actual=await read(tx,source,{nodeId},scope);assert.deepEqual(identity(actual),identity(canonical),source+' '+scope+' '+nodeId+(JSON.stringify(identity(actual))===JSON.stringify(identity(canonical))?'':' '+await attributionDiagnostic(tx,source,nodeId,scope)));safe(actual);
     if(scope==='scope'&&(nodeId==='old-node'||nodeId==='new-node'))assert.equal(canonical.length,1,'canonical historical template join must be populated');
    }
   }
@@ -151,7 +187,7 @@ test('68 multi-row MySQL group and batch node attribution matches independent ca
    for(const scope of ['scope','foreign'])for(const nodeId of ['baseline-node-1','proposed-node-1','planned-node-1','add-node-1','migration-baseline-node','BASELINE-NODE-1','never-present']){
     const canonical=await rows<{entityId:string;revision:number;kind:string}>(tx,
      `SELECT e.batch_id entityId,e.revision,e.kind FROM ${family.prefix}_events e JOIN ${family.head} p ON p.scope_id=e.scope_id AND p.batch_id=e.batch_id WHERE e.scope_id=? AND (${predicate})`,[scope,...specPaths.flatMap(()=>[nodeId,nodeId])]);
-    const actual=await read(tx,family.source,{nodeId},scope);assert.deepEqual(identity(actual),identity(canonical),family.source+' '+scope+' '+nodeId);safe(actual);
+    const actual=await read(tx,family.source,{nodeId},scope);assert.deepEqual(identity(actual),identity(canonical),family.source+' '+scope+' '+nodeId+(JSON.stringify(identity(actual))===JSON.stringify(identity(canonical))?'':' '+await attributionDiagnostic(tx,family.source,nodeId,scope)));safe(actual);
     const populated=family.source==='path-publication'?['baseline-node-1','proposed-node-1']:family.source==='ingress-deployment'?['planned-node-1']:['add-node-1','migration-baseline-node'];
     if(populated.includes(nodeId))assert.equal(canonical.length,scope==='scope'?4:2,'canonical immutable plan association must be populated');
    }

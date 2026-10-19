@@ -215,6 +215,8 @@ jobs:
         run: node --test apps/control/test/probe-history-complete.test.ts
       - name: Original Probe history and finite plans same-transaction statement rollback and scheduler contention
         run: node --test apps/control/test/probe-history-plan-native-complete.test.ts
+      - name: Original Telemetry raw and rollup same-transaction quotas pruning and statement rollback
+        run: node --test apps/control/test/telemetry-store-complete.test.ts
       - name: Read-only upgrade assessment with SELECT-only MySQL and authenticated Agent journal
         run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
       - name: Console scoped filters, independent candidates and full-scope overview with SELECT-only MySQL

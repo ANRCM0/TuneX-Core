@@ -184,6 +184,52 @@ type handshakeCompleteTracked struct {
 
 func (c *handshakeCompleteTracked) Close() error { c.closed.Add(1); return c.Conn.Close() }
 
+// TLS rejection writes an alert before returning. With a bare net.Pipe this
+// can deadlock against the server's unfinished certificate flight. Buffer only
+// the fixture's server writes; the client's real handshakeWire still counts
+// every byte read from the original pipe and owns all client-side closes.
+type handshakeCompleteBufferedServer struct {
+	net.Conn
+	writes chan []byte
+	stop   chan struct{}
+	done   chan struct{}
+	tx     int
+}
+
+func (c *handshakeCompleteBufferedServer) Write(p []byte) (int, error) {
+	if len(p) > 4*MaximumTLSWireBytes-c.tx {
+		return 0, io.ErrShortWrite
+	}
+	b := append([]byte(nil), p...)
+	select {
+	case c.writes <- b:
+		c.tx += len(b)
+		return len(b), nil
+	case <-c.done:
+		return 0, io.ErrClosedPipe
+	case <-c.stop:
+		return 0, io.ErrClosedPipe
+	}
+}
+
+func (c *handshakeCompleteBufferedServer) pump() {
+	defer close(c.done)
+	for {
+		select {
+		case b := <-c.writes:
+			for len(b) > 0 {
+				n, err := c.Conn.Write(b)
+				if err != nil || n == 0 {
+					return
+				}
+				b = b[n:]
+			}
+		case <-c.stop:
+			return
+		}
+	}
+}
+
 func TestHandshakeCompleteNativeTLS13SNIAlpnRevocationAndNoCallerClose(t *testing.T) {
 	for _, mode := range []string{"valid", "revoke-after", "wrong-pin", "tls12", "wrong-alpn", "wire-budget"} {
 		t.Run(mode, func(t *testing.T) {
@@ -199,10 +245,18 @@ func TestHandshakeCompleteNativeTLS13SNIAlpnRevocationAndNoCallerClose(t *testin
 			}
 			clientRaw, serverRaw := net.Pipe()
 			raw := &handshakeCompleteTracked{Conn: clientRaw}
-			defer raw.Close()
-			defer serverRaw.Close()
+			bufferedServer := &handshakeCompleteBufferedServer{Conn: serverRaw, writes: make(chan []byte, 16), stop: make(chan struct{}), done: make(chan struct{})}
+			go bufferedServer.pump()
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
+			defer func() {
+				// Close original endpoints before waiting: a budget refusal leaves
+				// the server flight unread, and no TLS owner should close it for us.
+				close(bufferedServer.stop)
+				_ = clientRaw.Close()
+				_ = serverRaw.Close()
+				cancel()
+				<-bufferedServer.done
+			}()
 			deadline, _ := ctx.Deadline()
 			_ = serverRaw.SetDeadline(deadline)
 			version := uint16(tls.VersionTLS13)
@@ -216,7 +270,7 @@ func TestHandshakeCompleteNativeTLS13SNIAlpnRevocationAndNoCallerClose(t *testin
 			hello := make(chan *tls.ClientHelloInfo, 1)
 			finished := make(chan error, 1)
 			go func() {
-				server := tls.Server(serverRaw, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: version, MaxVersion: version, NextProtos: []string{alpn}, SessionTicketsDisabled: true, GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) { hello <- info; return nil, nil }})
+				server := tls.Server(bufferedServer, &tls.Config{Certificates: []tls.Certificate{certificate}, MinVersion: version, MaxVersion: version, NextProtos: []string{alpn}, SessionTicketsDisabled: true, GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) { hello <- info; return nil, nil }})
 				finished <- server.HandshakeContext(ctx)
 			}()
 			calls := 0
@@ -238,6 +292,9 @@ func TestHandshakeCompleteNativeTLS13SNIAlpnRevocationAndNoCallerClose(t *testin
 			if calls != 2 || raw.closed.Load() != 0 {
 				t.Fatal("handshake callback count or caller connection ownership changed", calls, raw.closed.Load())
 			}
+			if ctx.Err() != nil || !time.Now().Before(deadline) {
+				t.Fatal("native result came from fixture timeout", err)
+			}
 			switch mode {
 			case "valid":
 				if err != nil || verified == nil || !verified.Verified || verified.Version != "TLSv1.3" || verified.ALPN != ALPN || verified.LeafFingerprint != trust.Fingerprint() {
@@ -253,9 +310,15 @@ func TestHandshakeCompleteNativeTLS13SNIAlpnRevocationAndNoCallerClose(t *testin
 				}
 			}
 			_ = raw.Close()
+			_ = serverRaw.Close()
+			cleanup := time.NewTimer(time.Second)
+			defer cleanup.Stop()
 			select {
-			case <-finished:
-			case <-ctx.Done():
+			case serverErr := <-finished:
+				if (mode == "valid" || mode == "revoke-after") && serverErr != nil {
+					t.Fatal("native server failed a completed TLS handshake", serverErr)
+				}
+			case <-cleanup.C:
 				t.Fatal("native server did not finish")
 			}
 		})

@@ -124,8 +124,8 @@ short publication windows from delayed Agent progress without uploading wire or
 credential bodies.
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 169 cases have fully
-identified assertions; 51 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 184 cases have fully
+identified assertions; 36 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`
@@ -298,3 +298,26 @@ public contracts. TypeScript and the 950-file production boundary scan passed
 locally; Go formatting and whitespace checks are static only. The Audit private
 SQL correction is included in this batch, so earlier production boundary evidence
 is supplemented by the current scan rather than treated as unchanged-source proof.
+
+Candidate `fff3a91d8de003aa804420613663b72fb4e7b35b` ran baseline
+`39315559804` at checkout `f7dd50e3cca628fe9da23d622e2fb0f71fff1acc`.
+Contracts and Windows exposed native TLS fixture full-duplex pipe blocking;
+contracts also exposed frozen shared limits, duplicate path fixture digests,
+an overlong seven-day validity fixture, a cross-realm SQL fixture, an out-of-range
+cancel CAS and the native Promise thenable lookup in a getter trace. Their next
+source corrections preserve the original assertions and strict input boundaries.
+phase1 proved the earlier Audit scalar-count correction insufficient: both
+original populated cases and the independent canonical comparison still failed.
+The next candidate retains those expectations and adds failure-only prepared/text
+SQL, lateral/scalar phase and plan diagnostics before another production repair.
+Passing jobs from this head do not prove those unresolved cases or later changes.
+
+The next authored batch identifies 184 complete and 36 partial requirements across
+382 suites. It adds real original Probe public/machine/permit bridge order and
+postcommit late-ACK refusal, native Enrollment including actual HTTPS and protected
+file failures, complete four-family raw/rollup Telemetry with per-write canonical
+MySQL rollback, NativeTunnels/RelayPlans delegation and passive NodeObservations
+native clocks/timers/cleanup/projection boundaries. Local TypeScript passed;
+functional, database and native execution remain pending the saved candidate's
+own Actions. Foundation acceptance and independent physical-host gates remain
+unverified; upper product parallelism and release stay closed.
