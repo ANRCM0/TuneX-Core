@@ -321,3 +321,43 @@ native clocks/timers/cleanup/projection boundaries. Local TypeScript passed;
 functional, database and native execution remain pending the saved candidate's
 own Actions. Foundation acceptance and independent physical-host gates remain
 unverified; upper product parallelism and release stay closed.
+
+Candidate `927181f22c1ec545629bc64d2398352d500714b6` ran baseline
+`39317712487` at checkout `ba86298cbd3e9b45c27364419061d031438e7f04`.
+Container workflow `39317711018` passed. Windows, deployment, Probe, Relay
+isolation and all 3/4/8-node jobs passed. Contracts recorded 1777 TypeScript passes, 66 failures and 136
+conditional skips; Web passed 153/153. The failures identify HTTP expected JSON
+record prototypes and malformed-input status, repeated native-global mock
+restoration, immutable capacity fixtures and Direct terminal phase/parser inputs.
+The next source fixes retain raw parsed prototypes, original error/status mapping,
+independent global restoration and all target business assertions.
+
+The same revision's phase1 diagnostics show the scalar JSON_TABLE predicate can
+be evaluated before its historical revision owner joins. The original prepared
+and text queries both omit expected events, while direct lateral and scalar SELECT
+projections match the unchanged populated fixtures. The next private L2 query
+repair places JSON table dependencies in the direct join graph and deduplicates
+event projections before the existing stable order and limit. Scope, historical
+revision/digest and strict STRING/BINARY node predicates remain. Additional native
+cases pin multiple matching members/items, empty OR branches and invalid JSON
+types. This correction still requires its own exact-source Actions.
+
+The next authored batch identifies 190 complete and 30 partial requirements across
+389 suites. It adds original Runtime time/policy/native specialization and SQL
+matrices, pure Transit compiler/validator/projector ordering and Agent codec/CLI/
+standalone Responder tests. TypeScript checking awaits the active, separate Probe
+and Runtime test slices; the 950-file production boundary scan passed. Go formatting
+completed; local vet of the two new Agent packages stopped at unavailable cached
+dependencies with GOPROXY=off, before a successful analysis result. Functional and
+native evidence remains Actions-only. No foundation, physical-host, product
+parallelism or release acceptance is inferred from authored assertions.
+
+The next integrated batch identifies 197 complete and 23 partial requirements
+across 396 suites. Runtime related-Node closure and Relay historical authority
+now include native MySQL lock, limit, credential cutoff and statement rollback
+assertions. Probe storage/evidence/permit/qualification matrices pin native SQL,
+sentinels, synchronous callbacks, recovery and current value/wire boundaries.
+The complete TypeScript check and 950-file production boundary/document-link scan
+passed locally. Functional, MySQL and native execution of this batch remains
+pending its own saved candidate Actions. No B acceptance, independent physical-host
+acceptance, product parallelism or release approval follows from this source map.

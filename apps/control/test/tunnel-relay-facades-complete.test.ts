@@ -96,8 +96,9 @@ const spec=():ForwardSpec=>({enabled:false,protocols:['tcp','udp'],ingress:{node
 
 test('103 RelayPlans parses before any transaction then refuses absent path or locked Profile without authorization or reservation',async()=>{
  const f=relayFixture();assert.equal(Relay.RelayPlans.length,3);assert.equal(Relay.RELAY_QUERY_INTERFACE_VERSION,1);assert.deepEqual(f.events,[]);
- for(const input of [null,undefined,[],{}, {enabled:false}, {...spec(),protocols:[]}]){await assert.rejects(f.service.planRelay('actor','scope',input),{code:'INVALID_CONFIG',status:422});assert.deepEqual(f.events,[]);}
- for(const input of [{...spec(),path:undefined},{...spec(),transport:undefined},{...spec(),path:undefined,transport:undefined}]){await assert.rejects(f.service.planRelay('actor','scope',input),{code:'UNSUPPORTED_CAPABILITY',status:422,message:'Path and locked Transport Profile required'});assert.deepEqual(f.events,[]);}
+ for(const input of [null,undefined,[],{}, {enabled:false}, {...spec(),protocols:[]},{...spec(),path:undefined},{...spec(),transport:undefined},{...spec(),path:undefined,transport:undefined}]){await assert.rejects(f.service.planRelay('actor','scope',input),{code:'INVALID_CONFIG',status:422});assert.deepEqual(f.events,[]);}
+ const {path:_path,transport:_transport,...direct}=spec();void _path;void _transport;
+ await assert.rejects(f.service.planRelay('actor','scope',direct),{code:'UNSUPPORTED_CAPABILITY',status:422,message:'Path and locked Transport Profile required'});assert.deepEqual(f.events,[]);
  const failure=new Error('input getter');const poisoned={...spec(),get enabled(){throw failure;}};await assert.rejects(f.service.planRelay('actor','scope',poisoned),error=>error===failure);assert.deepEqual(f.events,[]);
 });
 

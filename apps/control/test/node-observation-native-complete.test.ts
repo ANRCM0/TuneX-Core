@@ -33,14 +33,14 @@ test('102 public legacy passive host rules frozen limits and raw contracts retai
 });
 
 test('102 native lifecycle clock encoder and ISO adapters resolve current globals and preserve exact callback delay handle and receiver',t=>{
- const events:unknown[][]=[],controller=new AbortController(),handle=Symbol('timer');
- t.mock.method(globalThis,'AbortController',function(){events.push(['controller']);return controller;} as never);
+ const events:unknown[][]=[],controller=new AbortController(),handle=Symbol('timer');let selectedController=controller,replaced=false;
+ t.mock.method(globalThis,'AbortController',function(){events.push([replaced?'replacement':'controller']);return selectedController;} as never);
  t.mock.method(globalThis,'setTimeout',((callback:unknown,delay:unknown,...rest:unknown[])=>{events.push(['schedule',callback,delay,...rest]);return handle;}) as never);
  t.mock.method(globalThis,'clearTimeout',((actual:unknown)=>{events.push(['clear',actual]);}) as never);
  const callback=()=>{};assert.equal(native.nativeObservationController(),controller);assert.equal(native.nativeObservationTimeout(callback,101),handle);native.nativeClearObservationTimeout(handle as never);assert.deepEqual(events,[['controller'],['schedule',callback,101],['clear',handle]] as unknown[][]);
- const next=new (Object.getPrototypeOf(controller).constructor)();t.mock.method(globalThis,'AbortController',function(){events.push(['replacement']);return next;} as never);assert.equal(native.nativeObservationController(),next);
- t.mock.method(Date,'now',()=>12.5);assert.equal(native.nativeWallClockNow(),12.5);t.mock.method(Date,'now',()=>Infinity);assert.equal(native.nativeWallClockNow(),Infinity);
- t.mock.method(performance,'now',()=>-1.25);assert.equal(native.nativeMonotonicNow(),-1.25);t.mock.method(performance,'now',()=>NaN);assert.ok(Number.isNaN(native.nativeMonotonicNow()));
+ const next=new (Object.getPrototypeOf(controller).constructor)();selectedController=next;replaced=true;assert.equal(native.nativeObservationController(),next);
+ let wall=12.5;t.mock.method(Date,'now',()=>wall);assert.equal(native.nativeWallClockNow(),12.5);wall=Infinity;assert.equal(native.nativeWallClockNow(),Infinity);
+ let mono=-1.25;t.mock.method(performance,'now',()=>mono);assert.equal(native.nativeMonotonicNow(),-1.25);mono=NaN;assert.ok(Number.isNaN(native.nativeMonotonicNow()));
  const encoded={toJSON(){events.push(['toJSON',this]);return {value:'被动'};}};assert.equal(native.nativeJsonEncoderBytes(encoded),Buffer.byteLength('{"value":"被动"}','utf8'));assert.deepEqual(events.at(-1),['toJSON',encoded]);
  const failure=new Error('JSON effect');assert.throws(()=>native.nativeJsonEncoderBytes({toJSON(){throw failure;}}),error=>error===failure);assert.throws(()=>native.nativeJsonEncoderBytes({value:1n}),TypeError);
  t.mock.method(Date.prototype,'toISOString',function(this:Date){events.push(['ISO',this.getTime()]);return 'original-native-ISO';});assert.equal(native.nativeIsoTime(123.75),'original-native-ISO');assert.deepEqual(events.at(-1),['ISO',123]);

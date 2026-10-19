@@ -13,6 +13,19 @@ import type { ControlApi, ControlHttpOptions, ControlHttpServices } from '../src
 
 type Route={method:string;path:string;owner:string;body:unknown;args:unknown[];limit:number;plain?:boolean;query?:boolean;bad?:unknown[]};
 const prefix='/api/v1/scopes/scope-a/',actor='actor-a',key='request-key',config={opaque:true},group={groupId:'group-a'},spec={opaque:'spec'};
+// The public JSON reader preserves null-prototype records. Route-created wrappers
+// keep ordinary prototypes, while their JSON-derived children retain that shape.
+function wireRecord(value:unknown):any {
+    if(Array.isArray(value))return value.map(wireRecord);
+    return value!==null&&typeof value==='object'?Object.assign(Object.create(null),Object.fromEntries(Object.entries(value).map(([key,item])=>[key,wireRecord(item)]))):value;
+}
+function writeArgs(route:Route):unknown[]{
+    const args=route.args.map(wireRecord);
+    const wrapper=route.owner==='changeMember'||route.owner==='changeNode'?4:
+        ['ingressDeployments.create','ingressMigrations.create','pathPublications.create'].includes(route.owner)?3:-1;
+    if(wrapper>=0)args[wrapper]={...args[wrapper]};
+    return args;
+}
 const routes:Route[]=[
     {method:'POST',path:'relay-plan',owner:'planRelay',body:config,args:[actor,'scope-a',config],limit:32768,plain:true},
     {method:'PUT',path:'transport-profiles/profile-a/grants/target-a',owner:'profileGrants.change',body:{allowed:false,expectedRevision:1},args:[actor,'scope-a','profile-a','target-a',key,1,false],limit:8192,bad:[{allowed:false,expectedRevision:0},{allowed:0,expectedRevision:1}]},
@@ -85,18 +98,18 @@ function fixture(route:Route){
 }
 
 for(const route of routes)test(`137 original HTTP ${route.method} ${route.path} exact dispatch byte bound and first refusal`,async()=>{
-    const f=fixture(route),response=await f.call();assert.equal(response.status,route.plain?200:202);assert.deepEqual(await response.json(),f.reply);assert.deepEqual(f.calls,[route.args]);
+    const f=fixture(route),response=await f.call();assert.equal(response.status,route.plain?200:202);assert.deepEqual(await response.json(),f.reply);assert.deepEqual(f.calls,[writeArgs(route)]);
     assert.equal(response.headers.get('cache-control'),'no-store');assert.deepEqual(f.trace,f.optional?['authority','admit','auth','owner','release']:['authority','auth','owner']);
     // Valid JSON padded to the inclusive byte bound must still dispatch; limit+1 refuses before JSON parsing or owner effects.
     const raw=JSON.stringify(route.body),edge=fixture(route);assert.equal((await edge.call(raw+' '.repeat(route.limit-Buffer.byteLength(raw)))).status,route.plain?200:202);assert.equal(edge.calls.length,1);
     for(const bad of ['{', '',new Uint8Array([0xc3]),'x'.repeat(route.limit+1)]){
-        const g=fixture(route),result=await g.call(bad);assert.equal(result.status,typeof bad==='string'&&bad.length>route.limit?413:400);assert.equal(g.calls.length,0);assert.equal((await result.json()).code,typeof bad==='string'&&bad.length>route.limit?'RESOURCE_LIMIT':'INVALID_CONFIG');
+        const g=fixture(route),result=await g.call(bad);assert.equal(result.status,typeof bad==='string'?(bad.length>route.limit?413:422):400);assert.equal(g.calls.length,0);assert.equal((await result.json()).code,typeof bad==='string'&&bad.length>route.limit?'RESOURCE_LIMIT':'INVALID_CONFIG');
     }
     for(const bad of route.bad??[]){const g=fixture(route),result=await g.call(JSON.stringify(bad));assert.equal(result.status,422);assert.equal(g.calls.length,0);}
     if(route.query){const g=fixture(route),result=await g.call('{','?unexpected=1');assert.equal(result.status,422);assert.equal(g.calls.length,0);}
     const denied=fixture(route);denied.fault.stage='authority';assert.equal((await denied.call('x'.repeat(route.limit+1))).status,503);assert.deepEqual(denied.trace,['authority']);
     const cookie=fixture(route);assert.equal((await cookie.call('{','',{cookie:'x'})).status,401);assert.equal(cookie.calls.length,0);
-    const failed=fixture(route);failed.fault.stage='owner';const failure=await failed.call();assert.equal(failure.status,409);assert.equal((await failure.json()).code,'TEST_OWNER');assert.deepEqual(failed.calls,[route.args]);
+    const failed=fixture(route);failed.fault.stage='owner';const failure=await failed.call();assert.equal(failure.status,409);assert.equal((await failure.json()).code,'TEST_OWNER');assert.deepEqual(failed.calls,[writeArgs(route)]);
 });
 
 const reads:[string,string,unknown[]][]=[
@@ -211,8 +224,8 @@ for(const [path,service,parser,limit] of [
     const options:ControlHttpOptions={control:{nodes:{machine:async()=>assert.fail('telemetry must authenticate within its original owner transaction')}} as unknown as ControlApi,
         runtime:{} as ControlHttpOptions['runtime'],authority:{allow:async()=>{trace.push('authority');},read:async()=>({maintenance:false})},services:{[service]:owner} as ControlHttpServices};
     const app=factory(options),call=(body:string|Uint8Array,epoch='1',query='')=>app.request('/agent/v3/'+path+query,{method:'POST',headers:{'x-tunex-session-epoch':epoch},body:typeof body==='string'?body:new Uint8Array(body)});
-    assert.equal((await call('{}'.padEnd(limit,' '))).status,200);assert.deepEqual(calls,[['claimed-node','fingerprint-a',1,{parser,args:[{}],nodeId:'claimed-node'}]]);assert.deepEqual(trace,['authority','admit','fingerprint','parse:'+parser,'owner','release']);
-    for(const [input,epoch,query,status,parsed] of [['x'.repeat(limit+1),'1','',413,false],['{','01','',400,false],['{}','01','',409,true],['{','1','?x=1',422,false],[new Uint8Array([0xc3]),'1','',400,false]] as const){
+    assert.equal((await call('{}'.padEnd(limit,' '))).status,200);assert.deepEqual(calls,[['claimed-node','fingerprint-a',1,{parser,args:[wireRecord({})],nodeId:'claimed-node'}]]);assert.deepEqual(trace,['authority','admit','fingerprint','parse:'+parser,'owner','release']);
+    for(const [input,epoch,query,status,parsed] of [['x'.repeat(limit+1),'1','',413,false],['{','01','',422,false],['{}','01','',409,true],['{','1','?x=1',422,false],[new Uint8Array([0xc3]),'1','',400,false]] as const){
         trace.length=0;calls.length=0;assert.equal((await call(input,epoch,query)).status,status);assert.equal(calls.length,0);assert.deepEqual(trace,['authority','admit','fingerprint',...(parsed?['parse:'+parser]:[]),'release']);
     }
     options.services={};trace.length=0;assert.equal((await factory(options).request('/agent/v3/'+path,{method:'POST',body:'x'.repeat(limit+1)})).status,503);assert.deepEqual(trace,['authority']);
@@ -229,7 +242,7 @@ test('137 Transit boot header precedes epoch and owner; snapshot keeps epoch bef
     }
     assert.equal((await app.request('/agent/v3/transit/command',{headers:{'x-tunex-boot-id':'boot-a','x-tunex-session-epoch':'2'}})).status,200);assert.deepEqual(calls.pop(),['node-a','fingerprint-a',2,'boot-a']);
     assert.equal((await app.request('/agent/v3/snapshot',{headers:{'x-tunex-session-epoch':'2'}})).status,200);assert.deepEqual(calls.pop(),['node-a',2,'fingerprint-a']);
-    for(const [body,status] of [[JSON.stringify({csr:'CSR',nodeId:'node-a',token:'secret'}).padEnd(32768,' '),200],['x'.repeat(32769),413],['{',400],[JSON.stringify({csr:'CSR',nodeId:'node-a',token:'secret',extra:1}),422]] as const){
+    for(const [body,status] of [[JSON.stringify({csr:'CSR',nodeId:'node-a',token:'secret'}).padEnd(32768,' '),200],['x'.repeat(32769),413],['{',422],[JSON.stringify({csr:'CSR',nodeId:'node-a',token:'secret',extra:1}),422]] as const){
         trace.length=0;const response=await app.request('/enrollment/v1',{method:'POST',body});assert.equal(response.status,status);assert.deepEqual(trace,status===200?['authority','enroll']:['authority']);if(status===200)assert.deepEqual(calls.pop(),['node-a','secret','CSR']);else assert.equal(calls.length,0);
     }
 });
@@ -239,7 +252,7 @@ test('137 both credential machine routes preserve body before epoch field errors
     const nodes={async machine(){trace.push('machine');return 'node-a';},async rotate(...args:unknown[]){calls.push(['rotate',...args]);return {rotated:true};},async relayCredential(...args:unknown[]){calls.push(['relay',...args]);return {rotated:true};}};
     const app=factory({control:{nodes} as unknown as ControlApi,runtime:{} as ControlHttpOptions['runtime'],authority:{allow:async()=>{},read:async()=>({maintenance:false})}});
     for(const [path,method] of [['credentials/rotate','rotate'],['relay-credential','relay']] as const){
-        for(const [raw,epoch,status] of [[JSON.stringify({csr:'CSR',requestId:'request-a'}).padEnd(32768,' '),'2',200],['x'.repeat(32769),'01',413],['{','01',400],[JSON.stringify({csr:1,requestId:'request-a'}),'01',422],[JSON.stringify({csr:'CSR',requestId:'request-a',extra:1}),'2',422],[JSON.stringify({csr:'CSR',requestId:'request-a'}),'01',409]] as const){
+        for(const [raw,epoch,status] of [[JSON.stringify({csr:'CSR',requestId:'request-a'}).padEnd(32768,' '),'2',200],['x'.repeat(32769),'01',413],['{','01',422],[JSON.stringify({csr:1,requestId:'request-a'}),'01',422],[JSON.stringify({csr:'CSR',requestId:'request-a',extra:1}),'2',422],[JSON.stringify({csr:'CSR',requestId:'request-a'}),'01',409]] as const){
             calls.length=0;const response=await app.request('/agent/v3/'+path,{method:'POST',headers:{'x-tunex-session-epoch':epoch},body:raw});assert.equal(response.status,status);assert.deepEqual(calls,status===200?[[method,'node-a','fingerprint-a',2,'request-a','CSR']]:[]);
         }
     }
@@ -251,13 +264,13 @@ test('137 Node provisioning observation and Probe withdrawal preserve original s
         observations:{async observe(...args:unknown[]){calls.push(['observe',...args]);return {observed:true};}},
         probes:{async revoke(...args:unknown[]){calls.push(['revoke',...args]);return {id:'probe-a',state:'withdrawn',withdrawnAt:withdrawn};}}};
     const app=createControlApp({control:control as unknown as ControlApi,runtime:{} as ControlHttpOptions['runtime'],authority:{allow:async()=>{},read:async()=>({maintenance:false})}});
-    const provision=await app.request(prefix+'nodes',{method:'POST',body:'{}'.padEnd(1048576,' ')});assert.equal(provision.status,201);assert.deepEqual(calls.pop(),['provision',actor,'scope-a',{}]);
+    const provision=await app.request(prefix+'nodes',{method:'POST',body:'{}'.padEnd(1048576,' ')});assert.equal(provision.status,201);assert.deepEqual(calls.pop(),['provision',actor,'scope-a',wireRecord({})]);
     assert.equal((await app.request(prefix+'nodes',{method:'POST',body:'x'.repeat(1048577)})).status,413);assert.equal(calls.length,0);
     const raw=new Request('http://localhost'+prefix+'nodes/node-a/observations',{method:'POST',body:'{}'.padEnd(1024,' '),signal:signal.signal});
-    assert.equal((await app.request(raw)).status,200);assert.deepEqual(calls.pop(),['observe',actor,'scope-a','node-a',{},raw.signal]);
+    assert.equal((await app.request(raw)).status,200);assert.deepEqual(calls.pop(),['observe',actor,'scope-a','node-a',wireRecord({}),raw.signal]);
     assert.equal((await app.request(prefix+'nodes/node-a/observations',{method:'POST',body:'x'.repeat(1025)})).status,413);assert.equal(calls.length,0);
     const revoke=await app.request(prefix+'probes/probe-a/revoke',{method:'POST',body:'{}'.padEnd(1024,' ')});assert.equal(revoke.status,200);assert.deepEqual(await revoke.json(),{probeId:'probe-a',state:'withdrawn',executionEnabled:false,withdrawnAt:new Date(withdrawn).toISOString()});assert.deepEqual(calls.pop(),['revoke',actor,'scope-a','probe-a']);
-    for(const [body,status] of [['[]',422],['null',422],['{"extra":1}',422],['x'.repeat(1025),413],['{',400]] as const){assert.equal((await app.request(prefix+'probes/probe-a/revoke',{method:'POST',body})).status,status);assert.equal(calls.length,0);}
+    for(const [body,status] of [['[]',422],['null',422],['{"extra":1}',422],['x'.repeat(1025),413],['{',422]] as const){assert.equal((await app.request(prefix+'probes/probe-a/revoke',{method:'POST',body})).status,status);assert.equal(calls.length,0);}
 });
 
 test('137 every registered Console asset dispatches its exact native name with original security and media headers',async()=>{

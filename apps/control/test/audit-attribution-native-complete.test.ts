@@ -195,3 +195,50 @@ test('68 multi-row MySQL group and batch node attribution matches independent ca
  });
  assert.deepEqual(await snapshot(db),before);
 }));
+
+test('68 direct lateral node joins deduplicate repeated matching members and plan items preserve empty OR branches and refuse non-string ingress identities',{skip:!databaseURL},async()=>database(async db=>{
+ await db.transaction(async tx=>{
+  await seedMetadata(tx);
+  for(const family of ['path','ingress'] as const){
+   const member={template:{templateId:'template',revision:1,configDigest:hash()}};
+   await insert(tx,family+'_groups',{scope_id:'scope',group_id:'duplicate-members',current_revision:1,archived:false});
+   await insert(tx,family+'_group_revisions',{scope_id:'scope',group_id:'duplicate-members',revision:1,config:JSON.stringify({[family==='path'?'candidates':'members']:[member,member,member]}),config_digest:hash(),created_by:'actor',created_at:1});
+   await insert(tx,family+'_group_events',{id:family+'-duplicate-members',scope_id:'scope',group_id:'duplicate-members',revision:1,kind:'publish',actor_id:'actor',created_at:300});
+  }
+  for(const family of families){
+   const custom=async(batch:string,value:unknown)=>{await seedBatch(tx,family,'scope',batch);await write(tx,`UPDATE ${family.head} SET plan=? WHERE scope_id=? AND batch_id=?`,[JSON.stringify(value),'scope',batch]);};
+   const rawSpec=(nodeId:unknown)=>({ingress:{nodeId},path:{via:[]}});
+   const repeated=rawSpec('duplicate-plan-node'),wrong=[['strict-ingress-node'],{nested:'strict-ingress-node'},19,null,true].map(rawSpec);
+   if(family.source==='path-publication'){
+    await custom('duplicate-plan',{items:[{source:{spec:repeated},proposedSpec:repeated},{source:{spec:repeated},proposedSpec:repeated}]});
+    await custom('one-branch',{items:[{proposedSpec:spec('only-proposed-node')}]});
+    await custom('wrong-types',{items:wrong.map(value=>({source:{spec:value},proposedSpec:value}))});
+   }else if(family.source==='ingress-deployment'){
+    await custom('duplicate-plan',{items:[{spec:repeated},{spec:repeated},{spec:repeated}]});
+    await custom('one-branch',{items:[{spec:spec('only-item-node')}]});
+    await custom('wrong-types',{items:wrong.map(value=>({spec:value}))});
+   }else{
+    await custom('duplicate-plan',{items:[{spec:repeated},{spec:repeated}],sources:[{state:{spec:repeated}},{state:{spec:repeated}}]});
+    await custom('one-branch',{items:[],sources:[{state:{spec:spec('only-source-node')}}]});
+    await custom('other-branch',{items:[{spec:spec('only-item-node')}],sources:[]});
+    await custom('wrong-types',{items:wrong.map(value=>({spec:value})),sources:wrong.map(value=>({state:{spec:value}}))});
+   }
+   await custom('empty-plan',{items:[],sources:[]});
+  }
+ });
+ const before=await snapshot(db);
+ await db.transaction(async tx=>{
+  for(const source of ['path-group','ingress-group'] as const){
+   const found=await read(tx,source,{nodeId:'old-node'});assert.equal(found.length,2);assert.equal(found.filter(row=>row.entityId==='duplicate-members').length,1);assert.equal(new Set(found.map(row=>row.key)).size,2);safe(found);
+  }
+  for(const family of families){
+   const records=await read(tx,family.source,{nodeId:'duplicate-plan-node'});assert.equal(records.length,2);assert.ok(records.every(row=>row.entityId==='duplicate-plan'));assert.deepEqual(records.map(row=>row.kind),['recovery','create']);assert.equal(new Set(records.map(row=>row.key)).size,2);safe(records);
+   const page=await new MySqlAuditReadStore(auditStoragePolicy).source(tx,'scope',family.source,{...readQuery({nodeId:'duplicate-plan-node'}),limit:1},row=>row);assert.equal(page.length,2,'limit plus lookahead counts distinct events');assert.equal(new Set(page.map(row=>row.key)).size,2);
+   const nodes=family.source==='path-publication'?['only-proposed-node']:family.source==='ingress-deployment'?['only-item-node']:['only-source-node','only-item-node'];
+   for(const nodeId of nodes){const found=await read(tx,family.source,{nodeId});assert.equal(found.length,2,family.source+' '+nodeId);assert.equal(new Set(found.map(row=>row.key)).size,2);}
+   for(const nodeId of ['strict-ingress-node','19','true','DUPLICATE-PLAN-NODE','never-present'])assert.deepEqual(await read(tx,family.source,{nodeId}),[],family.source+' '+nodeId);
+   assert.deepEqual(await read(tx,family.source,{nodeId:'duplicate-plan-node'},'foreign'),[]);
+  }
+ });
+ assert.deepEqual(await snapshot(db),before);
+}));

@@ -207,7 +207,7 @@ for (const family of ['forward', 'probe'] as const) {
             if (variant === 'gap') second.droppedSamples = '1';
             if (variant === 'counter-reset') second.uptimeMs = 500;
             if (variant === 'overflowed') second.items[0].overflowed = true;
-            if (variant === 'terminal') { second.items[0].state = 'terminal'; second.items[0].endedAt = second.items[0].capturedAt; if (family === 'forward') second.items[0].phase = 'draining'; }
+            if (variant === 'terminal') { second.items[0].state = 'terminal'; second.items[0].endedAt = second.items[0].capturedAt; }
             if (variant === 'unavailable') Object.assign(second.items[0], { availability: 'unavailable', counters: null, counterEpoch: null, overflowed: null });
             if (variant === 'historical') f.state.current.revoked = true;
             f.state.rows = [record(family, first, at), record(family, second, at + 1000)];

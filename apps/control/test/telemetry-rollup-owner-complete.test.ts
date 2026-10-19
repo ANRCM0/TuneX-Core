@@ -131,7 +131,7 @@ test('77 aggregate capacity preserves over-budget inspection and exact wide logi
     assert.equal(result.logicalBudget.rawMaxJsonBytesPerNode, (2n * 8640n * 8192n + 2n * 4096n * 6144n).toString());
     assert.equal(result.logicalBudget.scopeRawHardCap, false); assert.equal(result.logicalBudget.physicalBytesMeasured, false);
     await assert.rejects(f.service.capacity('reader', 'scope'), { code: 'TELEMETRY_AGGREGATE_RATE_LIMIT' });
-    f.state.now += 1000; f.state.counts.cursorRows = -1;
+    f.state.now += 1000; f.state.counts = { ...f.state.counts, cursorRows: -1 };
     await assert.rejects(f.service.capacity('reader', 'scope'), { code: 'INTEGRITY_FAILURE' });
     assert.equal(await f.service.prune(), 7);
 });

@@ -39,20 +39,23 @@ test('68 SQL node association follows immutable plans template revisions and acc
   if(source==='path-template')assert.ok(sql.includes("JSON_EXTRACT(r.config,'$.nodes')"));
   if(source==='path-group'||source==='ingress-group'){
    const collection=source==='path-group'?'candidates':'members';
-   assert.ok(sql.includes(`((SELECT COUNT(*) FROM JSON_TABLE(r.config,'$.${collection}[*]' COLUMNS (`+
+   assert.ok(sql.includes(` JOIN JSON_TABLE(r.config,'$.${collection}[*]' COLUMNS (`+
     "template_id VARCHAR(128) PATH '$.template.templateId',template_revision BIGINT PATH '$.template.revision',"+
-    "config_digest VARCHAR(71) PATH '$.template.configDigest')) audit_members "+
+    "config_digest VARCHAR(71) PATH '$.template.configDigest')) audit_members ON TRUE "+
     'JOIN path_template_revisions audit_template ON audit_template.scope_id=e.scope_id AND audit_template.template_id=audit_members.template_id '+
-    'AND audit_template.revision=audit_members.template_revision AND audit_template.config_digest=audit_members.config_digest '+
-    "WHERE JSON_CONTAINS(JSON_EXTRACT(audit_template.config,'$.nodes'),JSON_QUOTE(?)))>0)"),source);
+    'AND audit_template.revision=audit_members.template_revision AND audit_template.config_digest=audit_members.config_digest'),source);
+   assert.ok(sql.includes("WHERE e.scope_id=? AND (JSON_CONTAINS(JSON_EXTRACT(audit_template.config,'$.nodes'),JSON_QUOTE(?)))"));
   }
   if(source==='path-publication'||source==='ingress-deployment'||source==='ingress-migration'){
-   const expectedSpec="(CAST(CASE WHEN JSON_TYPE(JSON_EXTRACT(audit_specs.spec,'$.ingress.nodeId'))='STRING' THEN JSON_UNQUOTE(JSON_EXTRACT(audit_specs.spec,'$.ingress.nodeId')) ELSE NULL END AS BINARY)=CAST(? AS BINARY) OR JSON_CONTAINS(JSON_EXTRACT(audit_specs.spec,'$.path.via'),JSON_QUOTE(?)))";
    const selections=source==='path-publication'?[['$.items[*]','$.source.spec'],['$.items[*]','$.proposedSpec']]:source==='ingress-deployment'?[['$.items[*]','$.spec']]:[['$.items[*]','$.spec'],['$.sources[*]','$.state.spec']];
-   for(const [collection,path] of selections)assert.ok(sql.includes(`((SELECT COUNT(*) FROM JSON_TABLE(p.plan,'${collection}' COLUMNS (spec JSON PATH '${path}')) audit_specs WHERE ${expectedSpec})>0)`),source+' '+path);
+   for(const [index,[collection,path]] of selections.entries()){
+    const alias='audit_specs_'+index,expectedSpec=`(CAST(CASE WHEN JSON_TYPE(JSON_EXTRACT(${alias}.spec,'$.ingress.nodeId'))='STRING' THEN JSON_UNQUOTE(JSON_EXTRACT(${alias}.spec,'$.ingress.nodeId')) ELSE NULL END AS BINARY)=CAST(? AS BINARY) OR JSON_CONTAINS(JSON_EXTRACT(${alias}.spec,'$.path.via'),JSON_QUOTE(?)))`;
+    assert.ok(sql.includes(` LEFT JOIN JSON_TABLE(p.plan,'${collection}' COLUMNS (spec JSON PATH '${path}')) ${alias} ON TRUE`),source+' '+path);assert.ok(sql.includes(expectedSpec));
+   }
   }
   if(['path-group','ingress-group','path-publication','ingress-deployment','ingress-migration'].includes(source)){
-   assert.doesNotMatch(sql,/EXISTS\s*\(/);assert.equal((sql.match(/\(SELECT COUNT\(\*\) FROM JSON_TABLE\(/g)??[]).length,source==='path-publication'||source==='ingress-migration'?2:1);
+   assert.doesNotMatch(sql,/EXISTS\s*\(|SELECT COUNT\(\*\) FROM JSON_TABLE/);assert.ok(sql.startsWith('SELECT audit.* FROM (SELECT DISTINCT '));assert.equal((sql.match(/JOIN JSON_TABLE\(/g)??[]).length,source==='path-publication'||source==='ingress-migration'?2:1);
+   await f.store.source(f.tx,'scope',source,query,x=>x);assert.doesNotMatch(f.calls.at(-1)!.sql,/JSON_TABLE|SELECT DISTINCT/);assert.deepEqual(f.calls.at(-1)!.args,['scope',100,200]);
   }
   if(source.endsWith('-attempt')){assert.ok(sql.includes("'$.result.state'"));assert.ok(sql.includes("'$.ingress.nodeId'"));assert.ok(sql.includes("'$.path.via'"));assert.ok(sql.includes("'$.result.accepted.body'"));}
   if(source==='ingress-migration')assert.ok(sql.includes("'$.sources[*]'"));

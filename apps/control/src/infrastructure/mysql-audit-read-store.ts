@@ -4,7 +4,7 @@ import { rows } from './mysql.ts';
 import type { Transaction } from './mysql.ts';
 
 type Columns = Partial<Record<keyof AuditStorageRow, string>>;
-interface Projection { from: string; scope: string; pk: string[]; columns: Columns; node?: string }
+interface Projection { from: string; scope: string; pk: string[]; columns: Columns; node?: string; nodeJoins?: string }
 const literal = (value: string) => "'" + value.replaceAll("'", "''") + "'";
 const extract = (value: string, path: string) => `JSON_EXTRACT(${value},${literal(path)})`;
 const text = (value: string, path: string) => `CASE WHEN JSON_TYPE(${extract(value,path)})='STRING' THEN JSON_UNQUOTE(${extract(value,path)}) ELSE NULL END`;
@@ -17,32 +17,32 @@ const specNode = (spec: string) => `(CAST(${text(spec,'$.ingress.nodeId')} AS BI
 const configNode = (config: string) => `JSON_CONTAINS(${extract(config,'$.nodes')},JSON_QUOTE(${nodeToken}))`;
 const itemAt = (array: string, position: string) => `JSON_EXTRACT(${array},CONCAT('$[',(${position})-1,']'))`;
 const planItems = (plan: string) => extract(plan,'$.items');
-// Aggregate correlation prevents the JSON_TABLE semijoin transformation that can
-// lose matching outer rows on MySQL (bug #114897).
-const planSpecs = (plan: string, collection: string, path: string) =>
-    `((SELECT COUNT(*) FROM JSON_TABLE(${plan},${literal(collection)} COLUMNS (spec JSON PATH ${literal(path)})) audit_specs WHERE ${specNode('audit_specs.spec')})>0)`;
-function definitionNode(config: string, members: 'candidates' | 'members', scope: string) {
-    return `((SELECT COUNT(*) FROM JSON_TABLE(${config},'$.${members}[*]' COLUMNS (` +
+// Keep table-function dependencies in the join graph. A correlated scalar WHERE
+// can be evaluated before its JSON owner is joined on MySQL 8.4.9.
+function definitionJoins(config: string, members: 'candidates' | 'members', scope: string) {
+    return ` JOIN JSON_TABLE(${config},'$.${members}[*]' COLUMNS (` +
         "template_id VARCHAR(128) PATH '$.template.templateId',template_revision BIGINT PATH '$.template.revision'," +
-        "config_digest VARCHAR(71) PATH '$.template.configDigest')) audit_members " +
+        "config_digest VARCHAR(71) PATH '$.template.configDigest')) audit_members ON TRUE " +
         `JOIN path_template_revisions audit_template ON audit_template.scope_id=${scope} AND audit_template.template_id=audit_members.template_id ` +
-        'AND audit_template.revision=audit_members.template_revision AND audit_template.config_digest=audit_members.config_digest ' +
-        `WHERE ${configNode('audit_template.config')})>0)`;
+        'AND audit_template.revision=audit_members.template_revision AND audit_template.config_digest=audit_members.config_digest';
 }
 function metadata(table: string, id: string, revisions: string, entity: string, members?: 'candidates' | 'members'): Projection {
     return { from: `${table} e JOIN ${revisions} r ON r.scope_id=e.scope_id AND r.${id}=e.${id} AND r.revision=e.revision`,
         scope: 'e.scope_id=?', pk: ['e.id'], columns: { occurredAt: 'e.created_at', kind: 'e.kind', actorId: 'e.actor_id',
             entityKind: literal(entity), entityId: `e.${id}`, revision: 'e.revision', revisionKind: "'config'",
             nodeAssociation: literal(members ? 'immutable-group-definition' : 'immutable-template-config') },
-        node: members ? definitionNode('r.config',members,'e.scope_id') : configNode('r.config') };
+        node: configNode(members?'audit_template.config':'r.config'),
+        ...(members?{nodeJoins:definitionJoins('r.config',members,'e.scope_id')}:{}) };
 }
-function batchEvent(table: string, owner: string, entity: string, node: string): Projection {
+function batchEvent(table: string, owner: string, entity: string, selections:readonly (readonly [string,string])[]): Projection {
     return { from: `${table} e JOIN ${owner} p ON p.scope_id=e.scope_id AND p.batch_id=e.batch_id`, scope: 'e.scope_id=?',
         pk: ['e.scope_id','e.batch_id','e.revision'], columns: { occurredAt: 'e.created_at', kind: 'e.kind',
             actorId: "CASE WHEN e.kind='recovery' THEN NULL ELSE e.actor_id END",
             actorAttribution: "CASE WHEN e.kind='recovery' THEN 'unattributed-recovery' ELSE 'initiator' END",
             entityKind: literal(entity), entityId: 'e.batch_id', revision: 'e.revision', revisionKind: "'batch'",
-            nodeAssociation: "'immutable-forward-spec'", recoveryInvalidated: 'p.recovery_invalidated' }, node };
+            nodeAssociation: "'immutable-forward-spec'", recoveryInvalidated: 'p.recovery_invalidated' },
+        node:'('+selections.map((_selection,index)=>specNode(`audit_specs_${index}.spec`)).join(' OR ')+')',
+        nodeJoins:selections.map(([collection,path],index)=>` LEFT JOIN JSON_TABLE(p.plan,${literal(collection)} COLUMNS (spec JSON PATH ${literal(path)})) audit_specs_${index} ON TRUE`).join('') };
 }
 function ownerAttempt(family: 'path-publication' | 'ingress-deployment' | 'ingress-migration'): Projection {
     const table = family === 'path-publication' ? 'path_publication' : family === 'ingress-deployment' ? 'ingress_deployment' : 'ingress_migration';
@@ -115,10 +115,10 @@ function projection(source: string): Projection {
                     sequence: 'e.sequence', forwardId: 'e.forward_id', nodeAssociation: "'immutable-forward-spec'", outcome: "'accepted'" }, node: specNode('e.expanded_spec') };
         }
         case 'path-publication': return batchEvent('path_publication_events','path_publications','path-publication',
-            '(' + planSpecs('p.plan','$.items[*]','$.source.spec') + ' OR ' + planSpecs('p.plan','$.items[*]','$.proposedSpec') + ')');
-        case 'ingress-deployment': return batchEvent('ingress_deployment_events','ingress_deployments','ingress-deployment',planSpecs('p.plan','$.items[*]','$.spec'));
+            [['$.items[*]','$.source.spec'],['$.items[*]','$.proposedSpec']]);
+        case 'ingress-deployment': return batchEvent('ingress_deployment_events','ingress_deployments','ingress-deployment',[['$.items[*]','$.spec']]);
         case 'ingress-migration': return batchEvent('ingress_migration_events','ingress_migrations','ingress-migration',
-            '(' + planSpecs('p.plan','$.items[*]','$.spec') + ' OR ' + planSpecs('p.plan','$.sources[*]','$.state.spec') + ')');
+            [['$.items[*]','$.spec'],['$.sources[*]','$.state.spec']]);
         case 'path-publication-attempt': return ownerAttempt('path-publication');
         case 'ingress-deployment-attempt': return ownerAttempt('ingress-deployment');
         case 'ingress-migration-attempt': return ownerAttempt('ingress-migration');
@@ -170,8 +170,9 @@ export class MySqlAuditReadStore implements AuditStorage<Transaction> {
             args.push(query.before.occurredAt,query.before.occurredAt,query.before.source,query.before.source,query.before.key);
         }
         const fields = Object.entries(columns).map(([name,value]) => `${value} AS \`${name}\``).join(',');
+        const nodeJoins=query.filters.nodeId!==undefined?selected.nodeJoins??'':'';
         const result = await rows<Record<keyof AuditStorageRow, unknown>>(tx,
-            `SELECT audit.* FROM (SELECT ${fields} FROM ${selected.from} WHERE ${where}) audit WHERE ${filters.join(' AND ')} ` +
+            `SELECT audit.* FROM (SELECT ${nodeJoins?'DISTINCT ':''}${fields} FROM ${selected.from}${nodeJoins} WHERE ${where}) audit WHERE ${filters.join(' AND ')} ` +
             `ORDER BY audit.occurredAt DESC,CAST(audit.source AS BINARY) DESC,CAST(audit.\`key\` AS BINARY) DESC LIMIT ${query.limit + 1}`, args);
         const flag = (value: unknown): boolean | null => {
             if (value === null) return null;
