@@ -159,6 +159,25 @@ are now pinned to that report's original upstream SHA instead of requiring an
 untracked directory in a clean checkout. The checker is not exempted or weakened.
 The boundary negative tests were not reached before this link failure.
 
+### Fourth Saved Candidate
+
+Head `a089871c0d20376c7ab86994d0a6c3d21a94e6d5` used test merge
+`57c4e52b5d21a86d74060b343e908271c34f9f13`. Container run `39250735293`
+passed. In baseline run `39250735299`, all independent check groups, Go vet and
+the full race suite passed. This includes 630 TypeScript passes with 78
+conditional skips, 99 Web passes, 11 boundary-negative passes, 950 production
+source checks, documentation links and the offline plan/Go parser example.
+The real Probe/Relay browser workflow, Relay isolation/capacity/rotation and
+complete 3/4-node topology plus namespace scenarios also passed on this revision.
+
+The phase1 aggregate job exceeded its total 15-minute budget during Relay switch
+acceptance. GitHub's annotation explicitly reports the maximum execution time;
+no earlier assertion failed. Backup/recovery and capacity steps were not reached.
+The next revision allows a bounded 30 minutes for this expanded aggregate while
+retaining every case timeout, assertion and step. A timeout is not a passing
+result; the complete revised job must run again. The 8-node namespace scenario
+was still running when this budget repair was prepared.
+
 Use the saved revision's Actions job logs and final run conclusions for actual
 passing/failing/skipped cases. This record does not mark readiness cases 1-220 as
 passed, certify all migration equivalence or open the upper module gate.
