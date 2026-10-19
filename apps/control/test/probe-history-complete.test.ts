@@ -375,7 +375,9 @@ test('186 real MySQL0037 roundtrips family optional fields, immutable revisions,
                     await recorder.recordIn(tx, { kind: 'consumed', permit: owner, at: consumed, result: null });
                     await recorder.recordIn(tx, { kind: 'result', permit: owner, at: accepted, result });
                     const stored = await store.get(tx, 'scope-a', value.id);
-                    assert.deepEqual(stored, parseProbeRunRecord({ ...owner, revision: 3, updatedAt: accepted, withdrawnAt: null, result, recoverySuspended: false }));
+                    // Persisted JSON evidence has ordinary object prototypes after the driver decodes it.
+                    const persistedResult = JSON.parse(JSON.stringify(result)) as ProbeRunResult;
+                    assert.deepEqual(stored, parseProbeRunRecord({ ...owner, revision: 3, updatedAt: accepted, withdrawnAt: null, result: persistedResult, recoverySuspended: false }));
                     const [rows] = await tx.query<RowDataPacket[]>('SELECT result_tls,result_echo,result_request_bytes,result_response_bytes FROM probe_runs WHERE probe_id=?', [value.id]);
                     assert.equal(rows[0]!.result_tls === null, !measurement.includes('tls'));
                     assert.equal(rows[0]!.result_echo === null, !measurement.includes('echo'));

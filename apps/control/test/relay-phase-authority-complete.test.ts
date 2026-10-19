@@ -55,7 +55,11 @@ test('11 accept keeps historical sorted locks previous generation and preferred 
     const replacement=await occupied.host.acceptPlan(occupied.tx,'actor',occupied.forward);
     const chosen=replacement.nodes.find(n=>n.nodeId==='node-2')!.assignments.find(a=>a.protocol==='tcp')!;assert.equal(chosen.resource.port,33001);
     assert.deepEqual(occupied.events.filter(e=>e.name.startsWith('port:node-2:')).map(e=>e.args[2]),[33000,33001,33000,34000]);
-    const exhausted=fixture();exhausted.record.generation=MAX_COUNTER;await assert.rejects(exhausted.host.acceptPlan(exhausted.tx,'actor',exhausted.forward),{code:'RESOURCE_LIMIT'});assert.deepEqual(names(exhausted),['history','lock:node-1','lock:node-2','lock:node-3','latest']);
+    const exhausted=fixture();exhausted.record.generation=MAX_COUNTER;
+    // Keep history internally valid so exhaustion is reached after the original sorted locks.
+    exhausted.record.body=JSON.stringify(nativeRelayCompiler.multihopPlan({...exhausted.input,
+        reservations:exhausted.input.reservations.map(reservation=>({...reservation,deploymentGeneration:MAX_COUNTER}))}));
+    await assert.rejects(exhausted.host.acceptPlan(exhausted.tx,'actor',exhausted.forward),{code:'RESOURCE_LIMIT'});assert.deepEqual(names(exhausted),['history','lock:node-1','lock:node-2','lock:node-3','latest']);
 });
 
 test('11 every preparing cursor and activation phase admits only downstream-authorized assignments with original session safety',async()=>{

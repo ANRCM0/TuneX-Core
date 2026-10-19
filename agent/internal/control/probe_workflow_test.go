@@ -155,10 +155,17 @@ func TestProbeWorkflowCancellationDrainsReportAndWatchBeforeReturning(t *testing
 	case <-time.After(time.Second):
 		t.Fatal("HTTP request did not terminate")
 	}
+	// Client completion does not synchronize the target's Accept goroutine.
+	// Wait for its zero-payload close before inspecting the target-side count.
+	select {
+	case <-f.eof:
+	case <-time.After(time.Second):
+		t.Fatal("target did not observe zero-payload close")
+	}
 	probeDeliveries.mutex.Lock()
 	active := probeDeliveries.nodes[f.binding.NodeID].active
 	probeDeliveries.mutex.Unlock()
 	if active || f.reports.Load() != 1 || f.connections.Load() != 1 {
-		t.Fatal("cancellation leaked slot or retried work")
+		t.Fatalf("cancellation leaked slot or retried work: active=%v reports=%d connections=%d", active, f.reports.Load(), f.connections.Load())
 	}
 }

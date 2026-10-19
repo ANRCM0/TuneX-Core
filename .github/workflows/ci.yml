@@ -148,6 +148,20 @@ jobs:
       - name: Windows Agent vet
         if: ${{ !cancelled() }}
         run: node scripts/run-go.mjs vet ./...
+  unsupported-platform:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache: false
+      - name: Unsupported native OS refuses execution locks and clocks without fallback
+        run: node scripts/run-go.mjs test ./cmd/network-fixture ./internal/platformclock ./internal/platformobservation -run 'TestAgentSourceGraphCompleteUnsupportedNativeLockFailsWithoutFiles|TestClockCompleteActualNativeSampleBracketAndUnsupported|TestObservationCompleteActualNativeResources' -count=1
   phase1:
     runs-on: ubuntu-latest
     timeout-minutes: 30

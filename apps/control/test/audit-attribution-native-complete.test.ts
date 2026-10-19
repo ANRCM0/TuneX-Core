@@ -219,11 +219,13 @@ test('68 direct lateral node joins deduplicate repeated matching members and pla
     await custom('wrong-types',{items:wrong.map(value=>({spec:value}))});
    }else{
     await custom('duplicate-plan',{items:[{spec:repeated},{spec:repeated}],sources:[{state:{spec:repeated}},{state:{spec:repeated}}]});
-    await custom('one-branch',{items:[],sources:[{state:{spec:spec('only-source-node')}}]});
+    await custom('one-branch',{items:[{}],sources:[{state:{spec:spec('only-source-node')}}]});
     await custom('other-branch',{items:[{spec:spec('only-item-node')}],sources:[]});
     await custom('wrong-types',{items:wrong.map(value=>({spec:value})),sources:wrong.map(value=>({state:{spec:value}}))});
    }
-   await custom('empty-plan',{items:[],sources:[]});
+   // Native heads require at least one item. An empty item keeps both spec
+   // projections absent while preserving that independent SQL constraint.
+   await custom('empty-plan',{items:[{}],sources:[]});
   }
  });
  const before=await snapshot(db);

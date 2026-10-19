@@ -11,6 +11,9 @@ import { multihopFixture } from './fixtures/multihop.ts';
 type Equal<A,B>=(<T>()=>T extends A?1:2) extends (<T>()=>T extends B?1:2)?true:false;
 const familyCorrelations:[Equal<RuntimeRelayProfile['config'],unknown>,Equal<NativeRuntimeRelayProfile,RuntimeRelayProfile<NativeRuntimeFamily>>,Equal<NativeRuntimeRelayTransport<{tx:true}>,RuntimeRelayTransport<{tx:true},NativeRuntimeFamily>>,Equal<NativeRuntimeRelayPlanInput,RuntimeRelayPlanInput<NativeRuntimeFamily>>,Equal<NativeRuntimeMultihopInput,RuntimeMultihopInput<NativeRuntimeFamily>>,Equal<NativeTransportProfileConfig,TransportProfileConfig<NativeRuntimeFamily>>,Equal<NativeTransportProfileConfig,RelayProfileConfig>,Equal<NativeRelayConfigurationCodec,RelayConfigurationCodec<NativeRuntimeFamily>>]=[true,true,true,true,true,true,true,true];
 const rawProfile=()=>({driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:60,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:128});
+// The native closed JSON parser projects records with a null prototype.
+// Keep the input ordinary and express the expected parsed shape independently.
+const parsedProfileRecord=(input:object)=>Object.assign(Object.create(null),input);
 function relay(){
     const multi=multihopFixture(),input={...multi,forward:{...multi.forward,spec:{...multi.forward.spec,path:{via:[multi.nodes[1]!.facts.nodeId]}}},nodes:multi.nodes.slice(0,2)},endpoint=input.endpoints[0]!,ports={tcp:endpoint.config.allowedTcpPorts[0]!,udp:endpoint.config.allowedTcpPorts[1]!};
     const resources=compileRelayResources(input.forward,input.nodes.map(n=>n.facts),input.profile,endpoint,ports);
@@ -33,7 +36,7 @@ test('131 Profile JSON getters toJSON and native failures occur before schema pa
     const observed=Object.fromEntries(Object.entries(raw).map(([key,value])=>[key,value]));
     Object.defineProperty(observed,'driver',{enumerable:true,get(){events.push('driver');return raw.driver;}});
     Object.defineProperty(observed,'protocols',{enumerable:true,get(){events.push('protocols');return raw.protocols;}});
-    const parsed=codec.profile(observed);assert.deepEqual(events,['driver','protocols']);assert.deepEqual(parsed,raw);
+    const parsed=codec.profile(observed);assert.deepEqual(events,['driver','protocols']);assert.deepEqual(parsed,parsedProfileRecord(raw));
     events.length=0;assert.deepEqual(codec.profile({toJSON(){events.push('toJSON');return raw;}}),parsed);assert.deepEqual(events,['toJSON']);
     for(const parse of [codec.profile,nativeTransitProfileConfig]){
         assert.throws(()=>parse({get driver(){throw failure;}}),e=>e===failure);
@@ -66,7 +69,7 @@ test('131 Relay and multihop plans retain original Profile key reads native dige
     const f=relay(),events:string[]=[],profile={...f.profile};Object.defineProperty(profile,'config',{get(){events.push('config');return f.profile.config;}});
     const result=compileRelayPlan({...f,profile});assert.deepEqual(events,['config','config']);
     const {planDigest,...body}=result;assert.equal(planDigest,digest(body));assert.equal(Object.isFrozen(result),true);assert.ok(result.nodes.every(n=>Object.isFrozen(n.assignments)));
-    for(const node of result.nodes)for(const assignment of node.assignments){const config=assignment.driver.config;assert.equal(assignment.driver.configDigest,digest(config));assert.equal(Object.isFrozen(config),true);assert.deepEqual((config as {profile:unknown}).profile,f.profile.config);}
+    for(const node of result.nodes)for(const assignment of node.assignments){const config=assignment.driver.config;assert.equal(assignment.driver.configDigest,digest(config));assert.equal(Object.isFrozen(config),true);assert.deepEqual((config as {profile:unknown}).profile,parsedProfileRecord(f.profile.config));}
     const failure=new Error('Profile must remain unread');
     assert.throws(()=>compileRelayPlan({...f,forward:null as never,profile:{get config(){throw failure;}} as never}),{message:'INVALID_CONFIG: Invalid Forward'});
     const broken={...f,nodes:f.nodes.map(n=>({...n,sessionEpoch:0})),profile:{get config(){throw failure;}} as never};

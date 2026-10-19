@@ -42,8 +42,14 @@ test('60/61 original MySQL owners and Forward path admission retain same-Tx ever
             for(const id of ['ingress','ingress-b','middle','egress']){
                 const facts={nodeId:id,scopeId:'scope',capabilities:pathRequirements(parsePathTemplate(config)),allowedPorts:[32001,32002,32003,32004,32005,32006,32007],allowedListenerAddresses:['127.0.0.1'],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false};
                 await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',[id,'scope',createHash('sha256').update(id).digest('hex'),now,now+3600000,JSON.stringify(facts)]);
-                await connection.execute('INSERT INTO runtime_nodes(node_id) VALUES(?)',[id]);for(const actor of ['owner','manager'])await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[id,actor]);
-                if(id==='middle'||id==='egress')await connection.execute('INSERT INTO node_relay_endpoints(node_id,revision,config,created_by,updated_at) VALUES(?,1,?,?,?)',[id,JSON.stringify({listenAddress:'127.0.0.1',advertisedHost:'127.0.0.1',allowedTcpPorts:[32101,32102]}),'owner',now]);
+                // Real path acceptance requires an established session and a current bounded Relay pin even for disabled intent.
+                await connection.execute('INSERT INTO runtime_nodes(node_id,session_epoch,boot_id) VALUES(?,1,?)',[id,'boot-'+id]);
+                await connection.execute('INSERT INTO node_boots(node_id,boot_id,session_epoch) VALUES(?,?,1)',[id,'boot-'+id]);
+                await connection.execute('INSERT INTO node_relay_credentials(fingerprint,node_id,issued_at,valid_until,certificate) VALUES(?,?,?,?,?)',
+                    [createHash('sha256').update('relay:'+id).digest('hex'),id,now,now+3600000,'synthetic persisted Relay credential for SQL acceptance only']);
+                for(const actor of ['owner','manager'])await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[id,actor]);
+                // Keep a second exclusive TCP/UDP pair for the later independent replacement add; the original Forward retains its slots.
+                if(id==='middle'||id==='egress')await connection.execute('INSERT INTO node_relay_endpoints(node_id,revision,config,created_by,updated_at) VALUES(?,1,?,?,?)',[id,JSON.stringify({listenAddress:'127.0.0.1',advertisedHost:'127.0.0.1',allowedTcpPorts:[32101,32102,32103,32104]}),'owner',now]);
             }
             const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:60,maxFrameBytes:1024,maxUdpDatagramBytes:1024,maxConnectionsPerNode:8};
             await control.transport.publish('owner','scope','profile','profile-create',0,profile);await connection.execute('INSERT INTO transport_profile_grants(profile_id,actor_id) VALUES(?,?)',['profile','manager']);

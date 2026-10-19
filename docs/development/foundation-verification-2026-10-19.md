@@ -361,3 +361,32 @@ The complete TypeScript check and 950-file production boundary/document-link sca
 passed locally. Functional, MySQL and native execution of this batch remains
 pending its own saved candidate Actions. No B acceptance, independent physical-host
 acceptance, product parallelism or release approval follows from this source map.
+
+The final authored assertion batch identifies 217 complete and 3 partial requirements
+across 406 suites. Full structural HTTP provider substitution, all twelve native
+management-read SQL methods, disabled optional owner HTTP composition, native
+Observation certificate policy, Probe scheduler savepoints and Agent network
+fixture roots/load/refusals now have concrete cases. Requirements 7, 192 and 220
+remain partial until the final frozen candidate and its applicable execution
+evidence are reconciled. The complete TypeScript check, 950-file production
+boundary/document-link scan and whitespace check passed locally after freezing
+these files. No local functional, database, network or browser test ran.
+
+Candidate b06bb9b3a8ba720c295ba92d4a855df18fce9eb0 ran baseline 39321329524
+at checkout 94e76d9dccab16de880715c35f0a8a997f68d2ce;
+packaging 39321329530 passed. Contracts reported 1905 TypeScript passes, 3 failures
+and 141 conditional skips; Web passed 153/153 and Go build/vet/race passed.
+Windows exposed a cancellation-fixture synchronization race. Source corrections
+retain the native parsed record prototypes, Relay generation consistency and
+completed target EOF before observing counters. Deployment, Probe, Relay isolation
+and all 3/4/8-node jobs passed. The four phase1 group failures now have completed
+logs: the original four populated Audit cases and all Station/PathGroup tests
+passed, while the added Audit case used an empty items array forbidden by native
+constraints. Ingress needed original online sessions/current Relay pins; history
+needed a closed permit summary and persisted JSON expected prototypes. These
+fixture corrections retain their original response, SQL and rollback assertions.
+Probe plan inserts still violate the original expiresAt INTEGER JSON constraint
+despite valid public numeric input. Failure-only read diagnostics retain the error
+and will report exact native JSON types and constraint definitions in the next
+candidate. No production schema repair or reduced timestamp was substituted for
+that unresolved evidence. This record is not acceptance of the later candidate.
