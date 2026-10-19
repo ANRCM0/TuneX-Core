@@ -51,8 +51,18 @@ The navigation sources are:
 
 Paths in the Control tables are relative to apps/control/src. An aggregate entry
 version does not replace versions of its exported ports. Package version 0.1.0,
-Core/Forward v1, ADP/3, native schema versions and SQL schema sequence 0037 are
+Core/Forward v1, ADP/3, native schema versions and SQL schema sequence 0038 are
 different contracts; none can stand in for an accepted source revision.
+
+B's [FR-0027](../changes/FR-0027-probe-plan-json-integers.md) advances only the
+UpgradeAssessment public counter to 2 and the reviewed SQL sequence to 0038.
+The additional Control profile `adp3-probe-plan-json-integers-v1` covers 0038;
+all 26 older profile ceilings, old aliases and Agent release profiles remain.
+Exhaustive CompatibilityProfile source consumers must account for the new member.
+Plan/report payload versions remain 1. The explicitly reviewed CHECK-only SQL
+has no new table/column footprint and does not prove full schema equivalence.
+The original A5 inventories below retain their dated source scope; B acceptance
+and new migration behavior require the final candidate's separate evidence.
 
 | Public entry/declaration | Current candidate value | Concrete consumers and compatibility boundary |
 | --- | --- | --- |
@@ -100,7 +110,8 @@ framework/public.ts. They are not covered merely by the Framework1 row:
 | Recovery | OBSERVATION_RECOVERY_STORAGE_INTERFACE_VERSION, PUBLICATION_RECOVERY_STORAGE_INTERFACE_VERSION, RECOVERY_EVENT_STORAGE_INTERFACE_VERSION | original owner recovery methods, one caller Tx and original mutation order; FR-0017 |
 
 Other Control product public entries declare their own module/API/command/query/
-recovery counters. Current declared values are1 except Transport module2 above.
+recovery counters. Current declared values are1 except Transport module2 above
+and UpgradeAssessment2 under FR-0027.
 The named owners include Identity, Node, Forward, Path, Ingress, Probe/history/plan,
 ObservationService, Audit, ForwardDiagnostic, StationAlert, Notification, Telemetry,
 Transit, RelayEndpoint/RelayPlan, RuntimeStatus, Console/Control/Tunnel queries,
@@ -142,7 +153,7 @@ Compose file, label or healthcheck has been executed or accepted by this review.
 | packages/contracts/data/native-drivers-v1.json | Native catalog parser and digest; Control COPY includes whole packages/contracts | Catalog1 metadata is not live driver authority; generated/Agent catalog parity unverified |
 | docs/protocol/schemas | Actual TS fs inputs resolved from source modules; Control explicitly COPYs schema directory | Direct native asset map in contracts-package-native-boundaries-v1.md; nested references/byte parity/module initialization still require closure |
 | Agent embedded schema copies/generated Go structs | Existing go:embed and native packages; Agent/responder builder COPYs agent/ | Do not regenerate or infer parity from matching filenames; generation invokes gofmt and is not source-phase authorized |
-| apps/control/migrations/0001-0037 | Original MySQL migration reader and upgrade inspection; whole apps/control is copied | Actual DDL/footprints/upgrade/refusal not executed; new0020-0037 are part of dirty candidate |
+| apps/control/migrations/0001-0038 | Original MySQL migration reader and upgrade inspection; whole apps/control is copied | Original A5 sequence ended0037; B0038 CHECK repair and exact read-only catalog review are in FR-0027, awaiting their own native upgrade/refusal evidence |
 | apps/web including owner/native modules, index.html/style.css | Control literal asset union/routes + original fixed reader; whole apps/web is copied | Browser import resolution, MIME/CSP/headers and every referenced asset require acceptance; directory COPY alone does not prove loading |
 | scripts/ops and canonical Control command/native owners | Existing ops/recovery/upgrade/release entries; Control COPY includes scripts/ops and apps/control | Production/operator source, not test-only; preserve lazy initialization, original Tx, protected history and credential/rebind ordering |
 | examples/foundation-extension/{public,module,main}.ts and README.md | Public source example in repository checkout | Not copied into current production Control image; root tsconfig include omits examples; type/import/behavior acceptance is still required |

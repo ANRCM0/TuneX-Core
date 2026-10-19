@@ -8,6 +8,17 @@ do not accept A5, the foundation, runtime execution, upgrade permission or relea
 
 ## Public owner and full source chains
 
+Current B amendment, 2026-10-20: [FR-0027](../changes/FR-0027-probe-plan-json-integers.md)
+advances UPGRADE_ASSESSMENT_INTERFACE_VERSION to 2 and the reviewed catalog to
+38 files ending in 0038-probe-plan-json-integers.sql. The 27th Control profile,
+adp3-probe-plan-json-integers-v1, adds ceiling0038; all old ceilings, aliases,
+Agent profiles and plan/report version1 remain. Exhaustive profile consumers
+must handle the added union member. The narrow full-SQL/filename review for this
+CHECK-only migration yields no new table/column marker and does not inspect CHECK
+metadata or prove full schema equivalence. Unknown/altered markerless migrations
+still refuse. New native upgrade/refusal evidence is pending exact-source Actions.
+The original A5 descriptions below retain their dated source scope.
+
 modules/upgrade-assessment-owner/public.ts exposes original parseUpgradePlan,
 assessUpgrade and runUpgradeAssessment with original invocation signatures. It also
 exposes the original CompatibilityProfile, JournalInspection, UpgradePlan,

@@ -198,7 +198,7 @@ modules/transport-owner/grant-api TRANSPORT_GRANT_INTERFACE_VERSION 1
 modules/transport-owner/public TRANSPORT_MODULE_INTERFACE_VERSION 2
 modules/transport-owner/query-contracts TRANSPORT_QUERY_INTERFACE_VERSION 1
 modules/tunnel-query-owner/contracts TUNNEL_QUERY_INTERFACE_VERSION 1
-modules/upgrade-assessment-owner/contracts UPGRADE_ASSESSMENT_INTERFACE_VERSION 1
+modules/upgrade-assessment-owner/contracts UPGRADE_ASSESSMENT_INTERFACE_VERSION 2
 `.trim().split('\n').map(line => { const [path, name, value] = line.split(' '); return { path: `apps/control/src/${path}.ts`, name: name!, value: Number(value) }; });
 const otherCounters = [
     ['packages/contracts/src/policy.ts', 'RUNTIME_POLICY_INTERFACE_VERSION', 1],
@@ -330,8 +330,9 @@ test('saved package support assets and actual deployment COPY embed fs and sourc
     assert.match(read('.github/workflows/container.yml'), /docker build --pull/);
     assert.match(read('.github/workflows/container.yml'), /network none[^\n]+upgrade-inspect\.ts/);
     const migrations = readdirSync(new URL('apps/control/migrations/', root)).filter(name => name.endsWith('.sql')).sort();
-    assert.equal(migrations.length, 37);
-    assert.deepEqual(migrations.map(name => name.slice(0, 4)), Array.from({ length: 37 }, (_, index) => String(index + 1).padStart(4, '0')));
+    assert.equal(migrations.length, 38);
+    assert.equal(migrations.at(-1), '0038-probe-plan-json-integers.sql');
+    assert.deepEqual(migrations.map(name => name.slice(0, 4)), Array.from({ length: 38 }, (_, index) => String(index + 1).padStart(4, '0')));
     for (const path of leaves('agent/internal').filter(path => path.endsWith('.go') && !path.endsWith('_test.go'))) {
         const source = read(path);
         for (const match of source.matchAll(/^\/\/go:embed\s+([^\r\n]+)/gm)) {

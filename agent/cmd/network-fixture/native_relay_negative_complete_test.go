@@ -295,7 +295,7 @@ func TestNetworkFixtureCompleteRelayNegativeNativePrerequisiteErrorOrder(t *test
 				if err := os.WriteFile(openPath, []byte("{\"wireVersion\":1,\"wireVersion\":1}"), 0600); err != nil {
 					t.Fatal(err)
 				}
-				want = "INVALID_CONFIG:"
+				want = "INTEGRITY_FAILURE: Duplicate JSON key"
 			case "bad-node":
 				node = "invalid\n"
 				want = "INVALID_CONFIG: Bound Relay identity required"
@@ -313,6 +313,9 @@ func TestNetworkFixtureCompleteRelayNegativeNativePrerequisiteErrorOrder(t *test
 			}
 			if want != "" && !strings.HasPrefix(err.Error(), want) {
 				t.Fatal("original prerequisite error priority", mode, err, want)
+			}
+			if mode == "strict-open" && err.Error() != want {
+				t.Fatal("canonical strict JSON error changed", err, want)
 			}
 			if mode == "missing-ca" || mode == "missing-open" {
 				var path *os.PathError
@@ -339,7 +342,7 @@ func TestNetworkFixtureCompleteProtectedPriorBundleStrictSnapshotAndKeypair(t *t
 			switch mode {
 			case "duplicate-snapshot":
 				raw = json.RawMessage(`{"certificate":"first","certificate":"second"}`)
-				want = "INVALID_CONFIG:"
+				want = "INTEGRITY_FAILURE: Duplicate JSON key"
 			case "typed-snapshot":
 				raw = json.RawMessage(`{"certificate":3,"privateKey":"opaque"}`)
 				want = "json:"
@@ -359,6 +362,9 @@ func TestNetworkFixtureCompleteProtectedPriorBundleStrictSnapshotAndKeypair(t *t
 			})
 			if err == nil || len(records) != 0 || !strings.HasPrefix(err.Error(), want) {
 				t.Fatal("protected snapshot validation/refusal order", mode, err, records)
+			}
+			if mode == "duplicate-snapshot" && err.Error() != want {
+				t.Fatal("canonical protected strict JSON error changed", err, want)
 			}
 		})
 	}

@@ -31,6 +31,14 @@ The source-only sections below retain implementation rationale, consumer and
 planned-case details. Their no-check/unexecuted descriptions refer to each
 original source slice, not the overall verification status of the saved candidate.
 
+The B schema correction in [FR-0027](../changes/FR-0027-probe-plan-json-integers.md)
+adds migration 0038 for MySQL's native unsigned JSON integer expiry representation.
+It preserves historical migrations and all other bounds. UpgradeAssessment2 adds
+an independent Control profile while retaining all old ceilings and Agent profiles.
+The pure CHECK migration has no new table/column footprint; its explicitly reviewed
+catalog entry does not claim complete schema or CHECK metadata equivalence. New
+upgrade/refusal assertions still need the next frozen candidate's own Actions.
+
 Source work from ADR-0047 and the first ADR-0048 extraction is present. The earlier
 phrase "source scope closed" does not satisfy the human's complete foundation DoD.
 

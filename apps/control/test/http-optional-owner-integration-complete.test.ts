@@ -119,11 +119,11 @@ test('31 actual disabled NotificationDeliveries and ProbePlans retain their HTTP
         } };
         const store = (name: string, losses: Any) => ({ async history() { trace.push(name); return []; }, async losses() { return losses; } });
         const notificationDeliveries = new NotificationDeliveries({ db: f.database, auth,
-            store: store('deliveries', { queueRejected: '0', routingRejected: '0', silenceSuppressed: '0', disabledSuppressed: '0', rowsExpired: '0', rowsEvicted: '0', attemptsEvicted: '0' }),
+            store: store('deliveries', { queueRejected: 0, routingRejected: 0, silenceSuppressed: 0, disabledSuppressed: 0, rowsExpired: 0, rowsEvicted: 0, attemptsEvicted: 0 }),
             endpoints: new Proxy({}, { get: noEffect }), policies: new Proxy({}, { get: noEffect }), secrets: undefined,
             sender: { send: noEffect, idle: noEffect, close: noEffect }, authorityBinding: noEffect, enabled: false, clock } as any);
         const probePlans = new ProbePlans({ db: f.database, auth,
-            store: store('plans', { rowsExpired: '0', rowsEvicted: '0', decisionsEvicted: '0' }),
+            store: store('plans', { rowsExpired: 0, rowsEvicted: 0, decisionsEvicted: 0 }),
             requests: new Proxy({}, { get: noEffect }), issuer: new Proxy({}, { get: noEffect }), executionEnabled: false, scheduleEnabled: false, clock } as any);
         const app = http({ notificationDeliveries, probePlans }, positional);
         for (const [path, flag, source, code] of [
@@ -135,6 +135,8 @@ test('31 actual disabled NotificationDeliveries and ProbePlans retain their HTTP
             assert.equal(body.source, source); assert.equal(body.readOnly, true); assert.equal(body.health, 'unknown');
             assert.equal(body.executionAuthorized, false); assert.equal(body.networkCheck, 'not-performed-by-read');
             assert.deepEqual(body.items, []); assert.equal(body.hasMore, false); assert.equal(body.nextCursor, null);
+            assert.deepEqual(body.losses, path === 'probe-plans' ? { rowsExpired: 0, rowsEvicted: 0, decisionsEvicted: 0 } :
+                { queueRejected: 0, routingRejected: 0, silenceSuppressed: 0, disabledSuppressed: 0, rowsExpired: 0, rowsEvicted: 0, attemptsEvicted: 0 });
             if (path === 'probe-plans') assert.equal(body.scheduleEnabled, false);
             const absent = await read(http({}, positional), path); assert.equal(absent.status, 503); assert.equal((await absent.json()).code, code);
         }

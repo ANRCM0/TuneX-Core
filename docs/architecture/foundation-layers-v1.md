@@ -1190,6 +1190,12 @@ no existing L0/L1 contract or authority semantics change. Current exact source
 chains are in architecture/upgrade-assessment-owner-native-v1.md and
 architecture/operator-command-owner-native-v1.md (relative to docs/).
 
+B amendment 2026-10-20: UpgradeAssessment2 adds the explicit Control0038 profile
+under [FR-0027](../changes/FR-0027-probe-plan-json-integers.md). The L2 MySQL repair
+accepts native unsigned JSON integer expiry while retaining historical migrations,
+all other bounds and read-only assessment. Old profiles/Agent restrictions remain;
+the pure CHECK catalog review does not claim complete schema equivalence.
+
 Contracts package classification now identifies three L1 leaves (1/1/2), every
 native L2 leaf/barrel and actual eleven public exports/schema/catalog origins.
 Native root/shared imports remain eager and native; telemetry handwritten parsers

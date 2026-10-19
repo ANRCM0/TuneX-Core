@@ -117,8 +117,14 @@ func TestProbeWorkflowReportAttemptBurnsBeforeLostOrInvalidAcknowledgement(t *te
 			if err := f.runner.reportProbe(execution); !errors.Is(err, probe.ErrReplay) {
 				t.Fatal("uncertain report was retried", err)
 			}
+			// Report completion does not synchronize the target's Accept goroutine.
+			select {
+			case <-f.eof:
+			case <-time.After(time.Second):
+				t.Fatal("target did not observe zero-payload close")
+			}
 			if f.reports.Load() != 1 || f.connections.Load() != 1 || f.claims.Load() != 1 {
-				t.Fatal("report failure retried execution or HTTP")
+				t.Fatalf("report failure retried execution or HTTP: reports=%d connections=%d claims=%d", f.reports.Load(), f.connections.Load(), f.claims.Load())
 			}
 		})
 	}

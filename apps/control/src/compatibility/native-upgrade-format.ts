@@ -14,10 +14,27 @@ export interface DatabaseInspection {
     latestLeaseUntil: number | null;
 }
 const migrationName = /^[0-9]{4}-[a-z0-9-]+\.sql$/;
+// FR-0027 reviews this complete CHECK-only migration. It adds no table/column footprint.
+const probePlanJsonIntegersSql = `ALTER TABLE probe_plans
+ DROP CHECK probe_plans_chk_7,
+ ADD CONSTRAINT probe_plan_expiry_json_integer CHECK(
+  JSON_TYPE(JSON_EXTRACT(config,'$.expiresAt')) IN ('INTEGER','UNSIGNED INTEGER')
+  AND JSON_EXTRACT(config,'$.expiresAt') IS NOT NULL
+ );`;
+function reviewedSqlTokens(sql: string): string {
+    // Preserve quoted values and every SQL token; ignore only whitespace and outside-string line comments.
+    const tokens = sql.match(/'(?:''|[^'])*'|--(?=[\x00-\x20\x7f]|$)[^\r\n]*|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[^ \t\r\n\f\v]/g) ?? [];
+    return JSON.stringify(tokens.filter(token => !token.startsWith('--')));
+}
 /** Footprints detect interrupted known DDL; this is not a full schema equivalence proof. */
 export function schemaMarkers(migration: string, sql: string): SchemaMarker[] {
     const markers: SchemaMarker[] = [];
     if (!migrationName.test(migration)) throw new Error('UNKNOWN_MIGRATION_FILE');
+    if (migration === '0038-probe-plan-json-integers.sql') {
+        if (reviewedSqlTokens(sql) !== reviewedSqlTokens(probePlanJsonIntegersSql))
+            throw new Error('UNREVIEWED_MIGRATION_FILE');
+        return markers;
+    }
     for (const match of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?([a-z_]+)\s*\(/g))
         markers.push({ migration, table: match[1]! });
     for (const match of sql.matchAll(/ALTER TABLE ([a-z_]+)([^;]+);/g)) {

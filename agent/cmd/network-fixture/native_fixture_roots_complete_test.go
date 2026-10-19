@@ -182,6 +182,11 @@ func TestNetworkFixtureCompleteOriginalRootsAndExternalEffectLifetimes(t *testin
 				return true
 			}
 			key := owner.Name + "." + selector.Sel.Name
+			if name == "load.go" && key == "time.Since" {
+				call.Fun = ast.NewIdent("fixtureLoadSince")
+				counts["load.time.Since"]++
+				return true
+			}
 			replacement := map[string]string{"signal.NotifyContext": "fixtureSignal", "net.DialTimeout": "fixtureDial", "time.Sleep": "fixtureSleep"}[key]
 			if replacement != "" {
 				call.Fun = ast.NewIdent(replacement)
@@ -252,7 +257,7 @@ func TestNetworkFixtureCompleteOriginalRootsAndExternalEffectLifetimes(t *testin
 			t.Fatal(err)
 		}
 	}
-	if counts["signal.NotifyContext"] != 4 || counts["net.DialTimeout"] != 6 || counts["time.Sleep"] != 4 || counts["fixtureProxyDial"] != 1 || counts["fixtureProxyDeadline"] != 2 {
+	if counts["signal.NotifyContext"] != 4 || counts["net.DialTimeout"] != 6 || counts["time.Sleep"] != 4 || counts["load.time.Since"] != 2 || counts["fixtureProxyDial"] != 1 || counts["fixtureProxyDeadline"] != 2 {
 		t.Fatal("native fixture external collaborator inventory changed", counts)
 	}
 	for _, name := range []string{"tcpProxy", "relayNegative", "load", "target", "probe", "monitor", "udpRouteMonitor", "occupyUDP"} {
@@ -279,13 +284,15 @@ var fixtureParent context.Context=context.Background()
 var fixtureCancel context.CancelFunc
 var fixtureDialOverride func(string,string,time.Duration)(net.Conn,error)
 var fixtureSleepOverride func(time.Duration)
+var fixtureLoadSinceOverride func(time.Time)time.Duration
 var fixtureSignalCount int
 func fixtureSignal(parent context.Context,signals ...os.Signal)(context.Context,context.CancelFunc){if parent!=context.Background()||!reflect.DeepEqual(signals,[]os.Signal{os.Interrupt,syscall.SIGTERM}){panic("original fixture signal vocabulary changed")};fixtureSignalCount++;ctx,cancel:=context.WithCancel(fixtureParent);fixtureCancel=cancel;return ctx,cancel}
 func fixtureDial(network,address string,timeout time.Duration)(net.Conn,error){if fixtureDialOverride!=nil{return fixtureDialOverride(network,address,timeout)};return net.DialTimeout(network,address,timeout)}
 func fixtureProxyDial(dialer *net.Dialer,ctx context.Context,network,address string)(net.Conn,error){if dialer.Timeout!=3*time.Second||network!="tcp"{panic("native proxy dial budget/network changed")};return dialer.DialContext(ctx,network,address)}
 func fixtureProxyDeadline(socket net.Conn,deadline time.Time)error{remaining:=time.Until(deadline);if remaining<29*time.Second||remaining>30*time.Second{panic("native proxy socket deadline changed")};return socket.SetDeadline(deadline)}
 func fixtureSleep(delay time.Duration){if fixtureSleepOverride!=nil{fixtureSleepOverride(delay);return};time.Sleep(delay)}
-func fixtureReset(){fixtureParent=context.Background();fixtureCancel=nil;fixtureDialOverride=nil;fixtureSleepOverride=nil;fixtureSignalCount=0;fixtureDispatch=nil}
+func fixtureLoadSince(start time.Time)time.Duration{if fixtureLoadSinceOverride!=nil{return fixtureLoadSinceOverride(start)};return time.Since(start)}
+func fixtureReset(){fixtureParent=context.Background();fixtureCancel=nil;fixtureDialOverride=nil;fixtureSleepOverride=nil;fixtureLoadSinceOverride=nil;fixtureSignalCount=0;fixtureDispatch=nil}
 func fixtureOutput(t *testing.T,operation func()error)(error,[]map[string]any){t.Helper();file,err:=os.CreateTemp(t.TempDir(),"output");if err!=nil{t.Fatal(err)};old:=os.Stdout;os.Stdout=file;defer func(){os.Stdout=old;file.Close()}();result:=operation();file.Seek(0,0);decoder:=json.NewDecoder(file);var output []map[string]any;for{var record map[string]any;err:=decoder.Decode(&record);if err==io.EOF{break};if err!=nil{t.Fatal(err)};output=append(output,record)};return result,output}
 type fixtureSocket struct{read func([]byte)(int,error);write func([]byte)(int,error);closed atomic.Int32;deadline time.Time}
 func(c *fixtureSocket)Read(raw []byte)(int,error){if c.read!=nil{return c.read(raw)};return 0,io.EOF}
@@ -301,9 +308,20 @@ func TestOriginalLoadLaterDialFailureAndInitialOutputFailureCleanup(t *testing.T
   old:=os.Stdout;if stage=="progress-output"{file,err:=os.CreateTemp(t.TempDir(),"closed");if err!=nil{t.Fatal(err)};file.Close();os.Stdout=file};err:=load(12345,1,1,1,64,"run",true,0,false);os.Stdout=old;if stage=="later-dial"&&err!=sentinel{t.Fatal("original later dial error identity",err)};if err==nil||calls!=2||first.closed.Load()!=1||stage=="progress-output"&&second.closed.Load()!=1{t.Fatal("partial socket/client cleanup changed",stage,err,calls,first.closed.Load(),second.closed.Load())}
  }
 }
+func TestOriginalLoadZeroElapsedRetainsNativeJSONInfinityRefusal(t *testing.T){
+ fixtureReset();defer fixtureReset();fixtureLoadSinceOverride=func(time.Time)time.Duration{return 0};var sockets []*fixtureSocket
+ fixtureDialOverride=func(network,address string,timeout time.Duration)(net.Conn,error){round:=0;var sent []byte;socket:=&fixtureSocket{};socket.write=func(raw []byte)(int,error){round++;if round>1{return 0,io.EOF};sent=append([]byte(nil),raw...);return len(raw),nil};socket.read=func(raw []byte)(int,error){return copy(raw,sent),nil};sockets=append(sockets,socket);return socket,nil}
+ err,records:=fixtureOutput(t,func()error{return load(12345,1,1,5,64,"zero-clock",true,0,true)});var unsupported *json.UnsupportedValueError
+ if !errors.As(err,&unsupported)||unsupported.Str!="+Inf"||unsupported.Value.Kind()!=reflect.Float64||unsupported.Value.Float()<=0||err.Error()!="json: unsupported value: +Inf"{t.Fatal("original zero-duration encoder refusal changed",err)}
+ if len(records)!=1||records[0]["running"]!=true{t.Fatal("zero-duration throughput must not publish a successful completion",records)}
+ if len(sockets)!=2{t.Fatal("original client setup changed",len(sockets))};for _,socket:=range sockets{if socket.closed.Load()!=2{t.Fatal("encoder error lost original worker and outer deferred cleanup",socket.closed.Load())}}
+}
 func TestOriginalLoadWriteReplyClassesAndEveryClientVerification(t *testing.T){
- defer fixtureReset();for _,mode:=range []string{"short-write","write-timeout","payload-mismatch","udp-size-mismatch","no-client-verification"}{t.Run(mode,func(t *testing.T){fixtureReset();calls:=0;fixtureDialOverride=func(network,address string,timeout time.Duration)(net.Conn,error){index:=calls;calls++;round:=0;var sent []byte;c:=&fixtureSocket{};c.write=func(raw []byte)(int,error){round++;sent=append([]byte(nil),raw...);if round>1&&index==0&&mode=="short-write"{return len(raw)-1,nil};if round>1&&index==0&&mode=="write-timeout"{return 0,os.ErrDeadlineExceeded};return len(raw),nil};c.read=func(raw []byte)(int,error){if index==0&&mode=="no-client-verification"{return 0,io.EOF};if round>1{if index==0&&mode=="payload-mismatch"{copy(raw,sent);raw[len(sent)-1]^=1;return len(sent),nil};if index==1&&mode=="udp-size-mismatch"{return copy(raw,sent[:len(sent)-1]),nil};return 0,io.EOF};return copy(raw,sent),nil};return c,nil}
-  err,records:=fixtureOutput(t,func()error{return load(12345,1,1,5,64,"run",true,0,true)});want:="";switch mode{case "payload-mismatch","udp-size-mismatch":want="payload corruption is never an expected cutoff";case "no-client-verification":want="every load client must verify payload before completion"};if want!=""&&(err==nil||err.Error()!=want){t.Fatal("original load failure priority",mode,err,want)};if mode=="short-write"||mode=="write-timeout"{if err!=nil{t.Fatal("expected cutoff with successful prefix should complete",err)};last:=records[len(records)-1];client:=last["clients"].([]any)[0].(map[string]any);kind:="short-write";if mode=="write-timeout"{kind="timeout"};if client["errorKind"]!=kind||client["failure"]!="write"{t.Fatal("original write class lost",client)}};if len(records)<1{t.Fatal("progress missing")}
+ // Successful throughput samples need a measurable exchange interval. Immediate
+ // fake replies can share one Windows clock tick; the original load intentionally
+ // remains untouched, including its unguarded zero-duration JSON error boundary.
+ defer fixtureReset();for _,mode:=range []string{"short-write","write-timeout","payload-mismatch","udp-size-mismatch","no-client-verification"}{t.Run(mode,func(t *testing.T){fixtureReset();calls:=0;fixtureDialOverride=func(network,address string,timeout time.Duration)(net.Conn,error){index:=calls;calls++;round:=0;var sent []byte;c:=&fixtureSocket{};c.write=func(raw []byte)(int,error){round++;sent=append([]byte(nil),raw...);if round>1&&index==0&&mode=="short-write"{return len(raw)-1,nil};if round>1&&index==0&&mode=="write-timeout"{return 0,os.ErrDeadlineExceeded};return len(raw),nil};c.read=func(raw []byte)(int,error){if index==0&&mode=="no-client-verification"{return 0,io.EOF};if round>1{if index==0&&mode=="payload-mismatch"{copy(raw,sent);raw[len(sent)-1]^=1;return len(sent),nil};if index==1&&mode=="udp-size-mismatch"{return copy(raw,sent[:len(sent)-1]),nil};return 0,io.EOF};time.Sleep(20*time.Millisecond);return copy(raw,sent),nil};return c,nil}
+  err,records:=fixtureOutput(t,func()error{return load(12345,1,1,5,64,"run",true,0,true)});want:="";switch mode{case "payload-mismatch","udp-size-mismatch":want="payload corruption is never an expected cutoff";case "no-client-verification":want="every load client must verify payload before completion"};if want!=""&&(err==nil||err.Error()!=want){t.Fatal("original load failure priority",mode,err,want)};if mode=="short-write"||mode=="write-timeout"{if err!=nil{t.Fatal("expected cutoff with successful prefix should complete",err)};last:=records[len(records)-1];seconds:=last["seconds"].(float64);if seconds<=0||last["bytesPerSecond"].(float64)!=last["verifiedBidirectionalBytes"].(float64)/seconds{t.Fatal("original positive-duration throughput formula changed",last)};client:=last["clients"].([]any)[0].(map[string]any);kind:="short-write";if mode=="write-timeout"{kind="timeout"};if client["errorKind"]!=kind||client["failure"]!="write"{t.Fatal("original write class lost",client)}};if len(records)<1{t.Fatal("progress missing")}
  })}
 }
 func TestOriginalLoadInclusiveUpperBoundsReachOutputAndReleaseEverySocket(t *testing.T){fixtureReset();defer fixtureReset();var sockets []*fixtureSocket;fixtureDialOverride=func(network,address string,timeout time.Duration)(net.Conn,error){want:="tcp";if len(sockets)>=256{want="udp"};if network!=want||address!="127.0.0.1:12345"||timeout!=5*time.Second{t.Fatal("native upper-bound client dial sequence changed")};socket:=&fixtureSocket{};sockets=append(sockets,socket);return socket,nil};file,err:=os.CreateTemp(t.TempDir(),"closed-upper-output");if err!=nil{t.Fatal(err)};file.Close();old:=os.Stdout;os.Stdout=file;defer func(){os.Stdout=old}();err=load(12345,256,256,180,4096,"",true,1000,true);if err==nil||err.Error()=="bounded load parameters required"||len(sockets)!=512{t.Fatal("inclusive native load maximum rejected or exceeded",err,len(sockets))};for _,socket:=range sockets{if socket.closed.Load()!=1{t.Fatal("readiness failure leaked upper-bound fixture socket")}}}

@@ -390,3 +390,29 @@ despite valid public numeric input. Failure-only read diagnostics retain the err
 and will report exact native JSON types and constraint definitions in the next
 candidate. No production schema repair or reduced timestamp was substituted for
 that unresolved evidence. This record is not acceptance of the later candidate.
+
+Candidate `8a807f8b72e3854cd2748878f2590fa935b63232` ran baseline
+`39324943013` at actual checkout `04a93ed8b7ecc7fa98474a701ed004ac4acca29a`.
+Packaging `39324943001` passed. Contracts reported 1942 TypeScript passes,
+two failures and 141 conditional skips; Web passed153/153. The two assertions
+need native numeric loss counters and a CA fixture with certificate-signing usage.
+Windows additionally found duplicate-key canonical error expectations, a
+zero-duration load fixture and a lost-ACK target-counter synchronization race.
+The source fixes preserve every refusal/cleanup condition and the native zero-time
+JSON Infinity error; no production throughput clock/algorithm change is made.
+
+The same revision's phase1 completed: all other configured native SQL, transaction,
+recovery, fault and capacity groups passed. Its three finite-plan failures now
+have actual failure-only diagnostics: valid expiry1800000060000 is MySQL JSON
+UNSIGNED INTEGER, while original probe_plans_chk_7 permits only INTEGER.
+[FR-0027](../changes/FR-0027-probe-plan-json-integers.md) records the appended0038
+CHECK repair, UpgradeAssessment2 and independent0038 Control profile. All old
+profile ceilings/Agent restrictions and historical rows/receipts remain protected.
+The new upgrade test uses a reconstructed native0037 schema in an isolated fixture,
+then invokes the actual migrator against populated plans/decisions and unrelated
+authority/history. It does not claim a historical production database capture.
+These new assertions and source changes require their own candidate Actions.
+The same old head's Probe, Relay isolation, deployment, unsupported-platform and
+all3/4/8-node browser/namespace jobs completed successfully. The failed contracts,
+Windows and three plan cases keep that baseline failed; their results cannot
+accept the later migration/profile source.

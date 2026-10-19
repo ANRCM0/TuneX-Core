@@ -29,7 +29,8 @@ async function fixture(directory:string){
         const name='key-'+keyNames.size;await openssl('req','-new','-newkey',...args,'-nodes','-keyout',name+'.key','-out',name+'.csr','-subj','/CN='+server);keyNames.set(kind,name);return name;
     }
     async function leaf(kind='ec256',args=['ec','-pkeyopt','ec_paramgen_curve:P-256'],options:{ca?:boolean;usage?:string|null;sans?:string|null}={}):Promise<Leaf>{
-        const name=await key(kind,args),id='leaf-'+serial++,extensions='basicConstraints=critical,CA:'+(options.ca?'TRUE':'FALSE')+'\nkeyUsage=critical,digitalSignature\n'+
+        const name=await key(kind,args),id='leaf-'+serial++,extensions='basicConstraints=critical,CA:'+(options.ca?'TRUE':'FALSE')+'\nkeyUsage=critical,'+
+            (options.ca?'digitalSignature,keyCertSign,cRLSign':'digitalSignature')+'\n'+
             (options.usage===null?'':'extendedKeyUsage='+(options.usage??'serverAuth')+'\n')+
             (options.sans===null?'':'subjectAltName='+(options.sans??`DNS:${server},URI:${urn}`)+'\n');
         await writeFile(join(directory,id+'.ext'),extensions,{mode:0o600});
@@ -76,7 +77,10 @@ test('40 actual native certificate policy rejects weak or unsupported keys CA le
         {sans:`DNS:${server},URI:urn:other`},{sans:`DNS:${server},URI:${urn},DNS:extra.example`},
         {sans:`DNS:${server},URI:${urn},URI:${urn}`},
     ]){
-        const leaf=await pki.leaf('ec256',['ec','-pkeyopt','ec_paramgen_curve:P-256'],options);assert.throws(()=>observationTrust(config(leaf),scope,service),invalid);
+        const leaf=await pki.leaf('ec256',['ec','-pkeyopt','ec_paramgen_curve:P-256'],options);
+        // A CA fixture must also permit certificate signing for the native CA projection.
+        if(options.ca)assert.equal(leaf.certificate.ca,true,'native CA fixture must represent a signing authority');
+        assert.throws(()=>observationTrust(config(leaf),scope,service),invalid,JSON.stringify(options));
     }
 }));
 

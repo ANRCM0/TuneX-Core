@@ -41,7 +41,7 @@ function inspection():owner.UpgradeInspection {
 }
 
 test('upgrade public aliases exact source-only version and mutable report retain independent key check and safety inventories',()=>{
- assert.equal(owner.UPGRADE_ASSESSMENT_INTERFACE_VERSION,1);assert.equal(owner.runUpgradeAssessment.length,1);assert.equal(legacy.parseUpgradePlan,owner.parseUpgradePlan);assert.equal(legacy.assessUpgrade,owner.assessUpgrade);
+ assert.equal(owner.UPGRADE_ASSESSMENT_INTERFACE_VERSION,2);assert.equal(owner.runUpgradeAssessment.length,1);assert.equal(legacy.parseUpgradePlan,owner.parseUpgradePlan);assert.equal(legacy.assessUpgrade,owner.assessUpgrade);
  assert.equal(legacy.schemaMarkers,schemaMarkers);assert.equal(legacy.inspectSchema,inspectSchema);assert.equal(oldInspection.runUpgradeAssessment,owner.runUpgradeAssessment);assert.equal(oldInspection.readUpgradeInput,readUpgradeInput);assert.equal(oldInspection.upgradeSchemaCatalog,upgradeSchemaCatalog);assert.equal(oldInspection.inspectUpgradeDatabase,inspectUpgradeDatabase);assert.equal(nativeUpgradeParseJson,parseJson);
  assert.equal(nativeUpgradeInspectionEffects.readInput,readUpgradeInput);assert.equal(nativeUpgradeInspectionEffects.catalog,upgradeSchemaCatalog);assert.equal(nativeUpgradeInspectionEffects.inspectDatabase,inspectUpgradeDatabase);
  const p=plan(),i=inspection(),report=owner.assessUpgrade(p,i);
@@ -55,15 +55,34 @@ test('upgrade public aliases exact source-only version and mutable report retain
  assert.equal(Object.isFrozen(report),false);assert.equal(Object.isFrozen(report.checks),false);report.checks[0]!.subject='mutable';assert.equal(report.checks[0]!.subject,'mutable');assert.equal(report.runtimeReady,false);assert.equal(report.productionApproved,false);assert.equal(report.decision,'compatible');
 });
 
-const ceilings:[owner.CompatibilityProfile,number][]=[['adp3-runtime-v1',12],['adp3-multihop-v1',13],['adp3-probe-registry-v1',14],['adp3-probe-permits-v1',15],['adp3-probe-withdrawals-v1',16],['adp3-probe-results-v1',17],['adp3-path-templates-v1',18],['adp3-path-bindings-v1',19],['adp3-node-telemetry-v1',20],['adp3-forward-telemetry-v1',21],['adp3-host-telemetry-v1',22],['adp3-probe-telemetry-v1',23],['adp3-telemetry-rollups-v1',24],['adp3-path-groups-v1',25],['adp3-path-publications-v1',26],['adp3-ingress-groups-v1',27],['adp3-ingress-migrations-v1',28],['adp3-station-alerts-v1',29],['adp3-notification-endpoints-v1',30],['adp3-notification-deliveries-v1',31],['adp3-probe-runs-v1',32],['adp3-probe-plans-v1',33],['adp3-typed-probes-v1',34],['adp3-observation-services-v1',35],['adp3-probe-services-v1',36],['adp3-probe-echo-v1',37]];
-test('all twenty-six independent Control profile ceilings including four late additions preserve agent restrictions reader pending and report precedence',()=>{
+const ceilings:[owner.CompatibilityProfile,number][]=[['adp3-runtime-v1',12],['adp3-multihop-v1',13],['adp3-probe-registry-v1',14],['adp3-probe-permits-v1',15],['adp3-probe-withdrawals-v1',16],['adp3-probe-results-v1',17],['adp3-path-templates-v1',18],['adp3-path-bindings-v1',19],['adp3-node-telemetry-v1',20],['adp3-forward-telemetry-v1',21],['adp3-host-telemetry-v1',22],['adp3-probe-telemetry-v1',23],['adp3-telemetry-rollups-v1',24],['adp3-path-groups-v1',25],['adp3-path-publications-v1',26],['adp3-ingress-groups-v1',27],['adp3-ingress-migrations-v1',28],['adp3-station-alerts-v1',29],['adp3-notification-endpoints-v1',30],['adp3-notification-deliveries-v1',31],['adp3-probe-runs-v1',32],['adp3-probe-plans-v1',33],['adp3-typed-probes-v1',34],['adp3-observation-services-v1',35],['adp3-probe-services-v1',36],['adp3-probe-echo-v1',37],['adp3-probe-plan-json-integers-v1',38]];
+test('all twenty-seven independent Control profile ceilings including the JSON integer review preserve agent restrictions reader pending and report precedence',()=>{
  for(const [profile,ceiling] of ceilings){const p=plan(),i=inspection();p.source.control.profile=p.target.control.profile=profile;i.database.migrations=migrations.slice(0,ceiling);const parsed=owner.parseUpgradePlan(JSON.stringify(p));const report=owner.assessUpgrade(parsed,i);assert.equal(report.decision,'compatible',profile);
-  if(ceiling<37){i.database.migrations.push(migrations[ceiling]!);const blocked=owner.assessUpgrade(parsed,i);assert.deepEqual(blocked.checks.filter(x=>x.code==='CONTROL_SCHEMA_READER').map(x=>[x.status,x.subject]),[['block','source'],['block','target']],profile);assert.equal(blocked.decision,'blocked');}
+  if(ceiling<38){i.database.migrations.push(migrations[ceiling]!);const blocked=owner.assessUpgrade(parsed,i);assert.deepEqual(blocked.checks.filter(x=>x.code==='CONTROL_SCHEMA_READER').map(x=>[x.status,x.subject]),[['block','source'],['block','target']],profile);assert.equal(blocked.decision,'blocked');}
   i.database.migrations=migrations.slice(0,ceiling-1);const pending=owner.assessUpgrade(parsed,i);assert.deepEqual(pending.database.pendingMigrations,[migrations[ceiling-1]]);assert.equal(pending.decision,'review-required');assert.equal(pending.runtimeReady,false);assert.equal(pending.productionApproved,false);
   p.target.agent.profile=profile;if(!['adp3-runtime-v1','adp3-multihop-v1'].includes(profile))assert.throws(()=>owner.parseUpgradePlan(JSON.stringify(p)),/INVALID_UPGRADE_PLAN/);
  }
  const p=plan(),i=inspection();p.operation='recover';i.authority.maintenance=false;i.authorityStable=false;i.database.nodes.push({nodeId:'node-missing',generation:0,snapshotDigest:null});p.journals.push({...p.journals[0]!,nodeId:'foreign'});const report=owner.assessUpgrade(p,i);assert.equal(report.decision,'blocked');assert.deepEqual(report.checks.slice(-4).map(x=>[x.code,x.status,x.subject]),[['JOURNAL_NODE_NOT_IN_DATABASE','block','foreign'],['JOURNAL_INVENTORY_MISSING','review','node-missing'],['RECOVERY_MAINTENANCE','block','authority'],['RECOVERY_WORKFLOW_REQUIRED','review','authority']]);
  assert.deepEqual(report.requiredActions,['Resolve blocking checks; do not start the target or reset protected state']);
+});
+
+test('0038 Control review preserves all old reader ceilings pending DDL and both unchanged Agent release restrictions',()=>{
+ const p=plan(),i=inspection();p.source.control.profile=p.target.control.profile='adp3-probe-plan-json-integers-v1';
+ i.database.migrations=migrations.slice(0,37);
+ const pending=owner.assessUpgrade(owner.parseUpgradePlan(JSON.stringify(p)),i);
+ assert.equal(pending.decision,'review-required');assert.deepEqual(pending.database.pendingMigrations,['0038-probe-plan-json-integers.sql']);
+ assert.ok(pending.unchecked.includes('full-schema-equivalence-and-data-backfills'));
+ i.database.migrations=[...migrations];
+ const complete=owner.assessUpgrade(p,i);assert.equal(complete.decision,'compatible');assert.equal(complete.version,1);
+ assert.equal(complete.runtimeReady,false);assert.equal(complete.productionApproved,false);
+ for(const [profile,ceiling] of ceilings.filter(([,ceiling])=>ceiling<38)){
+  const old=plan();old.source.control.profile=old.target.control.profile=profile;
+  const report=owner.assessUpgrade(owner.parseUpgradePlan(JSON.stringify(old)),i);
+  assert.deepEqual(report.checks.filter(check=>check.code==='CONTROL_SCHEMA_READER').map(check=>[check.status,check.subject]),[['block','source'],['block','target']],profile+':'+ceiling);
+  assert.equal(report.decision,'blocked',profile);
+ }
+ for(const side of ['source','target'] as const){const agent=plan();agent[side].agent.profile='adp3-probe-plan-json-integers-v1';assert.throws(()=>owner.parseUpgradePlan(JSON.stringify(agent)),/INVALID_UPGRADE_PLAN/);}
+ i.database.migrations.push('0039-new.sql');assert.equal(owner.assessUpgrade(p,i).decision,'blocked');
 });
 
 test('upgrade original closed JSON build Journal counters zero generations imported Transit and distinct native format rules remain exact',()=>{
@@ -113,13 +132,35 @@ test('native bounded upgrade input preserves default allocation partial reads ze
  const precedence=nativeHarness(),last=Error('close wins');precedence.state.fail='read';precedence.file.close=async()=>{throw last;};await assert.rejects(precedence.api.readUpgradeInput('/p',8),error=>error===last);
 });
 
-test('native migration catalog resolves real new relative root all thirty-seven hashes markers and deliberate floor unknown-file refusals',async()=>{
+test('native migration catalog resolves real new relative root all thirty-eight hashes markers and deliberate floor unknown-file refusals',async()=>{
  const h=nativeHarness();h.state.names=[...migrations].reverse().concat(['README.md']);h.state.sql=(url:URL)=>readFileSync(url,'utf8');const result=await h.api.upgradeSchemaCatalog();
- assert.equal(h.events[0][0],'readdir');assert.equal(h.events[0][1].href,new URL('../migrations/',import.meta.url).href);assert.deepEqual(plain(result.files.map((x:any)=>x.name)),migrations);assert.equal(result.files.length,37);
- assert.equal(result.files.at(-1).name,'0037-probe-echo.sql');for(const file of result.files){const sql=readFileSync(new URL('../migrations/'+file.name,import.meta.url),'utf8');assert.equal(file.sql,sql);assert.equal(file.sha256,createHash('sha256').update(sql).digest('hex'));}assert.deepEqual(plain(result.markers),migrations.flatMap(name=>schemaMarkers(name,readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'))));
- for(const names of [migrations.slice(0,36),[...migrations,'0038-new.sql'],[...migrations.slice(0,36),'0037-wrong.sql']]){const f=nativeHarness();f.state.names=names;await assert.rejects(f.api.upgradeSchemaCatalog(),/UNREVIEWED_UPGRADE_SCHEMA/);assert.equal(f.events.some(x=>x[0]==='open'),false);}
- const unknown=nativeHarness();unknown.state.names=['0000-INVALID.sql',...migrations.slice(1)];unknown.state.sql=()=> 'CREATE TABLE example (id INT);';await assert.rejects(unknown.api.upgradeSchemaCatalog(),/UNKNOWN_MIGRATION_FILE/);
+ assert.equal(h.events[0][0],'readdir');assert.equal(h.events[0][1].href,new URL('../migrations/',import.meta.url).href);assert.deepEqual(plain(result.files.map((x:any)=>x.name)),migrations);assert.equal(result.files.length,38);
+ assert.equal(result.files.at(-1).name,'0038-probe-plan-json-integers.sql');for(const file of result.files){const sql=readFileSync(new URL('../migrations/'+file.name,import.meta.url),'utf8');assert.equal(file.sql,sql);assert.equal(file.sha256,createHash('sha256').update(sql).digest('hex'));}assert.deepEqual(plain(result.markers),migrations.flatMap(name=>schemaMarkers(name,readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'))));
+ for(const names of [migrations.slice(0,37),[...migrations,'0039-new.sql'],[...migrations.slice(0,37),'0038-wrong.sql'],['0000-invalid.sql',...migrations.slice(1)]]){const f=nativeHarness();f.state.names=names;await assert.rejects(f.api.upgradeSchemaCatalog(),/UNREVIEWED_UPGRADE_SCHEMA/);assert.equal(f.events.some(x=>x[0]==='open'),false);}
+ const unknown=nativeHarness();unknown.state.names=['0001-INVALID.sql',...migrations.slice(1)];unknown.state.sql=(url:URL)=>url.pathname.endsWith('0038-probe-plan-json-integers.sql')?readFileSync(url,'utf8'):'CREATE TABLE example (id INT);';await assert.rejects(unknown.api.upgradeSchemaCatalog(),/UNKNOWN_MIGRATION_FILE/);
  const empty=nativeHarness();empty.state.sql=()=> 'SELECT 1;';await assert.rejects(empty.api.upgradeSchemaCatalog(),/UNREVIEWED_MIGRATION_FILE/);
+});
+
+test('only the exact reviewed CHECK replacement permits no new footprint while whitespace comments and original hashes stay distinct',async()=>{
+ const name='0038-probe-plan-json-integers.sql',sql=readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8');
+ assert.deepEqual(schemaMarkers(name,sql),[]);
+ const spaced=sql.replace('ALTER TABLE','ALTER\t TABLE').replace(' DROP CHECK',' -- reviewed line comment\n DROP  CHECK');
+ assert.deepEqual(schemaMarkers(name,spaced),[]);
+ assert.deepEqual(schemaMarkers(name,sql+'\n--'),[]);
+ // Existing 0033 tables must not create a false interrupted-0038 footprint before this migration applies.
+ assert.deepEqual(inspectSchema([],schemaMarkers(name,sql),[{table:'probe_plans',column:'config',type:'json'}]),[]);
+ for(const changed of [sql.replace('probe_plans_chk_7','probe_plans_chk_8'),sql.replace('UNSIGNED INTEGER','UNSIGNEDINTEGER'),sql.replace('UNSIGNED INTEGER','UNSIGNED  INTEGER'),
+  sql.replace(" IN ('INTEGER','UNSIGNED INTEGER')"," = 'INTEGER'"),sql.replace(' IS NOT NULL',' IS NULL'),
+  sql.replace('probe_plan_expiry_json_integer','other_constraint'),sql+'\nSELECT 1;',sql.replace('ALTER TABLE','ALTER /* ignored? */ TABLE'),
+  sql.replace('ALTER TABLE','ALTER --not-comment\n TABLE'),sql.replace('ALTER TABLE','ALTER\u00a0TABLE')]){
+  assert.throws(()=>schemaMarkers(name,changed),/UNREVIEWED_MIGRATION_FILE/);
+  const h=nativeHarness();h.state.sql=(url:URL)=>url.pathname.endsWith(name)?changed:readFileSync(url,'utf8');
+  await assert.rejects(h.api.upgradeSchemaCatalog(),/UNREVIEWED_MIGRATION_FILE/);
+ }
+ for(const other of ['0039-new.sql','0038-other.sql','0037-check-only.sql'])assert.throws(()=>schemaMarkers(other,sql),/UNREVIEWED_MIGRATION_FILE/);
+ const h=nativeHarness();h.state.sql=(url:URL)=>url.pathname.endsWith(name)?spaced:readFileSync(url,'utf8');const catalog=await h.api.upgradeSchemaCatalog();
+ assert.equal(catalog.files.at(-1).sql,spaced);assert.equal(catalog.files.at(-1).sha256,createHash('sha256').update(spaced).digest('hex'));
+ assert.notEqual(catalog.files.at(-1).sha256,createHash('sha256').update(sql).digest('hex'));
 });
 
 const sqls={isolation:'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ',start:'START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY',

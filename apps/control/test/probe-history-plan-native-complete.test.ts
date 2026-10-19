@@ -7,7 +7,7 @@ import { ControlError } from '../src/framework/public.ts';
 import { nativeValueDigest } from '../src/compatibility/public.ts';
 import { ProbeRunHistoryRecorder, probeRunStorageValues } from '../src/modules/probe-history-owner/public.ts';
 import type { ProbeRunPermit, ProbeRunRecord } from '../src/modules/probe-history-owner/public.ts';
-import { ProbePlans, probePlanStorageValues, parseProbePlanDecision } from '../src/modules/probe-plan-owner/public.ts';
+import { ProbePlans, probePlanStorageValues, parseProbePlanConfig, parseProbePlanDecision } from '../src/modules/probe-plan-owner/public.ts';
 import type { ProbePlanHead, ProbePlanDecision } from '../src/modules/probe-plan-owner/public.ts';
 import { MySqlProbeHistoryStore } from '../src/infrastructure/mysql-probe-history-store.ts';
 import { MySqlProbePlanStore } from '../src/infrastructure/mysql-probe-plan-store.ts';
@@ -77,26 +77,8 @@ test('73/74 legacy native prototypes lazy callbacks and original failures keep c
 });
 
 const databaseURL=process.env.TUNEX_TEST_DATABASE_URL;
-function planCheckDiagnostics(tx:Transaction):Transaction{return new Proxy(tx,{get(target,key){
- if(key==='execute')return async(sql:string,args:unknown[]=[])=>{try{return await target.execute(sql,args);}catch(error){
-  if((error as {sqlMessage?:string}).sqlMessage?.includes("Check constraint 'probe_plans_chk_7'")){
-   try{
-    const columns=/^INSERT INTO probe_plans\(([^)]+)\)/.exec(sql)?.[1]?.split(',')??[],position=columns.indexOf('config');
-    const configs=position<0?[]:[...new Set(args.filter((_,index)=>index%columns.length===position))];
-    const decoded=[];for(const config of configs){const [types]=await target.execute("SELECT JSON_TYPE(JSON_EXTRACT(CAST(? AS JSON),'$.expiresAt')) expires_at_type,JSON_EXTRACT(CAST(? AS JSON),'$.expiresAt') expires_at_value",[config,config]);decoded.push({config,types});}
-    const [schema]=await target.query('SHOW CREATE TABLE probe_plans');
-    const [constraints]=await target.execute('SELECT CONSTRAINT_NAME,CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND CONSTRAINT_NAME=?',['probe_plans_chk_7']);
-    const [persisted]=await target.query("SELECT plan_id,config,JSON_TYPE(JSON_EXTRACT(config,'$.expiresAt')) expires_at_type FROM probe_plans ORDER BY plan_id LIMIT 32");
-    console.error('probe_plans_chk_7 failure-only diagnostic',JSON.stringify({decoded,schema,constraints,persisted}));
-   }catch(diagnostic){console.error('probe_plans_chk_7 diagnostic failed',(diagnostic as {code?:string}).code??'unknown');}
-  }
-  throw error;
- }};
- const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
-}});}
 async function database(action:(db:MySqlUnitOfWork)=>Promise<void>){
  const admin=await createConnection(databaseURL!),name='tunex_history_plans_'+randomUUID().replaceAll('-',''),url=new URL(databaseURL!);url.pathname='/'+name;const db=new MySqlUnitOfWork(url.toString());let created=false;
- const transaction=db.transaction.bind(db);db.transaction=<T>(work:(tx:Transaction)=>Promise<T>):Promise<T>=>transaction(tx=>work(planCheckDiagnostics(tx)));
  try{await admin.query(`CREATE DATABASE \`${name}\``);created=true;await db.migrate();await db.transaction(async tx=>{await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',['actor','a'.repeat(64)]);await write(tx,'INSERT INTO scopes(id,owner_id) VALUES(?,?)',['scope-a','actor']);await write(tx,'INSERT INTO scope_members(scope_id,actor_id,can_manage) VALUES(?,?,TRUE)',['scope-a','actor']);});await action(db);}
  finally{try{await db.close();if(created)await admin.query(`DROP DATABASE \`${name}\``);}finally{await admin.end();}}
 }
@@ -145,6 +127,57 @@ test('74 actual MySQL finite owner create run cancel savepoint durable refusal r
 }));
 
 async function insertRows(tx:Transaction,table:string,values:Any[]){if(!values.length)return;const keys=Object.keys(values[0]!);await write(tx,`INSERT INTO ${table}(${keys.join(',')}) VALUES ${values.map(()=>`(${keys.map(()=>'?').join(',')})`).join(',')}`,values.flatMap(value=>keys.map(key=>value[key])));}
+
+const integerMigration='0038-probe-plan-json-integers.sql';
+async function expiryChecks(db:MySqlUnitOfWork){return rows<{name:string;clause:string}>(db.pool,"SELECT CONSTRAINT_NAME name,CHECK_CLAUSE clause FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND (CONSTRAINT_NAME LIKE 'probe_plans_chk_%' OR CONSTRAINT_NAME='probe_plan_expiry_json_integer') ORDER BY CONSTRAINT_NAME");}
+async function expiryRefusals(db:MySqlUnitOfWork,id:string){
+ const [row]=await rows<{config:string;expiresAt:number;createdAt:number}>(db.pool,'SELECT CAST(config AS CHAR) config,expires_at expiresAt,created_at createdAt FROM probe_plans WHERE scope_id=? AND plan_id=?',['scope-a',id]);assert.ok(row);
+ const config=JSON.parse(row.config) as Any,encoded=JSON.stringify(config),literal='"expiresAt":'+String(config.expiresAt);
+ assert.ok(encoded.includes(literal));
+ const invalid:[string,string,unknown[]][]=[
+  ['JSON double with equal numeric value','UPDATE probe_plans SET config=? WHERE scope_id=? AND plan_id=?',[encoded.replace(literal,literal+'.0'),'scope-a',id]],
+  ['JSON string','UPDATE probe_plans SET config=? WHERE scope_id=? AND plan_id=?',[JSON.stringify({...config,expiresAt:String(config.expiresAt)}),'scope-a',id]],
+  ['JSON null','UPDATE probe_plans SET config=? WHERE scope_id=? AND plan_id=?',[JSON.stringify({...config,expiresAt:null}),'scope-a',id]],
+  ['missing JSON expiry','UPDATE probe_plans SET config=JSON_REMOVE(config,\'$.expiresAt\') WHERE scope_id=? AND plan_id=?',['scope-a',id]],
+  ['expiry column mismatch','UPDATE probe_plans SET expires_at=expires_at+1 WHERE scope_id=? AND plan_id=?',['scope-a',id]],
+  ['expiry not after creation','UPDATE probe_plans SET config=?,expires_at=? WHERE scope_id=? AND plan_id=?',[JSON.stringify({...config,expiresAt:row.createdAt}),row.createdAt,'scope-a',id]],
+  ['original one-hour lifetime overflow','UPDATE probe_plans SET config=?,expires_at=? WHERE scope_id=? AND plan_id=?',[JSON.stringify({...config,expiresAt:row.createdAt+3600001}),row.createdAt+3600001,'scope-a',id]],
+ ];
+ for(const [label,sql,args]of invalid){const before=await snapshot(db);await assert.rejects(db.transaction(tx=>write(tx,sql,args)),{code:'ER_CHECK_CONSTRAINT_VIOLATED'},label);assert.deepEqual(await snapshot(db),before,label+' must not change any table');}
+ // Public maximum-date validation is independent of the narrower persisted SQL guards.
+ for(const expiresAt of [-1,253402300800000,Number.MAX_SAFE_INTEGER+1])assert.throws(()=>parseProbePlanConfig({...config,expiresAt}),{code:'INVALID_CONFIG'});
+}
+
+test('74 real MySQL0038 fresh migration preserves large native expiry and rejects original SQL invalid expiry types bounds and mismatches',{skip:!databaseURL,timeout:120000},async()=>database(async db=>{
+ const receipts=await rows<{name:string}>(db.pool,'SELECT name FROM vnext_migrations ORDER BY name');assert.equal(receipts.length,38);assert.equal(receipts.at(-1)!.name,integerMigration);assert.equal(receipts.filter(value=>value.name===integerMigration).length,1);
+ const checks=await expiryChecks(db);assert.equal(checks.some(value=>value.name==='probe_plans_chk_7'),false);assert.equal(checks.filter(value=>value.name==='probe_plan_expiry_json_integer').length,1);
+ const store=new MySqlProbePlanStore(probePlanStorageValues),value=plan('large-expiry');assert.equal(value.config.expiresAt,1800000060000);await db.transaction(tx=>store.create(tx,value,at));assert.deepEqual(await db.transaction(tx=>store.get(tx,'scope-a',value.id)),probePlanStorageValues.head(value));
+ const [native]=await rows<{type:string;expiry:number}>(db.pool,"SELECT JSON_TYPE(JSON_EXTRACT(config,'$.expiresAt')) type,expires_at expiry FROM probe_plans WHERE scope_id=? AND plan_id=?",['scope-a',value.id]);assert.ok(['INTEGER','UNSIGNED INTEGER'].includes(native!.type));assert.equal(native!.expiry,value.config.expiresAt);
+ await expiryRefusals(db,value.id);const before=await snapshot(db);await db.migrate();assert.deepEqual(await snapshot(db),before);
+}));
+
+test('74 reconstructed native MySQL0037 populated state upgrades only expiry CHECK through actual migrator preserving exact rows authority and receipts',{skip:!databaseURL,timeout:120000},async()=>database(async db=>{
+ // Fresh full migration runs first. Reconstruct 0037 only in this disposable test DB;
+ // this is not a production rollback/history-repair path or historical deployment evidence.
+ const completeReceipts=await rows<{name:string}>(db.pool,'SELECT name FROM vnext_migrations ORDER BY name'),completeChecks=await expiryChecks(db);assert.equal(completeReceipts.length,38);
+ await db.pool.query("ALTER TABLE probe_plans DROP CHECK probe_plan_expiry_json_integer, ADD CONSTRAINT probe_plans_chk_7 CHECK(JSON_TYPE(JSON_EXTRACT(config,'$.expiresAt'))='INTEGER' AND JSON_EXTRACT(config,'$.expiresAt') IS NOT NULL)");
+ assert.equal(await write(db.pool,'DELETE FROM vnext_migrations WHERE name=?',[integerMigration]),1);
+ const beforeReceipts=await rows<{name:string}>(db.pool,'SELECT name FROM vnext_migrations ORDER BY name');assert.equal(beforeReceipts.length,37);assert.equal(beforeReceipts.at(-1)!.name,'0037-probe-echo.sql');assert.deepEqual(beforeReceipts,completeReceipts.filter(value=>value.name!==integerMigration));
+ const reconstructedChecks=await expiryChecks(db);assert.ok(reconstructedChecks.some(value=>value.name==='probe_plans_chk_7'));assert.equal(reconstructedChecks.some(value=>value.name==='probe_plan_expiry_json_integer'),false);assert.deepEqual(reconstructedChecks.filter(value=>value.name!=='probe_plans_chk_7'),completeChecks.filter(value=>value.name!=='probe_plan_expiry_json_integer'));
+ const store=new MySqlProbePlanStore(probePlanStorageValues),legacy=plan('legacy-small');legacy.createdAt=10000;legacy.updatedAt=15000;legacy.config={...legacy.config,expiresAt:30000};legacy.configDigest=nativeValueDigest(legacy.config);legacy.decisionCount=1;legacy.acceptedCount=1;
+ const oldDecision=parseProbePlanDecision({position:1,actorId:'actor',source:'manual',decidedAt:15000,outcome:{accepted:true,receipt:{status:202,body:{probeId:'legacy-issued',forwardId:wire.binding.forwardId,issuedAt:new Date(12000).toISOString(),expiresAt:new Date(14000).toISOString(),dispatch:'agent-poll',executionEnabled:false}}}},legacy.config,'scope-a');
+ await db.transaction(async tx=>{await store.create(tx,legacy,15000);await store.append(tx,'scope-a',legacy.id,oldDecision);const value=run('upgrade-authority');await new MySqlProbePermits().insert(tx,authority(value));await new ProbeRunHistoryRecorder(new MySqlProbeHistoryStore(probeRunStorageValues)).recordIn(tx,{kind:'issued',permit:historyPermit(value),at:value.issuedAt,result:null});});
+ const [oldType]=await rows<{type:string}>(db.pool,"SELECT JSON_TYPE(JSON_EXTRACT(config,'$.expiresAt')) type FROM probe_plans WHERE plan_id=?",[legacy.id]);assert.equal(oldType!.type,'INTEGER');
+ const rawPlan=await rows(db.pool,'SELECT plan_id,HEX(CAST(config AS CHAR)) config_bytes,HEX(CAST(origin_binding AS CHAR)) binding_bytes,config_digest FROM probe_plans ORDER BY plan_id'),rawDecisions=await rows(db.pool,'SELECT plan_id,position,HEX(CAST(outcome AS CHAR)) outcome_bytes FROM probe_plan_decisions ORDER BY plan_id,position');
+ const before=await snapshot(db),oldChecks=await expiryChecks(db);assert.ok(oldChecks.some(value=>value.name==='probe_plans_chk_7'));assert.equal(before.probe_plans.length,1);assert.equal(before.probe_plan_decisions.length,1);assert.equal(before.probe_permits.length,1);assert.equal(before.probe_runs.length,1);
+ const large=plan('upgraded-large');await assert.rejects(db.transaction(tx=>store.create(tx,large,at)),{code:'ER_CHECK_CONSTRAINT_VIOLATED'});assert.deepEqual(await snapshot(db),before);
+ await db.migrate();const after=await snapshot(db);for(const table of Object.keys(before))if(table!=='vnext_migrations')assert.deepEqual(after[table],before[table],table+' must preserve exact persisted rows');
+ assert.deepEqual(await rows(db.pool,'SELECT plan_id,HEX(CAST(config AS CHAR)) config_bytes,HEX(CAST(origin_binding AS CHAR)) binding_bytes,config_digest FROM probe_plans ORDER BY plan_id'),rawPlan);assert.deepEqual(await rows(db.pool,'SELECT plan_id,position,HEX(CAST(outcome AS CHAR)) outcome_bytes FROM probe_plan_decisions ORDER BY plan_id,position'),rawDecisions);
+ assert.deepEqual(after.vnext_migrations.filter((value:string)=>JSON.parse(value).name!==integerMigration),before.vnext_migrations);assert.equal(after.vnext_migrations.filter((value:string)=>JSON.parse(value).name===integerMigration).length,1);
+ const newChecks=await expiryChecks(db);assert.deepEqual(newChecks.filter(value=>value.name!=='probe_plan_expiry_json_integer'),oldChecks.filter(value=>value.name!=='probe_plans_chk_7'));assert.equal(newChecks.filter(value=>value.name==='probe_plan_expiry_json_integer').length,1);assert.equal(newChecks.some(value=>value.name==='probe_plans_chk_7'),false);
+ assert.deepEqual(await db.transaction(tx=>store.get(tx,'scope-a',legacy.id)),probePlanStorageValues.head(legacy));assert.deepEqual(await db.transaction(tx=>store.decisions(tx,'scope-a',legacy.id)),[oldDecision]);
+ await db.migrate();assert.deepEqual(await snapshot(db),after);await db.transaction(tx=>store.create(tx,large,at));assert.equal((await db.transaction(tx=>store.get(tx,'scope-a',large.id)))!.config.expiresAt,1800000060000);await expiryRefusals(db,large.id);
+}));
 
 test('73 actual MySQL exact1024 quota oldest tie eviction bounded16 expiry guarded losses and scoped keysets roll back every write',{skip:!databaseURL,timeout:180000},async()=>database(async db=>{
  const store=new MySqlProbeHistoryStore(probeRunStorageValues);await db.transaction(async tx=>{await store.lockScope(tx,'scope-a');await insertRows(tx,'probe_runs',Array.from({length:1024},(_,i)=>runRow(run('q'+String(i).padStart(4,'0')))));});
