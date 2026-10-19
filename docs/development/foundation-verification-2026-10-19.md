@@ -87,21 +87,29 @@ it read SQL argument index 7 (details) instead of index 6 (created_at). The next
 candidate corrects the assertion. This run reported 922 TypeScript passes, one
 failure and 78 conditional skips; Go full tests/vet/race and Web suites passed
 within that job. Windows Agent, deployment tools, Probe and Relay isolation jobs
-and packaging run `39280558321` passed. The other integration jobs were still
-running at this update; this is not a complete passing baseline.
+and packaging run `39280558321` passed. The remaining integration jobs also
+completed successfully; the failed contracts job keeps this baseline failed.
 
-The next source batch adds Journal uncertain-persistence/reload and complete
-native history projection, staged actual AtomicWrite failure effects, native
-platform/factory/registry contracts, Forward/Snapshot registry behavior, actual
-Control server construction/worker/shutdown traces and Core/Web source consumers.
-Local TypeScript and 950-source boundaries passed; Go vet passed for the cached
-pure packages. Other native-package vet attempts could not load uncached external
-dependencies with the proxy disabled and are not counted as passed. No local
-functional tests ran. All newly appended tests require their saved head's Actions.
+The following saved candidate `8c114b99a8ec50685adea9a512c1f5a1d56a2743`
+ran at PR merge checkout `7b0b2ec` in baseline `39284689909`. Contracts found
+two server fixture continuation waits, one missing Web fixture method in three cases and
+three Agent test/vet expectations; those are corrected in the next test batch.
+Windows Agent also failed the same Agent expectations. Packaging `39284690233`,
+deployment tools, Probe/Relay isolation and 3/4-node integration passed. The
+8-node browser path batch timed out awaiting an Operation and remains under
+investigation; no passing full baseline is recorded for this candidate.
+
+The next source batch adds original Control composition callbacks, HTTP query
+families, reconciliation and Transport formatting, native recovery/upgrade/operator
+effects, notification request/response cancellation drain, native Relay browser
+flows, Agent time projection, Ledger SQL rollback and competing claim locks.
+The new Ledger MySQL groups and Relay owner groups are explicitly routed to the
+disposable MySQL phase1 job. Local TypeScript and 950-source boundaries passed.
+No local functional tests ran. All appended tests require their saved head's Actions.
 
 The B [assertion map](foundation-b-assertion-coverage.md) associates all 220 cases
-with actual suites and specific remaining obligations. 49 cases have fully
-identified assertions; 171 remain partial. This classification does not report
+with actual suites and specific remaining obligations. 78 cases have fully
+identified assertions; 142 remain partial. This classification does not report
 execution success. PR #112 adds direct failure-order, owner-transaction, native
 and compatibility tests, a private notification cancellation/drain fix and distinct
 multi-hop fixture ports. Its first head `8ee61b1fdc952675c7a625605aa79a447ab7e65f`

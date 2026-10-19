@@ -29,7 +29,8 @@ func TestExecutionDriverCompletePublicNativeAliasesAndZeroBinding(t *testing.T){
 		{reflect.TypeOf(executiondriver.Driver{}),reflect.TypeOf(executionhost.Driver[adp3.Assignment,adp3.Policy,relay.Identity]{})},
 		{reflect.TypeOf(executiondriver.Features{}),reflect.TypeOf(executionhost.Features{})},
 	}{if pair[0]!=pair[1]||pair[0].PkgPath()!="github.com/tunex/vnext/agent/internal/executionhost"{t.Fatal("typed native alias canonical identity changed",pair)}}
-	if executiondriver.HostVersion!=1||executiondriver.HostVersion!=executionhost.HostVersion{t.Fatal("typed host version changed")}
+	if executiondriver.HostVersion!=1{t.Fatal("typed host version changed")}
+	if executiondriver.HostVersion!=executionhost.HostVersion{t.Fatal("typed host version differs from executionhost")}
 	zero:=&executiondriver.Registry{}
 	if values:=zero.Descriptors();values==nil||len(values)!=0{t.Fatal("native zero Registry invented defaults")}
 	if driver,err:=zero.Resolve(adp3.Assignment{},executiondriver.Features{});err==nil||err.Error()!="UNSUPPORTED_CAPABILITY: Execution host, platform, driver, version, role, phase or protocol unavailable"||driver.Descriptor.ID!=""{t.Fatal("native zero resolve changed")}

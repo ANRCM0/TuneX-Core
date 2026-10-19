@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"net"
 	"reflect"
-	"runtime"
 	"testing"
 
 	"github.com/tunex/vnext/agent/internal/platformruntime"
 	"github.com/tunex/vnext/agent/internal/probe"
+	"github.com/tunex/vnext/agent/internal/runtimeplatform"
 )
 
 type completeFactoryRandom struct{calls int}
@@ -27,7 +28,8 @@ func TestControlCompleteNativeProbeFactoryPriorityAndBoundResolvers(t *testing.T
 			if i<=level{expected:=[]any{runner.resolveProbeTarget,runner.resolveProbeIngressTarget,runner.resolveProbeServiceTarget,runner.resolveProbeEchoTarget}[i];if function.Pointer()!=reflect.ValueOf(expected).Pointer(){t.Fatal("factory resolver was replaced",field)}}
 		}
 		if value.FieldByName("schedule").Elem().Type()!=reflect.TypeOf(platformruntime.Schedule{})||value.FieldByName("entropy").Elem().Type()!=reflect.TypeOf(platformruntime.Local{}){t.Fatal("Runner operational providers replaced native Probe defaults")}
-		name:=runtime.FuncForPC(value.FieldByName("dial").Pointer()).Name();if name!="github.com/tunex/vnext/agent/internal/platformruntime.(*Dialer).DialContext-fm"{t.Fatal("factory bypassed native fresh Dialer",name)}
+		var nativeDialer runtimeplatform.Dialer[net.Conn]=platformruntime.NewDialer()
+		if value.FieldByName("dial").Pointer()!=reflect.ValueOf(nativeDialer.DialContext).Pointer(){t.Fatal("factory bypassed native Dialer interface binding")}
 	}
 	if reader.calls!=0{t.Fatal("executor factory sampled entropy before NewGate")}
 }

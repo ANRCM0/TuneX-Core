@@ -189,6 +189,10 @@ jobs:
         run: node --test apps/control/test/transit-negotiation.test.ts
       - name: Multi-hop withdrawal, command/Snapshot rollback and full-path capacity
         run: node --test apps/control/test/multihop-runtime.test.ts
+      - name: Relay operation predicates and rollback before deployment withdrawal
+        run: node --test apps/control/test/relay-owner-complete.test.ts
+      - name: Original Ledger retirement, rollback and competing claim locks
+        run: node --test apps/control/test/ledger-owner-complete.test.ts
       - name: Read-only upgrade assessment with SELECT-only MySQL and authenticated Agent journal
         run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
       - name: Console scoped filters, independent candidates and full-scope overview with SELECT-only MySQL

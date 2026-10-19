@@ -33,7 +33,9 @@ for (const statement of parsed.statements) if (ts.isImportDeclaration(statement)
   for (const entry of bindings.elements) if (!entry.isTypeOnly) names.push((entry.propertyName ?? entry.name).text);
   imports.set(statement.moduleSpecifier.text, names);
 }
-const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
+// A macrotask joins all current async continuations, including Promise adoption
+// between the test and VM realms, before asserting the held listen/drain stage.
+const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 
 function fixture() {

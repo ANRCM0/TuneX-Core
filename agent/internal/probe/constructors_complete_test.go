@@ -8,7 +8,6 @@ import (
 	"go/token"
 	"net"
 	"reflect"
-	"runtime"
 	"testing"
 
 	"github.com/tunex/vnext/agent/internal/observationtrust"
@@ -36,7 +35,8 @@ func TestProbeCompleteFourConstructorsExplicitEffectsAndResolverHierarchy(t *tes
 		if len(events)!=0{t.Fatal("construction invoked a resolver")}
 		if explicit{if executor.schedule!=effects.Schedule||executor.entropy!=effects.Entropy{t.Fatal("explicit Effects fallback/normalization")}}else{
 			if reflect.TypeOf(executor.schedule)!=reflect.TypeOf(platformruntime.Schedule{})||reflect.TypeOf(executor.entropy)!=reflect.TypeOf(platformruntime.Local{}){t.Fatal("legacy constructors lost native schedule/entropy")}
-			name:=runtime.FuncForPC(reflect.ValueOf(executor.dial).Pointer()).Name();if name!="github.com/tunex/vnext/agent/internal/platformruntime.(*Dialer).DialContext-fm"{t.Fatal("legacy default dial no longer binds native fresh Dialer",name)}
+			var nativeDialer runtimeplatform.Dialer[net.Conn]=platformruntime.NewDialer()
+			if reflect.ValueOf(executor.dial).Pointer()!=reflect.ValueOf(nativeDialer.DialContext).Pointer(){t.Fatal("legacy default dial no longer binds native Dialer interface")}
 		}
 		if _,err:=executor.resolve(context.Background(),Binding{});err!=failure{t.Fatal("base resolver error changed")}
 		if level>=1{if _,err:=executor.resolveIngress(context.Background(),Binding{});err!=failure{t.Fatal("ingress resolver error changed")}}

@@ -83,7 +83,7 @@ function harness(t, options = {}) {
     events.push([name]); initializers[name] = input;
     const owner = owners[name] = {};
     for (const method of ['clear', 'leave', 'refresh', 'list', 'selectDefinition', 'refreshCandidates', 'edit', 'copy',
-      'deployment', 'open', 'openNode', 'openForward', 'retry', 'profileBatch', 'pathBatch', 'catalog']) owner[method] = function(...args) {
+      'deployment', 'open', 'openNode', 'openForward', 'retry', 'profileBatch', 'pathBatch', 'catalog', 'page']) owner[method] = function(...args) {
         assert.equal(this, owner); events.push([name, method, ...args]);
         if (method === 'list' || method === 'refresh' || method === 'refreshCandidates') return Promise.resolve();
         return options.ownerResult?.(name, method, args) ?? true;
