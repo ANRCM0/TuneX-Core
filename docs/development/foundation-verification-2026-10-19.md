@@ -363,7 +363,7 @@ pending its own saved candidate Actions. No B acceptance, independent physical-h
 acceptance, product parallelism or release approval follows from this source map.
 
 The final authored assertion batch identifies 217 complete and 3 partial requirements
-across 406 suites. Full structural HTTP provider substitution, all twelve native
+across 406 evidence sources. Full structural HTTP provider substitution, all twelve native
 management-read SQL methods, disabled optional owner HTTP composition, native
 Observation certificate policy, Probe scheduler savepoints and Agent network
 fixture roots/load/refusals now have concrete cases. Requirements 7, 192 and 220
@@ -416,3 +416,21 @@ The same old head's Probe, Relay isolation, deployment, unsupported-platform and
 all3/4/8-node browser/namespace jobs completed successfully. The failed contracts,
 Windows and three plan cases keep that baseline failed; their results cannot
 accept the later migration/profile source.
+
+Candidate `be7a48a9334b773b9a3af67cbc14133461e2c74e` started baseline
+`39329036507` at checkout `06af13fba8484bea12103b24206283c056443555`.
+Its Windows Agent and original unsupported-platform/deployment jobs passed.
+A final execution-route audit found two existing unsupported-platform branches
+that Linux/Windows success could not cover: actual synchronization provider
+selection (case217) and the native execution registry wrapper (case215).
+The next routing-only candidate adds these existing tests to the same targeted
+macOS job; no production/source contract or new test body changes. This head is
+superseded before complete acceptance, and its partial results do not validate
+the next saved candidate.
+
+The same source audit confirms all45 database-conditional TypeScript files are
+explicitly routed through phase1 with disposable MySQL8.4.9. Linux/getuid and
+GITHUB_ACTIONS native tests run in contracts; Chromium/namespace cases have their
+named jobs. Evidence IDs E1-E406 include configuration, asset and scenario sources;
+they are not406 distinct executed test suites. Actual step outcomes and condition
+skips must still be reconciled against the final candidate.

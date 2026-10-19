@@ -160,8 +160,8 @@ jobs:
         with:
           go-version-file: agent/go.mod
           cache: false
-      - name: Unsupported native OS refuses execution locks and clocks without fallback
-        run: node scripts/run-go.mjs test ./cmd/network-fixture ./internal/platformclock ./internal/platformobservation -run 'TestAgentSourceGraphCompleteUnsupportedNativeLockFailsWithoutFiles|TestClockCompleteActualNativeSampleBracketAndUnsupported|TestObservationCompleteActualNativeResources' -count=1
+      - name: Unsupported native OS refuses execution registry locks clocks and synchronization without fallback
+        run: node scripts/run-go.mjs test ./cmd/network-fixture ./internal/platformclock ./internal/platformobservation ./internal/authorization ./internal/executiondriver -run 'TestAgentSourceGraphCompleteUnsupportedNativeLockFailsWithoutFiles|TestClockCompleteActualNativeSampleBracketAndUnsupported|TestObservationCompleteActualNativeResources|TestSynchronizationCompleteActualProviderSelection|TestExecutionDriverCompletePublicNativeAliasesAndZeroBinding' -count=1
   phase1:
     runs-on: ubuntu-latest
     timeout-minutes: 30

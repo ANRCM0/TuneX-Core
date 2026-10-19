@@ -8,7 +8,7 @@ remaining obligations. It is not a pass certificate.
 
 ## Status And Source Identity
 
-The latest saved candidate at this map update is `8a807f8b72e3854cd2748878f2590fa935b63232` in PR #112.
+The latest saved candidate at this map update is `be7a48a9334b773b9a3af67cbc14133461e2c74e` in PR #112.
 Additional working-tree suites listed below require their next saved candidate's
 own Actions. The functional/MySQL/network/container/browser runs occur only in GitHub Actions.
 A workflow's exact tested checkout/tree and its conclusion must be recorded with
