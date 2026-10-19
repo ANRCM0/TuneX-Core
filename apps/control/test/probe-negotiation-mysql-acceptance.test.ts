@@ -43,6 +43,7 @@ async function digest(db: Connection, excludeInstances = false, excludePermits =
         if (excludeInstances && table.name === 'probe_instances') continue;
         if (excludePermits && ['probe_permits', 'probe_permit_budget', 'probe_permit_withdrawals'].includes(table.name)) continue;
         if (excludeResults && ['probe_results', 'probe_permit_budget'].includes(table.name)) continue;
+        if ((excludePermits || excludeResults) && ['probe_run_scopes', 'probe_runs'].includes(table.name)) continue;
         const [records] = await db.query<RowDataPacket[]>(`SELECT * FROM \`${table.name}\``);
         inventory.push([table.name, records.map(record => JSON.stringify(record)).sort()]);
     }
@@ -110,6 +111,11 @@ async function fixture(writeInstances = false, writePermits = false, lockPermits
         if (writeResults) {
             await admin.query(`GRANT INSERT ON \`${name}\`.probe_results TO ?@'%'`, [username]);
             await admin.query(`GRANT UPDATE ON \`${name}\`.probe_permit_budget TO ?@'%'`, [username]);
+        }
+        if(writePermits||writeResults) {
+            // History remains a distinct owner, invoked atomically by the permit/result workflow.
+            await admin.query(`GRANT INSERT,UPDATE ON \`${name}\`.probe_run_scopes TO ?@'%'`,[username]);
+            await admin.query(`GRANT ${writePermits?'INSERT,UPDATE,DELETE':'UPDATE'} ON \`${name}\`.probe_runs TO ?@'%'`,[username]);
         }
         const readUrl = new URL(url); readUrl.username = username; readUrl.password = password;
         reader = new MySqlUnitOfWork(readUrl.toString());
@@ -195,7 +201,7 @@ async function resultCommand(f: Awaited<ReturnType<typeof fixture>>): Promise<Pr
         applicationHealth: 'unknown', source: 'agent-reported', applicationPayloadBytes: 0 };
 }
 
-test('real mTLS result ingestion has INSERT-only result privileges, durable duplicate receipts and no execution writes',
+test('real mTLS result ingestion has INSERT-only result privileges, delegated history updates and no execution writes',
     { skip: !databaseUrl, timeout: 60000 }, async () => {
         const f = await fixture(false, false, true, true);
         try {
@@ -208,13 +214,17 @@ test('real mTLS result ingestion has INSERT-only result privileges, durable dupl
             assert.equal(acks[0]!.health, 'unknown'); assert.equal(acks[0]!.executionEnabled, false);
             const [saved] = await f.db.query<RowDataPacket[]>('SELECT * FROM probe_results');
             assert.equal(saved.length, 1); assert.equal(saved[0]!.permit_id, input.permitId);
+            const [history]=await f.db.query<RowDataPacket[]>('SELECT probe_id,state,revision,result_digest,result_accepted_at FROM probe_runs');
+            assert.deepEqual(history.map(row=>({...row})),[{probe_id:input.permitId,state:'consumed',revision:3,
+                result_digest:saved[0]!.result_digest,result_accepted_at:saved[0]!.accepted_at}]);
             assert.equal(await digest(f.db, false, false, true), before);
             const stable = await digest(f.db), replay = { ...input, requestId: randomBytes(32).toString('hex') };
             const ack = parseProbeResult('Response', await f.request({ path: resultPath, input: replay }));
             assert.equal(ack.duplicate, true); assert.equal(await digest(f.db), stable);
             for (const sql of ['UPDATE probe_results SET accepted_at=0', 'DELETE FROM probe_results',
-                "UPDATE probe_permits SET state='issued',closed_at=NULL", 'UPDATE snapshots SET generation=generation'])
-                await assert.rejects(f.reader.pool.query(sql));
+                "UPDATE probe_permits SET state='issued',closed_at=NULL", 'UPDATE snapshots SET generation=generation',
+                'DELETE FROM probe_runs', 'DELETE FROM probe_run_scopes', 'INSERT INTO probe_runs SELECT * FROM probe_runs WHERE FALSE'])
+                await assert.rejects(f.reader.pool.query(sql), {code:'ER_TABLEACCESS_DENIED_ERROR'});
         } finally { await f.close(); }
     });
 
@@ -413,7 +423,7 @@ test('current Node credential revocation, overlap retirement, expiry and session
 const claimRequest = (permitId: string): ProbeClaimRequest => ({ protocolVersion: 3, probeVersion: 1, kind: 'probe-claim',
     nodeId: 'node-a', bootId: 'boot-a', sessionEpoch: 2, instanceId: 'c'.repeat(64), instanceGeneration: 1, permitId });
 const claimPath = '/agent/v3/probe/claim';
-test('real mTLS claim races commit one consumed receipt and mutate only permit-owned tables with restricted credentials',
+test('real mTLS claim races commit one receipt with delegated history and no unrelated writes',
     { skip: !databaseUrl, timeout: 60000 }, async () => {
         const f = await fixture(false, true);
         try {
@@ -429,6 +439,9 @@ test('real mTLS claim races commit one consumed receipt and mutate only permit-o
             assert.ok(!['actorId', 'scopeId', 'fingerprint', 'target', 'permit'].some(key => key in ack));
             const [rows] = await f.db.query<RowDataPacket[]>('SELECT state,closed_at FROM probe_permits WHERE id=?', [permit.id]);
             assert.equal(rows[0]!.state, 'consumed'); assert.ok(rows[0]!.closed_at > 0);
+            const [history]=await f.db.query<RowDataPacket[]>('SELECT probe_id,state,revision,closed_at,result_status FROM probe_runs');
+            assert.deepEqual(history.map(row=>({...row})),[{probe_id:permit.id,state:'consumed',revision:2,
+                closed_at:rows[0]!.closed_at,result_status:null}]);
             await f.request({ path: claimPath, input, status: 409 });
             await assert.rejects(f.issuePermit(), { code: 'PROBE_PERMIT_LIMIT' });
             assert.equal(await digest(f.db, false, true), before);
@@ -514,8 +527,11 @@ test('real mTLS poll/status use SELECT plus locking-only privileges and preserve
         const f = await fixture(false, false, true);
         try {
             await f.prepareProbe();
-            for (const table of ['probe_permits', 'probe_permit_withdrawals', 'probe_permit_budget'])
-                await assert.rejects(f.reader.pool.query(`DELETE FROM ${table}`));
+            for (const table of ['probe_permits', 'probe_permit_withdrawals', 'probe_permit_budget', 'probe_runs', 'probe_run_scopes'])
+                await assert.rejects(f.reader.pool.query(`DELETE FROM ${table}`), {code:'ER_TABLEACCESS_DENIED_ERROR'});
+            for(const sql of ['UPDATE probe_runs SET revision=revision', 'UPDATE probe_run_scopes SET rows_expired=rows_expired',
+                "INSERT INTO probe_run_scopes(scope_id) VALUES('scope-a')"])
+                await assert.rejects(f.reader.pool.query(sql), {code:'ER_TABLEACCESS_DENIED_ERROR'});
             await assert.rejects(f.reader.pool.query('UPDATE probe_instances SET generation=generation'));
             const emptyBefore = await digest(f.db), emptyRequest = pollRequest();
             const empty = parseProbeDelivery('PollResponse', await f.request({ path: pollPath, input: emptyRequest }));

@@ -56,7 +56,9 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         page.on('request', request => {
             const pathname = new URL(request.url()).pathname;
             if (pathname === base + 'relay-plan' && request.method() === 'POST') previews++;
-            else if (pathname.endsWith('/path-preview') && pathname.startsWith(base) && request.method() === 'POST') pathPreviews++;
+            else if (pathname.startsWith(base + 'forwards/') &&
+                /^[^/]+\/(?:path-preview|tunnel-preview)$/.test(pathname.slice((base + 'forwards/').length)) &&
+                request.method() === 'POST') pathPreviews++;
             else if (pathname.startsWith(base) && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method())) {
                 writes++; commands.push({ method: request.method(), path: pathname,
                     key: request.headers()['idempotency-key'], body: request.postDataJSON() });

@@ -7,8 +7,12 @@ const forward = { id: 'forward-a', revision: 7, spec: { protocols: ['tcp'], enab
 const acceptance = { probeId: 'probe-a', forwardId: forward.id, issuedAt, expiresAt, dispatch: 'agent-poll', executionEnabled: false };
 const receipt = (changes = {}) => ({ probeId: 'probe-a', forwardId: forward.id, issuedAt, expiresAt,
   state: 'issued', expired: false, withdrawnAt: null, executionEnabled: false, health: 'unknown', result: null, ...changes });
-const result = () => ({ historical: true, expired: true, acceptedAt: Date.parse(issuedAt) + 50,
-  body: { permitId: 'probe-a', binding: { forwardId: forward.id }, source: 'agent-reported', applicationHealth: 'unknown',
+const result = () => ({ historical: true, expired: true, acceptedAt: Date.parse(issuedAt) + 50, resultDigest: 'sha256:' + 'a'.repeat(64),
+  body: { protocolVersion: 3, probeVersion: 1, kind: 'probe-result', nodeId: 'node-a', bootId: 'boot-a', sessionEpoch: 1,
+    instanceId: 'b'.repeat(64), instanceGeneration: 1, permitId: 'probe-a',
+    binding: { nodeId: 'node-a', bootId: 'boot-a', sessionEpoch: 1, snapshotGeneration: 1, assignmentId: 'assignment-a',
+      forwardId: forward.id, forwardRevision: 7, deploymentGeneration: 1, bindingFence: 1, configDigest: 'sha256:' + 'c'.repeat(64), egressPolicyRevision: 1 },
+    consumedAt: issuedAt, source: 'agent-reported', applicationHealth: 'unknown',
     applicationPayloadBytes: 0, point: 'agent-direct-egress', status: 'connected', code: 'tcp-connected', timeoutMs: 500, issuedAt, expiresAt, elapsedMs: 0,
     measuredAt: issuedAt, validUntil: expiresAt } });
 function harness(handler = async () => ({ probeIssuanceEnabled: true }), confirm = () => true) {

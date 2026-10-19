@@ -49,8 +49,8 @@ async function loadConsoleModule(url, context, modules) {
         candidates,page,store,clearConnectionData};
     }`);
   }
-  const factory = vm.runInContext(`(function({${Object.keys(imports).join(',')}}){
-    'use strict';\n${source}\nreturn {${localExports.join(',')}};
+  const factory = vm.runInContext(`(function(moduleImports){
+    'use strict';\nconst {${Object.keys(imports).join(',')}} = moduleImports;\n${source}\nreturn {${localExports.join(',')}};
   })`, context, { filename: url.pathname });
   const namespace = { ...exported, ...factory(imports) };
   modules.set(url.href, namespace);

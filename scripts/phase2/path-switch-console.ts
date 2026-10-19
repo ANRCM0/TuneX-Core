@@ -13,14 +13,16 @@ interface PathSwitchFixture extends ConsoleFixture {
 /** Real owner/Runtime/Agent switch on the existing copy; source rule remains independent. */
 export async function verifyPathSwitchConsole(page: Page, context: BrowserContext, fixture: PathSwitchFixture) {
     const base = '/api/v1/scopes/' + fixture.scope + '/', templateId = 'console-manual-path';
-    const templatePath = base + 'path-templates/' + templateId, forwardPath = base + 'forwards/' + fixture.copyId + '/path-binding';
+    // The real Console composes logical-tunnel management over PathTemplate;
+    // observe that public route while retaining the same immutable backing data.
+    const templatePath = base + 'tunnels/' + templateId, forwardPath = base + 'forwards/' + fixture.copyId + '/tunnel-binding';
     const nodes = [fixture.spec.ingress.nodeId, ...fixture.spec.path!.via], profile = fixture.spec.transport!;
     const headers = { authorization: 'Bearer ' + fixture.token }, intents: { method: string; path: string; key: string | undefined; body: any }[] = [];
     let plans = 0, proposals = 0;
     page.on('request', request => {
         const path = new URL(request.url()).pathname;
         if (request.method() === 'POST' && path === base + 'relay-plan') plans++;
-        if (request.method() === 'POST' && path === base + 'forwards/' + fixture.copyId + '/path-preview') proposals++;
+        if (request.method() === 'POST' && path === base + 'forwards/' + fixture.copyId + '/tunnel-preview') proposals++;
         if ([templatePath, forwardPath].includes(path) && ['PUT', 'DELETE'].includes(request.method()))
             intents.push({ method: request.method(), path, key: request.headers()['idempotency-key'], body: request.postDataJSON() });
     });
@@ -104,7 +106,7 @@ export async function verifyPathSwitchConsole(page: Page, context: BrowserContex
     await page.locator('#path-switch-references').click();
     await page.waitForFunction(() => document.getElementById('path-switch-page')?.textContent?.includes('total 1.'));
     assert.match((await page.locator('#path-switch-rows').textContent())!, /explicit change available/);
-    const impact = await get('path-templates/' + templateId + '/references?targetRevision=2');
+    const impact = await get('tunnels/' + templateId + '/references?targetRevision=2');
     assert.equal(impact.total, 1); assert.equal(impact.items[0].forwardId, fixture.copyId); assert.equal(impact.items[0].expectedRevision, fixture.revision);
     assert.deepEqual(impact.items[0].proposedSpec.path.via, [nodes.at(-1)]); assert.equal(impact.reserved, false);
     await prepare(2, fixture.revision);
@@ -136,14 +138,14 @@ export async function verifyPathSwitchConsole(page: Page, context: BrowserContex
     await fixture.succeeded(restored.operationId); const restoredDeployment = await ready(nodes);
     assert.ok(restoredDeployment.generation > shortDeployment.generation); await fixture.traffic(fixture.spec.ingress.listen.port);
     const final = await get('forwards/' + fixture.copyId); assert.deepEqual(final.desired.spec, fixture.spec);
-    const provenance = await get('forwards/' + fixture.copyId + '/path-binding');
+    const provenance = await get('forwards/' + fixture.copyId + '/tunnel-binding');
     assert.equal(provenance.history.length, 3); assert.deepEqual(provenance.history.map((record: any) => record.revision), [1, 2, 1]);
     assert.deepEqual(provenance.history.map((record: any) => record.forwardRevision), [fixture.revision, fixture.revision + 1, fixture.revision + 2]);
     assert.deepEqual(provenance.history[1].expandedSpec.path.via, [nodes.at(-1)]);
 
     await page.locator('#path-template-archive').click();
     await page.waitForFunction(() => document.getElementById('path-template-state')?.textContent?.includes('Archived r2'));
-    const archived = await get('path-templates/' + templateId + '/references?targetRevision=1');
+    const archived = await get('tunnels/' + templateId + '/references?targetRevision=1');
     assert.equal(archived.archived, true); assert.equal(archived.total, 1); assert.equal(archived.items[0].unavailableReason, 'TEMPLATE_ARCHIVED');
     assert.deepEqual((await get('forwards/' + fixture.copyId)).desired.spec, fixture.spec); await fixture.traffic(fixture.spec.ingress.listen.port);
     const bindingAttempts = intents.filter(intent => intent.path === forwardPath);

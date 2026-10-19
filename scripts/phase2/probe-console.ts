@@ -81,8 +81,13 @@ export async function verifyDisabledConsole(fixture: ConsoleFixture) {
 export async function issueFromConsole(fixture: ConsoleFixture, forwardId: string) {
     return withBrowser(fixture, async page => {
         await page.locator('[data-view="forwards"]').click();
-        await page.locator('[data-action="forward-probe"][data-id="' + forwardId + '"]').click();
-        await page.waitForFunction(() => document.getElementById('probe-capability')?.textContent?.includes('enabled.'));
+        const [capabilities] = await Promise.all([
+            page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/scopes/${fixture.scope}/execution-capabilities` && response.request().method() === 'GET'),
+            page.locator('[data-action="forward-probe"][data-id="' + forwardId + '"]').click()
+        ]);
+        assert.equal(capabilities.status(), 200);
+        assert.equal((await capabilities.json()).probeIssuanceEnabled, true);
+        await page.waitForFunction(() => document.getElementById('probe-capability')?.textContent?.includes('Control egress issuance=true;'));
         assert.equal(await page.locator('#probe-issue').isDisabled(), false);
         await page.locator('#probe-consent').check();
         const path = `/api/v1/scopes/${fixture.scope}/forwards/${forwardId}/probes`;

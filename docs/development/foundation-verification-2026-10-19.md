@@ -54,6 +54,10 @@ for the changed candidate and requires the applicable checks again.
   current schema profile, retaining explicit old-reader refusal cases.
 - Add synchronization/native JSON/credential/provider and cancellation/example
   contract cases; existing full-suite/race steps execute them in Actions.
+- Collect independent type/test/Web/Go/generated/boundary groups even if another
+  group fails, with a final failing exit status. Vet and race still run after a
+  group failure when dependencies installed successfully. This avoids a stale
+  Web harness preventing any evidence from later independent Go checks.
 
 Static validation has already found real compilation failures, including unused
 Go imports, an invalid variable redeclaration, unsupported TypeScript parameter
@@ -112,6 +116,27 @@ typed same-transaction fake ports; authorization-before-ledger-read and denial
 assertions remain. Container inspection checks follow main/command/native owners,
 with new Agent fake-port cases proving readonly inspection never reaches
 enrollment, instance locks or Runner creation, including every conflicting flag.
+
+### Second Saved Candidate
+
+Head `873dcecc54b0b6174d306d7b589c7efa48e6faf0` used test merge
+`be95f5d07e8cd02ca63d9ea9a4192c70bea283fb`. Container run `39247922694`
+passed. In baseline run `39247922674`, the TypeScript suite reported 630 passing,
+zero failing and 78 skipped cases, including the SQL splitter regressions.
+Deployment tools and Relay isolation/capacity/rotation passed on this revision.
+
+The run then exposed stale Web consumers: a VM wrapper combined destructured
+parameters with a strict directive; a historical receipt fixture lacked the
+closed native record fields; browser waits expected old capability text and
+PathTemplate routes while the canonical UI used Tunnel routes. These are being
+adapted without production credential hooks or weaker assertions.
+
+The phase1 database job passed the preceding MySQL cases, then stopped at a
+restricted Probe fixture missing explicit history-owner table grants. The fix
+keeps public recordIn on the caller transaction, grants only the required history
+operations, retains unrelated-table write denials and whole-database digests for
+reads/refusals/rollback, and tests a failure after history writes. No broad database
+grant or production-owner bypass is intended.
 
 Use the saved revision's Actions job logs and final run conclusions for actual
 passing/failing/skipped cases. This record does not mark readiness cases 1-220 as
