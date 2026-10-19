@@ -134,8 +134,13 @@ async function expiryRefusals(db:MySqlUnitOfWork,id:string){
  const [row]=await rows<{config:string;expiresAt:number;createdAt:number}>(db.pool,'SELECT CAST(config AS CHAR) config,expires_at expiresAt,created_at createdAt FROM probe_plans WHERE scope_id=? AND plan_id=?',['scope-a',id]);assert.ok(row);
  const config=JSON.parse(row.config) as Any,encoded=JSON.stringify(config),literal='"expiresAt":'+String(config.expiresAt);
  assert.ok(encoded.includes(literal));
+ const doubleConfig=encoded.replace(literal,literal+'.0');
+ const [doubleType]=await rows<{type:string}>(db.pool,"SELECT JSON_TYPE(JSON_EXTRACT(CAST(? AS JSON),'$.expiresAt')) type",[doubleConfig]);assert.equal(doubleType!.type,'DOUBLE');
+ const beforeDouble=await snapshot(db),[nativeRow]=await rows<Any>(db.pool,'SELECT * FROM probe_plans WHERE scope_id=? AND plan_id=?',['scope-a',id]);assert.ok(nativeRow);
+ const doubleRow={...nativeRow,plan_id:id+'-raw-double',config:doubleConfig};
+ await assert.rejects(db.transaction(tx=>insertRows(tx,'probe_plans',[doubleRow])),{code:'ER_CHECK_CONSTRAINT_VIOLATED'},'fresh INSERT must reject same-numeric JSON DOUBLE');assert.deepEqual(await snapshot(db),beforeDouble);
  const invalid:[string,string,unknown[]][]=[
-  ['JSON double with equal numeric value','UPDATE probe_plans SET config=? WHERE scope_id=? AND plan_id=?',[encoded.replace(literal,literal+'.0'),'scope-a',id]],
+  ['JSON double with an actual row change','UPDATE probe_plans SET config=?,revision=revision+1 WHERE scope_id=? AND plan_id=?',[doubleConfig,'scope-a',id]],
   ['JSON string','UPDATE probe_plans SET config=? WHERE scope_id=? AND plan_id=?',[JSON.stringify({...config,expiresAt:String(config.expiresAt)}),'scope-a',id]],
   ['JSON null','UPDATE probe_plans SET config=? WHERE scope_id=? AND plan_id=?',[JSON.stringify({...config,expiresAt:null}),'scope-a',id]],
   ['missing JSON expiry','UPDATE probe_plans SET config=JSON_REMOVE(config,\'$.expiresAt\') WHERE scope_id=? AND plan_id=?',['scope-a',id]],
@@ -144,6 +149,12 @@ async function expiryRefusals(db:MySqlUnitOfWork,id:string){
   ['original one-hour lifetime overflow','UPDATE probe_plans SET config=?,expires_at=? WHERE scope_id=? AND plan_id=?',[JSON.stringify({...config,expiresAt:row.createdAt+3600001}),row.createdAt+3600001,'scope-a',id]],
  ];
  for(const [label,sql,args]of invalid){const before=await snapshot(db);await assert.rejects(db.transaction(tx=>write(tx,sql,args)),{code:'ER_CHECK_CONSTRAINT_VIOLATED'},label);assert.deepEqual(await snapshot(db),before,label+' must not change any table');}
+ // MySQL compares JSON numeric values before deciding whether an UPDATE changes a row.
+ // Equal integer/DOUBLE input can be a no-op; prove it retains the original native bytes/type.
+ const nativeSql="SELECT JSON_TYPE(JSON_EXTRACT(config,'$.expiresAt')) type,HEX(CAST(config AS CHAR)) bytes FROM probe_plans WHERE scope_id=? AND plan_id=?";
+ const beforeNoOp=await snapshot(db),nativeBefore=await rows<{type:string;bytes:string}>(db.pool,nativeSql,['scope-a',id]);assert.ok(['INTEGER','UNSIGNED INTEGER'].includes(nativeBefore[0]!.type));
+ await db.transaction(tx=>write(tx,'UPDATE probe_plans SET config=? WHERE scope_id=? AND plan_id=?',[doubleConfig,'scope-a',id]));
+ assert.deepEqual(await rows(db.pool,nativeSql,['scope-a',id]),nativeBefore);assert.deepEqual(await snapshot(db),beforeNoOp);
  // Public maximum-date validation is independent of the narrower persisted SQL guards.
  for(const expiresAt of [-1,253402300800000,Number.MAX_SAFE_INTEGER+1])assert.throws(()=>parseProbePlanConfig({...config,expiresAt}),{code:'INVALID_CONFIG'});
 }

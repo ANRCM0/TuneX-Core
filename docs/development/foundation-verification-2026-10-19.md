@@ -441,3 +441,16 @@ GITHUB_ACTIONS native tests run in contracts; Chromium/namespace cases have thei
 named jobs. Evidence IDs E1-E406 include configuration, asset and scenario sources;
 they are not406 distinct executed test suites. Actual step outcomes and condition
 skips must still be reconciled against the final candidate.
+
+Candidate `798a9ab0ee3165f28e7026818458af9beeb181be` ran baseline
+`39329900881` at checkout `a55c12c1313df2f75c4c10f9382b068f26ac3cae`.
+All nine other jobs passed, including the five targeted macOS unsupported-provider
+packages; packaging `39329900909` passed. Contracts reported1946 passes,
+zero failures and143 database-conditional skips, routed separately in phase1;
+Web153/153 passed. phase1 passed the original ten Probe history/plan tests and
+all other configured groups. Only two new expiry-refusal tests failed because
+same-numeric JSON UPDATE can be a native no-op retaining the valid integer.
+The corrected fixture proves CAST input DOUBLE, rejects fresh INSERT and a real
+revision-changing UPDATE, and separately proves the original no-op retains exact
+integer bytes and every table. No further production or DDL change is made.
+This correction requires the next candidate's own full execution.

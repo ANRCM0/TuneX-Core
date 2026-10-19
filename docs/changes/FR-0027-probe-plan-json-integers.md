@@ -98,6 +98,17 @@ example, configured 3/4/8-node/browser/network and container jobs. Record saved
 head and actual PR test-merge checkout separately. Physical independent hosts,
 long-running/load gates, standalone Responder delivery and release remain separate.
 
+Candidate798a9ab, baseline39329900881 at checkout
+a55c12c1313df2f75c4c10f9382b068f26ac3cae, passed all original finite-plan
+transaction/quota/scheduler cases after0038. Its two new tests incorrectly expected
+a same-numeric JSON UPDATE to evaluate CHECK: MySQL compares records first and
+can retain the existing integer without a row change. The revised assertions
+first prove the input parses as DOUBLE, then require a fresh INSERT and an UPDATE
+with a real revision change to refuse. The original equal-value UPDATE separately
+must preserve stored integer type, exact bytes and every table. The correction
+changes test evidence, not the schema or public parser; new exact-source execution
+remains required.
+
 ## Source Authorization And Acceptance Gate
 
 Chosen under the standing source authorization: implement the narrow additive
