@@ -203,7 +203,7 @@ const stamp = value => value === null ? '未知 / 无记录（不是零）' : va
 const show = value => value === null || value === undefined ? '未知 / 无记录（不是零）' : typeof value === 'object' ?
   JSON.stringify(value, (_, item) => instant(item) ? stamp(item) : item, 2) : instant(value) ? stamp(value) : String(value);
 
-export function initForwardDiagnostics({ request, byId, notify, getScope, document = globalThis.document, confirm = globalThis.confirm }) {
+export function initForwardDiagnostics({ request, byId, notify, getScope, summarizeDiagnosticRecord, document = globalThis.document, confirm = globalThis.confirm }) {
   const el = name => byId('forward-diagnostic-' + name);
   let forward = null, scope = null, epoch = 0, controller = null, displayed = null;
   function controls() { el('reload').disabled = !forward || Boolean(controller); el('cancel').disabled = !controller;
@@ -223,9 +223,30 @@ export function initForwardDiagnostics({ request, byId, notify, getScope, docume
     }
     table.append(head, body); wrap.append(table); area.append(wrap); el('layers').append(area);
   }
+  function statusOverview(data) {
+    const s = summarizeDiagnosticRecord(data), op = s.operations;
+    const deployment = s.deployment ? { stage: s.deployment.stage, matchesIntent: s.deployment.matchesIntent, authorizationUntil: s.deployment.authorizationUntil } : '无 Relay 部署记录（Direct 为预期）';
+    const cleanup = s.cleanup ? { complete: s.cleanup.complete, slots: s.cleanup.slots, retirements: s.cleanup.retirements,
+      leases: s.cleanup.leases, truncated: s.cleanup.slotsTruncated || s.cleanup.retirementsTruncated || s.cleanup.leasesTruncated } : '无清理投影';
+    const nodes = s.nodes ? { expected: s.nodes.total, fresh: s.nodes.fresh, stale: s.nodes.stale, unknown: s.nodes.unknown,
+      missingEvidence: s.nodes.missing, revoked: s.nodes.revoked, currentSession: s.nodes.currentSession, currentSnapshot: s.nodes.currentSnapshot } : '无节点投影';
+    const listeners = s.listeners ? { current: s.listeners.current, historical: s.listeners.historical, reportFresh: s.listeners.reportFresh,
+      nodeEvidenceMatches: s.listeners.nodeEvidenceMatches, ready: s.listeners.ready, degraded: s.listeners.degraded, error: s.listeners.error,
+      unknown: s.listeners.unknown, truncated: s.listeners.truncated } : '无监听投影';
+    const probe = s.probe ? { records: s.probe.total, withResult: s.probe.withResult, windowOpen: s.probe.windowOpen,
+      truncated: s.probe.truncated, historyComplete: s.probe.historyComplete } : '无 Probe 投影';
+    section('0 · 状态解释总览', ['Operation / 部署 / 清理','节点 / 监听 / Probe','来源与偏差'], [
+      [{ total: op.total, accepted: op.accepted, running: op.running, succeeded: op.succeeded, failed: op.failed,
+        superseded: op.superseded, cleanupPending: op.cleanupPending, truncated: op.truncated }, deployment, cleanup],
+      [nodes, listeners, probe],
+      [{ capturedAt: s.capturedAt, source: s.source, consistency: s.consistency, health: s.health },
+        { partial: s.partial, stale: s.stale, unknown: s.unknown }, s.note],
+    ], '这些是同一只读投影的计数与偏差标记，不是健康结论。Accepted/Operation、Applied 证据、Listener 发布元组、Probe 结果分别显示；truncated=true 表示当前页被截断，不表示零或已清理。');
+  }
   function render(data) {
     const i = data.intent, b = data.support.bundle;
     el('meta').textContent = '采集 ' + stamp(data.capturedAt) + '\n' + data.source + ' / ' + data.consistency + '\nnetworkCheck=not-performed / health=unknown / executionAuthorized=false\nSnapshot digest 仅投影，未重算；不是全库快照或完整历史。';
+    statusOverview(data);
     section('1 · 意图', ['Forward / 修订 / 模式','期望与隔离','路径 / 监听 / Transport'], [[i.forwardId + ' / r' + i.revision + ' / ' + i.mode,
       { enabled: i.enabled, deleting: i.deleting, recoverySuspended: i.recoverySuspended, protocols: i.protocols }, { path: i.path, listen: i.listen, transport: i.transport }]],
     '期望启用、停用、删除或恢复挂起均不是运行健康。此处不执行任何命令。');

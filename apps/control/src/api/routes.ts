@@ -176,6 +176,8 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
     app.get('/console/ingress-groups.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('ingress-groups.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/ingress-migrations.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('ingress-migrations.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/forward-diagnostics.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('forward-diagnostics.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/forward-status.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('forward-status.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    app.get('/console/forward-preflight.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('forward-preflight.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/audit-console.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('audit-console.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/station-alerts.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('station-alerts.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/notification-endpoints.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('notification-endpoints.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });

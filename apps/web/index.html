@@ -54,6 +54,21 @@
         <div class="explain-grid"><div><b>Desired</b><p>用户希望系统如何转发；Revision 代表配置版本。</p></div><div><b>Operation</b><p>Control 是否已经接收、执行或完成部署动作。</p></div><div><b>Applied</b><p>Agent 实际应用且仍新鲜的部署观察结果。</p></div><div><b>Health</b><p>Agent 上报的运行状况；不等于独立端到端探测。</p></div></div>
       </section>
       <section class="panel"><div class="panel-head"><h2>使用说明</h2></div><p class="muted">从“节点管理”确认 Agent 能力和端口授权，再到“转发管理”创建规则。202 Accepted 仅表示任务已持久接收，不代表执行完成。默认关闭的受限 TCP 探测只检查 Direct 已有目标的 TCP 连接，不发送应用数据，不把 Agent 在线或历史连接成功当作当前业务健康。</p></section>
+      <section class="panel" aria-labelledby="ops-title">
+        <div class="panel-head"><h2 id="ops-title">运维闭环 · 只读</h2><span id="ops-status" class="hint" role="status"></span></div>
+        <div class="explain-grid">
+          <div><b>失败 Operation（当前页）</b><div id="ops-failed-operations" class="hint"></div></div>
+          <div><b>报告过期 / 已撤销节点（当前页）</b><div id="ops-stale-nodes" class="hint"></div></div>
+        </div>
+        <div class="actions"><button id="ops-audit" type="button" class="secondary">管理审计</button><button id="ops-alerts" type="button" class="secondary">站内事件</button><button id="ops-notifications" type="button" class="secondary">通知端点</button><button id="ops-operations" type="button" class="secondary">执行记录</button><button id="ops-forwards" type="button" class="secondary">转发分层诊断</button></div>
+        <p class="hint">数据库不可达或请求失败时，页面显示错误并保留“未知”，不会把缺失记录当作零或健康。支持包在 Forward 分层诊断中按同次读取生成；升级评估与恢复仍由原 ops/Authority/Journal owner 执行，本页不提供写操作。</p>
+      </section>
+      <section class="panel" aria-labelledby="topology-entry-title">
+        <div class="panel-head"><h2 id="topology-entry-title">固定拓扑与人工切换 · 入口</h2></div>
+        <p class="muted">精确模板、候选组、持久发布与入口迁移均已存在。本面板只提供导航，不自动发布、不自动切换、不推断物理主机拓扑。</p>
+        <div class="actions"><button id="topology-templates" type="button" class="secondary">路径模板</button><button id="topology-groups" type="button" class="secondary">候选组 / 手动切换</button><button id="topology-publications" type="button" class="secondary">持久组发布</button><button id="topology-ingress" type="button" class="secondary">入口组 / 迁移</button></div>
+        <p class="hint">发布以 previewDigest、expectedRevision CAS、逐位置 apply/compensate 和 Operation 为准；不承诺跨 Forward 全局原子、自动回滚、自动故障转移或物理主机验收。</p>
+      </section>
     </section>
 
     <section id="view-nodes" class="view" hidden>
@@ -99,6 +114,12 @@
         </div>
         <label class="check"><input name="enabled" type="checkbox" checked> 创建或更新后请求启用</label>
         <p id="forward-capabilities" class="hint"></p>
+        <div id="forward-preflight" class="panel" aria-labelledby="forward-preflight-title">
+          <h4 id="forward-preflight-title">逐节点能力预检（只读）</h4>
+          <p id="forward-preflight-summary" class="hint" role="status"></p>
+          <div class="table-wrap inner-table"><table><thead><tr><th>节点</th><th>结论</th><th>不可选原因</th><th>报告</th></tr></thead><tbody id="forward-preflight-rows"></tbody></table></div>
+          <p class="hint">仅基于当前页已加载节点与 Node Policy 能力声明；平台、角色、flag 未单独上报时显示未知。预检不授予执行，提交时服务端独立校验授权、目标、端口和凭据。</p>
+        </div>
         <div class="actions"><button id="save-forward" type="submit">提交操作</button><button id="cancel-forward" class="secondary" type="button">取消</button></div>
       </form>
       <form id="forwards-filter" class="query-controls panel" aria-label="转发服务端筛选">
@@ -112,7 +133,7 @@
         <div class="actions"><span id="rule-selection" class="hint" role="status">0 / 10 selected on this page</span><button id="rule-batch-enable" type="button" class="secondary" disabled>预览批量启用</button><button id="rule-batch-disable" type="button" class="secondary" disabled>预览批量停用</button></div>
         <p class="hint">最多选择当前页 10 条，刷新/筛选/翻页清空选择。逐条使用原 CAS 与独立幂等键，结果可以部分失败；无跨规则原子性、自动回滚或后台重试。列表中恢复挂起的规则不纳入批次，请先走原恢复审查；页面选择不是服务端安全边界。</p>
       </section>
-      <div class="panel table-wrap"><table><thead><tr><th>入口与端口</th><th>目标</th><th>协议</th><th>期望状态</th><th>操作状态</th><th>操作</th></tr></thead><tbody id="forward-rows"><tr><td colspan="6" class="empty">连接后加载转发</td></tr></tbody></table></div>
+      <div class="panel table-wrap"><table><thead><tr><th>入口与端口</th><th>目标</th><th>协议</th><th>期望状态</th><th>运行状态</th><th>操作状态</th><th>操作</th></tr></thead><tbody id="forward-rows"><tr><td colspan="7" class="empty">连接后加载转发</td></tr></tbody></table></div>
       <div id="forwards-pagination" class="pagination"></div>
     </section>
 
@@ -566,6 +587,7 @@
   <div class="query-controls"><label>历史范围<select id="telemetry-range"><option value="900000">最近 15 分钟</option><option value="3600000">最近 1 小时</option><option value="86400000">最近 24 小时</option></select></label><label>最多点数<select id="telemetry-limit"><option value="128">128</option><option value="256">256</option><option value="512">512</option></select></label><button id="telemetry-reload" type="button" class="secondary">手动读取</button></div>
   <p id="telemetry-state" class="hint" role="status" aria-live="polite"></p>
   <p id="telemetry-meta" class="hint"></p>
+  <p class="hint">指标语义：source 以面板响应为准（原始族为 agent-reported）；health 通常为 unknown / executionAuthorized=false。delta 仅在相邻连续样本内计算速率；baseline/gap/counter-reset/historical/unavailable/overflowed/terminal 不推算。coverage 的 returned/available、omitted/truncated 与 tails 淘汰分别表示窗口覆盖和保留边界；historyComplete=false。fresh 仅表示当前会话且接收时间在 30 秒内；stale/historical 不是当前健康。缺测不补零，图表点不是分母，四族指标互不替代。</p>
   <div id="telemetry-latest" class="metrics"></div>
   <div class="table-wrap inner-table"><table><thead><tr><th>采集 / 接收时间（Asia/Shanghai）</th><th>会话 / 连续性</th><th>进程 Heap / Runtime / 峰值 RSS</th><th>Goroutine / FD</th><th>存量 TCP / UDP / 排空实例</th><th>区间 CPU / 丢弃样本</th></tr></thead><tbody id="telemetry-rows"></tbody></table></div>
   <p class="hint">只按手动选择的有界时间窗读取，不自动轮询。原始记录按 24 小时窗口显示、每节点最多 8640 点，过期物理清理分批进行；未送达样本不补发，Agent 重启建立新基线，不删除已存历史。截断、缺口和无数据不是零值。CPU 仅在同一采样会话连续区间按进程 CPU 时间差 / uptime 差计算，可超过 100%；不跨缺口或重置推算。峰值 RSS 是进程峰值，不是主机总内存。null 表示平台不支持或未提供。</p>
@@ -576,6 +598,7 @@
   <div class="query-controls"><label>历史范围<select id="forward-telemetry-range"><option value="900000">最近 15 分钟</option><option value="3600000">最近 1 小时</option><option value="86400000">最近 24 小时</option></select></label><label>最多实例点<select id="forward-telemetry-limit"><option value="128">128</option><option value="256">256</option><option value="512">512</option></select></label><button id="forward-telemetry-reload" type="button" class="secondary">手动读取</button></div>
   <p id="forward-telemetry-state" class="hint" role="status" aria-live="polite"></p>
   <p id="forward-telemetry-meta" class="hint"></p>
+  <p class="hint">指标语义：source 以面板响应为准（原始族为 agent-reported）；health 通常为 unknown / executionAuthorized=false。delta 仅在相邻连续样本内计算速率；baseline/gap/counter-reset/historical/unavailable/overflowed/terminal 不推算。coverage 的 returned/available、omitted/truncated 与 tails 淘汰分别表示窗口覆盖和保留边界；historyComplete=false。fresh 仅表示当前会话且接收时间在 30 秒内；stale/historical 不是当前健康。缺测不补零，图表点不是分母，四族指标互不替代。</p>
   <div id="forward-telemetry-latest" class="metrics"></div>
   <div class="table-wrap inner-table"><table><thead><tr><th>完整入口实例身份</th><th>采集 / 接收时间（Asia/Shanghai + UTC）</th><th>状态 / 机器会话观察</th><th>实例累计（不是 Forward 合计）</th><th>连续区间 / 精确字节速率</th><th>导出与覆盖缺口</th><th>历史发布映射（非当前绑定）</th></tr></thead><tbody id="forward-telemetry-rows"></tbody></table></div>
   <p class="hint">手动读取，不自动轮询；接收默认关闭，页面不会启用采集。累计值使用十进制整数，速率仅按连续区间计算并截断至三位小数，不跨缺口/重置/溢出/终态外推。Direct 正数 Write 即使返回错误也计入已写字节；Relay TCP 只计完整成功业务帧，失败部分帧不补算；UDP 完整成功的空包增加次数但不增加字节。没有端到端交付、主机网卡字节或链路健康结论。</p>
@@ -586,6 +609,7 @@
   <p class="hint">独立、默认关闭的 agent-reported 只读观察，scope=agent-visible-os。Agent 所见 OS / 根文件系统 / 网络命名空间不等于已验证的物理宿主，也不是 cgroup CPU/内存限制。它们不代表进程用量、规则 payload、健康或容量承诺；本页面不启动 Probe 或执行命令。</p>
   <div class="query-controls"><label>历史范围<select id="host-telemetry-range"><option value="900000">最近 15 分钟</option><option value="3600000">最近 1 小时</option><option value="86400000">最近 24 小时</option></select></label><label>最多样本<select id="host-telemetry-limit"><option value="128">128</option><option value="256">256</option><option value="512">512</option></select></label><button id="host-telemetry-reload" type="button" class="secondary">手动读取</button></div>
   <p id="host-telemetry-state" class="hint" role="status" aria-live="polite"></p><p id="host-telemetry-meta" class="hint"></p>
+  <p class="hint">指标语义：source 以面板响应为准（原始族为 agent-reported）；health 通常为 unknown / executionAuthorized=false。delta 仅在相邻连续样本内计算速率；baseline/gap/counter-reset/historical/unavailable/overflowed/terminal 不推算。coverage 的 returned/available、omitted/truncated 与 tails 淘汰分别表示窗口覆盖和保留边界；historyComplete=false。fresh 仅表示当前会话且接收时间在 30 秒内；stale/historical 不是当前健康。缺测不补零，图表点不是分母，四族指标互不替代。</p>
   <div id="host-telemetry-latest" class="metrics"></div>
   <p id="host-telemetry-network-meta" class="hint"></p>
   <div class="table-wrap inner-table"><table class="host-network-table"><thead><tr><th>Agent 网络命名空间接口</th><th>累计 RX（不是规则 payload）</th><th>累计 TX（不推导速率）</th></tr></thead><tbody id="host-telemetry-network-rows"></tbody></table></div>
@@ -598,6 +622,7 @@
   <p class="hint">独立、默认关闭的 agent-reported 计数观察，不签发、领取或执行 Probe，不修改原 TCP 探测/回执流程。按完整 Direct TCP 发布绑定、Probe 实例和 counter epoch 隔离；最新一项不是 Forward 总计，也不是健康、网络丢包率或每个许可的审计证明。</p>
   <div class="query-controls"><label>历史范围<select id="probe-telemetry-range"><option value="900000">最近 15 分钟</option><option value="3600000">最近 1 小时</option><option value="86400000">最近 24 小时</option></select></label><label>最多实例点<select id="probe-telemetry-limit"><option value="128">128</option><option value="256">256</option><option value="512">512</option></select></label><button id="probe-telemetry-reload" type="button" class="secondary">手动读取</button></div>
   <p id="probe-telemetry-state" class="hint" role="status" aria-live="polite"></p><p id="probe-telemetry-meta" class="hint"></p>
+  <p class="hint">指标语义：source 以面板响应为准（原始族为 agent-reported）；health 通常为 unknown / executionAuthorized=false。delta 仅在相邻连续样本内计算速率；baseline/gap/counter-reset/historical/unavailable/overflowed/terminal 不推算。coverage 的 returned/available、omitted/truncated 与 tails 淘汰分别表示窗口覆盖和保留边界；historyComplete=false。fresh 仅表示当前会话且接收时间在 30 秒内；stale/historical 不是当前健康。缺测不补零，图表点不是分母，四族指标互不替代。</p>
   <div id="probe-telemetry-latest" class="metrics"></div>
   <div class="table-wrap inner-table"><table><thead><tr><th>完整绑定 / Probe 实例</th><th>采集 / 接收（Asia/Shanghai + UTC）</th><th>状态 / 机器会话观察</th><th>累计与 inFlight gauge</th><th>连续区间（不是全部尝试失败率）</th><th>导出 / 覆盖缺口</th><th>接收时来源（非当前权限）</th></tr></thead><tbody id="probe-telemetry-rows"></tbody></table></div>
   <p class="hint">attempted/succeeded/failed/unknown 是独立累计，inFlight 是 gauge，不能求负差当重置。前期在途任务可在本期完成，因此完成数大于本期 attempted 不代表计数回退。有效结果子集占比仅为 failed/(succeeded+failed)，不把 unknown/inFlight 或缺尾视为全部 attempt 的失败率。区间比例仅在连续且前后 inFlight 都为 0、unknown 增量为 0 时显示；仍只属于该实例、该有效结果子集，不推断当前健康。</p>
@@ -617,6 +642,7 @@
   <div class="actions"><button id="telemetry-aggregate-reload" type="button" class="secondary">手动读取 / 重建窗口</button><button id="telemetry-aggregate-next" type="button" class="secondary" disabled>同一固定窗口下一页</button><button id="telemetry-aggregate-capacity" type="button" class="secondary">单独读取 Scope 容量</button></div>
   <p id="telemetry-aggregate-state" class="hint" role="status" aria-live="polite"></p>
   <p id="telemetry-aggregate-meta" class="hint"></p>
+  <p class="hint">指标语义：source 以面板响应为准（原始族为 agent-reported）；health 通常为 unknown / executionAuthorized=false。delta 仅在相邻连续样本内计算速率；baseline/gap/counter-reset/historical/unavailable/overflowed/terminal 不推算。coverage 的 returned/available、omitted/truncated 与 tails 淘汰分别表示窗口覆盖和保留边界；historyComplete=false。fresh 仅表示当前会话且接收时间在 30 秒内；stale/historical 不是当前健康。缺测不补零，图表点不是分母，四族指标互不替代。</p>
   <pre id="telemetry-aggregate-capacity-output" aria-label="整个 Scope 的逻辑容量观察"></pre>
   <div class="table-wrap inner-table"><table><thead><tr><th>精确 Series Key / 完整实例身份</th><th>UTC 桶 / Asia/Shanghai / 接收与采集边界</th><th>Gauge 采样统计（非时间加权）</th><th>原始累计观察（不求和）</th><th>有效连续增量 / 各指标合格时长</th><th>缺测 / 重置 / 覆盖质量</th><th>连续区间覆盖与归属</th></tr></thead><tbody id="telemetry-aggregate-rows"></tbody></table></div>
   <p class="hint">只手动读取，五秒超时，无轮询、无自动重试。新读取按当前 UTC 分钟/小时对齐，包含尚未关闭的当前桶；下一页固定原 from/to/family/resolution/series/limit，但 keyset 不是全库快照，更新与清理可能改变剩余结果。更换筛选、关闭或断开会取消本地等待并清除输出。</p>
