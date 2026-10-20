@@ -30,13 +30,68 @@ Probe/Relay Chromium 和 3/4/8 节点 namespace 故障恢复，以及容器构�
 逐项结果、条件跳过与实际运行号以验证记录为准，不能拼接旧修订绿灯。
 本地仅执行获授权的静态检查，未运行功能、MySQL、网络或浏览器实验。
 
+## 2026-10-20 C1–D2 源码批次
+
+当前未提交工作树已写入 C1–C4/D2 的只读 Web 切片：
+
+- C1 状态解释：Forward 列表增加运行状态摘要；分层诊断增加 Operation/Listener/
+  Probe/清理计数与 partial/stale/unknown 说明。摘要来自既有 `GET forwards/:id`
+  与诊断响应，不新增权威或健康结论。列表当前按可见行逐条读取（最多 25 条），
+  未新增批量契约；D1 需测量该读取模式，若成为瓶颈再加批量读模型。
+- C2 能力预检：转发表单按已加载 Node Policy 展示逐节点可选/不可选/未知原因；
+  平台、角色、flag 未单独上报时保持 unknown，提交仍由服务端独立校验。
+- C3 指标解释：四族 telemetry 与聚合面板增加来源、delta、coverage、freshness
+  和缺测语义说明；不新增采集、聚合或健康判断。
+- C4 运维闭环：概览增加当前页失败 Operation、报告过期/撤销节点、审计/告警/
+  通知/执行记录入口与数据库失败不补零说明。
+- D2 固定拓扑入口：概览增加路径模板、候选组/手动切换、持久发布、入口迁移的
+  统一导航；不改变 Path/Ingress 命令、CAS、补偿或 Operation 语义。
+
+D1 仅记录[负载基线评估方案](load-baseline-2026-10-20.md)，未执行负载、长稳或
+资源实验。本批行为参考 ForwardX `0f8d096`（2.3.286，AGPL-3.0-only）的状态计数、
+预检和指标语义，但为 TuneX L2 独立实现，未复制源码；临时参考克隆已清理。
+本轮源码完成后，已按 2026-10-20 验收授权执行本地单测、类型、边界、契约、Go
+构建/UDP smoke（结果见下）；MySQL/mTLS、浏览器、Actions、容器、独立物理主机和
+长稳/负载实验未执行，未提交或推送。D1 仍未执行；不得据此宣称正式发行或完整
+D2/跨环境验收。
+
+计划验收覆盖（完整验收仍需相应环境执行）：C1 覆盖 Direct ready/partial/unknown、过期/缺失报告、
+多节点计数、truncated、迟到响应不覆盖新结果；C2 覆盖撤销、凭据过期、报告过期、
+缺能力、未知 Policy 及服务端拒绝；C3 覆盖 baseline/gap/counter-reset/historical/
+unavailable/overflowed/terminal、coverage 截断与缺测不补零；C4 覆盖失败 Operation、
+过期节点、权限裁剪、数据库/请求失败和只读导航；D2 只验证现有 Path/Ingress 入口、
+CAS/补偿/Operation 语义未变及人工切换导航。
+
+## 2026-10-20 C1–D2 本地验收
+
+测试树为 `84d1a35` 加本批未提交变更（dirty tree，无独立提交）。结果：
+
+| 命令 | 结果 |
+| --- | --- |
+| `npm run test:web` | 166/166 通过，0 失败 |
+| `npm test` | 1936 通过，153 跳过，0 失败 |
+| `npm run typecheck` | 通过 |
+| `npm run test:boundaries` | 952 个源文件检查通过；18/18 测试通过 |
+| `npm run contracts:check` | 通过 |
+| `npm run test:go` | 全包通过 |
+| `npm run build:go` | 通过 |
+| `npm run test:udp-smoke` | 2/2 通过 |
+| `node scripts/verify-offline-plan.mjs` | 通过 |
+
+新增测试合计 13/13 通过（`forward-status.test.mjs` 7 项、`forward-preflight.test.mjs`
+6 项）；`console-module-assets` 验证新增 `forward-status.js`/`forward-preflight.js`
+的固定路由、安全头和字节一致性。`npm test` 的 153 个跳过仍是数据库条件项，不是数据库
+通过；本地未执行 MySQL/mTLS、浏览器、Actions、容器、独立物理主机或长稳/负载
+实验，D1 仍未执行。该证据绑定 dirty tree，不能替代准确提交修订的 Actions 验收，
+也不代表正式发行。
+
 ## 后续进入条件
 
 后续模块可消费上述冻结公共接口或经过独立验证的后继修订；任务仍需明确授权，
 采用独立分支／worktree、模块目录、公共入口、契约测试和集成说明。当前 main 已
 包含 PR #112（`5a764f7`）；`373c291` 只是此前的 A5 合并点，不要从旧 main 推定
 B 接口已集成。
-C1 状态解释是计划中的下一包，本轮没有开始实现；后续顺序见
+C1–C4/D2 的源码切片已写入未提交工作树，尚未验收；后续顺序见
 [开发方案](development-plan.md)与[下一阶段目标](next-milestones.md)。
 
 独立物理多主机、长稳／负载、独立 Responder 构建发布、正式发行与生产就绪

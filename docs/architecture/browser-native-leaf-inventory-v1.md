@@ -79,6 +79,23 @@ connection-version state. Some leaves also track Scope explicitly; others rely o
 that original request binding. This document does not invent a uniform Scope,
 cloning, cancellation, command-key, return-shape or error policy across them.
 
+## Shared Pure Helper
+
+`apps/web/forward-status.js` is an L2 pure projection helper, not another leaf.
+`browser-native/control-console.js` imports it directly; the composition root
+passes `summarizeDiagnosticRecord` into `initForwardDiagnostics` as an initializer
+input so the diagnostics leaf retains no source import. The helper only validates
+the fields it displays, derives bounded Operation/Listener/Probe counts and
+unknown/partial flags, and performs no HTTP, DOM, storage, command or health
+decision.
+
+`apps/web/forward-preflight.js` is a second L2 pure helper, consumed only by
+`browser-native/control-console.js`. It derives per-node capability/credential/
+report-freshness reasons from the already loaded Node Policy. Platform, role and
+flag dimensions remain `unknown`; the result is advisory and does not grant
+execution. The service still validates authorization, target, port and credential
+on submit.
+
 ## Native Responsibilities And Actual Request Triggers
 
 | Leaf | Actual format/view/lifecycle responsibilities and bounded behavior |

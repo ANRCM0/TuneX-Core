@@ -69,7 +69,8 @@ export type NativeControlConsoleAsset = 'index.html' | 'app.js' | 'model.js' | '
     'browser-native/relay-forms.js' | 'browser-native/relay-console.js' |
     'probe.js' | 'transport-console.js' | 'rule-console.js' | 'tunnel-console.js' | 'path-templates.js' |
     'observation-services.js' | 'path-groups.js' | 'path-publications.js' | 'ingress-groups.js' |
-    'ingress-migrations.js' | 'forward-diagnostics.js' | 'audit-console.js' | 'station-alerts.js' |
+    'ingress-migrations.js' | 'forward-diagnostics.js' | 'forward-status.js' | 'forward-preflight.js' |
+    'audit-console.js' | 'station-alerts.js' |
     'notification-endpoints.js' | 'notification-deliveries.js' | 'probe-runs.js' | 'probe-plans.js' |
     'telemetry-console.js' | 'forward-telemetry-console.js' | 'host-telemetry-console.js' |
     'probe-telemetry-console.js' | 'telemetry-aggregate-console.js' | 'style.css';

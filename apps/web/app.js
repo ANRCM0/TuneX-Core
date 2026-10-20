@@ -19,6 +19,7 @@ import { initPathPublications } from './path-publications.js';
 import { initIngressGroups } from './ingress-groups.js';
 import { initIngressMigrations } from './ingress-migrations.js';
 import { initForwardDiagnostics } from './forward-diagnostics.js';
+import { summarizeDiagnosticRecord } from './forward-status.js';
 import { initAuditConsole } from './audit-console.js';
 import { initStationAlerts } from './station-alerts.js';
 import { initNotificationEndpoints } from './notification-endpoints.js';
@@ -31,6 +32,6 @@ mountControlConsole({
   initRelayConsole, initProbeConsole, initProbeRuns, initProbePlans, initTransportConsole, initRuleConsole, initTunnelConsole,
   initTelemetryConsole, initForwardTelemetryConsole, initHostTelemetryConsole, initProbeTelemetryConsole,
   initTelemetryAggregateConsole, initPathTemplates, initPathSwitch, initPathGroups, initPathPublications, initIngressGroups,
-  initIngressMigrations, initForwardDiagnostics, initAuditConsole, initStationAlerts, initNotificationEndpoints,
-  initNotificationDeliveries, initObservationServices,
+  initIngressMigrations, initForwardDiagnostics: options => initForwardDiagnostics({ ...options, summarizeDiagnosticRecord }),
+  initAuditConsole, initStationAlerts, initNotificationEndpoints, initNotificationDeliveries, initObservationServices,
 });

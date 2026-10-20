@@ -1,3 +1,6 @@
+import { summarizeForwardRecord } from '../forward-status.js';
+import { explainNodePreflight, summarizePreflight } from '../forward-preflight.js';
+
 export function mountControlConsole({
   validScope, parsePorts, parseCidrs, directCapable, allowedProtocols, directSpec, stateTone, pageCount, listResource, candidateChoices,
   createRequests, initRelayConsole, initProbeConsole, initProbeRuns, initProbePlans, initTransportConsole, initRuleConsole,
@@ -15,6 +18,9 @@ const candidatePages = { direct: 1, relay: 1 };
 const filters = { nodes: {}, forwards: {}, operations: {} };
 const readVersions = {};
 const totals = { nodes: 0, forwards: 0, operations: 0 };
+const forwardStatusCache = new Map();
+const forwardStatusCells = new Map();
+let forwardStatusEpoch = 0;
 const consoleRequests = createRequests({ scope: () => auth.scope, token: () => auth.token, version: () => connectionVersion });
 const { connected, request, mutate } = consoleRequests;
 let currentView = 'overview';
@@ -73,9 +79,9 @@ async function load(kind) {
   if (version !== readVersions[kind]) return;
   store[kind] = result.items;
   totals[kind] = result.total;
-  if (kind === 'nodes') renderNodes();
+  if (kind === 'nodes') { renderNodes(); renderForwardPreflight(); renderOps(); }
   if (kind === 'forwards') renderForwards();
-  if (kind === 'operations') renderOperations();
+  if (kind === 'operations') { renderOperations(); renderOps(); }
   pagination(kind, result);
 }
 async function loadOverview() {
@@ -114,6 +120,33 @@ async function refresh() {
 function updateOverview() {
   for (const [id, key] of [['nodes', 'nodes'], ['forwards', 'forwards'], ['running', 'activeOperations'], ['failed', 'failedOperations']])
     byId('metric-' + id).textContent = overview ? String(overview[key]) : '—';
+  renderOps();
+}
+function renderOps() {
+  const status = byId('ops-status'), failedBox = byId('ops-failed-operations'), staleBox = byId('ops-stale-nodes');
+  if (!status || !failedBox || !staleBox) return;
+  const failed = store.operations.filter(item => item.status === 'failed').slice(0, 5);
+  const now = Date.now();
+  const stale = store.nodes.filter(node => node.revoked || !node.lastReportAt ||
+    !Number.isFinite(Date.parse(node.lastReportAt)) || now - Date.parse(node.lastReportAt) > 90000).slice(0, 5);
+  status.textContent = 'Scope 全量失败 Operation ' + (overview ? overview.failedOperations : '—') +
+    ' · 当前页失败 ' + failed.length + ' · 当前页报告过期/撤销 ' + stale.length;
+  failedBox.replaceChildren();
+  if (!failed.length) failedBox.append(element('span', '当前页无失败 Operation；缺失不等于成功。', 'subline'));
+  for (const item of failed) {
+    const row = element('div', undefined, 'cell-actions');
+    row.append(element('span', shortId(item.id) + ' · r' + item.targetRevision + ' · ' + date(item.updatedAt), 'subline'),
+      button('查看', 'operation-detail', item.id, 'secondary'));
+    failedBox.append(row);
+  }
+  staleBox.replaceChildren();
+  if (!stale.length) staleBox.append(element('span', '当前页无过期或已撤销节点；报告新鲜不代表业务健康。', 'subline'));
+  for (const node of stale) {
+    const row = element('div', undefined, 'cell-actions');
+    row.append(element('span', shortId(node.id) + ' · ' + (node.revoked ? '已撤销' : '报告 ' + date(node.lastReportAt)), 'subline'),
+      button('诊断', 'node-diagnostics', node.id, 'secondary'));
+    staleBox.append(row);
+  }
 }
 function pagination(kind, result) {
   const container = byId(kind + '-pagination');
@@ -147,11 +180,39 @@ function renderNodes() {
     tbody.append(tr);
   }
 }
+function paintForwardStatus(target, summary) {
+  target.replaceChildren();
+  target.append(label(summary.label, summary.tone));
+  target.append(element('div', summary.detail, 'subline'));
+  if (summary.operation) target.append(element('div', 'Operation ' + summary.operation.status +
+    (summary.operation.cleanupPending ? ' · 旧资源清理中' : ''), 'subline'));
+  if (summary.receivedAt) target.append(element('div', '报告 ' + date(summary.receivedAt), 'subline'));
+}
+function renderForwardStatus(item, target) {
+  const key = item.id + ':' + item.revision;
+  const cached = forwardStatusCache.get(key);
+  if (cached) { paintForwardStatus(target, cached); return; }
+  const epoch = forwardStatusEpoch;
+  target.append(element('span', '读取中…', 'subline'));
+  request('GET', 'forwards/' + encodeURIComponent(item.id)).then(record => {
+    if (epoch !== forwardStatusEpoch) return;
+    const summary = summarizeForwardRecord(record);
+    forwardStatusCache.set(key, summary);
+    if (forwardStatusCells.get(item.id) === target) paintForwardStatus(target, summary);
+  }).catch(() => {
+    if (epoch !== forwardStatusEpoch) return;
+    if (forwardStatusCells.get(item.id) === target)
+      target.replaceChildren(element('span', '状态不可用 · 不推导成功', 'subline'));
+  });
+}
 function renderForwards() {
   ruleConsole.page();
+  forwardStatusEpoch++;
+  forwardStatusCells.clear();
+  const keepStatuses = new Set();
   const tbody = byId('forward-rows');
   tbody.replaceChildren();
-  if (!store.forwards.length) { const tr = element('tr'); const t = cell(tr, element('span', '暂无 Forward', 'empty')); t.colSpan = 6; tbody.append(tr); }
+  if (!store.forwards.length) { const tr = element('tr'); const t = cell(tr, element('span', '暂无 Forward', 'empty')); t.colSpan = 7; tbody.append(tr); }
   for (const item of store.forwards) {
     const tr = element('tr');
     const a = item.spec;
@@ -163,6 +224,10 @@ function renderForwards() {
     target.append(element('div', 'r' + item.revision + (a.path ? ' · '+(a.path.via.length+1)+' 节点链路' : ' · Direct'), 'subline'));
     cell(tr, label(a.protocols.join(' + ').toUpperCase(), ''));
     cell(tr, label(item.recoverySuspended ? '恢复挂起' : a.enabled ? '希望启用' : '希望停用', item.recoverySuspended ? 'progress' : ''));
+    const status = cell(tr);
+    forwardStatusCells.set(item.id, status);
+    keepStatuses.add(item.id + ':' + item.revision);
+    renderForwardStatus(item, status);
     const operation = cell(tr, item.lastOperation ? label(item.lastOperation.status) : label('无操作记录'));
     if (item.lastOperation) operation.append(button('查看', 'operation-detail', item.lastOperation.id, 'secondary'));
     const action = cell(tr);
@@ -180,6 +245,7 @@ function renderForwards() {
     action.append(group);
     tbody.append(tr);
   }
+  for (const key of forwardStatusCache.keys()) if (!keepStatuses.has(key)) forwardStatusCache.delete(key);
 }
 function renderOperations() {
   const tbody = byId('operation-rows');
@@ -215,6 +281,28 @@ function fillNodes(preferred) {
   addOptions(select, choices.map(n => ({ value: n.id, label: shortId(n.id) + ' · ' + n.policy.capabilities.filter(x => x === 'tcp' || x === 'udp').join('/') })), preferred);
   fillCapabilities();
 }
+function renderForwardPreflight() {
+  const tbody = byId('forward-preflight-rows'), summary = byId('forward-preflight-summary');
+  if (!tbody || !summary) return;
+  tbody.replaceChildren();
+  const protocol = byId('forward-protocol').value;
+  const rows = store.nodes.map(node => explainNodePreflight(node, { protocol }));
+  const counts = summarizePreflight(rows);
+  summary.textContent = '已加载节点 ' + counts.total + ' · 可选 ' + counts.supported + ' · 不可选 ' + counts.unsupported + ' · 未知 ' + counts.unknown;
+  if (!rows.length) {
+    const tr = element('tr'), td = cell(tr, element('span', '节点列表尚未加载；请先在连接后刷新节点。', 'empty'));
+    td.colSpan = 4; tbody.append(tr); return;
+  }
+  for (const row of rows) {
+    const tr = element('tr');
+    cell(tr, element('span', shortId(row.nodeId), 'mono'));
+    cell(tr, label(row.label, row.tone));
+    const dimensions = '平台 ' + row.dimensions.platform + ' / 角色 ' + row.dimensions.roles + ' / flag ' + row.dimensions.flags;
+    cell(tr, element('span', (row.reasons.length ? row.reasons.map(value => value.message).join('；') : '声明满足') + ' · ' + dimensions, 'subline'));
+    cell(tr, element('span', row.facts.status === 'fresh' ? '报告新鲜' : row.facts.status === 'stale' ? '报告过期' : '无报告', 'subline'));
+    tbody.append(tr);
+  }
+}
 function fillCapabilities(preferred) {
   const node = candidates.direct.find(n => n.id === byId('forward-node').value);
   const protocols = node ? allowedProtocols(node) : [];
@@ -223,6 +311,7 @@ function fillCapabilities(preferred) {
   addOptions(byId('forward-port'), (node?.policy?.allowedPorts ?? []).map(p => ({ value: p })), preferred?.port);
   byId('forward-capabilities').textContent = node ? '可用监听地址和端口由当前 Node Policy 决定，服务端会再次检查授权、目标 CIDR 与资源独占。' : '没有具备 ADP/3 Direct 能力和有效凭据的节点；请先接入 Agent。';
   byId('save-forward').disabled = !node;
+  renderForwardPreflight();
 }
 async function editor(item, copy = false) {
   byId('forward-form').hidden = true;
@@ -391,7 +480,7 @@ function clearConnectionData() {
     byId(mode + '-candidate-prev').disabled = byId(mode + '-candidate-next').disabled = true;
   }
   relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); ruleConsole.clear(); tunnelConsole.clear(); telemetryConsole.clear(); forwardTelemetryConsole.clear(); hostTelemetryConsole.clear(); probeTelemetryConsole.clear(); telemetryAggregateConsole.clear(); pathTemplates.clear(); pathSwitch.clear(); pathGroups.clear(); pathPublications.clear(); ingressGroups.clear(); ingressMigrations.clear(); fillNodes();
-  renderNodes(); renderForwards(); renderOperations(); updateOverview();
+  renderNodes(); renderForwards(); renderOperations(); renderForwardPreflight(); updateOverview();
 }
 async function refreshDirectCandidates() {
   const nodeId = editing?.spec.ingress.nodeId ?? byId('forward-node').value;
@@ -428,6 +517,15 @@ document.querySelectorAll('.nav').forEach(node => node.addEventListener('click',
   display(node.dataset.view);
   if(node.dataset.view==='relay' && auth.scope) Promise.all([relayConsole.refresh(),pathTemplates.list()]).catch(e=>notify(e.message,true));
 }));
+for (const [id, view] of [['ops-audit', 'audit'], ['ops-alerts', 'alerts'], ['ops-notifications', 'notifications'],
+  ['ops-operations', 'operations'], ['ops-forwards', 'forwards']])
+  byId(id).addEventListener('click', () => { if (view !== 'notifications') notificationEndpoints.leave(); display(view); });
+for (const [id, anchor] of [['topology-templates', 'tunnel-definition-title'], ['topology-groups', 'path-group-title'],
+  ['topology-publications', 'path-publication-title'], ['topology-ingress', 'ingress-migration-title']])
+  byId(id).addEventListener('click', () => {
+    [...document.querySelectorAll('.nav')].find(node => node.dataset.view === 'relay')?.click();
+    byId(anchor).scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
 byId('connection-form').addEventListener('submit', async event => {
   event.preventDefault();
   const scope = byId('scope').value.trim();
@@ -460,6 +558,7 @@ byId('cancel-forward').addEventListener('click', () => {
   editing = null; byId('forward-form').hidden = true;
 });
 byId('forward-node').addEventListener('change', () => fillCapabilities());
+byId('forward-protocol').addEventListener('change', () => renderForwardPreflight());
 byId('forward-form').addEventListener('submit', saveForward);
 byId('close-detail').addEventListener('click', () => byId('detail-dialog').close());
 byId('detail-dialog').addEventListener('close', () => { currentSecret = null; byId('detail-content').textContent = ''; });
