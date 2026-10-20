@@ -51,9 +51,9 @@ D1 仅记录[负载基线评估方案](load-baseline-2026-10-20.md)，未执行�
 资源实验。本批行为参考 ForwardX `0f8d096`（2.3.286，AGPL-3.0-only）的状态计数、
 预检和指标语义，但为 TuneX L2 独立实现，未复制源码；临时参考克隆已清理。
 本轮源码完成后，已按 2026-10-20 验收授权执行本地单测、类型、边界、契约、Go
-构建/UDP smoke（结果见下）；MySQL/mTLS、浏览器、Actions、容器、独立物理主机和
-长稳/负载实验未执行，未提交或推送。D1 仍未执行；不得据此宣称正式发行或完整
-D2/跨环境验收。
+构建/UDP smoke（结果见下），并提交为分支 `verify/c1-d2-20261020` 通过配置内
+Actions/容器验收（见下节）。独立物理主机和长稳/负载实验未执行。D1 仍未执行；
+不得据此宣称正式发行或完整 D2/跨环境验收。
 
 计划验收覆盖（完整验收仍需相应环境执行）：C1 覆盖 Direct ready/partial/unknown、过期/缺失报告、
 多节点计数、truncated、迟到响应不覆盖新结果；C2 覆盖撤销、凭据过期、报告过期、
@@ -85,13 +85,36 @@ CAS/补偿/Operation 语义未变及人工切换导航。
 实验，D1 仍未执行。该证据绑定 dirty tree，不能替代准确提交修订的 Actions 验收，
 也不代表正式发行。
 
+## 2026-10-20 C1–D2 Actions 验收
+
+C1–D2 源码已提交为分支 `verify/c1-d2-20261020`，草稿 PR #113，通过配置内
+GitHub Actions 在**确切修订**上完成功能验收：
+
+| 身份 | 准确值 |
+| --- | --- |
+| 被测源码修订 | `8172791d31a0f8f92d7bd76a26523c5a67dcda95` |
+| CI run | 39374960189，`success` / `completed` |
+| 容器 run | 39374960192，`success` / `completed` |
+| PR #113 | 草稿，`MERGEABLE`；未合并、未发行 |
+
+11 个作业全部通过、无失败无重试：`contracts`(4m30s)、`deployment-tools`(10s)、
+`windows-agent`(1m20s)、`unsupported-platform`(1m5s)、`probe-workflow`(3m53s)、
+`relay-isolation`(8m29s)、`multihop (3)`(8m6s)、`multihop (4)`(10m41s)、
+`multihop (8)`(30m19s)、`phase1`(20m23s)、`containers`(1m32s)。覆盖 8 节点
+namespace 故障恢复、Windows 原生执行、macOS 明确不支持分支、MySQL/mTLS/回滚、
+Probe/Relay Chromium 与容器构建。发布类 workflow（images.yml / candidate-images.yml）
+未被 PR 触发；未发布镜像、未合并 PR、未打标签或正式发行。独立物理主机、长稳/负载
+（D1）仍未执行，`multihop`/namespace 证据共享同一 Linux runner，不构成独立平台或
+容量证明。
+
 ## 后续进入条件
 
 后续模块可消费上述冻结公共接口或经过独立验证的后继修订；任务仍需明确授权，
 采用独立分支／worktree、模块目录、公共入口、契约测试和集成说明。当前 main 已
 包含 PR #112（`5a764f7`）；`373c291` 只是此前的 A5 合并点，不要从旧 main 推定
 B 接口已集成。
-C1–C4/D2 的源码切片已写入未提交工作树，尚未验收；后续顺序见
+C1–C4/D2 的源码切片已在分支 `verify/c1-d2-20261020`（修订 `8172791d`）通过配置内
+Actions 验收，草稿 PR #113 尚未合并；D1 负载与独立物理主机证据仍未执行。后续顺序见
 [开发方案](development-plan.md)与[下一阶段目标](next-milestones.md)。
 
 独立物理多主机、长稳／负载、独立 Responder 构建发布、正式发行与生产就绪
