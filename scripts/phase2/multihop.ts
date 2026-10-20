@@ -33,7 +33,7 @@ const binary=linuxBinary('tunex-agent'),fixture=linuxBinary('network-fixture'),n
 const policy={...DEFAULT_POLICY,pollIntervalSeconds:1,leaseSeconds:45,renewalLeadSeconds:18,observationFreshnessSeconds:10,drainTimeoutSeconds:3,udpIdleTimeoutSeconds:2};
 const options={databaseUrl:url.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,multihopEnabled:true};
 let control:Awaited<ReturnType<typeof startControl>>|undefined,target:ChildProcess|undefined,targetPID:number|undefined,releaseReady:(()=>void)|undefined,proxy:ChildProcess|undefined,proxyPID:number|undefined,controlURL='';
-const agents:{nodeId:string;root:string;args:string[];process:ChildProcess;errors:string}[]=[];
+const agents:{nodeId:string;root:string;args:string[];process:ChildProcess;errors:string;exitedAt?:string}[]=[];
 let completedEvidence:Record<string,unknown>|undefined;
 let consoleEvidence:unknown;
 function pass(text:string){checks.push(text);console.log('PASS '+text);}
@@ -58,7 +58,12 @@ async function stopOwned(root:string){
     }
   }
 }
-function restart(agent:typeof agents[number]){const index=agents.indexOf(agent);agent.process=lab?lab.spawn(lab.namespaces[index]!,binary,agent.args):spawnLinux(binary,agent.args);agent.process.stderr!.on('data',b=>{agent.errors=(agent.errors+b.toString()).slice(-16384);});}
+function observeAgent(agent:typeof agents[number]){
+  const process=agent.process;delete agent.exitedAt;
+  process.stderr!.on('data',b=>{agent.errors=(agent.errors+new Date().toISOString()+' '+b.toString()).slice(-16384);});
+  process.once('exit',()=>{if(agent.process===process)agent.exitedAt=new Date().toISOString();});
+}
+function restart(agent:typeof agents[number]){const index=agents.indexOf(agent);agent.process=lab?lab.spawn(lab.namespaces[index]!,binary,agent.args):spawnLinux(binary,agent.args);observeAgent(agent);}
 async function ready(process:ChildProcess):Promise<any>{return new Promise((resolve,reject)=>{let buffer='';const timer=setTimeout(()=>reject(Error('Fixture startup timeout')),10000);process.once('error',reject);process.stdout!.on('data',b=>{buffer+=b.toString();if(buffer.includes('\n')){clearTimeout(timer);try{resolve(JSON.parse(buffer.split('\n')[0]!));}catch(e){reject(e);}}});});}
 async function diagnostics(){return Promise.all(agents.map(async(a,i)=>JSON.parse((await(lab?lab.run(lab.namespaces[i]!,'/bin/cat',[a.root+'/state/diagnostics/status.json']):linux('/bin/cat',[a.root+'/state/diagnostics/status.json']))).stdout)));}
 async function replay(agent:typeof agents[number],report:any){
@@ -77,16 +82,23 @@ try{
   const targetStatus=await ready(target);targetPID=targetStatus.pid;assert.equal(targetStatus.platform,'linux');
   const usedPorts=new Set<number>([targetStatus.port]);
   async function distinctPort(){for(let attempt=0;attempt<128;attempt++){const next=await port();if(!usedPorts.has(next)){usedPorts.add(next);return next;}}throw Error('Distinct fixture port selection exhausted');}
-  const listenPort=browserConsole?await distinctPort():await port(),copyPort=browserConsole?await distinctPort():undefined,batchPort=browserConsole?await distinctPort():undefined;
+  const listenPort=await distinctPort(),copyPort=browserConsole?await distinctPort():undefined,batchPort=browserConsole?await distinctPort():undefined;
   const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:5,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:128};
   assert.equal((await call('PUT','transport-profiles/multihop-profile',{expectedRevision:0,config:profile})).status,202);
   for(let i=0;i<count;i++){
     const node=await call('POST','nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:i===0&&copyPort!==undefined?[listenPort,copyPort,batchPort!]:[listenPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
     const root=nativeRoot+'/node-'+i;const args:string[]=['--control',controlURL,'--node',node.body.nodeId,'--ca',linuxPath(caCert),'--state',root+'/state','--journal-key',root+'/secrets/journal.key','--relay','--multihop','--diagnostics'];
     try{const enroll=[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll'];if(lab)await lab.run(lab.namespaces[i]!,'/usr/bin/env',enroll);else await linux('env',enroll);}catch{throw Error('Multi-hop enrollment failed; token redacted');}
-    const process=lab?lab.spawn(lab.namespaces[i]!,binary,args):spawnLinux(binary,args);const entry:typeof agents[number]={nodeId:node.body.nodeId,root,args,process,errors:''};process.stderr!.on('data',b=>{entry.errors=(entry.errors+b.toString()).slice(-16384);});agents.push(entry);
+    const process=lab?lab.spawn(lab.namespaces[i]!,binary,args):spawnLinux(binary,args);const entry:typeof agents[number]={nodeId:node.body.nodeId,root,args,process,errors:''};observeAgent(entry);agents.push(entry);
     await until(async()=>{const [r]=await control!.db.pool.query<any[]>('SELECT session_epoch,(SELECT COUNT(*) FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE) peers FROM runtime_nodes WHERE node_id=?',[entry.nodeId,entry.nodeId]);return r[0]?.session_epoch>0&&r[0]?.peers>0;},'current Node session and peer credential');
-    if(i>0){const peerPorts=browserConsole?await Promise.all(Array.from({length:6},()=>distinctPort())):[await port(),await port()];assert.equal((await call('PUT',`nodes/${entry.nodeId}/relay-endpoint`,{expectedRevision:0,config:{listenAddress:lab?lab.address(i):'127.0.0.1',advertisedHost:lab?lab.address(i):'127.0.0.1',allowedTcpPorts:peerPorts}})).status,202);}
+    if(i>0){
+      // The port fixture closes its temporary listener; the OS may return the same
+      // ephemeral port again, including for this endpoint's second TCP resource.
+      const peerPorts:number[]=[];for(let n=0;n<(browserConsole?6:2);n++)peerPorts.push(await distinctPort());
+      const config={listenAddress:lab?lab.address(i):'127.0.0.1',advertisedHost:lab?lab.address(i):'127.0.0.1',allowedTcpPorts:peerPorts};
+      const endpoint=await call('PUT',`nodes/${entry.nodeId}/relay-endpoint`,{expectedRevision:0,config});
+      assert.equal(endpoint.status,202,JSON.stringify({nodeId:entry.nodeId,config,response:endpoint.body}));
+    }
   }
   pass(`${count} independent Agent processes advertise the explicit execution extension`);
   const ingress=agents[0]!,spec={enabled:true,protocols:['tcp','udp'],ingress:{nodeId:ingress.nodeId,listen:{address:'127.0.0.1',port:listenPort}},target:{host:'127.0.0.1',port:targetStatus.port},path:{via:agents.slice(1).map(a=>a.nodeId)},transport:{profileId:'multihop-profile',configRevision:1}};
@@ -174,7 +186,24 @@ try{
   await writeFile(join(directory,'evidence.json'),JSON.stringify(completedEvidence,null,2));
   console.log('Multi-hop acceptance evidence: '+directory);
 }catch(error){
-  if(control){const [operations]=await control.db.pool.query('SELECT id,forward_id,status,cleanup_pending,last_error FROM operations');const [runtime]=await control.db.pool.query('SELECT node_id,session_epoch,snapshot_generation,last_report FROM runtime_nodes');await writeFile(join(directory,'failure.json'),JSON.stringify({passed:false,error:error instanceof Error?error.message:'Multi-hop acceptance failed',checks,operations,runtime,agents:agents.map(a=>({nodeId:a.nodeId,errors:a.errors,exitCode:a.process.exitCode}))},null,2));}
+  if(control){
+    const [operations]=await control.db.pool.query('SELECT id,forward_id,status,cleanup_pending,last_error FROM operations');
+    const [runtime]=await control.db.pool.query('SELECT node_id,session_epoch,snapshot_generation,last_report FROM runtime_nodes');
+    // Keep only timing and instance identifiers, never wire bodies, credentials,
+    // driver configuration or key material, in uploaded failure evidence.
+    const readBody=(body:any)=>typeof body==='string'?JSON.parse(body):body;
+    const [storedSnapshots]=await control.db.pool.query<any[]>('SELECT s.node_id,s.generation,s.session_epoch,s.body FROM snapshots s JOIN runtime_nodes n ON n.node_id=s.node_id WHERE s.generation>=GREATEST(n.snapshot_generation-7,0) ORDER BY s.node_id,s.generation');
+    const snapshots=storedSnapshots.map(row=>{const body=readBody(row.body);return {nodeId:row.node_id,generation:row.generation,sessionEpoch:row.session_epoch,
+      issuedAt:body.issuedAt,validUntil:body.validUntil,assignments:body.assignments.map((assignment:any)=>({forwardId:assignment.forwardId,
+        assignmentId:assignment.assignmentId,deploymentGeneration:assignment.deploymentGeneration,bindingFence:assignment.bindingFence,phase:assignment.phase,role:assignment.role,protocol:assignment.protocol}))};});
+    const [storedDeployments]=await control.db.pool.query<any[]>('SELECT forward_id,generation,stage,body FROM relay_deployments ORDER BY forward_id,generation');
+    const deployments=storedDeployments.map(row=>{const body=readBody(row.body);return {forwardId:row.forward_id,generation:row.generation,stage:row.stage,
+      authorizationUntil:body.authorizationUntil,nodes:body.nodes.map((node:any)=>({nodeId:node.nodeId,sessionEpoch:node.sessionEpoch}))};});
+    const measurements=await diagnostics().catch(()=>undefined);
+    await writeFile(join(directory,'failure.json'),JSON.stringify({passed:false,capturedAt:new Date().toISOString(),policy,
+      error:error instanceof Error?error.message:'Multi-hop acceptance failed',checks,operations,runtime,snapshots,deployments,measurements,
+      agents:agents.map(a=>({nodeId:a.nodeId,errors:a.errors,exitCode:a.process.exitCode,exitedAt:a.exitedAt??null}))},null,2));
+  }
   throw error;
 }finally{
   const cleanupErrors:unknown[]=[],collect=async(action:()=>Promise<unknown>)=>{try{await action();}catch(error){cleanupErrors.push(error);}};

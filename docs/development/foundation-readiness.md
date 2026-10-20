@@ -1,52 +1,47 @@
 # Foundation Readiness And Parallel Gate
 
-Date: 2026-10-19 (Asia/Shanghai).
-Overall: **not stable/accepted; upper parallel-development gate closed**.
+Date: 2026-10-20 (Asia/Shanghai).
+Overall: **accepted for the frozen current public contracts and configured Actions
+scope; module entry gate open for those contracts**.
 
-Current source disposition, 2026-10-19: **A5 manual source classification and
-reviewable candidate records are closed**, including the application99/Runtime34/
-top-level59 maps, full Control/Agent/assets ledgers and implemented-unverified
-FR-0023-0025. See
-[A5 source closure](../architecture/foundation-a5-source-closure-v1.md).
-The saved head `9f1d78d939a59c1514d9bcca1591afa2e89e6754` passed all nine
-configured PR checks and was merged by PR #111 as
-`373c291a6ea4f04e5929796a6119eb3b60027c34`. Exact checkout identity and
-scope are recorded in [verification](foundation-verification-2026-10-19.md).
-This supersedes source-phase statements that verification has not started.
-Readiness 1-220 still requires a case-by-case evidence mapping and an acceptance
-decision; CI totals alone do not provide it. Cleanup revisions require their own
-checks. Upper product-module parallelism remains closed.
+Accepted on 2026-10-20 for the frozen current public interfaces, their
+classified consumers/default bindings and configured Actions environments at
+`e208a3abf17129b0c2898ba2022c69f60f45445a`, tested at PR merge `c3ce8a67b901f61234b4116190409854818cb6c7`.
+The complete 220-item assertion map and applicable job/step results are reconciled
+in [verification](foundation-verification-2026-10-19.md). This permits future
+modules to consume those accepted contracts from that frozen revision or a
+separately verified successor, with their own authorization, isolated worktree,
+public entry, contract tests and integration instructions. No product slice starts
+in this task; PR #112 remains open and no release is approved.
 
-The source-only sections below retain implementation rationale, consumer and
-planned-case details. Their no-check/unexecuted descriptions refer to each
-original source slice, not the overall verification status of the saved candidate.
+Independent physical hosts, long-run/load acceptance, standalone Responder delivery,
+image publication, release and production readiness retain their own gates.
+Same-runner namespaces and a public preview example do not satisfy those gates.
 
-Source work from ADR-0047 and the first ADR-0048 extraction is present. The earlier
-phrase "source scope closed" does not satisfy the human's complete foundation DoD.
+[Assertion map](foundation-b-assertion-coverage.md): 220 complete requirements,
+zero partial and zero unmapped within the declared scope. A5 source classification
+and PR #111 merge are historical milestones. B acceptance includes FR-0026's
+queued-publication renewal timing and FR-0027's appended MySQL0038 JSON integer
+expiry repair plus UpgradeAssessment2. All old profile ceilings, Agent profiles,
+original authority/Journal, Runtime ledger and protected history remain.
+The reviewed CHECK-only catalog entry does not claim full schema equivalence.
+
+The original source-only slices and numbered plan below preserve their dated
+rationale and obligations. Their planned/unexecuted wording is superseded for
+this accepted revision by the assertion map and execution record, and remains
+applicable to any later source change until separately verified.
 
 ## 1. DoD Evidence
 
-| Required criterion | L0 | L1 | L2 |
-| --- | --- | --- | --- |
-| Public document/version | Domain v1 plus runtime kernel interface 1 documented | Framework/resource1; Host3/Ledger3/evidence2; Relay5/runtime values2/configuration2/Transport2 (FR-0009), Node authority3 (FR-0010), BackgroundTasks2, policy/observation1, Agent executionstate3/runtimeplatform2 (FR-0013), PreparedInstance1 (FR-0014; driver HostVersion1 unchanged), runtimeobservation2/platformobservation2/wire1 (FR-0015), raw Runtime status storage1 (FR-0016), observation/publication/event recovery storage1 (FR-0017); all source-authored/unverified | Entry interface/target matrix and provided ports documented |
-| Automated critical-path/contract tests | Configured domain/decision suite passes on the saved candidate; detailed case mapping pending | Configured owner/host/port/lifecycle suite passes; detailed case mapping pending | Configured wire/storage/MySQL suite passes; detailed case mapping pending |
-| Minimal runnable example | Consumed through L1 in the passing public example | Public extension compiles and runs in Actions on the saved candidate | Example adapter runs; real Runtime behavior uses separate integration evidence |
-| Extension point instructions | Public intent and decision boundary | Ports and module recipe | Named target/refusal recipe |
-| Error/log/config conventions | Pure decisions, no I/O | Common error/log ports and injected configuration documented | Adapter refusal, no hidden fallbacks or secrets in logs |
-| Explicit limitations/debt | Present below | Present below | Present below and in target matrix |
-| Upper module using public interfaces only | Public example passes in Actions | Public example passes in Actions | Public example passes in Actions |
-
-Configured CI evidence above is **passed on its identified source**. Cases below
-remain planned/unmapped until their actual assertions are associated with evidence;
-no individual case is marked passed from aggregate totals. Source/read-only review
-does not substitute for acceptance. No checks ran during the original A5 source
-phase; verification and its repairs followed under later explicit authorization.
-
-Latest independent A5 counters are cancellation1, Node report read2, Notification
-effects2, executiontime2/platformclock2, executionidentity2/agentidentity2 and
-nativeexecution2. Host/Guard/Journal, wire/schema and package release versions are
-not changed by those source proposals. The candidate index records all other
-current public counters separately. No version declaration proves compatibility.
+| Required criterion | Accepted evidence and limits |
+| --- | --- |
+| Public documents and independent versions | Candidate index, owner/native records and explicit public-counter/type/alias tests; source migrations remain disclosed in FR-0001–0027 |
+| Critical-path and contract assertions | All 220 requirements mapped; full applicable job/step results on the exact saved source, including MySQL rollback/competition, ordering, cancellation, wire/native identity and refusal |
+| Minimal public example | The public extension compiles and runs in Actions on the same revision; preview is non-executable and preserves authorization, immutable result, error/log and drain contracts |
+| Extension instructions | Public ports, adapter target/refusal matrix and module integration recipe; new modules use their own public entry and tests |
+| Conventions and boundaries | Exact error/log/config behavior and full source/type/private graph with negative cases; no platform source dependency moved into lower layers |
+| Consumers, defaults and compatibility | Current Control/Agent/Web/operator/assets plus native/legacy constructors, aliases and default binding behavior covered; private or hypothetical external consumers receive no added guarantee |
+| Known limits | Physical independent hosts, long-run/load, standalone Responder delivery, release and production remain separate; no native unavailable fact is fabricated |
 
 ## 2. Source Separation Record
 

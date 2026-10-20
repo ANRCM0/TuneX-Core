@@ -30,11 +30,13 @@ const controlSchemaCeiling: Record<CompatibilityProfile, string> = {
     'adp3-observation-services-v1': '0035-',
     'adp3-probe-services-v1': '0036-',
     'adp3-probe-echo-v1': '0037-',
+    'adp3-probe-plan-json-integers-v1': '0038-',
 };
 profiles.add('adp3-typed-probes-v1');
 profiles.add('adp3-observation-services-v1');
 profiles.add('adp3-probe-services-v1');
 profiles.add('adp3-probe-echo-v1');
+profiles.add('adp3-probe-plan-json-integers-v1');
 const invalid = (): never => { throw new Error('INVALID_UPGRADE_PLAN'); };
 function object(value: unknown, keys: string[]): Record<string, unknown> {
     if (!value || typeof value !== 'object' || Array.isArray(value) ||

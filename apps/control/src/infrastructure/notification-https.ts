@@ -90,7 +90,14 @@ export class ControlledNotificationHttps implements NotificationSender {
             const abort = () => stop('ABORTED');
             this.cancels.add(abort);
             input.signal?.addEventListener('abort',abort,{ once: true });
-            if (input.signal?.aborted) { dnsPending = false; stop('ABORTED'); return; }
+            if (input.signal?.aborted) {
+                dnsPending = false;
+                stop('ABORTED');
+                // Registration may have synchronously settled the attempt before
+                // this no-DNS branch could clear its pending marker.
+                release();
+                return;
+            }
             overallTimer = setTimeout(() => stop('DEADLINE'),5000);
             dnsTimer = setTimeout(() => stop('DNS_TIMEOUT'),2000);
             try {

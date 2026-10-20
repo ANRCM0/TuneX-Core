@@ -1,0 +1,91 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { randomUUID } from 'node:crypto';
+import { createConnection } from 'mysql2/promise';
+import { MySqlTransitDeliveryStore } from '../src/infrastructure/mysql-transit-delivery-store.ts';
+import { MySqlTransitCoordinationStore } from '../src/infrastructure/mysql-transit-coordination-store.ts';
+import { MySqlUnitOfWork, rows, write } from '../src/infrastructure/mysql.ts';
+import { TransitPreviewDelivery, TransitCoordinationService, verifyTransitStage } from '../src/modules/transit-owner/public.ts';
+import type { TransitStoredStage } from '../src/framework/public.ts';
+import type { Transaction } from '../src/infrastructure/mysql.ts';
+import { nativeTransitPreviewCommand, nativeTransitDeliveryCommand, nativeTransitDeliveryAck, nativeValueDigest as digest } from '../src/compatibility/public.ts';
+import * as Native from '../src/compatibility/native-transit-delivery.ts';
+import type { TransitDeliveryReport } from '../src/compatibility/public.ts';
+import type { TransitDeliveryStorage } from '../src/framework/public.ts';
+
+type Statement=readonly [string,unknown[]];
+const now=1800000000000;
+const facts={nodeId:'node',bootId:'boot',sessionEpoch:2,forwardId:'forward',deploymentGeneration:1,coordinationRevision:1,previewAction:'prepare' as const,commandDigest:'sha256:'+'a'.repeat(64),issuedAt:now,validUntil:now+30000};
+
+test('63 native codec aliases preserve JSON UTC digest parser order closed frozen preview and ACK key shapes without clock reads',t=>{
+ assert.equal(nativeTransitPreviewCommand,Native.nativeTransitPreviewCommand);assert.equal(nativeTransitDeliveryCommand,Native.nativeTransitDeliveryCommand);assert.equal(nativeTransitDeliveryAck,Native.nativeTransitDeliveryAck);
+ const events:string[]=[],nativeIso=Date.prototype.toISOString,nativeEncode=JSON.stringify,nativeParse=JSON.parse;
+ t.mock.method(Date,'now',()=>assert.fail('pure Transit codec must not read clock'));
+ t.mock.method(Date.prototype,'toISOString',function(this:Date){events.push('utc:'+this.getTime());return nativeIso.call(this);});
+ t.mock.method(JSON,'stringify',function(value:unknown,...args:unknown[]){if(value&&typeof value==='object'&&'kind' in value)events.push('encode');return Reflect.apply(nativeEncode,JSON,[value,...args]);});
+ t.mock.method(JSON,'parse',(...args:Parameters<typeof JSON.parse>)=>{if(args[0].startsWith('{')||args[0].startsWith('['))events.push('parse');return nativeParse(...args);});
+ const command=nativeTransitPreviewCommand(facts);assert.deepEqual(events.slice(0,2),['utc:'+now,'utc:'+(now+30000)]);assert.equal(events.filter(e=>e==='encode').length,1);assert.equal(events.filter(e=>e==='parse').length,0,'strict parser is its own original parser, not native JSON.parse');
+ assert.deepEqual(Object.keys(command),['protocolVersion','extensionVersion','kind','executionEnabled','nodeId','bootId','sessionEpoch','forwardId','deploymentGeneration','coordinationRevision','previewAction','commandDigest','issuedAt','validUntil','envelopeDigest']);assert.equal(Object.isFrozen(command),true);assert.equal(Object.getPrototypeOf(command),null);assert.equal(command.executionEnabled,false);
+ const {envelopeDigest,...body}=command;assert.equal(envelopeDigest,digest(body));assert.equal(command.issuedAt,new Date(now).toISOString());
+ events.length=0;const fromObject=nativeTransitDeliveryCommand(command);assert.equal(events.filter(e=>e==='encode').length,1);assert.equal(events.filter(e=>e==='parse').length,0);assert.equal(fromObject.envelopeDigest,command.envelopeDigest);assert.notEqual(fromObject,command);
+ const encoded=nativeEncode(command);events.length=0;nativeTransitDeliveryCommand(encoded);assert.deepEqual(events.filter(e=>e==='parse'||e==='encode'),['parse','encode']);
+ assert.throws(()=>nativeTransitDeliveryCommand('{'),SyntaxError);assert.throws(()=>nativeTransitDeliveryCommand({...command,unknown:true}));assert.throws(()=>nativeTransitDeliveryCommand({...command,envelopeDigest:'sha256:'+'f'.repeat(64)}));assert.throws(()=>nativeTransitPreviewCommand({...facts,issuedAt:NaN}),RangeError);assert.throws(()=>nativeTransitPreviewCommand({...facts,validUntil:now}));
+ const report:TransitDeliveryReport={protocolVersion:3,extensionVersion:1,kind:'transit-delivery-report-v1',nodeId:'node',bootId:'boot',sessionEpoch:2,commandDigest:command.commandDigest,envelopeDigest,reportSequence:4,observedAt:new Date(now).toISOString(),condition:'received'};
+ for(const status of ['accepted','duplicate'] as const){events.length=0;const ack=nativeTransitDeliveryAck(report,status);assert.deepEqual(events,['encode']);assert.equal(ack.status,status);assert.equal(ack.executionEnabled,false);assert.equal(Object.isFrozen(ack),true);assert.equal(Object.getPrototypeOf(ack),null);assert.deepEqual(Object.keys(ack),['protocolVersion','extensionVersion','kind','executionEnabled','nodeId','bootId','sessionEpoch','commandDigest','envelopeDigest','reportSequence','status']);}
+ assert.throws(()=>nativeTransitDeliveryAck({...report,reportSequence:0},'accepted'));
+});
+
+const databaseURL=process.env.TUNEX_TEST_DATABASE_URL;
+test('63 canonical MySQL delivery keeps separate planner Tx and rolls back every real outbox receipt acknowledgement write retaining coordination and physical history',{skip:!databaseURL},async t=>{
+ const database='tunex_d63_'+randomUUID().replaceAll('-',''),admin=await createConnection(databaseURL!);let db:MySqlUnitOfWork|undefined,created=false;
+ try{
+  await admin.query(`CREATE DATABASE \`${database}\``);created=true;const url=new URL(databaseURL!);url.pathname='/'+database;db=new MySqlUnitOfWork(url.toString());await db.migrate();const active=db;
+  const assignments=['node-a','node-b','node-c'].map((nodeId,index)=>{const role=index===0?'ingress' as const:index===1?'transit' as const:'egress' as const;return {assignmentId:'assignment-'+index,nodeId,role,protocol:'tcp' as const,sessionEpoch:2,bindingFence:index+4,resource:{nodeId,role,forwardProtocol:'tcp' as const,physicalProtocol:'tcp' as const,address:'127.0.0.1',port:32001+index}};}),body={executable:false as const,scopeId:'scope',forwardId:'forward',forwardRevision:1,deploymentGeneration:1,profileDigest:'sha256:'+'1'.repeat(64),pathDigest:'sha256:'+'2'.repeat(64),authorizationUntil:now+240000,activationOrder:['node-c','node-b','node-a'],assignments,intents:[]},planDigest=digest(body),stage:TransitStoredStage={forward_id:'forward',generation:1,target_revision:1,scope_id:'scope',created_by:'owner',state:'reserved',expires_at:now+180000,plan_digest:planDigest,body:{...body,planDigest},created_at:now-100,updated_at:now-100};
+  await db.transaction(async tx=>{await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',['owner','a'.repeat(64)]);await write(tx,'INSERT INTO scopes(id,owner_id) VALUES(?,?)',['scope','owner']);await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec) VALUES(?,?,?,?)',['forward','scope',1,'{}']);for(const [index,a] of assignments.entries()){await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',[a.nodeId,'scope',String(index+1).repeat(64),now+100000,now+100000,JSON.stringify({capabilities:['adp.multihop.1','transit.wire.1','native.transit.v1']})]);await write(tx,'INSERT INTO runtime_nodes(node_id,session_epoch,boot_id) VALUES(?,?,?)',[a.nodeId,2,'boot']);await write(tx,'INSERT INTO port_slots(node_id,protocol,port,owner_id,fence,deployment_generation) VALUES(?,?,?,?,?,?)',[a.nodeId,'tcp',a.resource.port,'forward',a.bindingFence,1]);}await write(tx,'INSERT INTO node_credentials(fingerprint,node_id,issued_at,valid_until) VALUES(?,?,?,?)',['f'.repeat(64),'node-c',now-10,now+100000]);await write(tx,'INSERT INTO transit_deployments(forward_id,generation,target_revision,scope_id,created_by,state,expires_at,plan_digest,body,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',['forward',1,1,'scope','owner','reserved',stage.expires_at,planDigest,JSON.stringify(stage.body),stage.created_at,stage.updated_at]);});
+  const planner=new TransitCoordinationService(db,new MySqlTransitCoordinationStore());t.mock.method(Date,'now',()=>now);await planner.begin('owner','scope','forward',1);verifyTransitStage(stage);
+  async function snapshot(){const tables=await rows<{name:string}>(active.pool,'SELECT TABLE_NAME name FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME');return Object.fromEntries(await Promise.all(tables.map(async({name})=>[name,(await rows(active.pool,`SELECT * FROM \`${name}\``)).map(value=>JSON.stringify(value)).sort()])));}
+  const statements:Statement[]=[],failure=new Error('after actual delivery write');let ordinal=0,fault=-1,zero=-1,transactions=0;
+  const boundary={async transaction<T>(action:(tx:Transaction)=>Promise<T>){transactions++;return active.transaction(async tx=>{let proxy:Transaction;proxy=new Proxy(tx,{get(target,key,receiver){if(key==='execute')return async function(this:unknown,sql:string,args:unknown[]=[]){assert.equal(this,proxy);statements.push([sql,[...args]]);const output=await Reflect.apply(target.execute,target,[sql,args]);if(!sql.startsWith('SELECT')){assert.match(sql,/^(INSERT INTO transit_delivery_(outbox|receipts)|UPDATE transit_delivery_outbox)/);const at=ordinal++;if(at===fault)throw failure;if(at===zero)(output[0] as {affectedRows:number}).affectedRows=0;}return output;};return Reflect.get(target,key,receiver);}});return action(proxy);});}};
+  let plannerCalls=0;const service=new TransitPreviewDelivery(boundary,new MySqlTransitDeliveryStore(),{async peek(...args){plannerCalls++;assert.equal(transactions,0,'planner completes before enqueue Tx begins');return planner.peek(...args);}}),initial=await snapshot();
+  fault=0;ordinal=0;await assert.rejects(service.enqueuePreview('owner','scope','forward',1),e=>e===failure);assert.equal(plannerCalls,1);assert.equal(transactions,1);assert.deepEqual(await snapshot(),initial);fault=-1;ordinal=0;transactions=0;
+  const command=await service.enqueuePreview('owner','scope','forward',1),queued=await snapshot(),report:TransitDeliveryReport={protocolVersion:3,extensionVersion:1,kind:'transit-delivery-report-v1',nodeId:'node-c',bootId:'boot',sessionEpoch:2,commandDigest:command.commandDigest,envelopeDigest:command.envelopeDigest,reportSequence:1,observedAt:new Date(now).toISOString(),condition:'received'};
+  for(const at of [0,1]){fault=at;ordinal=0;statements.length=0;await assert.rejects(service.report('node-c','f'.repeat(64),2,report),e=>e===failure);assert.equal(statements.filter(([sql])=>!sql.startsWith('SELECT')).length,at+1);assert.deepEqual(await snapshot(),queued);}fault=-1;zero=1;ordinal=0;await assert.rejects(service.report('node-c','f'.repeat(64),2,report),e=>(e as {code:string}).code==='FENCING_REJECTED');assert.deepEqual(await snapshot(),queued);zero=-1;
+  const ack=await service.report('node-c','f'.repeat(64),2,report);assert.equal(ack.status,'accepted');const accepted=await snapshot();statements.length=0;assert.equal((await service.report('node-c','f'.repeat(64),2,report)).status,'duplicate');assert.equal(statements.some(([sql])=>/MAX\(|transit_delivery_outbox|transit_coordination/.test(sql)),false);assert.deepEqual(await snapshot(),accepted);for(const [table,content] of Object.entries(initial))if(!['transit_delivery_outbox','transit_delivery_receipts'].includes(table))assert.deepEqual(accepted[table],content,table+' preserved');
+ }finally{try{await db?.close();if(created)await admin.query(`DROP DATABASE \`${database}\``);}finally{await admin.end();}}
+});
+
+test('63 native delivery store all reads retain exact SQL column projections predicates lock differences arguments raw mutable rows and undefined',async()=>{
+ const statements:Statement[]=[],raw={facts:'{',body:null,receipt_highwater:undefined,last_sequence:null,session_epoch:'2'},result=[raw,{other:true}],failure=new Error('original SQL');let output:unknown=result,fail=false;
+ const tx={async execute(this:unknown,sql:string,args:unknown[]=[]){assert.equal(this,tx);statements.push([sql,args]);if(fail)throw failure;return [output,[]];}} as unknown as Transaction,store=new MySqlTransitDeliveryStore();
+ const cases:[()=>Promise<unknown>,Statement][]=[
+  [()=>store.machine(tx,'node','fingerprint'),['SELECT r.session_epoch,r.boot_id,n.revoked node_revoked,n.credential_until,n.facts,\n          c.revoked credential_revoked,c.valid_until,c.retire_after\n         FROM runtime_nodes r JOIN nodes n ON n.id=r.node_id\n         LEFT JOIN node_credentials c ON c.node_id=r.node_id AND c.fingerprint=?\n         WHERE r.node_id=? FOR UPDATE',['fingerprint','node']]],
+  [()=>store.stage(tx,'scope','forward',1),['SELECT * FROM transit_deployments WHERE forward_id=? AND generation=? AND scope_id=? FOR UPDATE',['forward',1,'scope']]],
+  [()=>store.runtime(tx,'node'),['SELECT session_epoch,boot_id FROM runtime_nodes WHERE node_id=? FOR UPDATE',['node']]],
+  [()=>store.slot(tx,'node','tcp',32001),['SELECT owner_id,fence,deployment_generation FROM port_slots WHERE node_id=? AND protocol=? AND port=? FOR UPDATE',['node','tcp',32001]]],
+  [()=>store.journal(tx,'forward',1),['SELECT revision,phase,position,plan_digest,receipt_highwater,journal_digest FROM transit_coordination WHERE forward_id=? AND generation=? FOR UPDATE',['forward',1]]],
+  [()=>store.status(tx,'forward',1),['SELECT revision,phase FROM transit_coordination WHERE forward_id=? AND generation=?',['forward',1]]],
+  [()=>store.status(tx,'forward',1,false),['SELECT revision,phase FROM transit_coordination WHERE forward_id=? AND generation=?',['forward',1]]],
+  [()=>store.status(tx,'forward',1,true),['SELECT revision,phase FROM transit_coordination WHERE forward_id=? AND generation=? FOR UPDATE',['forward',1]]],
+  [()=>store.outbox(tx,'forward',1,2,'node'),['SELECT * FROM transit_delivery_outbox WHERE forward_id=? AND generation=? AND coordination_revision=? AND node_id=? FOR UPDATE',['forward',1,2,'node']]],
+  [()=>store.envelope(tx,'digest'),['SELECT * FROM transit_delivery_outbox WHERE envelope_digest=? FOR UPDATE',['digest']]],
+  [()=>store.previousReceipt(tx,'node',2,3),['SELECT request_digest FROM transit_delivery_receipts WHERE node_id=? AND session_epoch=? AND report_sequence=?',['node',2,3]]],
+  [()=>store.highwater(tx,'node',2),['SELECT MAX(report_sequence) last_sequence FROM transit_delivery_receipts WHERE node_id=? AND session_epoch=?',['node',2]]],
+ ];
+ for(const [invoke,expected] of cases){output=result;assert.equal(await invoke(),raw);assert.deepEqual(statements.at(-1),expected);output=[];assert.equal(await invoke(),undefined);fail=true;await assert.rejects(invoke(),e=>e===failure);fail=false;}
+ output=result;assert.equal(await store.pending(tx,'node',2),result);assert.deepEqual(statements.at(-1),["SELECT * FROM transit_delivery_outbox WHERE node_id=? AND session_epoch=? AND state='pending' ORDER BY created_at,envelope_digest LIMIT 16 FOR UPDATE",['node',2]]);output=[];assert.equal(await store.pending(tx,'node',2),output);assert.equal(Object.isFrozen(raw),false);assert.equal(raw.facts,'{');
+});
+
+test('63 native outbox receipt and pending-only acknowledgement SQL preserve argument getter JSON timing and raw affected rows',async()=>{
+ const store=new MySqlTransitDeliveryStore(),events:string[]=[],statements:Statement[]=[],failure=new Error('original getter');let output:unknown={affectedRows:1},fail=false;
+ const tx={async execute(this:unknown,sql:string,args:unknown[]){assert.equal(this,tx);events.push('execute');statements.push([sql,args]);if(fail)throw failure;return [output,[]];}} as unknown as Transaction;
+ type Outbox=Parameters<TransitDeliveryStorage<Transaction>['insertOutbox']>[1];type Receipt=Parameters<TransitDeliveryStorage<Transaction>['insertReceipt']>[1];
+ const outbox:Outbox={envelopeDigest:'envelope',forward:'forward',generation:1,revision:2,node:'node',epoch:3,commandDigest:'command',body:{toJSON(){events.push('JSON');return {opaque:true};}},createdAt:now};
+ const receipt:Receipt={node:'node',epoch:3,sequence:4,envelopeDigest:'envelope',requestDigest:'request',receivedAt:now};
+ const cases=[['outbox',['envelopeDigest','forward','generation','revision','node','epoch','commandDigest','body','createdAt'],outbox],['receipt',['node','epoch','sequence','envelopeDigest','requestDigest','receivedAt'],receipt]] as const;
+ for(const [kind,fields,source] of cases)for(let at=-1;at<fields.length;at++){events.length=0;const supplied={};for(const [index,name] of fields.entries())Object.defineProperty(supplied,name,{get(){events.push(name);if(index===at)throw failure;return Reflect.get(source,name);}});const call=kind==='outbox'?store.insertOutbox(tx,supplied as Outbox):store.insertReceipt(tx,supplied as Receipt);if(at>=0){await assert.rejects(call,e=>e===failure);assert.equal(events.includes('execute'),false);assert.equal(events.at(-1),fields[at]);}else{await call;assert.deepEqual(events,kind==='outbox'?[...fields.slice(0,8),'JSON','createdAt','execute']:[...fields,'execute']);}}
+ assert.deepEqual(statements[0],['INSERT INTO transit_delivery_outbox(envelope_digest,forward_id,generation,coordination_revision,node_id,session_epoch,command_digest,body,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',['envelope','forward',1,2,'node',3,'command','{"opaque":true}','pending',now]]);
+ assert.deepEqual(statements[1],['INSERT INTO transit_delivery_receipts(node_id,session_epoch,report_sequence,envelope_digest,request_digest,received_at) VALUES(?,?,?,?,?,?)',['node',3,4,'envelope','request',now]]);
+ for(const value of [0,1,2,'1',undefined]){output={affectedRows:value};assert.equal(await store.acknowledge(tx,'envelope',now),value);assert.deepEqual(statements.at(-1),["UPDATE transit_delivery_outbox SET state='acknowledged',acknowledged_at=? WHERE envelope_digest=? AND state='pending'",[now,'envelope']]);}
+ fail=true;await assert.rejects(store.insertOutbox(tx,outbox),e=>e===failure);await assert.rejects(store.insertReceipt(tx,receipt),e=>e===failure);await assert.rejects(store.acknowledge(tx,'e',now),e=>e===failure);
+ const cyclic:Record<string,unknown>={};cyclic.self=cyclic;events.length=0;await assert.rejects(store.insertOutbox(tx,{...outbox,body:cyclic}),TypeError);assert.equal(events.includes('execute'),false);
+});

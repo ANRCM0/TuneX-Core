@@ -29,7 +29,8 @@ export async function upgradeSchemaCatalog() {
     const root = new URL('../../migrations/', import.meta.url);
     const names = (await readdir(root)).filter(n => n.endsWith('.sql')).sort();
     // New migrations require a deliberate compatibility-profile review.
-    if (names.length !== 37 || names.at(-1) !== '0037-probe-echo.sql')
+    if (names.length !== 38 || names.at(-1) !== '0038-probe-plan-json-integers.sql' ||
+        names.some((name, index) => !name.startsWith(String(index + 1).padStart(4, '0') + '-')))
         throw new Error('UNREVIEWED_UPGRADE_SCHEMA');
     const files = await Promise.all(names.map(async name => {
         const sql = await readUpgradeInput(new URL(name, root));

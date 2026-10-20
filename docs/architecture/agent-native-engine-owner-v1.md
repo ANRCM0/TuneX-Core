@@ -29,6 +29,20 @@ Native ADP/contracts/relaycontracts and egress are their explicit current source
 dependencies. Declaration placement alone does not accept every contract package
 or private type reference. No package-wide exception is inferred for new imports.
 
+## B Verification Repair
+
+The 2026-10-19 B audit found that `payloadstats.New`'s documented returned-error
+branch was unreachable through Go 1.26 `crypto/rand.Read`, which terminates the
+process when an overridden Reader returns an error. The implementation now uses
+`io.ReadFull(rand.Reader, epoch[:])`, preserving the same 16-byte source and hex
+epoch while returning nil for a returned reader error or incomplete epoch. It
+does not substitute weak randomness, retry, issue authority or change forwarding.
+The default operating-system reader can still terminate on its own unrecoverable
+failure; this repair makes no broader recovery guarantee. An Actions regression
+covers successful, partial and failing readers and detached/saturating snapshots.
+This restores the existing diagnostic nil-unavailable contract and adds no new
+public interface or source fallback. Exact-source execution remains required.
+
 ## Actual Source Change
 
 The original multihop conversion body moves from PrepareMultihop into its private

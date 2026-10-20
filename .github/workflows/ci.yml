@@ -120,6 +120,48 @@ jobs:
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
       - run: node scripts/run-go.mjs test -race ./...
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+  windows-agent:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      GOARCH: amd64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache: false
+      - uses: actions/cache@v4
+        with:
+          path: |
+            agent/.cache/go-mod
+            agent/.cache/go-build
+          key: vnext-go-windows-amd64-${{ hashFiles('agent/go.sum') }}
+      - name: Native Windows Agent contracts and filesystem lifecycle
+        run: node scripts/run-go.mjs test ./... -count=1
+      - name: Windows Agent build
+        if: ${{ !cancelled() }}
+        run: node scripts/run-go.mjs build ./...
+      - name: Windows Agent vet
+        if: ${{ !cancelled() }}
+        run: node scripts/run-go.mjs vet ./...
+  unsupported-platform:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache: false
+      - name: Unsupported native OS refuses execution registry locks clocks and synchronization without fallback
+        run: node scripts/run-go.mjs test ./cmd/network-fixture ./internal/platformclock ./internal/platformobservation ./internal/authorization ./internal/executiondriver -run 'TestAgentSourceGraphCompleteUnsupportedNativeLockFailsWithoutFiles|TestClockCompleteActualNativeSampleBracketAndUnsupported|TestObservationCompleteActualNativeResources|TestSynchronizationCompleteActualProviderSelection|TestExecutionDriverCompletePublicNativeAliasesAndZeroBinding' -count=1
   phase1:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -153,46 +195,120 @@ jobs:
         run: node scripts/run-go.mjs run ./cmd/time-proof --check
       - run: node scripts/run-go.mjs build -o ../.artifacts/time-proof ./cmd/time-proof
       - run: node scripts/run-go.mjs build -o ../.artifacts/network-fixture ./cmd/network-fixture
+        id: native-fixture
       - name: Transit real MySQL transaction acceptance
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/transit-mysql-acceptance.test.ts
       - name: Transit offline coordination MySQL acceptance
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/transit-coordination.test.ts
       - name: Transit mTLS capability negotiation MySQL acceptance
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/transit-negotiation.test.ts
       - name: Multi-hop withdrawal, command/Snapshot rollback and full-path capacity
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/multihop-runtime.test.ts
+      - name: Relay operation predicates and rollback before deployment withdrawal
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/relay-owner-complete.test.ts
+      - name: Original Runtime related-node locks report rollback and Relay authority windows
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/runtime-relay-mysql-acceptance.test.ts
+      - name: Original Ledger retirement, rollback and competing claim locks
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/ledger-owner-complete.test.ts
+      - name: Original resource reservation rollback and physical slot predicates
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/resource-sql-complete.test.ts
+      - name: Original MySQL migration lock, partial DDL and uncertain commit outcomes
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/mysql-native-complete.test.ts
+      - name: Original observation and publication recovery SQL retention and rollback
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/observation-recovery-stores-complete.test.ts apps/control/test/publication-recovery-stores-complete.test.ts
+      - name: Original Transport, Transit and Path metadata statement faults and canonical rollback
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/transport-store-sql-complete.test.ts apps/control/test/transit-store-sql-complete.test.ts apps/control/test/transit-negotiation-sql-complete.test.ts apps/control/test/path-template-store-sql-complete.test.ts
+      - name: Original notification native quotas, retention, compare-and-set and statement rollback
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/notification-native-complete.test.ts
+      - name: Original Audit attribution, Station retention and immutable PathGroup transaction closure
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/audit-store-complete.test.ts apps/control/test/audit-attribution-native-complete.test.ts apps/control/test/station-storage-complete.test.ts apps/control/test/path-group-store-sql-complete.test.ts
+      - name: Original Publication, IngressGroup, ObservationService and ProbeRegistry transactions
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/path-publication-store-sql-complete.test.ts apps/control/test/ingress-group-storage-complete.test.ts apps/control/test/observation-service-store-complete.test.ts apps/control/test/probe-registry-store-complete.test.ts
+      - name: Original Ingress Deployment and Migration same-transaction Forward statement rollback
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/ingress-batch-mysql-acceptance.test.ts
+      - name: Original Node and Identity native authority and SQL rollback
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/node-owner-complete.test.ts apps/control/test/node-store-sql-complete.test.ts apps/control/test/identity-owner-complete.test.ts apps/control/test/identity-store-sql-complete.test.ts
+      - name: Probe history native family projection and MySQL0037 immutable capture
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/probe-history-complete.test.ts
+      - name: Original Probe history and finite plans same-transaction statement rollback and scheduler contention
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/probe-history-plan-native-complete.test.ts
+      - name: Original Telemetry raw and rollup same-transaction quotas pruning and statement rollback
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/telemetry-store-complete.test.ts
       - name: Read-only upgrade assessment with SELECT-only MySQL and authenticated Agent journal
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
       - name: Console scoped filters, independent candidates and full-scope overview with SELECT-only MySQL
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/console-mysql-acceptance.test.ts
       - name: Native capability declarations and immutable Profile reference impact with SELECT-only MySQL
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/transport-query-mysql-acceptance.test.ts
       - name: Native TLS metadata, exact scoped adjacency and no writes with SELECT-only MySQL
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/tunnel-query-mysql-acceptance.test.ts
       - name: PathTemplate native grants, concurrent CAS and quota, archive and SELECT-only history
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/path-template-mysql-acceptance.test.ts
       - name: Original Forward path bindings, concurrent CAS, provenance quota rollback and SELECT-only impact
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/path-binding-mysql-acceptance.test.ts
+      - name: Original Path binding SQL and coordination journal native transaction rollback
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/path-binding-store-sql-complete.test.ts apps/control/test/transit-coordination-store-complete.test.ts apps/control/test/transit-delivery-store-complete.test.ts
       - name: Passive observation API with SELECT-only MySQL and scoped provenance
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/node-observation-mysql-acceptance.test.ts
       - name: Non-executable probe preflight with SELECT-only MySQL and current binding checks
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/forward-probe-mysql-acceptance.test.ts
       - name: Probe permit owner transactions, bounded offers, consumed withdrawal and upgrade backfill
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/probe-permit-mysql-acceptance.test.ts
       - name: Probe registry, claims, bounded delivery and result ingestion over real mTLS
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/probe-negotiation-mysql-acceptance.test.ts
       - name: Probe instance persistence, concurrent replacement, rollback and recovery quarantine
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/probe-instance-mysql-acceptance.test.ts
       - run: npm run test:phase1
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - run: npm run test:phase2
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - run: npm run test:security
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - run: npm run test:faults
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - run: npm run test:access
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - run: npm run test:transport
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - run: npm run test:relay-agent
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - run: npm run test:relay
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - run: npm run test:relay-switch
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - name: Use backup clients inside the locked MySQL service image
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: |
           mkdir -p .artifacts/mysql-clients
           cat > .artifacts/mysql-clients/mysql <<'SH'
@@ -207,10 +323,12 @@ jobs:
           .artifacts/mysql-clients/mysql --version
           .artifacts/mysql-clients/mysqldump --version
       - run: npm run test:recovery
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         env:
           TUNEX_MYSQL: .artifacts/mysql-clients/mysql
           TUNEX_MYSQLDUMP: .artifacts/mysql-clients/mysqldump
       - run: npm run test:capacity
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
       - name: Preserve redacted acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4

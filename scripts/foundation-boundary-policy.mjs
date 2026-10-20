@@ -75,6 +75,8 @@ export function sourceViolations(path, source, inventory) {
       if (targetClass?.layer === 'L0' && !contains('packages/core/src', path) && !contains('apps/control/src/kernel', path) &&
           !['packages/core/src/index.ts', 'apps/control/src/kernel/public.ts'].includes(target)) errors.push('private Core dependency: ' + reference);
     }
+    if (layer === 'L2' && !classified.binding && targetClass?.layer === 'L3')
+      errors.push('adapter imports product implementation or type: ' + reference);
     const fromOwner = owner(path), toOwner = target && owner(target);
     if (toOwner && !/\/public\.(?:ts|js)$/.test(target) &&
         (!classified.binding && layer === 'L3' && fromOwner !== toOwner || path.startsWith('scripts/ops/'))) errors.push('cross-owner private dependency: ' + reference);
@@ -82,6 +84,57 @@ export function sourceViolations(path, source, inventory) {
     if (!classified.binding && layer === 'L3' && target?.startsWith('apps/control/src/compatibility/') && !target.endsWith('/public.ts')) errors.push('private native adapter dependency: ' + reference);
     if (!classified.binding && layer === 'L3' && target?.startsWith('apps/control/src/infrastructure/')) errors.push('product imports concrete storage: ' + reference);
     if (!classified.binding && layer === 'L3' && owner(path) && !target) errors.push('product imports external/native implementation: ' + reference);
+  }
+  // Products branch on capabilities. OS/architecture selection belongs to L2,
+  // even when its platform name arrives through an injected fact.
+  if (layer === 'L3' && !classified.binding) {
+    if (path.endsWith('.go')) {
+      const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\r\n]*/g, '');
+      const operations = code.replace(/"(?:\\.|[^"\\])*"|`[^`]*`|'(?:\\.|[^'\\])*'/g, '');
+      const aliases = ['runtime'];
+      for (const match of code.matchAll(/(?:\bimport\s+|^\s*)([A-Za-z_]\w*|\.)\s+"runtime"/gm)) aliases.push(match[1]);
+      if (aliases.some(alias => alias === '.' ? /\bGO(?:OS|ARCH)\b/.test(operations) :
+          new RegExp('\\b' + alias + '\\.GO(?:OS|ARCH)\\b').test(operations))) errors.push('product native platform selection');
+      const platformFact = '\\b[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*\\.(?:Platform|OS|Arch|Architecture|OperatingSystem)\\b';
+      if (new RegExp(platformFact + '\\s*(?:==|!=|<=|>=|<|>)|(?:==|!=|<=|>=|<|>)\\s*' + platformFact + '|\\bswitch\\s+(?:[^;{}]*;\\s*)?' + platformFact + '\\s*\\{').test(operations))
+        errors.push('product native platform selection through injected facts');
+      const platforms = '(?:aix|android|darwin|dragonfly|freebsd|hurd|illumos|ios|js|linux|nacl|netbsd|openbsd|plan9|solaris|wasip1|windows|zos)';
+      if (new RegExp('_' + platforms + '(?:_[a-z0-9]+)?\\.go$').test(path) ||
+          source.split(/\r?\n/).some(line => /^\s*\/\/(?:go:build|\s*\+build)\s/.test(line) && new RegExp('\\b' + platforms + '\\b').test(line)))
+        errors.push('product platform-specific source selection');
+    } else {
+      const syntax = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+      const nativeRoots = new Set(['process', 'navigator', 'Deno', 'Bun']);
+      function memberPath(node) {
+        if (ts.isIdentifier(node)) return node.text;
+        if (ts.isPropertyAccessExpression(node)) return memberPath(node.expression) + '.' + node.name.text;
+        if (ts.isElementAccessExpression(node) && node.argumentExpression && ts.isStringLiteralLike(node.argumentExpression))
+          return memberPath(node.expression) + '.' + node.argumentExpression.text;
+        return '';
+      }
+      function platformFact(node) {
+        while (ts.isParenthesizedExpression(node)) node = node.expression;
+        return /\.(?:platform|os|arch|architecture|operatingSystem)$/i.test(memberPath(node));
+      }
+      function visit(node) {
+        const name = memberPath(node).replace(/^globalThis\./, '');
+        if (/^(?:process\.(?:platform|arch)|navigator\.(?:platform|userAgent|userAgentData)|Deno\.build|Bun\.env)(?:\.|$)/.test(name))
+          errors.push('product native platform selection');
+        if (ts.isVariableDeclaration(node) && ts.isObjectBindingPattern(node.name) && node.initializer &&
+            nativeRoots.has(memberPath(node.initializer).replace(/^globalThis\./, '')))
+          errors.push('product native platform selection through native destructuring');
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer &&
+            nativeRoots.has(memberPath(node.initializer).replace(/^globalThis\./, '')))
+          errors.push('product native platform selection through native alias');
+        if (ts.isBinaryExpression(node) && [ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
+          ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.LessThanToken,
+          ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(node.operatorToken.kind) &&
+          (platformFact(node.left) || platformFact(node.right)) || ts.isSwitchStatement(node) && platformFact(node.expression))
+          errors.push('product native platform selection through injected facts');
+        ts.forEachChild(node, visit);
+      }
+      visit(syntax);
+    }
   }
   // Browser owner effects are explicit. Mixed historical Control/Agent product
   // native views stay declared in their ledgers, not broadly exempted L1 APIs.

@@ -153,8 +153,9 @@ test('plan parsing rejects duplicates, unknown fields, unsafe counters, legacy p
 });
 test('known migration footprints cover tables, multi-column DDL and superseded enums', async () => {
     const catalog = await upgradeSchemaCatalog();
-    assert.equal(catalog.files.length, 37);
-    assert.equal(catalog.files.at(-1)?.name, '0037-probe-echo.sql');
+    assert.equal(catalog.files.length, 38);
+    assert.equal(catalog.files.at(-1)?.name, '0038-probe-plan-json-integers.sql');
+    assert.deepEqual(schemaMarkers('0038-probe-plan-json-integers.sql', catalog.files.at(-1)!.sql), []);
     assert.ok(catalog.markers.some(m => m.migration === '0037-probe-echo.sql' && m.table === 'probe_runs' && m.column === 'result_response_bytes'));
     assert.ok(catalog.markers.some(m => m.migration === '0019-path-bindings.sql' && m.table === 'forward_path_bindings'));
     assert.ok(catalog.markers.some(m => m.migration === '0019-path-bindings.sql' && m.table === 'current_path_bindings'));

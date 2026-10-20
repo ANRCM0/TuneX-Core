@@ -83,6 +83,15 @@ files with a further commit/push. That bounded authorization supersedes the
 source-only restriction below for those tasks. It does not accept the foundation,
 open parallel product development, or authorize a release.
 
+The later complete-B task additionally authorized closing the 220-item assertion
+map, the named parallel owner work, static checks, commit/push, exact-source
+Actions and removal of unnecessary temporary records. The bounded B acceptance
+decision is now recorded in docs/development/foundation-verification-2026-10-19.md.
+Future module entry is eligible only for the accepted frozen public contracts or
+a separately verified successor, with its own authorized task, public contract,
+independent branch/worktree, tests and integration instructions. This task does
+not authorize merging PR #112, starting C product work or publishing a release.
+
 The current human agreement is source development first, concentrated verification
 after freezing. During this phase do necessary source reads/edits; do not run tests,
 type/syntax/static/boundary checks, formatters, generators, builds, acceptance CI,

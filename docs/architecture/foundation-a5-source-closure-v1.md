@@ -1,17 +1,20 @@
 # A5 Foundation Source Closure v1
 
-Date: 2026-10-19 (Asia/Shanghai).
-Status: **A5 source classification closed; candidate saved, configured CI passed
-and PR #111 merged. Readiness acceptance remains pending.**
-Foundation status remains **not stable/accepted; upper parallel-development gate
-closed**. The source classification is distinct from the actual checks, source
-identity and merge recorded below; it does not itself approve publication or release.
+Date: 2026-10-20 (Asia/Shanghai).
+Status: **A5 source classification closed, PR #111 merged; later B accepted in
+its frozen public-interface/configured-Actions scope**.
 
-The human subsequently authorized testing/pushing and then merge/cleanup on
-2026-10-19. The saved candidate is `9f1d78d`, merged main is `373c291`; see
-[verification record](../development/foundation-verification-2026-10-19.md).
-The no-check/no-commit statements below describe the original source handoff,
-not the later executed verification. Cleanup revisions need their own checks.
+A5 saved head `9f1d78d` merged as `373c291`. B is frozen at
+`e208a3abf17129b0c2898ba2022c69f60f45445a`, actual tested PR checkout
+`c3ce8a67b901f61234b4116190409854818cb6c7`. See the
+[verification record](../development/foundation-verification-2026-10-19.md) for
+the acceptance decision and separate merge/environment/release gates. PR #112
+remains open; future product work needs its own authorization and accepted base.
+
+The no-check/no-commit/unverified statements below are the original A5 source
+handoff. Its later B assertions and execution are now reconciled in the maintained
+[map](../development/foundation-b-assertion-coverage.md); those historical words
+do not invalidate that identified evidence or accept any later source change.
 
 ## A5 Exit Scope And Records
 
@@ -62,7 +65,10 @@ source authorization and explicit parallel-agent instruction:
 Source intent retains original proof/credential field names/order/tags/omitempty,
 pointer semantics and missing-versus-corrupt refusal; Guard/Journal/authority,
 same-Tx locks/publication and save-before-bind ownership are not replaced.
-No native payload/schema/SQL migration or feature default changes were added.
+No native payload/schema/SQL migration or feature default changes were added
+in that A5 source slice. Later B work adds the narrow MySQL0038 CHECK repair and
+UpgradeAssessment2 profile in [FR-0027](../changes/FR-0027-probe-plan-json-integers.md),
+with its own compatibility and exact-source acceptance obligations.
 The stated byte, sequencing and lifecycle equivalence is still planned acceptance,
 not demonstrated behavior.
 

@@ -117,8 +117,14 @@ func TestProbeWorkflowReportAttemptBurnsBeforeLostOrInvalidAcknowledgement(t *te
 			if err := f.runner.reportProbe(execution); !errors.Is(err, probe.ErrReplay) {
 				t.Fatal("uncertain report was retried", err)
 			}
+			// Report completion does not synchronize the target's Accept goroutine.
+			select {
+			case <-f.eof:
+			case <-time.After(time.Second):
+				t.Fatal("target did not observe zero-payload close")
+			}
 			if f.reports.Load() != 1 || f.connections.Load() != 1 || f.claims.Load() != 1 {
-				t.Fatal("report failure retried execution or HTTP")
+				t.Fatalf("report failure retried execution or HTTP: reports=%d connections=%d claims=%d", f.reports.Load(), f.connections.Load(), f.claims.Load())
 			}
 		})
 	}
@@ -155,10 +161,17 @@ func TestProbeWorkflowCancellationDrainsReportAndWatchBeforeReturning(t *testing
 	case <-time.After(time.Second):
 		t.Fatal("HTTP request did not terminate")
 	}
+	// Client completion does not synchronize the target's Accept goroutine.
+	// Wait for its zero-payload close before inspecting the target-side count.
+	select {
+	case <-f.eof:
+	case <-time.After(time.Second):
+		t.Fatal("target did not observe zero-payload close")
+	}
 	probeDeliveries.mutex.Lock()
 	active := probeDeliveries.nodes[f.binding.NodeID].active
 	probeDeliveries.mutex.Unlock()
 	if active || f.reports.Load() != 1 || f.connections.Load() != 1 {
-		t.Fatal("cancellation leaked slot or retried work")
+		t.Fatalf("cancellation leaked slot or retried work: active=%v reports=%d connections=%d", active, f.reports.Load(), f.connections.Load())
 	}
 }

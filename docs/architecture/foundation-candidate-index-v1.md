@@ -1,7 +1,8 @@
 # Foundation Candidate Review Index v1
 
-Date: 2026-10-19 (Asia/Shanghai). Status: **source review index, not a frozen
-revision, complete dependency manifest or accepted foundation**. This document
+Date: 2026-10-20 (Asia/Shanghai). Status: **source/public-version index supporting
+the separately identified B acceptance decision**. The index is not itself a
+complete dependency manifest or execution certificate. This document
 joins actual public declarations, their documented consumers, source roots and
 distribution inputs. Version numbers below are declarations read from source,
 not successful compatibility negotiations or test results.
@@ -13,6 +14,15 @@ revision and matching machine/functional acceptance were absent at that handoff.
 The human has since authorized B verification and push; see
 [verification record](../development/foundation-verification-2026-10-19.md).
 Existing compatibility constructors/aliases are retained deliberately.
+
+B accepts the current public-version/consumer/default/compatibility scope at
+`e208a3abf17129b0c2898ba2022c69f60f45445a`, actually tested as
+`c3ce8a67b901f61234b4116190409854818cb6c7`. The
+[assertion map](../development/foundation-b-assertion-coverage.md) and
+[verification](../development/foundation-verification-2026-10-19.md) supersede the
+dated planned/unexecuted source handoff below for this revision. Future modules
+consume that frozen contract set or a verified successor; independent physical,
+long-run/load, Responder, release and production gates remain separate.
 
 ## Candidate Identity And Scope
 
@@ -51,8 +61,18 @@ The navigation sources are:
 
 Paths in the Control tables are relative to apps/control/src. An aggregate entry
 version does not replace versions of its exported ports. Package version 0.1.0,
-Core/Forward v1, ADP/3, native schema versions and SQL schema sequence 0037 are
+Core/Forward v1, ADP/3, native schema versions and SQL schema sequence 0038 are
 different contracts; none can stand in for an accepted source revision.
+
+B's [FR-0027](../changes/FR-0027-probe-plan-json-integers.md) advances only the
+UpgradeAssessment public counter to 2 and the reviewed SQL sequence to 0038.
+The additional Control profile `adp3-probe-plan-json-integers-v1` covers 0038;
+all 26 older profile ceilings, old aliases and Agent release profiles remain.
+Exhaustive CompatibilityProfile source consumers must account for the new member.
+Plan/report payload versions remain 1. The explicitly reviewed CHECK-only SQL
+has no new table/column footprint and does not prove full schema equivalence.
+The original A5 inventories below retain their dated source scope. B acceptance
+and the new migration behavior have their own exact-source evidence in verification.
 
 | Public entry/declaration | Current candidate value | Concrete consumers and compatibility boundary |
 | --- | --- | --- |
@@ -100,7 +120,8 @@ framework/public.ts. They are not covered merely by the Framework1 row:
 | Recovery | OBSERVATION_RECOVERY_STORAGE_INTERFACE_VERSION, PUBLICATION_RECOVERY_STORAGE_INTERFACE_VERSION, RECOVERY_EVENT_STORAGE_INTERFACE_VERSION | original owner recovery methods, one caller Tx and original mutation order; FR-0017 |
 
 Other Control product public entries declare their own module/API/command/query/
-recovery counters. Current declared values are1 except Transport module2 above.
+recovery counters. Current declared values are1 except Transport module2 above
+and UpgradeAssessment2 under FR-0027.
 The named owners include Identity, Node, Forward, Path, Ingress, Probe/history/plan,
 ObservationService, Audit, ForwardDiagnostic, StationAlert, Notification, Telemetry,
 Transit, RelayEndpoint/RelayPlan, RuntimeStatus, Console/Control/Tunnel queries,
@@ -142,7 +163,7 @@ Compose file, label or healthcheck has been executed or accepted by this review.
 | packages/contracts/data/native-drivers-v1.json | Native catalog parser and digest; Control COPY includes whole packages/contracts | Catalog1 metadata is not live driver authority; generated/Agent catalog parity unverified |
 | docs/protocol/schemas | Actual TS fs inputs resolved from source modules; Control explicitly COPYs schema directory | Direct native asset map in contracts-package-native-boundaries-v1.md; nested references/byte parity/module initialization still require closure |
 | Agent embedded schema copies/generated Go structs | Existing go:embed and native packages; Agent/responder builder COPYs agent/ | Do not regenerate or infer parity from matching filenames; generation invokes gofmt and is not source-phase authorized |
-| apps/control/migrations/0001-0037 | Original MySQL migration reader and upgrade inspection; whole apps/control is copied | Actual DDL/footprints/upgrade/refusal not executed; new0020-0037 are part of dirty candidate |
+| apps/control/migrations/0001-0038 | Original MySQL migration reader and upgrade inspection; whole apps/control is copied | Original A5 sequence ended0037; B0038 CHECK repair and exact read-only catalog review are in FR-0027, awaiting their own native upgrade/refusal evidence |
 | apps/web including owner/native modules, index.html/style.css | Control literal asset union/routes + original fixed reader; whole apps/web is copied | Browser import resolution, MIME/CSP/headers and every referenced asset require acceptance; directory COPY alone does not prove loading |
 | scripts/ops and canonical Control command/native owners | Existing ops/recovery/upgrade/release entries; Control COPY includes scripts/ops and apps/control | Production/operator source, not test-only; preserve lazy initialization, original Tx, protected history and credential/rebind ordering |
 | examples/foundation-extension/{public,module,main}.ts and README.md | Public source example in repository checkout | Not copied into current production Control image; root tsconfig include omits examples; type/import/behavior acceptance is still required |
@@ -218,4 +239,5 @@ The A5 source classification and reviewable candidate records are now complete;
 the next stage is separately authorized saving/freezing and B contract/functional/
 example acceptance. C/D/E and
 independent physical, long-run, recovery, image, release and production gates do
-not become complete by writing this index. The upper-module gate stays closed.
+not become complete by writing this index. The original source handoff kept the upper-module gate closed. The later bounded
+B decision above opens contract consumption only at its identified revision and scope.
