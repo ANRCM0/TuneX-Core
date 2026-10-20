@@ -18,6 +18,10 @@ scenario/configuration/assets, rather than 406 executed test suites.
 | Container packaging | [39341589509](https://github.com/ANRCM0/TuneX-Core/actions/runs/39341589509), success; no image publication |
 | Source status at freeze | Tracked tree clean; only the three temporary evidence JSONs scheduled for cleanup remained untracked |
 
+Post-merge status (2026-10-20): PR #112 was subsequently merged as
+`5a764f74f172cc60b40fc75ba61ffdfe94ced78e`. The table above records the
+pre-merge task state; this note does not change the accepted source or scope.
+
 The actual checkout is read from completed job logs, separately from the workflow
 head SHA. All baseline and packaging jobs belong to this source and checkout;
 older passing jobs are not combined to accept this candidate. The acceptance and
@@ -103,8 +107,9 @@ public example. Subsequent modules may consume these accepted public contracts
 from this frozen revision or a separately verified successor, with an authorized
 module task, independent branch/worktree, public entry, tests and integration
 instructions. Shared foundation/composition changes remain serial and follow FR
-governance. No new product slice starts here. Current main remains the prior A5
-integration line; PR #112 has not been merged.
+governance. No new product slice starts here. At the time of this record, current
+main remained the prior A5 integration line; PR #112 was subsequently merged as
+`5a764f7`.
 
 Independent physical-host topology, long-running/load and resource baselines,
 standalone Responder build/delivery, image publication, release and production

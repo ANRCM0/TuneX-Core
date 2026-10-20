@@ -12,7 +12,7 @@ in [verification](foundation-verification-2026-10-19.md). This permits future
 modules to consume those accepted contracts from that frozen revision or a
 separately verified successor, with their own authorization, isolated worktree,
 public entry, contract tests and integration instructions. No product slice starts
-in this task; PR #112 remains open and no release is approved.
+in this task; PR #112 was later merged as `5a764f7`; no release is approved.
 
 Independent physical hosts, long-run/load acceptance, standalone Responder delivery,
 image publication, release and production readiness retain their own gates.

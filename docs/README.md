@@ -26,6 +26,7 @@ development 其余文件保留现行模块的接线、开发命令与验收场�
 | --- | --- |
 | [总体架构](architecture/overview.md) | 组件边界、数据流与职责 |
 | [四层地图](architecture/foundation-layers-v1.md) | L0/L1/L2/L3 公共依赖方向 |
+| [兼容目标](architecture/compatibility-targets-v1.md) | 明确支持的兼容目标、拒绝边界与当前源码路线 |
 | [机器边界清单](architecture/foundation-boundaries-v1.json) | 源码分类、公共入口、具名兼容桥和默认绑定 |
 | [A5 收口](architecture/foundation-a5-source-closure-v1.md) | 完整 Control、Agent、Web 和资产／消费者索引 |
 | [候选公共版本](architecture/foundation-candidate-index-v1.md) | 版本、兼容影响与验收关联 |
@@ -46,6 +47,7 @@ decisions 与 changes 保留仍约束当前源码的设计与兼容变更。
 | [Core](spec/core-v1.md) 与 [Forward](spec/forward-v1.md) | 纯领域与最小转发语义 |
 | [Control API](spec/control-api-v1.md) 与 [Runtime/Agent](spec/runtime-agent-v1.md) | 公共命令、Operation、部署状态与恢复 |
 | [ADP/3](protocol/agent-deployment-v3.md) 与 [执行扩展](protocol/agent-deployment-execution-v1.md) | 当前在线协议及版本化多跳执行 |
+| [ADP/3 在线切换](development/adp3-cutover.md) | 当前 Direct 在线协议、旧 ADP/2 拒绝与状态边界 |
 | [模块边界](architecture/module-boundaries.md) | 原 owner、公共调用与事务归属 |
 | [原生能力管理](spec/native-driver-management-v1.md) | 声明能力、平台／角色与服务端拒绝 |
 

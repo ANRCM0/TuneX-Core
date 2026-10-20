@@ -9,7 +9,8 @@ A5 saved head `9f1d78d` merged as `373c291`. B is frozen at
 `c3ce8a67b901f61234b4116190409854818cb6c7`. See the
 [verification record](../development/foundation-verification-2026-10-19.md) for
 the acceptance decision and separate merge/environment/release gates. PR #112
-remains open; future product work needs its own authorization and accepted base.
+was later merged as `5a764f7`; future product work still needs its own authorization
+and accepted base.
 
 The no-check/no-commit/unverified statements below are the original A5 source
 handoff. Its later B assertions and execution are now reconciled in the maintained
