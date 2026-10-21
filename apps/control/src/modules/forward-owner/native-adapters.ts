@@ -68,7 +68,16 @@ class NativePathForwardAdapter<Tx> implements ForwardExecutionAdapter<Tx> {
     async prepareUpdate(tx:Tx,actor:string,current:Forward,next:Forward) {
         await this.relay.lockNodes(tx,next);
         const stopping=current.spec.enabled&&!next.spec.enabled&&digest({...current.spec,enabled:false})===digest(next.spec);
-        if(!stopping&&!await this.relay.canExecute(tx,actor,next))throw new ControlError('AUTHORIZATION_DENIED',403,'Relay execution is not authorized');
+        if(stopping)return;
+        if(next.spec.enabled){
+            if(!await this.relay.canExecute(tx,actor,next))throw new ControlError('AUTHORIZATION_DENIED',403,'Relay execution is not authorized');
+        }else{
+            // Disabled intent changes require product access, without online execution readiness.
+            const path=[next.spec.ingress.nodeId,...next.spec.path!.via];
+            const uses=path.map((nodeId,index)=>({nodeId,role:index===0?'ingress' as const:index===path.length-1?'egress' as const:'transit' as const}));
+            for(const {nodeId,role} of uses.sort((a,b)=>a.nodeId<b.nodeId?-1:a.nodeId>b.nodeId?1:0))
+                await this.nodes.authorizedRelayNode(tx,actor,next.scopeId,nodeId,role,next);
+        }
     }
     async planUpdate(tx:Tx,actor:string,forward:Forward) {if(forward.spec.enabled)await this.relay.acceptPlan(tx,actor,forward);}
     async lockRemoval(tx:Tx,forward:Forward) {await this.relay.lockNodes(tx,forward);}

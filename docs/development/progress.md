@@ -14,14 +14,17 @@
 实际部署易用性尚待验收，三路具名消费者源码已交接整合。最新目录为 41 条迁移、
 30 个 Control profile，JournalInspection2 和新增 Agent 预算 profile 均有未执行病例。
 带宽与额度余额目前不在线导出，页面显示 unavailable/null。当前授权内的源码切片
-已整理为集中验证候选；尚未保存冻结修订，全量兼容性和运行效果均未获得验证。
+已整理为集中验证候选；后续验证已进入草稿 PR #114，全量兼容性与运行效果仍在验证。
 准确状态、调用链与剩余项见
 [N 阶段台账](product-development-stage-n-2026-10-21.md)。
 
 用户随后授权“好，开始进行测试”，本地完整类型、边界、生成一致性、Web 语法、
 Windows Go 编译／vet 及 Linux、macOS 交叉编译已在修复后通过。
 实际结果与准确修订 Actions 的待执行项记录于
-[N 验证记录](product-verification-n-2026-10-21.md)。当前未提交推送或发行。
+[N 验证记录](product-verification-n-2026-10-21.md)。用户进一步授权后已提交并推送，
+第二轮候选为 `7854ad7`。Windows Agent、Probe 浏览器、Relay 隔离及 3／4 节点多跳
+等作业通过；contracts 和 MySQL 仍有失败，修复与后续准确修订重测进行中。
+尚未合并、发布镜像或发行。
 下列 B／C 的历史接受仅对各自所列冻结修订有效，不能作为 N 后继契约的当前证据。
 
 ## 当前结果

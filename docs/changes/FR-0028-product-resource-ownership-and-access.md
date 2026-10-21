@@ -188,3 +188,16 @@ policy but cannot apply/compensate as that creator. Path publication storage v2
 therefore changes only the caller-aware list contract, not its head identity.
 This source correction preserves the existing immutable schema and protected
 history; exact SQL/owner/attempt cases remain authored and unexecuted.
+
+## Verification Repair: Disabled Path Changes
+
+The second N Actions candidate exposed an unintended online-readiness requirement
+when attaching or replacing a disabled Forward's path binding. The native L3 Path
+adapter now checks every selected Node's product use, purpose and port policy in
+the original transaction with the actual Forward context. It does not call the
+online Relay execution check or publish a plan for a disabled edit. Enabled
+changes retain the full execution check; a pure disable retains the existing
+stop-only path. This restores offline authoring while preserving N resource
+authorization, the original Runtime ledger and protected history. Existing real
+MySQL path-binding acceptance and added adapter failure-order regressions must
+pass on the repaired saved revision; no public interface changes are introduced.

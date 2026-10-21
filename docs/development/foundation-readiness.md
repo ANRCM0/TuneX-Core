@@ -60,6 +60,13 @@ Telemetry/Transport/Tunnel and Web consumers now have authored migrations in the
 main worktree. All three named agents have handed off their scoped source files;
 this does not establish complete consumer closure or any executed acceptance.
 
+The human subsequently authorized the N testing branch, candidate commits/pushes,
+draft PR #114 and Actions repairs. Second candidate `7854ad7` is being checked by
+baseline run `39540041708` at PR merge `5ad65786cc0945f0717e2cbce81df84aba911992`.
+Several Agent, browser and network jobs passed, but contracts and MySQL reported
+failures. These are partial execution results, not successor acceptance; the
+verification record retains both failed candidates and their subsequent repairs.
+
 N5 consumer source follow-up includes the Path/Ingress publication/group storage,
 governance-only Audit/Station/Notification/Observation and remaining Probe,
 Telemetry and NodeObservation callers in isolated named test files. The public

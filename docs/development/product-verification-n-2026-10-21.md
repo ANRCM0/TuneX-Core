@@ -105,6 +105,43 @@ sources and schemas did not change in this repair set. No functional pass is
 claimed before the next saved-source Actions run. Functional/MySQL/network/browser
 tests remain Actions only.
 
+## Second Actions Candidate
+
+The repaired source `7854ad76ac7df5016bad09e75f28a9b5dbfdb852` was pushed to
+draft PR #114. Baseline run `39540041708` reports that head and checks out the
+temporary PR merge `5ad65786cc0945f0717e2cbce81df84aba911992`, joining it to
+`bc8507b765a84ef6a9607df8c2ea8531a71a71c9`. Container run `39540041645`
+passed on this candidate. This is a subsequent source, not a relabelling of
+the first run.
+
+The contracts job completed with 2,255 tests: 2,105 passed, three failed and
+147 were skipped in the no-database job. All three failures came from the
+3/4/8-Node coordinator consumer missing `reservationPorts`. Its replacement
+fixture now asserts the original transaction, actor, scope, endpoint ports,
+purpose role and full stored Forward context while retaining the pure domain
+projection and original denial assertions. The 206 Web tests, Linux Go tests
+and race run, static checks and offline parser integration passed in Actions.
+Windows Agent, unsupported-platform, deployment tooling, Probe browser workflow,
+Relay isolation/capacity/rotation and the 3/4-Node multi-hop jobs passed.
+
+The completed MySQL job failed only in Path binding acceptance and the legacy
+phase1 script; all its other acceptance steps completed successfully. Path
+binding exposed a production regression: an N authorization change required
+online execution readiness even for disabled path edits. The native L3 adapter
+now checks every Node's product use, role and port policy for disabled edits,
+without an online Relay check or plan publication. Enabled edits retain full
+execution validation, and pure stop-only changes retain their existing path.
+The original MySQL success/rollback assertions remain, with an added adapter
+regression for offline edits, exact context and every provider failure cutoff.
+
+The legacy capacity fixture inserted a Node with the old defaults, which now
+means unclassified; Actions confirmed a 404 before the expected 429 byte-capacity
+refusal. The fixture now declares the intended private owner explicitly,
+preserving the original capacity refusal and rollback checks. Full local
+typecheck, the 984-file boundary check and diff checks passed after these repairs.
+The repaired source still requires the next Actions revision. No N acceptance
+is declared while these failures or their retests remain unresolved.
+
 ## Actions Preparation And Pending Evidence
 
 The existing baseline workflow now imports the public shared resource provider
@@ -127,7 +164,7 @@ Pending on a saved and pushed N source revision:
   actual installation, image publication and release remain separate gates.
 
 No local functional/MySQL/network/browser/container tests, merge, image
-publication or release has occurred in this task. The next step is to save and
-push the repaired candidate for the configured Actions workflow. Container
+publication or release has occurred in this task. Continue collecting the current
+run and save/push its necessary repairs for the next configured Actions run. Container
 packaging is build evidence, not image publication or release. The local checkout
 baseline cannot stand in for the source actually executed there.

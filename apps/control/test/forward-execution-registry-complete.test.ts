@@ -160,6 +160,26 @@ test('115 Path adapters propagate each owner failure at its original call and sk
     }
 });
 
+test('disabled Relay and multihop edits check every purpose and original Forward context without online planning',async()=>{
+    for(const count of [1,2]){
+        const f=fixture(),adapter=f.adapters[count]!,current=forward(count,false);
+        const next={...current,revision:3,spec:{...current.spec,target:{...current.spec.target,port:81}}};
+        const path=[next.spec.ingress.nodeId,...next.spec.path!.via],sorted=[...path].sort();
+        f.options.denied=true;
+        await adapter.prepareUpdate(f.tx,'actor',current,next);await adapter.planUpdate(f.tx,'actor',next);
+        assert.deepEqual(f.args,[['lockNodes',f.tx,next],...sorted.map(id=>[
+            `authorizedRelayNode:${id}`,f.tx,'actor',next.scopeId,id,
+            id===path[0]?'ingress':id===path.at(-1)?'egress':'transit',next,
+        ])]);
+        for(const stage of ['lockNodes',...sorted.map(id=>`authorizedRelayNode:${id}`)]){
+            f.clear();f.options.fail=stage;
+            await assert.rejects(adapter.prepareUpdate(f.tx,'actor',current,next),error=>error===f.failure);
+            const expected=['lockNodes',...sorted.map(id=>`authorizedRelayNode:${id}`)];
+            assert.deepEqual(f.events,expected.slice(0,expected.indexOf(stage)+1));
+        }
+    }
+});
+
 test('115 executor preserves moved-Node state first recovery/revoked refusal sorted locks selected adapter and retry lock transition capacity receivers',async()=>{
     const current=forward(),next={...current,revision:3,spec:{...current.spec,ingress:{...current.spec.ingress,nodeId:'node-a'}}};
     for(const [suspended,revoked]of [[false,false],[false,true],[true,false]]){const f=fixture();f.options.oldRevoked=revoked!;await assert.rejects(f.executor.prepareUpdate(f.tx,'actor',current,next,suspended!),{code:'UNSUPPORTED_CAPABILITY',status:422,message:'Live Node moves require the later multi-node coordinator'});assert.deepEqual(f.args,[['state',f.tx,'node-z']]);}
