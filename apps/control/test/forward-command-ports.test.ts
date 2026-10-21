@@ -4,7 +4,8 @@ import { MAX_COUNTER } from '@tunex/core';
 import type { Forward, ForwardSpec } from '@tunex/core';
 import { digest } from '@tunex/contracts';
 import { ForwardCommands } from '../src/application/forward-commands.ts';
-import type { CommandResponse, IdempotentRequests, RequestIdentity, ScopeAuthorization, TransactionBoundary } from '../src/application/ports.ts';
+import type { CommandResponse, IdempotentRequests, RequestIdentity, ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary } from '../src/application/ports.ts';
+import type { ResourceReadAccess } from '../src/framework/public.ts';
 import type { ForwardWriter } from '../src/modules/forwarding-ports.ts';
 import type { ForwardNodeAuthorization } from '../src/modules/node-execution-ports.ts';
 import type { ForwardAuthorizationExecution } from '../src/modules/runtime/authorization-ports.ts';
@@ -26,7 +27,7 @@ function fixture(relay = false) {
         operations: [] as { id: string; forward: Forward; request: RequestIdentity; kind: ForwardOperationKind; previous: unknown; source: string | null }[],
         slots: [] as ReservedSlot[], plans: [] as number[], leases: [10000],
         responses: new Map<string, { digest: string; response?: CommandResponse }>() };
-    const options = { visible: true, manage: true, nodeAllowed: true, relayAllowed: true, oldRevoked: false,
+    const options = { visible: true, resourceVisible: true, manage: true, nodeAllowed: true, relayAllowed: true, oldRevoked: false,
         failure: '', invalidFacts: false, invalidReservation: false, onScope: () => {} };
     function event(current: Tx, name: string) {
         assert.equal(current, tx); events.push(name);
@@ -37,7 +38,7 @@ function fixture(relay = false) {
         try { const response = await action(tx); events.push('commit'); return response; }
         catch (error) { state = before; events.push('rollback'); throw error; }
     } };
-    const identity: ScopeAuthorization<Tx> = { scope: async (current, actor, scope, manage) => {
+    const identity: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx> = { owner: async (current, actor, scope) => { assert.equal(current, tx); assert.equal(actor, 'manager-a'); assert.equal(scope, 'scope-a'); }, scope: async (current, actor, scope, manage) => {
         event(current, manage ? 'manage' : 'visible'); assert.equal(actor, 'manager-a'); assert.equal(scope, 'scope-a');
         if (!options.visible || (manage && !options.manage)) throw new Error('denied');
         options.onScope();
@@ -54,10 +55,19 @@ function fixture(relay = false) {
         },
     };
     function currentForward() { if (!state.forward) throw new Error('not found'); return state.forward; }
+    const accessReads: string[] = [];
+    const access: ResourceReadAccess<Tx> = {
+        async principal(current, actor, scope) { assert.equal(current, tx); assert.equal(scope, 'scope-a'); return { actorId: actor, governance: false }; },
+        async forward(current, actor, scope, id) { assert.equal(current, tx); assert.equal(actor, 'manager-a'); const forward = currentForward(); assert.equal(scope, forward.scopeId); assert.equal(id, forward.id); accessReads.push(id); if (!options.resourceVisible) throw new Error('Resource visibility denied'); },
+        async node() { throw new Error('Forward fixture does not read Node product views'); },
+        async owned(current, actor, scope, kind, id) { assert.equal(current, tx); assert.equal(actor, 'manager-a'); assert.equal(scope, 'scope-a'); assert.equal(kind, 'forward'); assert.equal(id, currentForward().id); },
+    };
     const forwarding: ForwardWriter<Tx> = {
+        ownershipForUpdate: async (current, scope, id) => { assert.equal(current, tx); const forward = currentForward(); assert.equal(scope, forward.scopeId); assert.equal(id, forward.id); return forward; },
+        classifyOwner: async () => { throw new Error('Legacy command fixture does not classify ownership'); },
         record: async (current, scope, id) => {
             event(current, 'record'); const f = currentForward(); assert.equal(scope, f.scopeId); assert.equal(id, f.id);
-            return { ...f, deleting: state.deleting, recoverySuspended: state.recoverySuspended };
+            return { ...f, ownerActorId: 'manager-a', deleting: state.deleting, recoverySuspended: state.recoverySuspended };
         },
         currentForUpdate: async (current, scope, id) => {
             event(current, 'current'); if (state.deleting) throw new Error('deleting');
@@ -98,8 +108,9 @@ function fixture(relay = false) {
         state.slots.push(...slots); return slots;
     }
     const resources: ForwardResourceHost<Tx> = {
+        lockOwnership: async (current,forward) => { event(current, 'ownership-lock:' + forward.id); },
         lockNode: async (current, id) => { event(current, 'node-lock:' + id); },
-        reserve: async (current, forward) => { event(current, 'reserve'); return allocate(forward); },
+        reserve: async (current, forward,creatingOwnerActorId) => { assert.equal(creatingOwnerActorId,'manager-a'); event(current, 'reserve'); return allocate(forward); },
         transition: async (current, before, next) => { event(current, 'transition'); assert.equal(before.id, next.id); return allocate(next); },
     };
     const relayHost: ForwardRelayHost<Tx> = {
@@ -127,13 +138,13 @@ function fixture(relay = false) {
         },
     };
     const preparation = new ForwardCommandExecutor(nodes, resources, relayHost, execution);
-    const service = new ForwardCommands(db, identity, idempotency, forwarding, operations, preparation, () => 'new-forward');
+    const service = new ForwardCommands(db, identity, access, idempotency, forwarding, operations, preparation, () => 'new-forward');
     const create = (key = 'key-a', input: unknown = spec) => service.create('manager-a', 'scope-a', key, input);
     const update = (input: unknown = { ...spec, target: { host: '127.0.0.1', port: 81 } }, key = 'key-a', expected = 4) =>
         service.update('manager-a', 'scope-a', 'forward-a', key, expected, input);
     const remove = (key = 'key-a', expected = 4) => service.remove('manager-a', 'scope-a', 'forward-a', key, expected);
     const retry = (key = 'key-a', expected = 4) => service.retry('manager-a', 'scope-a', key, 'source-a', expected);
-    return { tx, db, identity, idempotency, forwarding, operations, preparation, service, options, events, spec,
+    return { tx, db, identity, access, accessReads, idempotency, forwarding, operations, preparation, service, options, events, spec,
         create, update, remove, retry, state: () => state };
 }
 
@@ -154,13 +165,16 @@ test('Relay creation authorizes sorted Nodes and plans after owner insertion eve
     assert.equal(f.state().slots.length, 0); assert.equal(f.state().plans.length, 1);
 });
 
-test('all replay paths require current visibility but not renewed management authority; create alone rechecks the owner record', async () => {
+test('all replay paths require current resource visibility but not renewed management authority', async () => {
     for (const method of ['create', 'update', 'remove', 'retry'] as const) {
         const f = fixture(), action = () => method === 'update' ? f.update() : f[method]();
-        const first = await action(); f.options.manage = false; f.events.length = 0;
+        const first = await action(), reads = f.accessReads.length; f.options.manage = false; f.events.length = 0;
         assert.deepEqual(await action(), first);
-        assert.deepEqual(f.events, ['begin', 'visible', 'claim', ...(method === 'create' ? ['record'] : []), 'commit']);
+        assert.deepEqual(f.events, ['begin', 'visible', 'claim', 'commit']);
+        assert.equal(f.accessReads.length, reads + 1);
         assert.equal(f.state().operations.length, 1);
+        f.options.resourceVisible = false; await assert.rejects(action(), /Resource visibility denied/);
+        f.options.resourceVisible = true;
         f.options.visible = false; await assert.rejects(action(), /denied/);
     }
     const missing = fixture(); await missing.create(); missing.state().forward = null;
@@ -311,7 +325,7 @@ test('non-HTTP callers cannot bypass input/identity/revision validation or requi
         () => f.service.retry('manager-a', 'scope-a', undefined, '../operation', 4),
     ]) await assert.rejects(action(), { code: 'INVALID_CONFIG' });
     assert.deepEqual(f.events, []);
-    assert.throws(() => new ForwardCommands(f.db, f.identity, f.idempotency, f.forwarding, f.operations, undefined as never, () => 'id'),
+    assert.throws(() => new ForwardCommands(f.db, f.identity, f.access, f.idempotency, f.forwarding, f.operations, undefined as never, () => 'id'),
         /preparation is required/);
     assert.equal((await f.create()).status, 202);
     await assert.rejects(f.create('key-a', { ...f.spec, enabled: false }), /IDEMPOTENCY_CONFLICT/);

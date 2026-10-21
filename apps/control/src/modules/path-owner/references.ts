@@ -16,8 +16,9 @@ export class NativePathReferences<Tx> implements PathTemplateReferences<Tx> {
     }
     async validate(tx: Tx, actor: string, scope: string, config: PathTemplateConfig) {
         const required = pathRequirements(config);
-        for (const id of [...config.nodes].sort()) {
-            const node = await this.nodes.authorizedRelayNode(tx, actor, scope, id);
+        const uses = config.nodes.map((id, index) => ({ id, role: index === 0 ? 'ingress' as const : index === config.nodes.length - 1 ? 'egress' as const : 'transit' as const }));
+        for (const { id, role } of uses.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) {
+            const node = await this.nodes.authorizedRelayNode(tx, actor, scope, id, role);
             if (node.nodeId !== id || node.scopeId !== scope || required.some(capability => !node.capabilities.includes(capability)))
                 throw new ControlError('UNSUPPORTED_CAPABILITY', 422, 'Every template Node must declare the required native capabilities');
         }

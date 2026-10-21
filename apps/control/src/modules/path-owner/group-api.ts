@@ -4,11 +4,12 @@ import type { PathBindingEvidence } from './binding-api.ts';
 import type { PathBindingPreview, PathSelection } from './binding-contracts.ts';
 import type { PathGroupHead, PathGroupRevision, PathGroupSelection } from './group-contracts.ts';
 
-export const PATH_GROUP_API_INTERFACE_VERSION=1 as const;
+export const PATH_GROUP_API_INTERFACE_VERSION=2 as const;
 
 export interface PathGroupQuery {page?:string|undefined;limit?:string|undefined;prefix?:string|undefined}
 export interface PathGroupReferenceQuery {page?:string|undefined;limit?:string|undefined;revision?:number|undefined}
 export interface PathGroupResponse {status:200|202;body:{groupId:string;revision:number;configDigest:string;archived:boolean;changed:boolean}}
+export interface PathGroupOwnerClassified {status:200;body:{groupId:string;revision:number;ownerActorId:string;classified:true}}
 export interface PathGroupPage extends ConsolePaging,PathBindingEvidence {
     total:number;items:PathGroupHead[];health:string;automaticSelection:boolean;
 }
@@ -22,7 +23,7 @@ export interface PathGroupHistoryItem extends PathGroupBindingPointer {
     expandedSpec:ForwardIntent;specDigest:string;actorId:string;createdAt:string;current:boolean;
 }
 export interface PathGroupBindingView extends PathBindingEvidence {
-    forwardId:string;revision:number;deleting:boolean;recoverySuspended:boolean;
+    forwardId:string;ownerActorId:string|null;revision:number;deleting:boolean;recoverySuspended:boolean;
     binding:PathGroupHistoryItem|null|undefined;history:PathGroupHistoryItem[];
     health:string;automaticSelection:boolean;referenceAuthorization:string;consistency:string;
 }
@@ -33,6 +34,7 @@ export interface PathGroupReferenceView extends PathGroupHead,ConsolePaging,Path
 }
 export interface PathGroupPreview extends PathBindingPreview {group:PathGroupSelection;priority:number;automaticSelection:boolean;health:string}
 export interface PathGroupApi {
+    classifyOwner(actor:string,scope:string,id:string,key:string|undefined,expectedRevision:number,ownerActorId:string):Promise<PathGroupOwnerClassified>;
     list(actor:string,scope:string,input?:PathGroupQuery):Promise<PathGroupPage>;
     get(actor:string,scope:string,id:string,requestedRevision?:number):Promise<PathGroupView>;
     publish(actor:string,scope:string,id:string,key:string|undefined,expectedRevision:number,input:unknown):Promise<PathGroupResponse>;

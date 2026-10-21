@@ -92,8 +92,8 @@ async function fixture(writeInstances = false, writePermits = false, lockPermits
         assert.equal(new X509Certificate(credentials[0]!.cert).fingerprint256.replaceAll(':', '').toLowerCase(), fingerprint);
         await db.execute('INSERT INTO accounts(id,token_hash) VALUES(?,?)', ['owner', createHash('sha256').update('fake-token').digest('hex')]);
         await db.execute('INSERT INTO scopes(id,owner_id) VALUES(?,?)', ['scope-a', 'owner']);
-        await db.execute(`INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts)
-            VALUES(?,?,?,0,?,?)`, ['node-a', 'scope-a', 'a'.repeat(64), now + 120000,
+        await db.execute(`INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision)
+            VALUES(?,?,?,0,?,?,'admin-shared',NULL,1)`, ['node-a', 'scope-a', 'a'.repeat(64), now + 120000,
             JSON.stringify({ capabilities: ['adp.3', 'native.direct.v1', 'tcp'] })]);
         await db.execute('INSERT INTO runtime_nodes(node_id,session_epoch,boot_id) VALUES(?,2,?)', ['node-a', 'boot-a']);
         await db.execute('INSERT INTO node_credentials(fingerprint,node_id,issued_at,valid_until) VALUES(?,?,?,?)',
@@ -165,9 +165,9 @@ async function fixture(writeInstances = false, writePermits = false, lockPermits
                 allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [22001], egressPolicyRevision: 1,
                 allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false };
             await db!.execute("INSERT INTO scope_members(scope_id,actor_id,can_manage) VALUES('scope-a','owner',TRUE)");
-            await db!.execute("INSERT INTO node_grants(node_id,actor_id) VALUES('node-a','owner')");
+            await db!.execute("INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES('node-a','owner','[\"ingress\"]','{\"allowedPorts\":[22001],\"maxBindings\":1}')");
             await db!.execute("UPDATE nodes SET facts=? WHERE id='node-a'", [JSON.stringify(facts)]);
-            await db!.execute("INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES('forward-a','scope-a',1,?,'owner')",
+            await db!.execute("INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor,owner_actor_id) VALUES('forward-a','scope-a',1,?,'owner','owner')",
                 [JSON.stringify(forward.spec)]);
             await db!.execute("UPDATE runtime_nodes SET snapshot_generation=3 WHERE node_id='node-a'");
             const snapshot = compileSnapshot({ nodeId: 'node-a', sessionEpoch: 2, snapshotGeneration: 3,
@@ -579,7 +579,7 @@ test('real mTLS discovery/claim/status stays one-use and sticky withdrawal canno
             await f.db.execute("DELETE FROM node_grants WHERE node_id='node-a'");
             const withdrawn = await f.control.probePermits.revoke('owner', 'scope-a', permit.id);
             assert.equal(withdrawn.state, 'consumed'); assert.equal(withdrawn.closedAt, Date.parse(receipt.consumedAt));
-            await f.db.execute("INSERT INTO node_grants(node_id,actor_id) VALUES('node-a','owner')");
+            await f.db.execute("INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES('node-a','owner','[\"ingress\"]','{\"allowedPorts\":[22001],\"maxBindings\":1}')");
             const after = await digest(f.db);
             await f.request({ path: statusPath, input: check, status: 409 });
             const noOffer = parseProbeDelivery('PollResponse', await f.request({ path: pollPath, input: pollRequest() }));

@@ -1,3 +1,4 @@
+import type { ReadPrincipal } from '../framework/public.ts';
 import { isId } from '@tunex/core';
 import { ControlError, invalid } from '../framework/public.ts';
 import type { ProbePlanStoredHead, ProbePlanStoredDecision, ProbePlanStoredFailure, ProbePlanStoredHeader, ProbePlanStoredLosses,
@@ -96,9 +97,10 @@ export class MySqlProbePlanStore<Head extends ProbePlanStoredHead,Decision exten
         return (await rows<Row>(tx,'SELECT position,actor_id,source,decided_at,IF(OCTET_LENGTH(outcome)<=2048,outcome,NULL) outcome FROM probe_plan_decisions WHERE scope_id=? AND plan_id=? ORDER BY position LIMIT 17',[scope,id]))
             .map(r=>decision({position:integer(r.position),actorId:r.actor_id,source:r.source,decidedAt:integer(r.decided_at),outcome:boundedJson(r.outcome)},this.values));
     }
-    async history(tx:Transaction,scope:string,query:ProbePlanStoredQuery<Head['state'],Head['config']['mode']>):Promise<Head[]> {
+    async history(tx:Transaction,scope:string,principal:ReadPrincipal,query:ProbePlanStoredQuery<Head['state'],Head['config']['mode']>):Promise<Head[]> {
         if(!Number.isSafeInteger(query.limit)||query.limit<1||query.limit>50)invalid('Bounded Probe plan history page required');
         const filters=['scope_id=?','created_at>=?','created_at<?'],args:unknown[]=[scope,query.from,query.to];
+        if (!principal.governance) { filters.push('created_by=?'); args.push(principal.actorId); }
         for(const [key,column]of [['forwardId','forward_id'],['mode','mode'],['state','state']]as const)if(query[key]!==undefined){filters.push(`CAST(${column} AS BINARY)=CAST(? AS BINARY)`);args.push(query[key]);}
         if(query.before){filters.push('(created_at<? OR (created_at=? AND CAST(plan_id AS BINARY)<CAST(? AS BINARY)))');args.push(query.before.createdAt,query.before.createdAt,query.before.id);}
         return(await rows<Row>(tx,`SELECT ${projection} FROM probe_plans WHERE ${filters.join(' AND ')} ORDER BY created_at DESC,CAST(plan_id AS BINARY) DESC LIMIT ${query.limit+1}`,args)).map(row=>head(row,this.values));

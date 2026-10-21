@@ -18,11 +18,28 @@ export interface MemberWriter<Tx> {
 }
 export interface IdentityMemberView { actorId:string;revision:number;active:boolean;role:string }
 export interface RecoveryIdentity { actorId:string;token:string;owner:boolean }
+export interface IdentityContextQuery { readonly limit?:string; readonly after?:string }
+export interface IdentityScopeView {
+    readonly scopeId:string;
+    readonly role:'owner'|'manager'|'viewer';
+    readonly membership:'active'|'inactive'|'absent';
+    readonly membershipRevision:number|null;
+    readonly canEnter:boolean;
+    readonly canManage:boolean;
+}
+export interface IdentityContextView {
+    readonly actorId:string;
+    readonly limit:number;
+    readonly nextAfter:string|null;
+    readonly truncated:boolean;
+    readonly scopes:IdentityScopeView[];
+}
 
 /** Independent user HTTP surface; it does not expose a concrete class or transaction. */
 export interface IdentityQueries {
     authenticate(header:string|undefined):Promise<string>;
     listMembers(actor:string,scopeId:string):Promise<{members:IdentityMemberView[]}>;
+    context(actor:string,input?:IdentityContextQuery):Promise<IdentityContextView>;
 }
 export interface IdentityOwner<Tx> extends IdentityQueries, IdentityAccess<Tx>, NodeScopeAuthority<Tx>, MemberWriter<Tx> {
     bootstrap(scopeId:string,actorId:string,token:string):Promise<void>;

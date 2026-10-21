@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { relayCapable,multihopCapable,multihopSpec,relayProfile,relayEndpoint,relaySpec } from '../relay-model.js';
 const node=(id)=>({
-  id,revoked:false,credentialUntil:'2099-01-01T00:00:00Z',
+  id,canUse:true,allowedRoles:null,readDetail:'full',revoked:false,credentialUntil:'2099-01-01T00:00:00Z',
   policy:{allowedListenerAddresses:['127.0.0.1','0.0.0.0'],allowedPorts:[25565,25566],
     capabilities:['adp.3','native.direct.v1','native.relay.v1','relay.wire.1','tcp','udp']}
 });

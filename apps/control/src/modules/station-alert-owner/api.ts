@@ -2,7 +2,7 @@ import type { StationAlertCommandResponse, StationAlertEvent, StationAlertLosses
     StationAlertPolicyAudit, StationAlertReason, StationAlertState, StationEventQuery } from './contracts.ts';
 import type { STATION_ALERT_LIMITS } from './policy.ts';
 
-export const STATION_ALERT_API_INTERFACE_VERSION=1 as const;
+export const STATION_ALERT_API_INTERFACE_VERSION=2 as const;
 
 export interface StationAlertEnvelope {
     stationAlertsVersion:number;scopeId:string;capturedAt:number;observerEnabled:boolean;

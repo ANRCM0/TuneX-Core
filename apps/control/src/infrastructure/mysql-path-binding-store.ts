@@ -1,5 +1,5 @@
 import { ControlError } from '../framework/public.ts';
-import type { ReadPageWindow, PathBindingStoredRecord, PathBindingStorage, PathBindingSequenceReader, ForwardIntent } from '../framework/public.ts';
+import type { ReadPageWindow, ReadPrincipal, PathBindingStoredRecord, PathBindingStorage, PathBindingSequenceReader, ForwardIntent } from '../framework/public.ts';
 import { consolePageSql } from './mysql-read-pagination.ts';
 import { json, rows, write } from './mysql.ts';
 import type { Transaction } from './mysql.ts';
@@ -28,9 +28,9 @@ export class MySqlPathBindingStore implements PathBindingStorage<Transaction>,Pa
         const records = await rows<StoredBinding>(tx, 'SELECT b.* FROM forward_path_bindings b JOIN forwards f ON f.id=b.forward_id WHERE f.scope_id=? AND b.scope_id=? AND f.id=? ORDER BY b.sequence', [scope, scope, forwardId]);
         return records.map(binding);
     }
-    async references(tx: Transaction, scope: string, templateId: string, paging: ReadPageWindow, revision?: number) {
-        const filter = ' WHERE f.scope_id=? AND b.scope_id=? AND b.template_id=? AND f.deleting=FALSE' + (revision === undefined ? '' : ' AND b.template_revision=?');
-        const args = [scope, scope, templateId, ...(revision === undefined ? [] : [revision])];
+    async references(tx: Transaction, scope: string, principal: ReadPrincipal, templateId: string, paging: ReadPageWindow, revision?: number) {
+        const filter = ' WHERE f.scope_id=? AND b.scope_id=? AND b.template_id=? AND f.deleting=FALSE' + (principal.governance ? '' : ' AND f.owner_actor_id=?') + (revision === undefined ? '' : ' AND b.template_revision=?');
+        const args = [scope, scope, templateId, ...(principal.governance ? [] : [principal.actorId]), ...(revision === undefined ? [] : [revision])];
         const total = (await rows<{ n: number }>(tx, 'SELECT COUNT(*) n' + join + filter, args))[0]!.n;
         const data = await rows<StoredBinding & { id: string; revision: number; spec: unknown; recovery_suspended: number }>(tx,
             'SELECT b.*,f.id,f.revision,f.spec,f.recovery_suspended' + join + filter + ' ORDER BY f.id ' + consolePageSql(paging), args);

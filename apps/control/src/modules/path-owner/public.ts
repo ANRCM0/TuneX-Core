@@ -1,4 +1,4 @@
-export const PATH_MODULE_INTERFACE_VERSION=1 as const;
+export const PATH_MODULE_INTERFACE_VERSION=2 as const;
 export { PATH_RECOVERY_INTERFACE_VERSION, PathPublicationRecovery } from './recovery.ts';
 export { NativePathReferences } from './references.ts';
 export { PathTemplateQueries, PathTemplateCommands } from './templates.ts';

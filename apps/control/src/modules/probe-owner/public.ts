@@ -1,4 +1,9 @@
-export const PROBE_MODULE_INTERFACE_VERSION=1 as const;
+export const PROBE_MODULE_INTERFACE_VERSION=3 as const;
+export { ForwardProbeCapabilities } from './capabilities.ts';
+export { FORWARD_PROBE_CAPABILITY_API_INTERFACE_VERSION } from './capability-api.ts';
+export type { ForwardProbeCapabilitiesApi } from './capability-api.ts';
+export type { ForwardProbeCapabilityView, ForwardProbeCapabilityItem, ForwardProbeCapabilityReason,
+    ForwardProbeIssuanceState } from './capability-contracts.ts';
 export { FORWARD_PROBE_API_INTERFACE_VERSION } from './command-api.ts';
 export type { ProbeAcceptance, IngressProbeAcceptance, ServiceProbeAcceptance, AnyProbeAcceptance,
     ForwardProbePlanApi, ForwardProbeApi } from './command-api.ts';

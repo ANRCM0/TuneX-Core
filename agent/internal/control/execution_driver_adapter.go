@@ -6,7 +6,7 @@ import (
 )
 
 func publicExecutionHost(host executionHost) executiondriver.Host {
-	return executiondriver.Host{NodeID: host.nodeID, SessionEpoch: host.sessionEpoch, Policy: host.policy, PeerIdentity: host.relayIdentity}
+	return executiondriver.Host{NodeID: host.nodeID, SessionEpoch: host.sessionEpoch, Policy: host.policy, PeerIdentity: host.relayIdentity, Payload: host.payload}
 }
 
 func publicExecutionDescriptor(descriptor executionDescriptor) executiondriver.Descriptor {
@@ -21,7 +21,7 @@ func publicExecutionDescriptor(descriptor executionDescriptor) executiondriver.D
 func publicExecutionDriver(value executionDriver) executiondriver.Driver {
 	driver := executiondriver.Driver{Descriptor: publicExecutionDescriptor(value.descriptor),
 		Start: func(host executiondriver.Host, assignment adp3.Assignment, check func() error) (executiondriver.Instance, error) {
-			return value.start(executionHost{nodeID: host.NodeID, sessionEpoch: host.SessionEpoch, policy: host.Policy, relayIdentity: host.PeerIdentity}, assignment, check)
+			return value.start(executionHost{nodeID: host.NodeID, sessionEpoch: host.SessionEpoch, policy: host.Policy, relayIdentity: host.PeerIdentity, payload: host.Payload}, assignment, check)
 		},
 		Phase: func(instance executiondriver.Instance, phase string) error { return value.phase(instance, phase) }, Classify: value.classify}
 	if value.replace != nil {

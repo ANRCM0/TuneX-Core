@@ -3,7 +3,7 @@ import { nativeValueDigest as digest, nativeParseJson as parseJson, nativeMonoto
 import { parseProbeServiceContext } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
 import { nativeCommandRequest as requestIdentity } from '../../compatibility/public.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import { validProbeBinding } from '../probe-owner/public.ts';
 import type { ProbePlanConfig, ProbePlanDecision, ProbePlanHead, ProbePlanHeader, ProbePlanIssuer, ProbePlanQuery, ProbePlanStore } from './contracts.ts';
 import type { ProbePlansApi, ProbePlanReceipt } from './api.ts';
@@ -40,9 +40,11 @@ export class ProbePlans<Tx> implements ProbePlansApi {
     readonly executionEnabled:boolean;readonly scheduleEnabled:boolean;readonly ingressExecutionEnabled:boolean;readonly servicesExecutionEnabled:boolean;
     private active=0;private admittedRequests=0;private stopping=false;private running:Promise<void>|null=null;
     private readonly actors=new Map<string,{active:boolean;until:number}>();
-    constructor(options:{db:TransactionBoundary<Tx>;auth:ScopeAuthorization<Tx>;requests:IdempotentRequests<Tx>;store:ProbePlanStore<Tx>;
+    private readonly access:ResourceReadAccess<Tx>;
+    constructor(options:{db:TransactionBoundary<Tx>;auth:ScopeAuthorization<Tx>;access:ResourceReadAccess<Tx>;requests:IdempotentRequests<Tx>;store:ProbePlanStore<Tx>;
         issuer:ProbePlanIssuer<Tx>;executionEnabled:boolean;scheduleEnabled:boolean;ingressExecutionEnabled?:boolean;servicesExecutionEnabled?:boolean;clock?:()=>number;clockSkewMs?:number}) {
         this.db=options.db;this.auth=options.auth;this.requests=options.requests;this.store=options.store;this.issuer=options.issuer;
+        this.access=options.access;
         this.executionEnabled=options.executionEnabled;this.scheduleEnabled=options.scheduleEnabled;this.clock=options.clock??nativeWallClockSource();this.skew=options.clockSkewMs??1000;
         this.ingressExecutionEnabled=this.executionEnabled&&options.ingressExecutionEnabled===true;
         this.servicesExecutionEnabled=this.ingressExecutionEnabled&&options.servicesExecutionEnabled===true;
@@ -134,7 +136,7 @@ export class ProbePlans<Tx> implements ProbePlansApi {
         const expectedRevision=body.expectedRevision;
         const request=requestIdentity(actor,scope,key,'POST',`/api/v1/scopes/${scope}/probe-plans/${id}/${action}`,body);
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);const replay=await this.requests.claim<ProbePlanReceipt>(tx,request);if(replay)return this.bounded(receipt(replay,id,action,expectedRevision));
+            await this.auth.scope(tx,actor,scope,true);await this.access.owned(tx,actor,scope,'probe-plan',id,action==='cancel');const replay=await this.requests.claim<ProbePlanReceipt>(tx,request);if(replay)return this.bounded(receipt(replay,id,action,expectedRevision));
             await this.store.lockScope(tx,scope);const raw=await this.store.get(tx,scope,id,true);if(!raw)notFound();let head=this.checked(raw,scope,id);
             if(head.revision!==expectedRevision)throw new ControlError('REVISION_CONFLICT',409,'Probe plan revision conflict');
             const now=this.now();if(now<head.updatedAt)throw new ControlError('CLOCK_UNCERTAIN',409,'Probe plan clock moved behind its state');
@@ -153,14 +155,14 @@ export class ProbePlans<Tx> implements ProbePlansApi {
     }
     async get(actor:string,scope:string,id:string) {
         identities(actor,scope,id);return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);const raw=await this.store.get(tx,scope,id,'share');if(!raw)notFound();const head=this.checked(raw,scope,id),now=this.now();
+            await this.auth.scope(tx,actor,scope,true);await this.access.owned(tx,actor,scope,'probe-plan',id,true);const principal=await this.access.principal(tx,actor,scope);const raw=await this.store.get(tx,scope,id,'share');if(!raw)notFound();const head=this.checked(raw,scope,id),now=this.now();
             if(head.createdAt<Math.max(0,now-limits.retentionMs))notFound();const rawDecisions=await this.store.decisions(tx,scope,id);
             if(!Array.isArray(rawDecisions)||rawDecisions.length!==head.decisionCount)corrupt();
             const decisions=rawDecisions.map(v=>stored(x=>parseProbePlanDecision(x,head.config,head.scopeId),v)),probes=new Set<string>();
             if(decisions.some((v,i)=>v.position!==i+1||v.decidedAt<head.createdAt||v.decidedAt>head.updatedAt||i>0&&v.decidedAt<decisions[i-1]!.decidedAt||
                 v.source==='scheduled'&&v.actorId!==head.createdBy)||decisions.filter(v=>v.outcome.accepted).length!==head.acceptedCount)corrupt();
             for(const value of decisions)if(value.outcome.accepted){const probe=value.outcome.receipt.body.probeId;if(probes.has(probe))corrupt();probes.add(probe);}
-            return this.bounded({...this.envelope(scope,now),plan:publicProbePlan(head,now),decisions,losses:stored(parseProbePlanLosses,await this.store.losses(tx,scope))});
+            return this.bounded({...this.envelope(scope,now),plan:publicProbePlan(head,now),decisions,losses:principal.governance?stored(parseProbePlanLosses,await this.store.losses(tx,scope)):null});
         }));
     }
     async history(actor:string,scope:string,input:Record<string,string>={}) {
@@ -170,7 +172,7 @@ export class ProbePlans<Tx> implements ProbePlansApi {
         const limit=input.limit===undefined?limits.defaultPageSize:Number(input.limit);if(!isCounter(limit)||limit>limits.maxPageSize||input.limit!==undefined&&String(limit)!==input.limit)invalid('Bounded Probe plan page required');
         const filters={forwardId:input.forwardId??null,mode:input.mode??null,state:input.state??null};
         if(filters.forwardId!==null&&!isId(filters.forwardId)||filters.mode!==null&&!['manual','scheduled'].includes(filters.mode)||filters.state!==null&&!PROBE_PLAN_STATES.includes(filters.state as ProbePlanHead['state']))invalid('Invalid Probe plan filter');
-        const queryDigest=digest({scope,from,to,limit,filters});let before:ProbePlanQuery['before']=null;
+        const queryDigest=digest({actor,scope,from,to,limit,filters});let before:ProbePlanQuery['before']=null;
         if(input.cursor!==undefined)try {
             if(!input.cursor||input.cursor.length>1024||!/^[A-Za-z0-9_-]+$(?![\s\S])/.test(input.cursor))invalid('Invalid Probe plan cursor');
             const value=probePlanObject(parseJson(nativeBase64UrlText(input.cursor),1024),['version','queryDigest','position']),position=probePlanObject(value.position,['createdAt','id']);
@@ -180,13 +182,13 @@ export class ProbePlans<Tx> implements ProbePlansApi {
         const query:ProbePlanQuery={from,to,limit,before,...(filters.forwardId===null?{}:{forwardId:filters.forwardId}),
             ...(filters.mode===null?{}:{mode:filters.mode as ProbePlanConfig['mode']}),...(filters.state===null?{}:{state:filters.state as ProbePlanHead['state']})};
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);const raw=await this.store.history(tx,scope,query);if(!Array.isArray(raw)||raw.length>limit+1)corrupt();const values=raw.map(v=>this.checked(v,scope));
+            await this.auth.scope(tx,actor,scope,true);const principal=await this.access.principal(tx,actor,scope);const raw=await this.store.history(tx,scope,principal,query);if(!Array.isArray(raw)||raw.length>limit+1)corrupt();const values=raw.map(v=>this.checked(v,scope));
             if(new Set(values.map(v=>v.id)).size!==values.length||values.some((v,i)=>v.createdAt<from||v.createdAt>=to||filters.forwardId!==null&&v.config.forwardId!==filters.forwardId||
                 filters.mode!==null&&v.config.mode!==filters.mode||filters.state!==null&&v.state!==filters.state||
                 before!==null&&(v.createdAt>before.createdAt||v.createdAt===before.createdAt&&v.id>=before.id)||i>0&&(values[i-1]!.createdAt<v.createdAt||values[i-1]!.createdAt===v.createdAt&&values[i-1]!.id<=v.id)))corrupt();
             const items=values.slice(0,limit),hasMore=values.length>limit,last=items[items.length-1];
             return this.bounded({...this.envelope(scope,now),window:{from,to},filters,limit,items:items.map(v=>publicProbePlan(v,now)),hasMore,
-                nextCursor:hasMore&&last?encodeCursor(queryDigest,{createdAt:last.createdAt,id:last.id}):null,losses:stored(parseProbePlanLosses,await this.store.losses(tx,scope))});
+                nextCursor:hasMore&&last?encodeCursor(queryDigest,{createdAt:last.createdAt,id:last.id}):null,losses:principal.governance?stored(parseProbePlanLosses,await this.store.losses(tx,scope)):null});
         }));
     }
     tick():Promise<void> {

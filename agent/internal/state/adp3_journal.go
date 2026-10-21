@@ -7,6 +7,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/executionstate"
+	"github.com/tunex/vnext/agent/internal/payloadbudget"
 	"maps"
 	"os"
 	"regexp"
@@ -40,7 +41,18 @@ func saveRuntimeJournal(path string, key []byte, value RuntimeJournal) error {
 	if err != nil {
 		return err
 	}
-	return Save(path, key, Journal{Snapshot: raw, Generation: value.Journal.Generation, Digest: value.Journal.Digest, Fences: value.Journal.Fences, Retired: value.Journal.Retired})
+	if len(raw) > 4194304+1048576 {
+		return fmt.Errorf("RESOURCE_LIMIT: Runtime journal payload capacity exhausted")
+	}
+	outer := Journal{Snapshot: raw, Generation: value.Journal.Generation, Digest: value.Journal.Digest, Fences: value.Journal.Fences, Retired: value.Journal.Retired}
+	encoded, err := json.Marshal(outer)
+	if err != nil {
+		return err
+	}
+	if len(encoded) > 6291456-128 {
+		return fmt.Errorf("RESOURCE_LIMIT: Runtime journal envelope capacity exhausted")
+	}
+	return Save(path, key, outer)
 }
 func LoadRuntimeJournal(path string, key []byte, node string) (RuntimeJournal, error) {
 	if len(key) != 32 {
@@ -65,6 +77,12 @@ func LoadRuntimeJournal(path string, key []byte, node string) (RuntimeJournal, e
 	var record RuntimeJournal
 	if err := decoder.Decode(&record); err != nil {
 		return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: invalid Runtime journal body: %w", err)
+	}
+	if err := validateResourceBudgetEncoding(outer.Snapshot); err != nil {
+		return RuntimeJournal{}, err
+	}
+	if err := payloadbudget.ValidateHistory(resourceBudgetFacts(record.ResourceBudgets), node); err != nil {
+		return RuntimeJournal{}, err
 	}
 	if record.ProtocolVersion != 3 || record.NodeID != node || record.Journal.Generation != outer.Generation || record.Journal.Digest != outer.Digest || !maps.Equal(record.Journal.Fences, outer.Fences) || !maps.Equal(record.Journal.Retired, outer.Retired) {
 		return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: Runtime journal binding differs")
@@ -95,7 +113,7 @@ func LoadRuntimeJournal(path string, key []byte, node string) (RuntimeJournal, e
 	if record.Journal.Generation > contracts.MaxCounter {
 		return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: Runtime generation overflow")
 	}
-	if record.Journal.Generation == 0 && (record.Journal.Digest != "" || string(record.Journal.Snapshot) != "null" || record.ImportedTransitDigest == "" && (len(record.Journal.Fences) != 0 || len(record.Journal.Retired) != 0)) {
+	if record.Journal.Generation == 0 && (record.ResourceBudgets != nil || record.Journal.Digest != "" || string(record.Journal.Snapshot) != "null" || record.ImportedTransitDigest == "" && (len(record.Journal.Fences) != 0 || len(record.Journal.Retired) != 0)) {
 		return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: Zero generation with execution history")
 	}
 	if record.Journal.Generation > 0 {
@@ -104,6 +122,13 @@ func LoadRuntimeJournal(path string, key []byte, node string) (RuntimeJournal, e
 			return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: invalid persisted Snapshot: %w", err)
 		}
 		s := value.(adp3.Snapshot)
+		history, err := runtimeSnapshotHistory(s)
+		if err != nil {
+			return RuntimeJournal{}, err
+		}
+		if err := payloadbudget.ValidateRetainedPolicies(resourceBudgetFacts(record.ResourceBudgets), history.ResourceLimits, node); err != nil {
+			return RuntimeJournal{}, err
+		}
 		if s.ExecutionExtension != nil && record.ExecutionExtension == nil {
 			return RuntimeJournal{}, fmt.Errorf("INTEGRITY_FAILURE: Missing durable execution extension")
 		}
@@ -135,7 +160,7 @@ func AcceptRuntimeSnapshot(path string, key []byte, current RuntimeJournal, snap
 // never executable. A crash before rename preserves the old journal; after rename
 // old binaries reject the added fields and cannot discard the imported high-water.
 func EnableRuntimeExecution(path string, key []byte, node, transitPath string) (RuntimeJournal, error) {
-	release, err := AcquireLock(path + ".lock")
+	release, err := acquireRuntimeFileLock(path)
 	if err != nil {
 		return RuntimeJournal{}, err
 	}

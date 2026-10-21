@@ -24,6 +24,54 @@ dated planned/unexecuted source handoff below for this revision. Future modules
 consume that frozen contract set or a verified successor; independent physical,
 long-run/load, Responder, release and production gates remain separate.
 
+## N Product Successor (Source Only, 2026-10-21)
+
+The later [N stage](../development/product-development-stage-n-2026-10-21.md)
+adds FR-0028 through FR-0032 on the current dirty source. The tables following
+this section retain the frozen B/A5 index and its dated scope. They do not assert
+that N kept the old contract semantics or passed the old acceptance again.
+The following are source declarations for the successor, not negotiated or
+tested compatibility. The authored public-counter consumer lives in
+`packages/core/test/public-source-closure.test.ts` and has not been executed.
+
+| Successor public family | Source version | Consumers and compatibility |
+| --- | --- | --- |
+| Node authority | 5 | NodeService installs resource/use policy; raw create persists claim/enrollment only; private owner grant is explicit, shared provision has no creator grant |
+| Runtime Relay / resource / exclusive reservations | 7 / 2 / 2 | Original Relay/Transit/resource consumers provide purpose checks and required port policy; one ledger, same transaction |
+| Identity access / intent / management storage | 2 / 2 / 2 | Current-account context, immutable product owners and caller-aware read providers; direct fakes/providers must migrate |
+| Path four storage / Ingress three storage / Probe history storage | 2 each | Original owner APIs and MySQL projections adopt ownership, classification and caller visibility |
+| Resource access / Runtime port policy | 1 / 1 | New L1 owner-independent ports; L3 product policy, original L2 stores, no reverse implementation dependency |
+| Identity module / access commands | 2 / 3 | Account context and purpose/port-limit grant changes; original transaction, CAS, digest and revocation |
+| Node module / management / personal port usage | 3 / 2 / 1 | Private/shared provision, legacy classification, read-detail union and caller-only original-slot usage |
+| Forward state / commands | 2 / 2 | Immutable owner separated from execution authorizer; original ownership lock/classification and pre-insert reservation identity |
+| Path / Ingress modules and their API families | 2 | Original aliases and commands carry owner/classification semantics; no implicit owner migration |
+| Console / Control detail / Transport / Tunnel queries | 2 each | Actor filtering before count/pagination; safe Node and history projections |
+| Audit / Forward diagnostics / Notifications / Station / Telemetry APIs | 2 each | Resource or governance read boundaries; withheld aggregates are not zero |
+| Probe module / Forward API / capability query | 3 / 2 / 1 | Purpose-aware original commands and read-only support matrix; not new live path measurements |
+| Probe history API / ProbePlan module / Observation service module | 2 each | Caller-aware historical reads and governance surfaces; no implicit measurement authority |
+| Resource limit ports / module | 1 / 1 | Per-subject/Node policy, same original transaction, CAS/receipts/audit; public provider example is authored |
+| Transit module / Control HTTP | 2 / 2 | Required offline payload policy construction and required successor aggregate HTTP providers; Transit command API and native HTTP adapter remain 1 |
+| Runtime values / RuntimeHost | 3 / 4 | Optional closed digest-covered resourceLimits; required publication policy; changed policy prevents hold/reuse |
+| executionstate / payloadbudget / executionhost | 4 / 1 / 1 | Original protected Journal precharge and shared gate; additive optional host payload port, old unmetered constructors explicit |
+| Upgrade assessment / Journal inspection | 5 / 2 | Catalog 41, 30 Control profiles and explicit shared-resource Agent profile; protected debit history blocks old binary downgrade |
+| ConsoleModel | 2 | Missing canUse/purpose data fails closed; old model entry forwards to the same successor |
+
+Migrations 0039/0040/0041 and the Control profiles
+`adp3-product-resource-access-v1` / `adp3-shared-node-port-limits-v1` /
+`adp3-shared-resource-limits-v1` are authored
+successors; they have no executed DDL or interrupted-migration acceptance here.
+The protected Core API and Runtime wire version 3 remain. The optional wire
+resourceLimits version 1 and original protected Journal resourceBudgets version 1
+extend actual native formats; old readers can refuse them. Agent authority/Journal
+and Runtime ledger have no competing successor authority. Five browser representation leaves
+are served through the original asset adapter. Template `loadDraft` and Relay
+`loadPathDraft` are additive returned operations; old initializers remain.
+See the [Web integration](../../apps/web/PRODUCT-INTEGRATION.md) and
+[Node integration](../../apps/control/src/modules/node-owner/PRODUCT-INTEGRATION.md).
+FR-0032's full owner/compatibility ledger, limits and unexecuted consumer cases are
+in its [change record](../changes/FR-0032-shared-resource-payload-limits.md) and
+[public example](../../examples/shared-resource-limits/README.md).
+
 ## Candidate Identity And Scope
 
 The complete integrated candidate was saved as

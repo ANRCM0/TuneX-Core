@@ -2,7 +2,7 @@ import type { NotificationEndpoint, NotificationEndpointAudit, NotificationEndpo
 import type { NotificationDelivery, NotificationDeliveryAttempt, NotificationDeliveryLosses, NotificationPayload } from './delivery-contracts.ts';
 import type { NOTIFICATION_ENDPOINT_LIMITS, NOTIFICATION_DELIVERY_LIMITS } from './policy.ts';
 
-export const NOTIFICATION_API_INTERFACE_VERSION=1 as const;
+export const NOTIFICATION_API_INTERFACE_VERSION=2 as const;
 
 // Deliberate public projections exclude credential references, authority material and raw destinations.
 export type NotificationEndpointView=Omit<NotificationEndpoint,'authorityDigest'|'credentialRef'>&{

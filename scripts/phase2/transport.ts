@@ -52,7 +52,7 @@ try{
  const endpointRace=await Promise.all([call('PUT',endpointPath,{expectedRevision:1,config:{...endpoint,allowedTcpPorts:[32003]}}),call('PUT',endpointPath,{expectedRevision:1,config:{...endpoint,allowedTcpPorts:[32004]}})]);assert.deepEqual(endpointRace.map(r=>r.status).sort(),[202,409]);
  pass('Node endpoint: owner-only explicit internal TLS address/ports use replay, canonical no-op and CAS');
  const endpointCLI=JSON.parse((await execute(process.execPath,['apps/control/src/client.ts','node-endpoint-get',scope,node.body.nodeId],{env:cliEnv})).stdout);assert.equal(endpointCLI.revision,2);const grantCLI=JSON.parse((await execute(process.execPath,['apps/control/src/client.ts','profile-grants',scope,'profile-a'],{env:cliEnv})).stdout);assert.equal(grantCLI.revision,3);
- await assert.rejects(()=>control!.db.transaction(tx=>control!.control.nodes.authorizedRelayNode(tx,member,scope,node.body.nodeId)));
+ await assert.rejects(()=>control!.db.transaction(tx=>control!.control.nodes.authorizedRelayNode(tx,member,scope,node.body.nodeId,'ingress')));
  const preview=await call('POST',`/api/v1/scopes/${scope}/relay-plan`,{enabled:true,protocols:['tcp','udp'],ingress:{nodeId:node.body.nodeId,listen:{address:'127.0.0.1',port:32001}},target:{host:'127.0.0.1',port:32002},path:{via:['node-egress']},transport:{profileId:'profile-a',configRevision:1}});assert.ok([403,404].includes(preview.status));
  pass('Planning authority: internal Node resolution and preview cannot bypass missing explicit Node/Profile grants');
 

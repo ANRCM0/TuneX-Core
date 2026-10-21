@@ -1,3 +1,4 @@
+import type { ReadPrincipal } from '../framework/public.ts';
 import { isId } from '@tunex/core';
 import { ControlError, invalid } from '../framework/public.ts';
 import type { ProbeHistoryRecord, ProbeHistoryLosses, ProbeHistoryQuery, ProbeHistoryValues, ProbeHistoryStorage } from '../framework/public.ts';
@@ -115,9 +116,10 @@ export class MySqlProbeHistoryStore<Record extends ProbeHistoryRecord> implement
             WHERE scope_id=? AND probe_id=? AND revision=?`,[value.state,value.closedAt,value.revision,value.updatedAt,value.withdrawnAt,...resultFields(value),
                 value.recoverySuspended,value.result?.tls==null?null:JSON.stringify(value.result.tls),value.result?.echo==null?null:JSON.stringify(value.result.echo),value.result?.requestBytes??null,value.result?.responseBytes??null,value.scopeId,value.probeId,old.revision])!==1) throw new ControlError('REVISION_CONFLICT',409,'Probe run history changed');
     }
-    async history(tx: Transaction, scope: string, query: ProbeHistoryQuery<Record['state'],NonNullable<Record['result']>['status']>): Promise<Record[]> {
+    async history(tx: Transaction, scope: string, principal: ReadPrincipal, query: ProbeHistoryQuery<Record['state'],NonNullable<Record['result']>['status']>): Promise<Record[]> {
         if (!Number.isSafeInteger(query.limit) || query.limit<1 || query.limit>50) invalid('Bounded Probe run history page required');
         const filters = ['scope_id=?','issued_at>=?','issued_at<?'], args: unknown[] = [scope,query.from,query.to];
+        if (!principal.governance) { filters.push('actor_id=?'); args.push(principal.actorId); }
         for (const [key,column] of [['forwardId','forward_id'],['nodeId','node_id'],['probeId','probe_id'],['state','state']] as const)
             if (query[key]!==undefined) {filters.push(`CAST(${column} AS BINARY)=CAST(? AS BINARY)`);args.push(query[key]);}
         if (query.resultStatus==='missing') filters.push('result_status IS NULL');

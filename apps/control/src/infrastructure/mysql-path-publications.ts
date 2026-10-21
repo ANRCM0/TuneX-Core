@@ -1,5 +1,5 @@
 import { MySqlPathPublicationStore } from './mysql-publication-store.ts';
-import type { ReadPageWindow } from '../framework/public.ts';
+import type { ReadPageWindow, ReadPrincipal } from '../framework/public.ts';
 import { pathPublicationStorageValues } from '../modules/path-owner/public.ts';
 import type { PathPublicationPlan, PathPublicationAttempt, PathPublicationFailure, PathPublicationHead, PathPublicationRecord,
     PathPublicationStore, PublicationOperation } from '../modules/path-owner/public.ts';
@@ -11,8 +11,8 @@ const store=new MySqlPathPublicationStore<PathPublicationPlan,PathPublicationAtt
 export class MySqlPathPublications implements PathPublicationStore<Transaction> {
     async lockScope(tx:Transaction,scope:string):Promise<void> {return store.lockScope(tx,scope);}
     async count(tx:Transaction,scope:string):Promise<number> {return store.count(tx,scope);}
-    async list(tx:Transaction,scope:string,paging:ReadPageWindow) {
-        return store.list(tx,scope,paging,{count:(tx,scope)=>this.count(tx,scope)});
+    async list(tx:Transaction,scope:string,principal:ReadPrincipal,paging:ReadPageWindow) {
+        return store.list(tx,scope,principal,paging);
     }
     async read(tx:Transaction,scope:string,id:string,lock=false):Promise<PathPublicationRecord|null> {return store.read(tx,scope,id,lock);}
     async create(tx:Transaction,scope:string,record:PathPublicationHead,plan:PathPublicationPlan):Promise<void> {

@@ -19,7 +19,7 @@ export type OriginalFacadeDeclarations=[
  Same<Equal<ConstructorParameters<typeof Tunnels.NativeTunnels<Tx>>,[PathTemplateQueryApi,PathTemplateCommandApi,PathBindingApi,Pick<ForwardBindingApi,'applyPath'>]>>,
  Same<Equal<Tunnels.NativeTunnelApi['list'],(...args:Parameters<PathTemplateQueryApi['list']>)=>Promise<Tunnels.NativeTunnelPage>>>,
  Same<Equal<Tunnels.NativeTunnelApi['get'],(...args:Parameters<PathTemplateQueryApi['get']>)=>Promise<Tunnels.NativeTunnelView>>>,
- Same<Equal<Pick<Tunnels.NativeTunnelApi,'publish'|'archive'>,PathTemplateCommandApi>>,
+ Same<Equal<Pick<Tunnels.NativeTunnelApi,'publish'|'archive'>,Pick<PathTemplateCommandApi,'publish'|'archive'>>>,
  Same<Equal<Tunnels.NativeTunnelApi['binding'],PathBindingApi['get']>>,
  Same<Equal<Tunnels.NativeTunnelApi['preview'],PathBindingApi['preview']>>,
  Same<Equal<Tunnels.NativeTunnelApi['references'],PathBindingApi['references']>>,

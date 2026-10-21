@@ -17,6 +17,22 @@ import { pathReferenceQuery } from '../src/api/path-template-query.ts';
 import { MySqlPathBindings } from '../src/infrastructure/mysql-path-bindings.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
 
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { ControlError as ResourceAccessError } from '../src/framework/public.ts';
+import type { OwnedResourceKind } from '../src/framework/public.ts';
+
+function ownerAccess<Tx>(tx:Tx,scopeId:string,members:ReadonlyMap<string,boolean>,
+    claim:(kind:OwnedResourceKind,id:string)=>string|null|undefined,scopeOwner='scope-owner') {
+    const same=(actual:Tx,scope:string)=>{assert.equal(actual,tx);assert.equal(scope,scopeId);};
+    return new ResourceAccess<Tx>({async scope(actual,actor,scope,manage=false){
+        same(actual,scope);
+        if(!members.has(actor)||manage&&!members.get(actor))throw new ResourceAccessError('AUTHORIZATION_DENIED',403,'Fixture scope permission denied');
+    }},{async scopeOwner(actual,scope){same(actual,scope);return {ownerActorId:scopeOwner};},
+        async ownership(actual,scope,kind,id){same(actual,scope);const ownerActorId=claim(kind,id);return ownerActorId===undefined?undefined:{ownerActorId};},
+        async node(){throw Error('Node access is outside this owner fixture');}});
+}
+
+
 type Tx = { name: string };
 const hash = 'sha256:' + 'a'.repeat(64);
 const config = (via = ['middle', 'egress']) => parsePathTemplate({ version: 1, protocols: ['tcp', 'udp'], nodes: ['ingress', ...via],
@@ -57,14 +73,15 @@ function fixture() {
     let state = { forward: { id: 'forward', scopeId: 'scope', revision: 4, spec: desired() } as Forward,
         suspended: false, archived: false, history: [] as PathBindingRecord[], pointer: null as PathBindingRecord | null,
         replies: new Map<string, { digest: string; response?: CommandResponse }>(), operations: [] as Forward[], authorizer: 'original' };
-    const options = { manage: true, references: true, profileDigest: hash, capacity: true, audit: true, preparation: true };
+    const options = { forwardOwner:'manager' as string|null, templateOwner:'manager' as string|null, manage: true, references: true, profileDigest: hash, capacity: true, audit: true, preparation: true };
     const check = (value: Tx, name: string) => { assert.equal(value, tx); calls.push(name); };
     const db = { async transaction<T>(action: (tx: Tx) => Promise<T>) {
         const before = structuredClone(state); calls.push('begin');
         try { const result = await action(tx); calls.push('commit'); return result; }
         catch (error) { state = before; calls.push('rollback'); throw error; }
     } };
-    const auth = { async scope(value: Tx, _actor: string, scope: string, manage = false) {
+    const access=ownerAccess(tx,'scope',new Map([['manager',true],['viewer',false],['scope-owner',true]]),(kind,id)=>kind==='forward'&&id==='forward'?options.forwardOwner:kind==='path-template'&&id==='path'?options.templateOwner:undefined);
+    const auth = { async owner(value:Tx,actor:string,scope:string){assert.equal(value,tx);assert.equal(actor,'scope-owner');assert.equal(scope,'scope');}, async scope(value: Tx, _actor: string, scope: string, manage = false) {
         check(value, 'auth:' + manage); if (scope !== 'scope' || manage && !options.manage) throw new ControlError('AUTHORIZATION_DENIED', 403, 'Denied');
     } };
     const requests: IdempotentRequests<Tx> = {
@@ -81,7 +98,7 @@ function fixture() {
         return [number, { revision: number, config: value, profileDigest: hash, configDigest: digest({ config: value, profileDigest: hash }), createdBy: 'manager', createdAt: 1800000000000 }] as const;
     }));
     const reader: PathTemplateReader<Tx> = {
-        async head(value, scope, id, lock) { check(value, 'template-head:' + Boolean(lock)); return scope === 'scope' && id === 'path' ? { templateId: id, currentRevision: 2, archived: state.archived } : null; },
+        async head(value, scope, id, lock) { check(value, 'template-head:' + Boolean(lock)); return scope === 'scope' && id === 'path' ? { templateId: id, ownerActorId:options.templateOwner, currentRevision: 2, archived: state.archived } : null; },
         async revision(value, scope, id, revision) { check(value, 'template-revision'); return scope === 'scope' && id === 'path' ? templates.get(revision) ?? null : null; },
         async list() { throw Error('unused'); }
     };
@@ -89,8 +106,8 @@ function fixture() {
     const store: PathBindingWriter<Tx> = {
         async current(value) { check(value, 'binding-read'); return state.pointer ? structuredClone(state.pointer) : null; },
         async history(value) { check(value, 'binding-history'); return structuredClone(state.history); },
-        async references(value, _scope, _template, paging, revision) {
-            check(value, 'references-read'); const items = state.pointer && (revision === undefined || state.pointer.revision === revision) ?
+        async references(value, _scope, principal, _template, paging, revision) {
+            check(value, 'references-read'); assert.deepEqual(principal,{actorId:'manager',governance:false}); const items = state.pointer && (revision === undefined || state.pointer.revision === revision) ?
                 [{ forward: state.forward, recoverySuspended: state.suspended, binding: structuredClone(state.pointer) }] : [];
             return { total: items.length, items: items.slice(paging.offset, paging.offset + paging.limit) };
         },
@@ -102,13 +119,16 @@ function fixture() {
         async detach(value) { check(value, 'detach'); state.pointer = null; }
     };
     const forwards: ForwardWriter<Tx> = {
-        async record(value) { check(value, 'record'); return { ...state.forward, deleting: false, recoverySuspended: state.suspended }; },
+        async ownershipForUpdate(){throw Error('Ownership classification is outside this fixture');},
+        async classifyOwner(){throw Error('Ownership classification is outside this fixture');},
+        async record(value) { check(value, 'record'); return { ...state.forward, ownerActorId:options.forwardOwner, deleting: false, recoverySuspended: state.suspended }; },
         async currentForUpdate(value) { check(value, 'forward-lock'); return structuredClone(state.forward); },
         async replace(value, _current, next) { check(value, 'replace'); state.forward = next; },
         async setAuthorizer(value, _id, actor) { check(value, 'authorizer'); state.authorizer = actor; },
         async insert() { throw Error('unused'); }, async markDeleting() { throw Error('unused'); }
     };
     const execution: ForwardCommandPreparation<Tx> = {
+        async lockOwnership(){throw Error('Ownership classification is outside this fixture');},
         async prepareUpdate(value) { check(value, 'prepare'); if (!options.preparation) throw Error('Original runtime preparation denied'); },
         async planUpdate(value) { check(value, 'plan'); },
         async assertCapacity(value) { check(value, 'capacity'); if (!options.capacity) throw Error('Original capacity denied'); },
@@ -119,12 +139,17 @@ function fixture() {
         async accept(value, forward) { check(value, 'accept'); state.operations.push(structuredClone(forward)); return 'operation-' + state.operations.length; },
         async read() { throw Error('unused'); }, async get() { throw Error('unused'); }
     };
-    const paths = new PathBindings(db, auth, reader, references, store, forwards, () => 1800000000000);
-    const commands = new ForwardCommands(db, auth, requests, forwards, operations, execution, () => 'new-id', paths);
+    const paths = new PathBindings(db, auth, access, reader, references, store, forwards, () => 1800000000000);
+    const commands = new ForwardCommands(db, auth, access, requests, forwards, operations, execution, () => 'new-id', paths);
     const selection = (revision = 2) => ({ templateId: 'path', revision, configDigest: templates.get(revision)!.configDigest });
     const apply = (revision = 2, key = 'apply', cas = 4) => commands.applyPath('manager', 'scope', 'forward', key, cas, selection(revision));
     return { tx, calls, db, auth, state: () => state, options, store, reader, templates, paths, commands, selection, apply };
 }
+
+test('binding ownership rejects a different Forward or template owner before writes, including replay',async()=>{
+    for(const property of ['forwardOwner','templateOwner'] as const){const f=fixture();f.options[property]='other-owner';await assert.rejects(f.apply(),{code:'NOT_FOUND'});assert.equal(f.state().history.length,0);assert.equal(f.state().operations.length,0);assert.equal(f.state().replies.size,0);}
+    const f=fixture();await f.apply();f.options.forwardOwner='other-owner';await assert.rejects(f.apply(),{code:'NOT_FOUND'});assert.equal(f.state().history.length,1);
+});
 
 test('selection is closed/detached, expansion changes only the fixed path/Profile and denies ingress/protocol moves', () => {
     const input = { templateId: 'path', revision: 2, configDigest: hash }, selected = parsePathSelection(input); input.revision = 3;
@@ -187,7 +212,7 @@ test('ordinary enabled/target/listener changes preserve historical binding; expl
     const changed = { ...f.state().forward.spec, enabled: false, target: { host: '127.0.0.1', port: 9001 } };
     await f.commands.update('manager', 'scope', 'forward', 'normal', 4, changed);
     assert.equal(f.state().pointer!.sequence, 1); assert.deepEqual(f.state().history, before);
-    const current = await f.paths.get('viewer', 'scope', 'forward'); assert.equal(current.revision, 5); assert.equal(current.binding!.forwardRevision, 4);
+    const current = await f.paths.get('manager', 'scope', 'forward'); assert.equal(current.revision, 5); assert.equal(current.binding!.forwardRevision, 4);
     f.state().archived = true;
     await f.commands.update('manager', 'scope', 'forward', 'different', 5, { ...changed, path: { via: ['egress'] } });
     assert.equal(f.state().pointer, null); assert.deepEqual(f.state().history, before); assert.ok(f.calls.includes('detach'));
@@ -214,10 +239,10 @@ test('bounded references and impact are read-only, include suspended/archived hi
     assert.equal((await f.paths.references('manager', 'scope', 'path', { targetRevision: 2 })).items[0]!.unavailableReason, 'RECOVERY_SUSPENDED');
     await assert.rejects(f.paths.preview('manager', 'scope', 'forward', 4, f.selection())); f.state().suspended = false; f.state().archived = true;
     f.options.references = false;
-    assert.equal((await f.paths.references('viewer', 'scope', 'path')).items.length, 1);
+    assert.equal((await f.paths.references('manager', 'scope', 'path')).items.length, 1);
     assert.equal((await f.paths.references('manager', 'scope', 'path', { targetRevision: 2 })).items[0]!.unavailableReason, 'TEMPLATE_ARCHIVED');
-    assert.equal((await f.paths.get('viewer', 'scope', 'forward')).binding!.sequence, 1);
-    f.state().pointer!.specDigest = hash; await assert.rejects(f.paths.get('viewer', 'scope', 'forward'), /provenance/);
+    assert.equal((await f.paths.get('manager', 'scope', 'forward')).binding!.sequence, 1);
+    f.state().pointer!.specDigest = hash; await assert.rejects(f.paths.get('manager', 'scope', 'forward'), /provenance/);
     for (const query of ['page=01', 'limit=101', 'targetRevision=0', 'targetRevision=1&targetRevision=2', 'revision=65', 'latest=true'])
         assert.throws(() => pathReferenceQuery(new URLSearchParams(query)));
     assert.deepEqual(pathReferenceQuery(new URLSearchParams('page=2&limit=25&revision=1&targetRevision=2')), { page: '2', limit: '25', revision: 1, targetRevision: 2 });

@@ -1,7 +1,7 @@
 import { deepFreeze, isCounter, isId } from '@tunex/core';
 import { nativeValueDigest as digest, nativeParseJson as parseJson, nativeParseTime, nativeIsoTime, nativeMonotonicNow, nativeWallClockSource, jsonUtf8Bytes, nativeJsonBase64Url, nativeBase64UrlText } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import type { ProbeRunCapture, ProbeRunQuery, ProbeRunRecord, ProbeRunRecorder, ProbeRunStore } from './contracts.ts';
 import type { ProbeRunsApi } from './api.ts';
 import { PROBE_RUN_LIMITS as limits } from './policy.ts';
@@ -77,7 +77,10 @@ export class ProbeRuns<Tx> implements ProbeRunsApi {
     private active=0;
     private requests=0;
     private readonly actors=new Map<string,{active:boolean;until:number}>();
-    constructor(db:TransactionBoundary<Tx>,auth:ScopeAuthorization<Tx>,store:ProbeRunStore<Tx>,clock:()=>number=nativeWallClockSource(),clockSkewMs=1000) {
+    private readonly access:ResourceReadAccess<Tx>;
+    constructor(db:TransactionBoundary<Tx>,auth:ScopeAuthorization<Tx>,access:ResourceReadAccess<Tx>,store:ProbeRunStore<Tx>,clock:()=>number=nativeWallClockSource(),clockSkewMs=1000) {
+        this.access=access;
+
         if(!isCounter(clockSkewMs,true)||clockSkewMs>300000)throw new Error('Bounded Probe history clock skew required');
         this.db=db;this.auth=auth;this.store=store;this.clock=clock;this.clockSkewMs=clockSkewMs;
     }
@@ -107,9 +110,11 @@ export class ProbeRuns<Tx> implements ProbeRunsApi {
         identities(actor,scope,id);
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
             await this.auth.scope(tx,actor,scope,true);
+            const principal=await this.access.principal(tx,actor,scope);
+            await this.access.owned(tx,actor,scope,'probe-run',id,true);
             const now=this.now(),raw=await this.store.get(tx,scope,id);if(!raw)notFound();const value=this.checked(raw,scope);
             if(value.issuedAt<Math.max(0,now-limits.retentionMs))notFound();
-            return this.bounded({...this.envelope(scope,now),run:publicProbeRun(value,now),losses:stored(parseProbeRunLosses,await this.store.losses(tx,scope))});
+            return this.bounded({...this.envelope(scope,now),run:publicProbeRun(value,now),losses:principal.governance?stored(parseProbeRunLosses,await this.store.losses(tx,scope)):null});
         }));
     }
     async history(actor:string,scope:string,input:Record<string,string>={}) {
@@ -125,7 +130,7 @@ export class ProbeRuns<Tx> implements ProbeRunsApi {
         if([filters.forwardId,filters.nodeId,filters.probeId].some(v=>v!==null&&!isId(v))||
             filters.state!==null&&!PROBE_RUN_STATES.includes(filters.state as ProbeRunRecord['state'])||
             filters.resultStatus!==null&&!['connected','unreachable','verified','unverified','echoed','missing'].includes(filters.resultStatus))invalid('Invalid Probe history filter');
-        const queryDigest=digest({scope,from,to,limit,filters});let before:ProbeRunQuery['before']=null;
+        const queryDigest=digest({actor,scope,from,to,limit,filters});let before:ProbeRunQuery['before']=null;
         if(input.cursor!==undefined) {
             try {
                 if(!input.cursor||input.cursor.length>1024||!/^[A-Za-z0-9_-]+$(?![\s\S])/.test(input.cursor))invalid('Invalid Probe history cursor');
@@ -141,7 +146,8 @@ export class ProbeRuns<Tx> implements ProbeRunsApi {
             ...(filters.resultStatus===null?{}:{resultStatus:filters.resultStatus as NonNullable<ProbeRunQuery['resultStatus']>})};
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
             await this.auth.scope(tx,actor,scope,true);
-            const raw=await this.store.history(tx,scope,query);if(!Array.isArray(raw)||raw.length>limit+1)corrupt();const values=raw.map(v=>this.checked(v,scope));
+            const principal=await this.access.principal(tx,actor,scope);
+            const raw=await this.store.history(tx,scope,principal,query);if(!Array.isArray(raw)||raw.length>limit+1)corrupt();const values=raw.map(v=>this.checked(v,scope));
             if(new Set(values.map(v=>v.probeId)).size!==values.length||values.some((v,i)=>v.issuedAt<from||v.issuedAt>=to||
                 filters.forwardId!==null&&v.binding.forwardId!==filters.forwardId||filters.nodeId!==null&&v.binding.nodeId!==filters.nodeId||
                 filters.probeId!==null&&v.probeId!==filters.probeId||filters.state!==null&&v.state!==filters.state||
@@ -151,7 +157,7 @@ export class ProbeRuns<Tx> implements ProbeRunsApi {
             const items=values.slice(0,limit),hasMore=values.length>limit;
             return this.bounded({...this.envelope(scope,now),window:{from,to},filters,limit,items:items.map(v=>publicProbeRun(v,now)),hasMore,
                 nextCursor:hasMore?cursor(queryDigest,{issuedAt:items[items.length-1]!.issuedAt,probeId:items[items.length-1]!.probeId}):null,
-                losses:stored(parseProbeRunLosses,await this.store.losses(tx,scope))});
+                losses:principal.governance?stored(parseProbeRunLosses,await this.store.losses(tx,scope)):null});
         }));
     }
 }

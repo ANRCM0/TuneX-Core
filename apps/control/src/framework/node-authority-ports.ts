@@ -1,10 +1,26 @@
+import type { Forward } from '@tunex/core';
 import type { AuthorizedNodeFacts } from './node-facts.ts';
 import type { ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary } from './application-ports.ts';
 import type { RuntimeNodeResources } from './runtime-resource-ports.ts';
 
-export const NODE_AUTHORITY_INTERFACE_VERSION=3 as const;
+export const NODE_AUTHORITY_INTERFACE_VERSION=5 as const;
 
-export interface NodeAuthorityRecord {
+export type NodeUseRole='ingress'|'transit'|'egress';
+export type NodeResourceSource='legacy-unclassified'|'private'|'admin-shared';
+export interface NodeResourceClaim {
+    resource_source:NodeResourceSource;
+    owner_actor_id:string|null;
+    resource_revision:number;
+}
+export interface NodeResourceAccess extends NodeResourceClaim {
+    id:string;scope_id:string;grant_actor_id:string|null;allowed_roles:unknown;port_limits:unknown;
+}
+/** Product policy is injected by its owner; this host never infers ownership. */
+export interface NodeUseAuthorization<Tx> {
+    allowed(tx:Tx,actor:string,scopeId:string,nodeId:string,role:NodeUseRole,forward?:Forward):Promise<boolean>;
+}
+
+export interface NodeAuthorityRecord extends NodeResourceClaim {
     id:string;
     scope_id:string;
     credential_until:number|null;
@@ -34,12 +50,16 @@ export interface SignedNodeCredential { certificate:string;ca:string;fingerprint
 export interface NodeCertificateSigner {
     sign(nodeId:string,csr:string,purpose?:'control'|'relay'):Promise<SignedNodeCredential>;
 }
-export type NodeSecurityEventKind='credential_rotation'|'policy_update'|'node_revocation'|'relay_endpoint_update'|'relay_credential_issue';
+export type NodeSecurityEventKind='credential_rotation'|'policy_update'|'node_revocation'|'relay_endpoint_update'|'relay_credential_issue'|'resource_classification';
 
 /** All owner mutations and locked reads use the supplied transaction. */
 export interface NodeAuthorityStore<Tx> {
     quarantine(tx:Tx):Promise<void>;
-    create(tx:Tx,nodeId:string,scopeId:string,actor:string,enrollmentHash:string,until:number,facts:AuthorizedNodeFacts):Promise<void>;
+    /** Persists the claim only; the product owner separately creates initial grants. */
+    create(tx:Tx,nodeId:string,scopeId:string,actor:string,enrollmentHash:string,until:number,facts:AuthorizedNodeFacts,resource:NodeResourceClaim):Promise<void>;
+    resourceAccess(tx:Tx,nodeId:string,scopeId:string,actor:string):Promise<NodeResourceAccess|undefined>;
+    classify(tx:Tx,nodeId:string,expectedRevision:number,resource:NodeResourceClaim):Promise<boolean>;
+    clearGrants(tx:Tx,nodeId:string):Promise<void>;
     enrollment(tx:Tx,nodeId:string,enrollmentHash:string):Promise<NodeEnrollmentRecord|undefined>;
     acceptEnrollment(tx:Tx,nodeId:string,csrDigest:string,signed:SignedNodeCredential,response:unknown):Promise<void>;
     insertCredential(tx:Tx,nodeId:string,signed:SignedNodeCredential,at:number):Promise<void>;
@@ -63,8 +83,9 @@ export interface NodeAuthorityStore<Tx> {
     securityEvent(tx:Tx,eventId:string,nodeId:string,actor:string|null,kind:NodeSecurityEventKind,at:number,details:unknown):Promise<void>;
     grantRevisionForUpdate(tx:Tx,nodeId:string):Promise<{grant_revision:number}|undefined>;
     grantRevision(tx:Tx,nodeId:string,scopeId:string):Promise<{grant_revision:number}|undefined>;
-    grantActors(tx:Tx,nodeId:string):Promise<{actor_id:string}[]>;
-    insertGrant(tx:Tx,nodeId:string,actor:string):Promise<void>;
+    grantActors(tx:Tx,nodeId:string):Promise<{actor_id:string;allowed_roles:unknown;port_limits:unknown}[]>;
+    insertGrant(tx:Tx,nodeId:string,actor:string,roles:readonly NodeUseRole[]|null,portLimits:unknown):Promise<void>;
+    setGrantRoles(tx:Tx,nodeId:string,actor:string,roles:readonly NodeUseRole[]|null,portLimits:unknown):Promise<void>;
     deleteGrant(tx:Tx,nodeId:string,actor:string):Promise<void>;
     setGrantRevision(tx:Tx,nodeId:string,revision:number):Promise<void>;
     visible(tx:Tx,nodeId:string,scopeId:string):Promise<boolean>;
@@ -99,6 +120,7 @@ export interface NodeAuthorityCodec {
     validateNetworkPolicy(policy:Omit<AuthorizedNodeFacts,'nodeId'|'scopeId'|'capabilities'>):void;
 }
 export interface NodeAuthorityOptions<Tx> {
+    readonly useAuthorization:NodeUseAuthorization<Tx>;
     readonly db:TransactionBoundary<Tx>;
     readonly identity:NodeScopeAuthority<Tx>;
     readonly store:NodeAuthorityStore<Tx>;

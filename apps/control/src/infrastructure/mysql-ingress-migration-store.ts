@@ -1,6 +1,6 @@
 import { isId } from '@tunex/core';
 import { ControlError, invalid } from '../framework/public.ts';
-import type { ReadPageWindow, IngressDeploymentStoredHead, IngressMigrationStoredPlan, IngressMigrationStoredAttempt,
+import type { ReadPrincipal, ReadPageWindow, IngressDeploymentStoredHead, IngressMigrationStoredPlan, IngressMigrationStoredAttempt,
     IngressMigrationStoredRecord, IngressMigrationStorage, IngressMigrationStorageHooks, PathPublicationStorageValues,
     PathPublicationStoredOperation } from '../framework/public.ts';
 import { consolePageSql } from './mysql-read-pagination.ts';
@@ -20,8 +20,8 @@ export class MySqlIngressMigrationStore<Plan extends IngressMigrationStoredPlan,
     constructor(values: PathPublicationStorageValues<Failure>) { this.values=values; }
     async lockScope(tx: Transaction, scope: string) { await rows(tx, 'SELECT id FROM scopes WHERE id=? FOR UPDATE', [scope]); }
     async count(tx: Transaction, scope: string) { return (await rows<{ n: number }>(tx, 'SELECT COUNT(*) n FROM ingress_migrations WHERE scope_id=?', [scope]))[0]!.n; }
-    async list(tx: Transaction, scope: string, paging: ReadPageWindow, groupId?: string) {
-        const filter = 'scope_id=?' + (groupId === undefined ? '' : ' AND group_id=?'), args = [scope, ...(groupId === undefined ? [] : [groupId])];
+    async list(tx: Transaction, scope: string, principal: ReadPrincipal, paging: ReadPageWindow, groupId?: string) {
+        const filter = 'scope_id=?' + (principal.governance ? '' : ' AND created_by=?') + (groupId === undefined ? '' : ' AND group_id=?'), args = [scope, ...(principal.governance ? [] : [principal.actorId]), ...(groupId === undefined ? [] : [groupId])];
         const total = (await rows<{ n: number }>(tx, 'SELECT COUNT(*) n FROM ingress_migrations WHERE ' + filter, args))[0]!.n;
         const records = await rows<StoredHead>(tx, 'SELECT batch_id,revision,created_by,created_at,plan_digest,cancelled,recovery_invalidated FROM ingress_migrations WHERE ' + filter + ' ORDER BY batch_id ' + consolePageSql(paging), args);
         return { total, items: records.map(head) };

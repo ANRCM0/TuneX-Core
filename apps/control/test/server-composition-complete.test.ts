@@ -103,7 +103,7 @@ function fixture() {
     async readFile(path: string) { invoke(`read:${path}`); return Buffer.from(path); },
     trustDigest(raw: Buffer) { invoke('trust-digest'); assert.equal(raw.toString(), 'ca-cert'); return 'trust'; },
     digest(value: unknown) { callbackCalls.push(['digest', value]); return 'binding'; },
-    createMySqlRuntimeResources(limit: number) { invoke('resources'); callbackCalls.push(['resources', limit]); return resources; },
+    createMySqlRuntimeResources(policy: unknown,limit: number) { invoke('resources'); assert.equal(policy,instances.get('NodePortLimitPolicy')); callbackCalls.push(['resources', policy,limit]); return resources; },
     createControlApp(value: unknown) { invoke('app'); appPorts = value; return { fetch: result }; },
     getRequestListener(fetch: unknown) { assert.equal(fetch, result); invoke('request-listener'); return listener = {}; },
     createServer(value: unknown, actual: unknown) { assert.equal(actual, listener); tlsOptions = value; invoke('https-create'); return server; },
@@ -155,7 +155,7 @@ test('159 server startup reads exact pool SQL, binds original resources and defe
   assert.equal(f.db.guard(), f.result); assert.equal(f.telemetryDb.guard(), f.result);
   assert.deepEqual(f.callbackCalls.filter(call => call[0] === 'allow').map(call => call[1]), [f.authority, f.authority]);
   const args = (name: string) => f.argumentsByName.get(name)![0]!;
-  assert.deepEqual(args('Nodes'), [f.db, f.identity, f.instances.get('NodeCertificateAuthority'), 120, 86400, f.resources]);
+  assert.deepEqual(args('Nodes'), [f.db, f.identity, f.instances.get('NodeCertificateAuthority'), 120, 86400, f.resources,f.instances.get('NodePortLimitPolicy')]);
   assert.deepEqual(args('ControlApplication'), [f.db, f.identity, f.instances.get('Nodes'), undefined, false, false, false, false, f.resources]);
   assert.deepEqual(args('RuntimeController'), [f.db, f.instances.get('Nodes'), f.control.forwarding, f.control.ledger, undefined, f.authority, f.control.relay]);
   assert.equal(args('NodeTelemetry')[5], Date.now); assert.equal(args('ForwardTelemetry')[6], Date.now);
@@ -311,7 +311,7 @@ test('159 all original option reads remain lazy repeated and ordered across asse
     probeTelemetryEnabled: true, telemetryRollupsEnabled: true, stationAlertsEnabled: true, webhookDeliveryEnabled: true, notificationSecretsDirectory: 'configured' });
   enabled.control.probes.ingressEnabled = true as never; enabled.control.probes.servicesEnabled = true as never;
   const active = await enabled.start(), args = (name: string) => enabled.argumentsByName.get(name)![0]!;
-  assert.deepEqual(args('Nodes').slice(3), [0, 3600, enabled.resources]);
+  assert.deepEqual(args('Nodes').slice(3), [0, 3600, enabled.resources,enabled.instances.get('NodePortLimitPolicy')]);
   assert.deepEqual(args('ControlApplication').slice(3), [enabled.options.policy, true, true, true, true, enabled.resources]);
   assert.equal(args('NodeTelemetry')[4], true); assert.equal(args('ForwardTelemetry')[5], true);
   assert.equal(args('HostTelemetry')[4], true); assert.equal(args('ProbeTelemetry')[5], true);

@@ -1,6 +1,7 @@
+import type { ReadPrincipal } from './resource-access-ports.ts';
 import type { StoredValues } from './intent-store-ports.ts';
 
-export const MANAGEMENT_READ_INTERFACE_VERSION=1 as const;
+export const MANAGEMENT_READ_INTERFACE_VERSION=2 as const;
 
 export interface ReadPageWindow {page:number;limit:number;offset:number}
 export type ReadFilters=Readonly<Record<string,string>>;
@@ -19,7 +20,10 @@ export interface ReadCount {n:number}
 export interface ReadRows<Row> {count:ReadCount|undefined;records:Row[]}
 export interface ReadNodeRow {
     id:string;revoked:number;credential_until:number|null;facts:unknown;
+    resource_source:'private'|'admin-shared'|'legacy-unclassified';owner_actor_id:string|null;
+    allowed_roles:unknown;can_use:number;
     session_epoch:number|null;snapshot_generation:number|null;received_at:number|null;
+    read_detail:'full'|'shared';
 }
 export interface ReadForwardRow {
     id:string;revision:number;spec:unknown;recovery_suspended:number;
@@ -49,20 +53,20 @@ export interface ReadTunnelPeers {count:{total:number;window_count:number}|undef
  * This preserves projection/decoding failure order without importing an outer DTO.
  */
 export interface ManagementReadStore<Tx> {
-    nodes<R>(tx:Tx,scope:string,paging:ReadPageWindow,filters:ReadFilters,project:(page:ReadRows<ReadNodeRow>)=>R):Promise<R>;
-    forwards<R>(tx:Tx,scope:string,paging:ReadPageWindow,filters:ReadFilters,project:(page:ReadRows<ReadForwardRow>)=>R):Promise<R>;
-    operations<R>(tx:Tx,scope:string,paging:ReadPageWindow,filters:ReadFilters,project:(page:ReadRows<ReadOperationRow>)=>R):Promise<R>;
-    candidates<R>(tx:Tx,actor:string,scope:string,paging:ReadPageWindow,filters:ReadFilters,capabilities:string[],project:(page:ReadRows<ReadNodeRow>)=>R):Promise<R>;
-    overview<R>(tx:Tx,scope:string,project:(record:ReadOverviewRow|undefined)=>R):Promise<R>;
-    diagnostics<R>(tx:Tx,scope:string,nodeId:string,project:(record:ReadDiagnosticsRow|undefined)=>R):Promise<R>;
+    nodes<R>(tx:Tx,scope:string,principal:ReadPrincipal,paging:ReadPageWindow,filters:ReadFilters,project:(page:ReadRows<ReadNodeRow>)=>R):Promise<R>;
+    forwards<R>(tx:Tx,scope:string,principal:ReadPrincipal,paging:ReadPageWindow,filters:ReadFilters,project:(page:ReadRows<ReadForwardRow>)=>R):Promise<R>;
+    operations<R>(tx:Tx,scope:string,principal:ReadPrincipal,paging:ReadPageWindow,filters:ReadFilters,project:(page:ReadRows<ReadOperationRow>)=>R):Promise<R>;
+    candidates<R>(tx:Tx,scope:string,principal:ReadPrincipal,paging:ReadPageWindow,filters:ReadFilters,capabilities:string[],project:(page:ReadRows<ReadNodeRow>)=>R):Promise<R>;
+    overview<R>(tx:Tx,scope:string,principal:ReadPrincipal,project:(record:ReadOverviewRow|undefined)=>R):Promise<R>;
+    diagnostics<R>(tx:Tx,scope:string,principal:ReadPrincipal,nodeId:string,project:(record:ReadDiagnosticsRow|undefined)=>R):Promise<R>;
 }
 export interface ProfileReferenceReadStore<Tx> {
     profile<R>(tx:Tx,scope:string,profile:string,project:(record:{current_revision:number}|undefined)=>R):Promise<R>;
-    references<R>(tx:Tx,scope:string,profile:string,paging:ReadPageWindow,revision:number|undefined,project:(page:ReadRows<ReadForwardReferenceRow>)=>R):Promise<R>;
+    references<R>(tx:Tx,scope:string,principal:ReadPrincipal,profile:string,paging:ReadPageWindow,revision:number|undefined,project:(page:ReadRows<ReadForwardReferenceRow>)=>R):Promise<R>;
 }
 export interface TunnelMetadataReadStore<Tx> {
     node<R>(tx:Tx,scope:string,node:string,project:(record:ReadTunnelNodeRow|undefined)=>R):Promise<R>;
     endpoint<R>(tx:Tx,node:string,project:(record:ReadTunnelEndpointRow|undefined)=>R):Promise<R>;
     peers<R>(tx:Tx,node:string,now:number,project:(page:ReadTunnelPeers)=>R):Promise<R>;
-    references<R>(tx:Tx,scope:string,node:string,paging:ReadPageWindow,project:(page:ReadRows<ReadForwardReferenceRow>)=>R):Promise<R>;
+    references<R>(tx:Tx,scope:string,principal:ReadPrincipal,node:string,paging:ReadPageWindow,project:(page:ReadRows<ReadForwardReferenceRow>)=>R):Promise<R>;
 }

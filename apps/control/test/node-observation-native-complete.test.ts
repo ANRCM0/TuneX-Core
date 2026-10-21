@@ -9,6 +9,9 @@ import * as native from '../src/compatibility/public.ts';
 import * as Owner from '../src/modules/node-observation-owner/public.ts';
 import * as Legacy from '../src/application/node-observations.ts';
 import { observeNodeReport as legacyRules } from '../src/modules/node-report-observation.ts';
+import { MySqlNodeObservationReader } from '../src/infrastructure/mysql-node-observation.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import type { MySqlUnitOfWork, Transaction } from '../src/infrastructure/mysql.ts';
 import type { NodeReportEvidence, NodeObservationContext } from '../src/framework/public.ts';
 
 type Any=Record<string,any>;
@@ -72,4 +75,35 @@ test('102 original report rules retain reason precedence distinct stale status a
  for(const [reason,patch,now,status]of cases){events.length=0;const input={...evidence(),...patch},out=rules.observeNodeReport(input,'scope','node',now,policy);assert.equal(out.reason,reason);assert.equal(out.status,status);assert.equal(out.health,'unknown');assert.equal(out.independentProbe,false);assert.equal(events[0],now);if(!input.report){assert.deepEqual(events,[now]);assert.equal(out.provenance,null);assert.equal(out.receivedAt,null);assert.equal(out.expiresAt,null);}else assert.equal(events[1],input.report.receivedAt);}
  for(const patch of [{assignmentCount:10001},{assignmentCount:-1},{observedAt:8640000000000001},{receivedAt:NaN},{reportSequence:0},{sessionEpoch:0}]){events.length=0;assert.throws(()=>rules.observeNodeReport({...evidence(),report:{...evidence().report!,...patch}},'scope','node',100000,policy),{code:'OBSERVATION_INVALID_RESULT'});assert.deepEqual(events,[]);}
  const failure=new Error('original ISO');const refused=evaluated('rules.ts',{'@tunex/core':core,'../../framework/public.ts':framework,'../../compatibility/public.ts':{nativeIsoTime(){throw failure;}}});assert.throws(()=>refused.observeNodeReport(raw,'scope','node',100000,policy),error=>error===failure);
+});
+
+test('102 actual observation adapter keeps concrete private and shared read policy inside its rolled-back projection transaction',async()=>{
+ for(const mode of ['private-own','private-foreign','shared','governance']as const){
+  const events:string[]=[],actor=mode==='governance'?'administrator':'reader',controller=new AbortController();
+  const connection={
+   connection:{stream:{destroy(){assert.fail('ordinary read policy refusal must not destroy the transport');}}},
+   async query(sql:string){assert.equal(sql,'SET TRANSACTION ISOLATION LEVEL READ COMMITTED');events.push('isolation');},
+   async beginTransaction(){events.push('begin');},async rollback(){events.push('rollback');},
+   release(){events.push('release');},destroy(){assert.fail('settled observation read must release its connection');},
+   async execute(sql:string,args:unknown[]){events.push('projection');assert.deepEqual(args,['node','scope']);assert.ok(sql.includes("LEFT(JSON_UNQUOTE(JSON_EXTRACT(r.last_report,'$.nodeId')),129)"));
+    return [[{id:'node',scope_id:'scope',revoked:0,credential_until:200000,session_epoch:2,boot_id:'boot',snapshot_generation:3,received_at:100000,
+     last_report_sequence:4,valid_until:160000,has_report:1,report_node:'node',report_boot:'boot',report_epoch:'2',report_sequence:'4',report_snapshot:'3',report_time:new Date(99000).toISOString(),observation_count:2}],[]];},
+  };
+  const tx=connection as unknown as Transaction;
+  const auth={async scope(actual:Transaction,who:string,scope:string,manage?:boolean){assert.equal(actual,tx);assert.deepEqual([who,scope],[actor,'scope']);events.push(manage?'manage':'scope');}};
+  const access=new ResourceAccess(auth,{
+   async scopeOwner(actual,scope){assert.equal(actual,tx);assert.equal(scope,'scope');events.push('scope-owner');return {ownerActorId:'administrator'};},
+   async node(actual,who,scope,node){assert.equal(actual,tx);assert.deepEqual([who,scope,node],[actor,'scope','node']);events.push('claim');
+    return mode==='private-own'||mode==='private-foreign'?{source:'private',ownerActorId:mode==='private-own'?'reader':'other',granted:false}:{source:'admin-shared',ownerActorId:null,granted:true};},
+   ownership:async()=>assert.fail('passive Node observation cannot inspect other resource owners'),
+  });
+  const db={pool:{async getConnection(){return tx;}},guard:async()=>{events.push('guard');}}as unknown as Pick<MySqlUnitOfWork,'pool'|'guard'>;
+  const reader=new MySqlNodeObservationReader(db,auth,access),context:NodeObservationContext=Object.freeze({actorId:actor,scopeId:'scope',nodeId:'node',deadlineAt:Date.now()+2000,signal:controller.signal});
+  if(mode==='private-foreign'||mode==='shared'){
+   await assert.rejects(reader.read(context),{code:'NOT_FOUND'});assert.deepEqual(events,['guard','isolation','begin','scope','scope','scope-owner','claim','rollback','release']);
+  }else{
+   const result=await reader.read(context);assert.deepEqual(result,evidence());
+   assert.deepEqual(events,['guard','isolation','begin','scope','scope','scope-owner',...(mode==='governance'?['manage']:[]),'claim','projection','guard','rollback','release']);
+  }
+ }
 });

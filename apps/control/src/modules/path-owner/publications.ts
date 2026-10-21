@@ -4,7 +4,7 @@ import { nativeValueDigest as digest, nativeModuleId as randomUUID, nativeComman
 import { pageWindow as consolePage } from '../../framework/public.ts';
 
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import { checkedPublicationPlan, parsePathPublicationInput, parsePublicationState, PATH_PUBLICATION_LIMITS, PATH_PUBLICATION_REJECTIONS, publicationHash } from './publication-values.ts';
 import type { PathPublicationAttempt, PathPublicationForwardPort, PathPublicationHead, PathPublicationInput, PathPublicationPlan, PathPublicationRecord, PathPublicationStore, PublicationForwardResult } from './publication-contracts.ts';
 import type { PathPublicationApi, PathPublicationCreated as Created, PathPublicationActed as Acted, PathPublicationCancelled as Cancelled } from './publication-api.ts';
@@ -80,14 +80,15 @@ const attemptView = (item: PathPublicationAttempt) => ({ ...item, createdAt: nat
 export class PathPublications<Tx> implements PathPublicationApi {
     private readonly db: TransactionBoundary<Tx>;
     private readonly auth: ScopeAuthorization<Tx>;
+    private readonly access: ResourceReadAccess<Tx>;
     private readonly requests: IdempotentRequests<Tx>;
     private readonly store: PathPublicationStore<Tx>;
     private readonly forwards: PathPublicationForwardPort<Tx>;
     private readonly clock: () => number;
     private readonly newId: () => string;
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, requests: IdempotentRequests<Tx>, store: PathPublicationStore<Tx>,
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, access: ResourceReadAccess<Tx>, requests: IdempotentRequests<Tx>, store: PathPublicationStore<Tx>,
         forwards: PathPublicationForwardPort<Tx>, clock: () => number = nativeWallClockSource(), newId: () => string = randomUUID) {
-        this.db = db; this.auth = auth; this.requests = requests; this.store = store; this.forwards = forwards; this.clock = clock; this.newId = newId;
+        this.db = db; this.auth = auth; this.access = access; this.requests = requests; this.store = store; this.forwards = forwards; this.clock = clock; this.newId = newId;
     }
     private now() { const at = this.clock(); if (!time(at)) corrupt(); return at; }
     private async plan(tx: Tx, actor: string, scope: string, input: PathPublicationInput): Promise<PathPublicationPlan> {
@@ -113,7 +114,7 @@ export class PathPublications<Tx> implements PathPublicationApi {
         const request = requestIdentity(actor, scope, key, 'POST', `/api/v1/scopes/${scope}/path-publications`, { ...selection, previewDigest });
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope, true);
-            const replay = await this.requests.claim<Created>(tx, request); if (replay) return replay;
+            const replay = await this.requests.claim<Created>(tx, request); if (replay) { await this.access.owned(tx, actor, scope, 'path-publication', replay.body.batchId, true); return replay; }
             await this.store.lockScope(tx, scope);
             const count = await this.store.count(tx, scope);
             if (!Number.isSafeInteger(count) || count < 0 || count > PATH_PUBLICATION_LIMITS.batchesPerScope) corrupt();
@@ -133,7 +134,7 @@ export class PathPublications<Tx> implements PathPublicationApi {
         const paging = Object.freeze(consolePage(input.page, input.limit));
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
-            const page = await this.store.list(tx, scope, paging);
+            const page = await this.store.list(tx, scope, await this.access.principal(tx, actor, scope), paging);
             if (!Number.isSafeInteger(page.total) || page.total < 0 || page.total > PATH_PUBLICATION_LIMITS.batchesPerScope || !Array.isArray(page.items) || page.items.length > paging.limit || new Set(page.items.map(item => item.batchId)).size !== page.items.length) corrupt();
             return deepFreeze({ ...paging, total: page.total, items: page.items.map(item => ({ ...checkedHead(item), createdAt: nativeIsoTime(item.createdAt) })), ...flags });
         });
@@ -146,7 +147,9 @@ export class PathPublications<Tx> implements PathPublicationApi {
         identity(actor, scope, id);
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
+            await this.access.owned(tx, actor, scope, 'path-publication', id, true);
             const record = await this.read(tx, scope, id), references = record.attempts.flatMap(item => item.outcome.accepted && item.outcome.result.accepted.body.operationId ? [item.outcome.result.accepted.body] : []);
+            for (const item of record.plan.items) await this.access.forward(tx, actor, scope, item.source.forwardId);
             const ids = [...new Set(references.map(item => item.operationId!))], operations = ids.length ? await this.store.operations(tx, scope, ids) : [];
             if (operations.length > ids.length || new Set(operations.map(item => item.operationId)).size !== operations.length || operations.some(item =>
                 !references.some(reference => reference.operationId === item.operationId && reference.forwardId === item.forwardId && reference.revision === item.targetRevision) ||
@@ -166,9 +169,9 @@ export class PathPublications<Tx> implements PathPublicationApi {
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope, true);
             const record = await this.read(tx, scope, id, true);
-            if (record.head.createdBy !== actor) throw new ControlError('AUTHORIZATION_DENIED', 403, 'Only the original current manager can advance this publication');
+            await this.access.owned(tx, actor, scope, 'path-publication', id);
             if (record.head.recoveryInvalidated) throw new ControlError('RECOVERY_REPLAY_REQUIRES_REVIEW', 409, 'Restored publications cannot execute or compensate');
-            const replay = await this.requests.claim<Acted>(tx, request); if (replay) return replay;
+            const replay = await this.requests.claim<Acted>(tx, request); if (replay) { await this.access.owned(tx, actor, scope, 'path-publication', replay.body.batchId, true); return replay; }
             if (record.head.revision !== expectedRevision) throw new ControlError('REVISION_CONFLICT', 409, 'Publication changed; explicitly reload');
             const row = record.plan.items[position - 1]; if (!row) notFound();
             if (record.attempts.some(item => item.position === position && item.kind === kind)) throw new ControlError('PUBLICATION_ITEM_ATTEMPTED', 409, 'This explicit item action already has a durable decision');
@@ -194,9 +197,9 @@ export class PathPublications<Tx> implements PathPublicationApi {
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope, true);
             const record = await this.read(tx, scope, id, true);
-            if (record.head.createdBy !== actor) throw new ControlError('AUTHORIZATION_DENIED', 403, 'Only the original current manager can cancel this publication');
+            await this.access.owned(tx, actor, scope, 'path-publication', id, true);
             if (record.head.recoveryInvalidated) throw new ControlError('RECOVERY_REPLAY_REQUIRES_REVIEW', 409, 'Restored publications remain suspended');
-            const replay = await this.requests.claim<Cancelled>(tx, request); if (replay) return replay;
+            const replay = await this.requests.claim<Cancelled>(tx, request); if (replay) { await this.access.owned(tx, actor, scope, 'path-publication', replay.body.batchId, true); return replay; }
             if (record.head.revision !== expectedRevision) throw new ControlError('REVISION_CONFLICT', 409, 'Publication changed; explicitly reload');
             const changed = !record.head.cancelled;
             if (changed) await this.store.cancel(tx, scope, id, expectedRevision, actor, this.now());

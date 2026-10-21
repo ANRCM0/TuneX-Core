@@ -4,7 +4,8 @@ import { invalid } from '../../framework/public.ts';
 import type { IdempotentRequests, ScopeOwnerAuthorization, TransactionBoundary } from '../../framework/public.ts';
 
 import type { MemberChangeInput, MemberWriter } from './contracts.ts';
-import type { NodeGrantWriter } from '../node-owner/public.ts';
+import { nodeGrantRoles, nodeGrantPortLimits } from '../node-owner/public.ts';
+import type { NodeGrantWriter, NodeUseRole, NodeGrantPortLimits } from '../node-owner/public.ts';
 import type { AccessChangeEffects } from './command-effects.ts';
 
 import type { MemberChangeResponse, NodeGrantResponse, AccessCommandApi } from './command-api.ts';
@@ -54,19 +55,22 @@ export class AccessCommands<Tx> implements AccessCommandApi {
     }
 
     async changeNodeGrant(actorId: string, scopeId: string, nodeId: string, subject: string, key: string | undefined,
-        expectedRevision: number, allowed: boolean): Promise<NodeGrantResponse> {
+        expectedRevision: number, allowed: boolean,allowedRoles:readonly NodeUseRole[]|null=null,portLimits?:NodeGrantPortLimits|null): Promise<NodeGrantResponse> {
         if (!nativeIdentityCodec.isId(nodeId) || !nativeIdentityCodec.isId(subject) || !nativeIdentityCodec.isCounter(expectedRevision) || typeof allowed !== 'boolean')
             invalid('Valid Node grant command required');
+        const roles=nodeGrantRoles(allowedRoles);
+        const limits=portLimits===undefined?undefined:nodeGrantPortLimits(portLimits);
+        if(!allowed&&(roles!==null||limits!==undefined&&limits!==null))invalid('A withdrawn grant cannot declare purposes or port limits');
         const request = requestIdentity(actorId, scopeId, key, 'PUT',
-            `/api/v1/scopes/${scopeId}/nodes/${nodeId}/grants/${subject}`, { expectedRevision, allowed });
+            `/api/v1/scopes/${scopeId}/nodes/${nodeId}/grants/${subject}`, { expectedRevision, allowed,allowedRoles:roles,...(limits===undefined?{}:{portLimits:limits}) });
         return this.db.transaction(async tx => {
             await this.identity.owner(tx, actorId, scopeId);
             const replay = await this.idempotency.claim<NodeGrantResponse>(tx, request);
             if (replay) return replay;
-            const grant = await this.nodes.changeGrant(tx, actorId, scopeId, nodeId, subject, expectedRevision, allowed);
+            const grant = await this.nodes.changeGrant(tx, actorId, scopeId, nodeId, subject, expectedRevision, allowed,roles,limits);
             const result = await this.effects.nodeGrant(tx, request, grant);
             const response: NodeGrantResponse = { status: grant.changed ? 202 : 200, body: {
-                nodeId, actorId: subject, revision: grant.revision, allowed, operationIds: result.operationIds,
+                nodeId, actorId: subject, revision: grant.revision, allowed,allowedRoles:grant.allowedRoles,portLimits:grant.portLimits, operationIds: result.operationIds,
                 latestAuthorizationUntil: authorizationUntil(result.maximumAuthorization),
             } };
             await this.idempotency.respond(tx, request, response);

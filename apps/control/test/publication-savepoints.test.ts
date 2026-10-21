@@ -4,6 +4,7 @@ import { MySqlPathPublicationStore } from '../src/infrastructure/mysql-publicati
 import { MySqlIngressDeploymentStore } from '../src/infrastructure/mysql-ingress-deployment-store.ts';
 import { MySqlIngressMigrationStore } from '../src/infrastructure/mysql-ingress-migration-store.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
+import { PATH_PUBLICATION_STORAGE_INTERFACE_VERSION, INGRESS_DEPLOYMENT_STORAGE_INTERFACE_VERSION, INGRESS_MIGRATION_STORAGE_INTERFACE_VERSION } from '../src/framework/public.ts';
 import type { PathPublicationStorageValues } from '../src/framework/public.ts';
 import { ControlError } from '../src/framework/errors.ts';
 import { pathPublicationStorageValues } from '../src/modules/path-owner/publication-storage-values.ts';
@@ -86,4 +87,9 @@ test('publication refusal classifier retains error identity, status bounds, retr
         assert.equal(pathPublicationStorageValues.isRefusal(error), true);
         assert.deepEqual(pathPublicationStorageValues.refusal(error), { code: added, status: 409 });
     } finally { PATH_PUBLICATION_REJECTIONS.delete(added); }
+});
+
+
+test('caller-aware storage version keeps all three original per-Forward savepoint contracts',()=>{
+    assert.deepEqual([PATH_PUBLICATION_STORAGE_INTERFACE_VERSION,INGRESS_DEPLOYMENT_STORAGE_INTERFACE_VERSION,INGRESS_MIGRATION_STORAGE_INTERFACE_VERSION],[2,2,2]);
 });

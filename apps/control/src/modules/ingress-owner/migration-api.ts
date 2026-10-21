@@ -4,7 +4,7 @@ import type { IngressMigrationAttempt, IngressMigrationItem, IngressMigrationPla
 import type { PublicationOperation } from '../path-owner/public.ts';
 import type { INGRESS_MIGRATION_LIMITS } from './limits.ts';
 
-export const INGRESS_MIGRATION_API_INTERFACE_VERSION=1 as const;
+export const INGRESS_MIGRATION_API_INTERFACE_VERSION=2 as const;
 
 export type IngressMigrationAttemptView=Omit<IngressMigrationAttempt,'createdAt'>&{createdAt:string};
 export interface IngressMigrationPreview extends IngressMigrationPlan,IngressBatchEvidence {

@@ -10,6 +10,7 @@ import type { ConsoleListKind } from '../src/modules/console-query-owner/public.
 import { createControlApp } from '../src/api/public.ts';
 import { ProbeRuns } from '../src/modules/probe-history-owner/public.ts';
 import { MySqlProbeRuns } from '../src/infrastructure/mysql-probe-runs.ts';
+import type { ResourceReadAccess } from '../src/framework/public.ts';
 import type { Transaction, MySqlUnitOfWork } from '../src/infrastructure/mysql.ts';
 
 type Equal<A,B>=(<T>()=>T extends A?1:2)extends(<T>()=>T extends B?1:2)?true:false;
@@ -164,10 +165,10 @@ test('113 native Console query keeps original map kind filters reference mutable
 });
 
 test('113 Console wrapper uses exact owner table and validator with all existing kind filters and original refusal ordering',async()=>{
-    const examples:Record<ConsoleListKind,Record<string,string[]>>={nodes:{idPrefix:['node_1'],credential:['valid','expired','unenrolled','revoked']},
-        forwards:{idPrefix:['forward_1'],enabled:['true','false'],recoverySuspended:['true','false'],protocol:['tcp','udp','both']},
+    const examples:Record<ConsoleListKind,Record<string,string[]>>={nodes:{idPrefix:['node_1'],credential:['valid','expired','unenrolled','revoked'],resourceSource:['private','admin-shared','legacy-unclassified'],ownership:['mine','available']},
+        forwards:{idPrefix:['forward_1'],enabled:['true','false'],recoverySuspended:['true','false'],protocol:['tcp','udp','both'],ownership:['mine','available']},
         operations:{forwardId:['forward_1'],kind:['create','update','enable','disable','delete','retry','policy','revoke'],status:['accepted','running','succeeded','failed','superseded']},
-        candidates:{idPrefix:['node_1'],nodeId:['node-a'],mode:['direct','relay','multihop'],protocol:['tcp','udp','both']}};
+        candidates:{idPrefix:['node_1'],nodeId:['node-a'],mode:['direct','relay','multihop'],protocol:['tcp','udp','both'],role:['ingress','transit','egress']}};
     for(const [kind,filters]of Object.entries(examples)as [ConsoleListKind,Record<string,string[]>][]){assert.deepEqual(consoleFilterNames[kind],Object.keys(filters));
         for(const [key,values]of Object.entries(filters))for(const value of values){const result=consoleQuery(kind,query([[key,value],['page','2']]));assert.deepEqual(result,{page:'2',limit:undefined,filters:{[key]:value}});}
     }
@@ -184,13 +185,20 @@ test('113/187 actual HTTP decoded echoed filter crosses original ProbeRuns owner
     const tx={async execute(this:unknown,sql:string,args:unknown[]){assert.equal(this,tx);calls.push({sql,args});events.push(sql.includes('FROM probe_runs WHERE')?'history-sql':'loss-sql');return [[],[]];}}as unknown as Transaction;
     const db={async transaction<T>(this:unknown,action:(current:Transaction)=>Promise<T>){assert.equal(this,db);events.push('begin');const result=await action(tx);events.push('commit');return result;}}as unknown as MySqlUnitOfWork;
     const auth={async scope(current:Transaction,actor:string,scope:string,manage:boolean){assert.equal(this,auth);assert.equal(current,tx);assert.equal(actor,'actor-a');assert.equal(scope,'scope-a');assert.equal(manage,true);events.push('scope');}};
-    const owner=new ProbeRuns(db,auth,new MySqlProbeRuns(),()=>now);
+    let governance=true;
+    const access:ResourceReadAccess<Transaction>={
+        async principal(current,actor,scope){assert.equal(current,tx);assert.deepEqual([actor,scope],['actor-a','scope-a']);events.push('principal');return Object.freeze({actorId:actor,governance});},
+        node:async()=>assert.fail('history listing does not read Node detail'),
+        forward:async()=>assert.fail('history listing filters its original actor claim'),
+        owned:async()=>assert.fail('listing must not enter detail ownership'),
+    };
+    const owner=new ProbeRuns(db,auth,access,new MySqlProbeRuns(),()=>now);
     const app=createControlApp({control:{} as never,runtime:{} as never,authority:{allow:async()=>{events.push('authority');},read:async()=>({maintenance:false})},
         services:{probeRuns:owner,authenticateObservation:async header=>{assert.equal(header,'Bearer original');events.push('authenticate');return 'actor-a';}}});
     const response=await app.request('/api/v1/scopes/scope-a/probe-runs?result%53tatus=%65choed&nodeId=node-a&forwardId=forward-a&state=consumed&limit=7',{headers:{authorization:'Bearer original'}});
     assert.equal(response.status,200);const body=await response.json()as Record<string,any>;
     assert.deepEqual(body.filters,{forwardId:'forward-a',nodeId:'node-a',probeId:null,state:'consumed',resultStatus:'echoed'});assert.deepEqual(body.items,[]);assert.equal(body.executionAuthorized,false);assert.equal(body.health,'unknown');
-    assert.deepEqual(events,['authority','authenticate','begin','scope','history-sql','loss-sql','commit']);
+    assert.deepEqual(events,['authority','authenticate','begin','scope','principal','history-sql','loss-sql','commit']);
     assert.equal(calls.length,2);const history=calls[0]!;
     const fields='scope_id,probe_id,actor_id,forward_id,node_id,binding,instance_id,instance_generation,timeout_ms,issued_at,expires_at,state,closed_at,revision,updated_at,withdrawn_at,result_status,result_code,result_elapsed_ms,result_measured_at,result_valid_until,result_accepted_at,result_digest,recovery_suspended,measurement,service_selection,result_tls,echo_challenge,result_echo,result_request_bytes,result_response_bytes';
     const projection=fields.replace(',binding,',',IF(OCTET_LENGTH(binding)<=2048,binding,NULL) binding,')
@@ -205,4 +213,10 @@ test('113/187 actual HTTP decoded echoed filter crosses original ProbeRuns owner
     const rejected=await app.request('/api/v1/scopes/scope-a/probe-runs?resultStatus=unknown',{headers:{authorization:'Bearer original'}});
     assert.equal(rejected.status,422);assert.equal((await rejected.json()as {message:string}).message,'Invalid Probe history result status');assert.equal(calls.length,before);assert.deepEqual(events,['authority','authenticate']);
     await assert.rejects(owner.history('actor-other','scope-a',{resultStatus:'unknown'}),{code:'INVALID_CONFIG',message:'Invalid Probe history filter'});assert.equal(calls.length,before);
+    governance=false;events.length=0;
+    const personal=new ProbeRuns(db,auth,access,new MySqlProbeRuns(),()=>now);
+    const own=await personal.history('actor-a','scope-a',{resultStatus:'echoed'});
+    assert.equal(own.losses,null);assert.deepEqual(events,['begin','scope','principal','history-sql','commit']);
+    assert.equal(calls.length,before+1);assert.match(calls.at(-1)!.sql,/issued_at<\? AND actor_id=\? AND CAST\(result_status AS BINARY\)=CAST\(\? AS BINARY\)/);
+    assert.deepEqual(calls.at(-1)!.args,['scope-a',now-86400000,now,'actor-a','echoed']);
 });

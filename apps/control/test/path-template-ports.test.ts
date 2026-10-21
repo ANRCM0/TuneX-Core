@@ -10,6 +10,22 @@ import type { PathTemplateConfig } from '../src/modules/path-template-contract.t
 import type { PathTemplateHead, PathTemplateRevision, PathTemplateWriter } from '../src/modules/path-template-ports.ts';
 import { pathTemplateListQuery, pathTemplateRevisionQuery } from '../src/api/path-template-query.ts';
 
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { ControlError as ResourceAccessError } from '../src/framework/public.ts';
+import type { OwnedResourceKind } from '../src/framework/public.ts';
+
+function ownerAccess<Tx>(tx:Tx,scopeId:string,members:ReadonlyMap<string,boolean>,
+    claim:(kind:OwnedResourceKind,id:string)=>string|null|undefined,scopeOwner='scope-owner') {
+    const same=(actual:Tx,scope:string)=>{assert.equal(actual,tx);assert.equal(scope,scopeId);};
+    return new ResourceAccess<Tx>({async scope(actual,actor,scope,manage=false){
+        same(actual,scope);
+        if(!members.has(actor)||manage&&!members.get(actor))throw new ResourceAccessError('AUTHORIZATION_DENIED',403,'Fixture scope permission denied');
+    }},{async scopeOwner(actual,scope){same(actual,scope);return {ownerActorId:scopeOwner};},
+        async ownership(actual,scope,kind,id){same(actual,scope);const ownerActorId=claim(kind,id);return ownerActorId===undefined?undefined:{ownerActorId};},
+        async node(){throw Error('Node access is outside this owner fixture');}});
+}
+
+
 const config = () => ({ version: 1, protocols: ['udp', 'tcp'], nodes: ['ingress', 'transit', 'egress'],
     endpoints: [{ nodeId: 'transit', revision: 1 }, { nodeId: 'egress', revision: 2 }], transport: { profileId: 'profile', configRevision: 3 } });
 const profileDigest = 'sha256:' + 'a'.repeat(64);
@@ -24,7 +40,8 @@ function fixture() {
         const before = structuredClone({ heads, revisions, events, replies });
         try { return await action(tx); } catch (error) { ({ heads, revisions, events, replies } = before); throw error; }
     } };
-    const auth = { async scope(value: Tx, actor: string, scope: string, manage = false) {
+    const access=ownerAccess(tx,'scope',new Map([['manager',true],['viewer',false],['scope-owner',true]]),(kind,id)=>kind==='path-template'?heads.get(scopeKey('scope',id))?.ownerActorId:undefined);
+    const auth = { async owner(value:Tx,actor:string,scope:string){check(value);assert.equal(actor,'scope-owner');assert.equal(scope,'scope');}, async scope(value: Tx, actor: string, scope: string, manage = false) {
         check(value); calls.push('auth:' + manage);
         if (scope !== 'scope' || actor === 'outside' || manage && actor === 'viewer') throw new ControlError('AUTHORIZATION_DENIED', 403, 'Denied');
     } };
@@ -42,14 +59,16 @@ function fixture() {
         async count(value, scope) { check(value); return [...heads.keys()].filter(key => key.startsWith(scope + '/')).length; },
         async head(value, scope, id) { check(value); return structuredClone(heads.get(scopeKey(scope, id)) ?? null); },
         async revision(value, scope, id, number) { check(value); return structuredClone(revisions.get(scopeKey(scope, id) + '/' + number) ?? null); },
-        async list(value, scope, paging, prefix) {
-            check(value); const items = [...heads.entries()].filter(([key, head]) => key.startsWith(scope + '/') && head.templateId.startsWith(prefix)).map(([, head]) => structuredClone(head));
+        async list(value, scope, principal, paging, prefix) {
+            check(value); const items = [...heads.entries()].filter(([key, head]) => key.startsWith(scope + '/') && head.templateId.startsWith(prefix) && (principal.governance || head.ownerActorId===principal.actorId)).map(([, head]) => structuredClone(head));
             return { total: items.length, items: items.slice(paging.offset, paging.offset + paging.limit) };
         },
         async publish(value, scope, id, record) {
-            check(value); calls.push('publish'); heads.set(scopeKey(scope, id), { templateId: id, currentRevision: record.revision, archived: false });
+            check(value); calls.push('publish'); heads.set(scopeKey(scope, id), { templateId: id, ownerActorId:heads.get(scopeKey(scope,id))?.ownerActorId??record.createdBy, currentRevision: record.revision, archived: false });
             assert.ok(!revisions.has(scopeKey(scope, id) + '/' + record.revision)); revisions.set(scopeKey(scope, id) + '/' + record.revision, structuredClone(record));
         },
+        async classifyOwner(value,scope,id,expectedRevision,ownerActorId){check(value);const head=heads.get(scopeKey(scope,id));if(!head||head.currentRevision!==expectedRevision||head.ownerActorId!==null)return 0;head.ownerActorId=ownerActorId;return 1;},
+        async auditOwnership(){throw Error('Ownership classification audit is outside this fixture');},
         async archive(value, scope, id) { check(value); calls.push('archive'); heads.get(scopeKey(scope, id))!.archived = true; },
         async audit(value, _scope, _id, _actor, _revision, kind) { check(value); calls.push('audit'); events.push(kind); }
     };
@@ -57,8 +76,8 @@ function fixture() {
         check(value); calls.push('references'); assert.equal(Object.isFrozen(input.nodes), true); return { profileDigest };
     } };
     return { db, auth, requests, store, references, calls,
-        commands: new PathTemplateCommands(db, auth, requests, store, references, () => 1800000000000),
-        queries: new PathTemplateQueries(db, auth, store),
+        commands: new PathTemplateCommands(db, auth, access, requests, store, references, () => 1800000000000),
+        queries: new PathTemplateQueries(db, auth, access, store),
         state: () => ({ heads, revisions, events, replies }) };
 }
 
@@ -86,7 +105,7 @@ test('publication uses one authorization/owner transaction and preserves immutab
     assert.equal((await f.commands.publish('manager', 'scope', 'saved', 'same', 1, config())).status, 200);
     const next = config(); next.protocols = ['tcp']; const second = await f.commands.publish('manager', 'scope', 'saved', 'next', 1, next);
     assert.equal(second.body.revision, 2); assert.notEqual(second.body.configDigest, first.body.configDigest);
-    const old = await f.queries.get('viewer', 'scope', 'saved', 1), current = await f.queries.get('viewer', 'scope', 'saved');
+    const old = await f.queries.get('manager', 'scope', 'saved', 1), current = await f.queries.get('manager', 'scope', 'saved');
     assert.deepEqual(old.config.protocols, ['tcp', 'udp']); assert.deepEqual(current.config.protocols, ['tcp']);
     assert.equal(old.currentRevision, 2); assert.equal(old.executionAuthorized, false); assert.equal(old.bindingCreated, false);
     assert.deepEqual(f.state().events, ['publish', 'publish']);
@@ -102,6 +121,14 @@ test('scope denial precedes idempotency, reads and owner side effects; stale CAS
     assert.deepEqual(f.state(), before);
 });
 
+test('template reads filter ordinary members and refuse nonowners while governance reads the original claim',async()=>{
+    const f=fixture();await f.commands.publish('manager','scope','saved','create',0,config());
+    await assert.rejects(f.queries.get('viewer','scope','saved'),{code:'NOT_FOUND'});
+    assert.equal((await f.queries.list('viewer','scope')).total,0);
+    assert.equal((await f.queries.get('scope-owner','scope','saved')).ownerActorId,'manager');
+    assert.equal((await f.queries.list('scope-owner','scope')).total,1);
+});
+
 test('archival is terminal, keeps immutable history and does not require or create new execution authority', async () => {
     const f = fixture(); await f.commands.publish('manager', 'scope', 'saved', 'first', 0, config()); f.calls.length = 0;
     const result = await f.commands.archive('manager', 'scope', 'saved', 'archive', 1);
@@ -109,7 +136,7 @@ test('archival is terminal, keeps immutable history and does not require or crea
     assert.deepEqual(await f.commands.archive('manager', 'scope', 'saved', 'archive', 1), result);
     assert.equal((await f.commands.archive('manager', 'scope', 'saved', 'archive-again', 1)).body.changed, false);
     await assert.rejects(f.commands.publish('manager', 'scope', 'saved', 'reuse', 1, config()), /cannot be reused/);
-    assert.equal((await f.queries.get('viewer', 'scope', 'saved', 1)).archived, true);
+    assert.equal((await f.queries.get('manager', 'scope', 'saved', 1)).archived, true);
     assert.deepEqual(f.state().events, ['publish', 'archive']);
 });
 
@@ -128,7 +155,7 @@ test('quota, reference denial and audit failure roll back head, immutable versio
 
 test('revision ceiling permits authorized no-op and archival, but cannot overwrite the last version', async () => {
     const f = fixture(), parsed = parsePathTemplate(config());
-    f.state().heads.set('scope/saved', { templateId: 'saved', currentRevision: 64, archived: false });
+    f.state().heads.set('scope/saved', { templateId: 'saved', ownerActorId:'manager', currentRevision: 64, archived: false });
     f.state().revisions.set('scope/saved/64', { revision: 64, config: parsed, profileDigest,
         configDigest: digest({ config: parsed, profileDigest }), createdBy: 'manager', createdAt: 1800000000000 });
     assert.equal((await f.commands.publish('manager', 'scope', 'saved', 'same', 64, config())).body.changed, false);
@@ -139,12 +166,12 @@ test('revision ceiling permits authorized no-op and archival, but cannot overwri
 
 test('reads detect stored corruption, detach pagination and retain archived rows without checking execution grants', async () => {
     const f = fixture(); await f.commands.publish('manager', 'scope', 'saved', 'first', 0, config());
-    const page = await f.queries.list('viewer', 'scope', { page: '1', limit: '1', prefix: 'sav' });
+    const page = await f.queries.list('manager', 'scope', { page: '1', limit: '1', prefix: 'sav' });
     assert.equal(page.items.length, 1); assert.equal(Object.isFrozen(page.items[0]), true);
     f.state().revisions.get('scope/saved/1')!.configDigest = 'sha256:' + 'b'.repeat(64);
-    await assert.rejects(f.queries.get('viewer', 'scope', 'saved'), /Invalid persisted/);
+    await assert.rejects(f.queries.get('manager', 'scope', 'saved'), /Invalid persisted/);
     for (const input of [{ page: '01' }, { page: 1 }, { prefix: '%' }, { limit: '101' }, { extra: true }])
-        await assert.rejects(f.queries.list('viewer', 'scope', input as any));
+        await assert.rejects(f.queries.list('manager', 'scope', input as any));
     assert.throws(() => pathTemplateListQuery(new URLSearchParams('page=1&page=2')));
     for (const query of ['revision=1&revision=2', 'revision=01', 'revision=0', 'current=1', 'revision=1e2'])
         assert.throws(() => pathTemplateRevisionQuery(new URLSearchParams(query)));

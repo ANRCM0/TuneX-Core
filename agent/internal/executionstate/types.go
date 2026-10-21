@@ -2,7 +2,9 @@
 // Durable file/MAC/wire validation remains the responsibility of injected adapters.
 package executionstate
 
-const InterfaceVersion uint64 = 3
+import "github.com/tunex/vnext/agent/internal/payloadbudget"
+
+const InterfaceVersion uint64 = 4
 
 // These facts have no persisted encoding; native adapters retain their own record types.
 type Journal struct {
@@ -19,6 +21,7 @@ type RuntimeJournal struct {
 	Journal               Journal
 	ExecutionExtension    *uint64
 	ImportedHistoryDigest string
+	ResourceBudgets       *payloadbudget.History
 }
 
 type RuntimeStore interface {
@@ -62,6 +65,7 @@ type SnapshotHistory struct {
 	ExecutionExtension *uint64
 	Assignments        []ExecutionIdentity
 	Tombstones         []PhysicalRetirement
+	ResourceLimits     []payloadbudget.Policy
 }
 
 type SnapshotInput interface {

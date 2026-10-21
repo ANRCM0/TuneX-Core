@@ -24,15 +24,15 @@ export class NodeChangeReconciler<Tx> implements NodeManagementEffects<Tx> {
             await this.execution.lock(tx, forward);
             if (forward.spec.path) for (const id of await this.execution.nodeIDs(tx, forward)) affectedNodes.add(id);
             const sourceActor = await this.forwards.authorizer(tx, forward.id);
-            const canRun = change.kind === 'policy' && Boolean(sourceActor && await this.execution.allowed(tx, sourceActor, forward));
+            const canRun = change.kind !== 'revoke' && Boolean(sourceActor && await this.execution.allowed(tx, sourceActor, forward));
             if (canRun && forward.spec.enabled) await this.execution.transition(tx, sourceActor!, forward);
             const operationId = await this.execution.accept(tx, forward, request, canRun ? 'policy' : 'revoke');
             operationIds.push(operationId);
             if (canRun && forward.spec.enabled) await this.execution.assertCapacity(tx, forward);
-            if (change.kind === 'policy' && !canRun) await this.execution.denyIntent(tx, operationId);
+            if (change.kind !== 'revoke' && !canRun) await this.execution.denyIntent(tx, operationId);
         }
         // Whole-Node revocation must commit even when removal Snapshots cannot fit.
-        if (change.kind === 'policy') await this.execution.assertNodeCapacity(tx, change.facts);
+        if (change.kind !== 'revoke') await this.execution.assertNodeCapacity(tx, change.facts);
         let maximumAuthorization: number | null = null;
         for (const nodeId of affectedNodes) {
             const until = await this.execution.maximumAuthorization(tx, nodeId);

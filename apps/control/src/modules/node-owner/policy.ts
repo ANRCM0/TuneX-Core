@@ -6,6 +6,14 @@ export { validateNodeNetworkPolicy as validatePolicy } from '../../compatibility
 export function snapshotNodeCommand(input:NodeManagementCommand):NodeManagementCommand {
     if(!input||typeof input!=='object'||Array.isArray(input))invalid('Valid Node management command required');
     if(input.kind==='revoke'&&Object.keys(input).join(',')==='kind')return Object.freeze({kind:'revoke'});
+    if(input.kind==='classify'){
+        if(Object.keys(input).sort().join(',')!=='expectedRevision,kind,legacyGrants,ownerActorId,source'||
+            !nativeNodeCodec.isCounter(input.expectedRevision)||!['private','admin-shared'].includes(input.source)||
+            !['discard','retain'].includes(input.legacyGrants)||
+            (input.source==='private' ? !nativeNodeCodec.isId(input.ownerActorId)||input.legacyGrants!=='discard' : input.ownerActorId!==null))
+            invalid('Explicit Node source, owner, revision and legacy grant choice required');
+        return Object.freeze({...input});
+    }
     if(input.kind!=='policy'||Object.keys(input).sort().join(',')!=='expectedRevision,kind,policy'||
         !nativeNodeCodec.isCounter(input.expectedRevision))invalid('Valid Node policy command required');
     nativeNodeCodec.validateNetworkPolicy(input.policy);

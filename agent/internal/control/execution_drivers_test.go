@@ -70,7 +70,7 @@ func TestExecutionRegistryDeclarations(t *testing.T) {
 	if _, err := registry.resolve(assignment, executionFeatures{}); err != nil {
 		t.Fatalf("registration retained caller-owned declaration slices: %v", err)
 	}
-	want := []string{"adp.3", "native.direct.v1", "tcp", "udp"}
+	want := []string{"adp.3", "native.direct.v1", "tcp", "udp", "shared-resource-limits.v1"}
 	got := registry.capabilities(executionFeatures{})
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("capabilities = %v, want %v", got, want)
@@ -132,7 +132,7 @@ func TestExecutionRegistrySelection(t *testing.T) {
 }
 
 func TestExecutionRegistryCapabilities(t *testing.T) {
-	direct := []string{"adp.3", "native.direct.v1", "tcp", "udp"}
+	direct := []string{"adp.3", "native.direct.v1", "tcp", "udp", "shared-resource-limits.v1"}
 	withRelay := append(append([]string{}, direct...), "native.relay.v1", "relay.wire.1")
 	withMultihop := append(append([]string{}, withRelay...), "adp.execution.1", "native.multihop.v1", "multihop.wire.1")
 	for _, test := range []struct {

@@ -10,7 +10,7 @@ function fixture() {
     const now = 1800000000000, tx = Object.freeze({ transaction: Symbol('station-worker') }), trace: string[] = [];
     const config = parseStationAlertConfig({ schemaVersion: 1, rule: 'node-credential-expiring', target: { kind: 'node', id: 'node' }, enabled: true, thresholdSeconds: 60 });
     const original = parseStationAlertPolicy({ policyId: 'policy', revision: 1, configRevision: 1, config, configDigest: digest(config),
-        managedBy: 'manager', createdAt: now - 1000, updatedAt: now - 1000, silencedUntil: null, suspended: 'none',
+        managedBy: 'scope-owner', createdAt: now - 1000, updatedAt: now - 1000, silencedUntil: null, suspended: 'none',
         nextEvaluateAt: now, state: { ...emptyStationAlertState(), condition: 'clear', armed: true } });
     const state = { policy: original, latest: null as StationAlertPolicy | null, events: [] as StationAlertEvent[], queued: 0,
         deny: false, fail: '', depth: 0, gate: undefined as Promise<void> | undefined, deferred: [] as number[][] };
@@ -34,9 +34,9 @@ function fixture() {
         async audits() { assert.fail('unexpected audit query'); }, async event() { assert.fail('unexpected event read'); },
         async events() { assert.fail('unexpected event query'); }, async acknowledge() { assert.fail('unexpected acknowledgement'); },
     };
-    const auth = { async scope(actual: typeof tx, actor: string, scope: string, manage?: boolean) {
-        check(actual, 'authorize'); assert.deepEqual([actor, scope, manage], ['manager', 'scope', true]);
-        if (state.deny) throw new ControlError('AUTHORIZATION_DENIED', 403, 'manager revoked');
+    const auth = { async scope() { assert.fail('Station worker must retain owner authorization'); }, async owner(actual: typeof tx, actor: string, scope: string, ...extra:unknown[]) {
+        check(actual, 'authorize'); assert.equal(scope,'scope'); assert.deepEqual(extra,[]);
+        if (state.deny||actor!=='scope-owner') throw new ControlError('AUTHORIZATION_DENIED', 403, 'Scope owner permission required');
     } };
     const requests: IdempotentRequests<typeof tx> = { async claim() { assert.fail('worker claimed a command'); }, async respond() { assert.fail('worker wrote a receipt'); } };
     const facts = { async read(actual: typeof tx, scope: string) {
@@ -58,7 +58,7 @@ test('station worker authorizes before locks and atomically appends handoff and 
     assert.equal(f.state.policy.nextEvaluateAt, f.now + STATION_ALERT_LIMITS.evaluationIntervalMs);
 });
 
-test('station revoked manager suspends without reading facts or producing events', async () => {
+test('station revoked owner suspends without reading facts or producing events', async () => {
     const f = fixture(); f.state.deny = true; await f.service.tick();
     assert.deepEqual(f.trace, ['begin', 'due', 'candidate', 'authorize', 'lock-scope', 'policy-locked', 'put-policy', 'commit']);
     assert.equal(f.state.policy.suspended, 'actor-not-authorized'); assert.deepEqual(f.state.events, []); assert.equal(f.state.queued, 0);
@@ -97,4 +97,10 @@ test('station worker rechecks latest revision and prevents overlapping ticks whi
     if (!f.trace.includes('facts')) { release(); await first; assert.fail('worker did not reach fact read'); }
     const before = [...f.trace]; await f.service.tick(); assert.deepEqual(f.trace, before);
     release(); await first; assert.equal(f.state.events.length, 1); assert.equal(f.state.depth, 0);
+});
+
+test('station worker suspends a formerly managing selfservice actor instead of evaluating protected facts',async()=>{
+ const f=fixture();f.state.policy={...f.state.policy,managedBy:'selfservice-manager'};await f.service.tick();
+ assert.deepEqual(f.trace,['begin','due','candidate','authorize','lock-scope','policy-locked','put-policy','commit']);
+ assert.equal(f.state.policy.suspended,'actor-not-authorized');assert.deepEqual(f.state.events,[]);assert.equal(f.state.queued,0);
 });

@@ -83,7 +83,7 @@ function forwardFixture() {
     const store: ForwardIntentStore<typeof tx> = {
         revisions: unsupported, quarantine: unsupported, liveProfileCount: unsupported, liveNodeCount: unsupported,
         forNode: unsupported, forReferencedNode: unsupported, forProfileActor: unsupported, authorizer: unsupported,
-        setAuthorizer: unsupported, forActor: unsupported, get: unsupported, currentForUpdate: unsupported, record: unsupported,
+        classifyOwner: unsupported, auditOwnership: unsupported, setAuthorizer: unsupported, forActor: unsupported, get: unsupported, currentForUpdate: unsupported, record: unsupported,
         insertCurrent: async (...args) => { assert.equal(args[0], tx); calls.push(['current', ...args.slice(1)]); hooks.current(); },
         insertRevision: async (...args) => { assert.equal(args[0], tx); calls.push(['revision', ...args.slice(1)]); },
         replaceCurrent: async (...args) => { assert.equal(args[0], tx); calls.push(['replace', ...args.slice(1)]); hooks.replacement(); return outcome.changed; },

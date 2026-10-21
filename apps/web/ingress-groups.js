@@ -1,3 +1,4 @@
+import { resolveTemplateLines } from './template-reference.js';
 const id = value => typeof value === 'string' && value.length <= 128 && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value) && !/\s/.test(value);
 const uint = value => Number.isSafeInteger(value) && value >= 0;
 const positive = value => uint(value) && value > 0;
@@ -184,13 +185,10 @@ export function initIngressGroups({ request, byId, notify, getScope, document = 
     const item = document.createElement('button'); item.type = 'button'; item.className = 'secondary'; item.textContent = text; item.dataset.epoch = String(token); item.dataset.unavailable = String(unavailable);
     item.addEventListener('click', () => { if (token === epoch && !pending && !sending && !item.disabled) return action(); }); cell.append(item);
   }
-  function metadataDraft() {
-    const members = el('members').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
-      const values = line.split(/\s+/); if (values.length !== 4 || !/^[1-9][0-9]*$/.test(values[2])) throw Error('每行需要 memberID TemplateID 精确修订 sha256:摘要。');
-      return { memberId: values[0], template: { templateId: values[1], revision: Number(values[2]), configDigest: values[3] } };
-    });
-    const config = { schemaVersion: 1, members };
-    if (!configValid(config)) throw Error('需要一至八个有序成员；成员 ID 与完整路径摘要必须不同。');
+  async function metadataDraft() {
+    const members=await resolveTemplateLines(el('members').value,call,'memberId');
+    const config={schemaVersion:1,members};
+    if(!configValid(config))throw Error('需要 1–8 个有序成员，成员名称与线路摘要必须不同。');
     return config;
   }
   async function inspect(groupId = el('group').value.trim(), selected = el('read-revision').value) {
@@ -210,7 +208,7 @@ export function initIngressGroups({ request, byId, notify, getScope, document = 
         throw Error('入口定义修订、摘要、独立入口或协议响应无效。');
       if (token !== epoch) return;
       inspected = clone(data); el('group').value = groupId; el('expected').value = String(data.currentRevision); el('read-revision').value = String(data.revision);
-      el('members').value = data.config.members.map(member => [member.memberId,member.template.templateId,member.template.revision,member.template.configDigest].join(' ')).join('\n');
+      el('members').value = data.config.members.map(member => [member.memberId,member.template.templateId,member.template.revision].join(' ')).join('\n');
       el('plan-group').textContent = '固定定义 ' + groupId + ' / r' + data.revision + ' / ' + data.configDigest + (data.archived ? '（已归档，不可创建计划）' : '');
       for (const member of data.members) { const item = document.createElement('li'); item.textContent = member.memberId + ' · 独立入口 ' + member.config.nodes[0] + ' · 必经路径 ' + member.config.nodes.join(' → ') +
         ' · ' + member.config.protocols.join('+') + ' · Profile ' + member.config.transport.profileId + ' r' + member.config.transport.configRevision + ' · health=unknown'; el('topology').append(item); }
@@ -347,15 +345,20 @@ export function initIngressGroups({ request, byId, notify, getScope, document = 
       '原结果不确定，只可明确重放原键/body。不能换候选、成员、监听或 CAS；重放时的拒绝也不能证明原提交不存在。' :
       '初次命令已明确拒绝；没有换 CAS、重试或继续尾部。请手动读取并重新准备。'); notify(error.message, true); } }
   }
-  function metadata(method) {
+  async function metadata(method) {
     if (pending || sending) return;
+    const token=epoch;
     try {
       const groupId = el('group').value.trim(), expected = el('expected').value;
       if (!id(groupId) || !/^(0|[1-9][0-9]*)$/.test(expected) || Number(expected) > 64 || method === 'DELETE' && Number(expected) === 0) throw Error('需要定义 ID 和显式当前 CAS，新建发布填 0。');
-      const body = { expectedRevision: Number(expected), ...(method === 'PUT' ? { config: metadataDraft() } : {}) };
+      sending=true;controls();
+      const config=method==='PUT'?await metadataDraft():null;
+      if(token!==epoch)return;
+      sending=false;controls();
+      const body={expectedRevision:Number(expected),...(config?{config}:{})};
       if (!confirm(method === 'PUT' ? '只发布不可变入口定义？不预留监听、不创建规则，也不自动部署成员。' : '永久归档入口定义？历史保留，不会停止已创建规则或取消既有计划。')) return;
       invalidate(true); pending = { kind: 'metadata', method, resource: 'ingress-groups/' + encodeURIComponent(groupId), groupId, body: clone(body), key: randomUUID(), scope: getScope() }; return send(pending);
-    } catch (error) { notify(error.message, true); }
+    } catch (error) { if(token===epoch){sending=false;controls();notify(error.message,true);} }
   }
   function createPlan() {
     if (pending || sending || !preview) return;

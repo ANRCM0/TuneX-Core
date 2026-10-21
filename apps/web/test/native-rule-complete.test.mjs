@@ -3,13 +3,18 @@ import assert from 'node:assert/strict';
 import { createNativeRuleConsole, mountControlConsole } from '../browser-native/public.js';
 
 class Element {
-  constructor(tag = 'div') { this.tag = tag; this.children = []; this.listeners = {}; this.checked = false; this.disabled = false; this.textContent = ''; }
+  constructor(tag = 'div') { this.tag = tag; this.children = []; this.listeners = {}; this.dataset={};this.value='';this.checked = false; this.disabled = false; this.textContent = ''; }
   append(...items) { this.children.push(...items); }
   replaceChildren(...items) { this.children = [...items]; }
   setAttribute(name, value) { this[name] = value; }
   addEventListener(name, callback) { this.listeners[name] = callback; }
   close() { this.open = false; }
   showModal() { this.open = true; }
+  reset() {}
+  querySelector(selector) {
+    assert.equal(selector,'option[value="retain"]');
+    return this.children.find(child=>child.tag==='option'&&child.value==='retain')??null;
+  }
 }
 function harness(overrides = {}) {
   const elements = new Map(), events = [], calls = [], state = { selected: new Map(), active: false, plan: null }, captured = {};
@@ -136,6 +141,8 @@ test('actual main composition keeps Profile and Path handoffs lazy until the ini
     getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
     createElement: tag => new Element(tag), querySelectorAll: () => [], addEventListener() {},
   };
+  document.getElementById('resource-provision-form').elements=[];
+  const retain=new Element('option');retain.value='retain';document.getElementById('resource-classify-legacy').append(retain);
   Object.defineProperty(globalThis, 'document', { configurable: true, value: document });
   t.after(() => { if (descriptor) Object.defineProperty(globalThis, 'document', descriptor); else delete globalThis.document; });
   const initializers = ['initRelayConsole', 'initProbeConsole', 'initProbeRuns', 'initProbePlans', 'initTransportConsole', 'initRuleConsole',

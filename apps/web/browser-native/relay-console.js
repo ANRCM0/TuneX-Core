@@ -1,9 +1,11 @@
+import { roleAllowed } from '../account-context.js';
 export function createNativeRelayConsole({ relayCapable, multihopCapable, multihopSpec, relayProfile, relayEndpoint, relaySpec }) {
 function initRelayConsole({ request, mutate, notify, byId, candidates, load, loadOverview, loadCandidates, detail, display, inspectProfile, loadCatalog, inspectTunnel }) {
   const knownProfiles = new Map();
   let profileList = [];
   let previewed = null;
   let planVersion = 0;
+  let sessionVersion = 0;
   let multihopEnabled=false, intermediates=[],editing=null,pinnedProfileRevision=null,deploymentId=null,editVersion=0,deploymentVersion=0;
   const el = byId;
   const formValue = (form, name) => form.elements.namedItem(name).value;
@@ -44,24 +46,24 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
       }
       el('multihop-path').append(li);
     });
-    options('multihop-candidate',candidates.relay.filter(n=>multihopCapable(n)&&!path.includes(n.id)).map(n=>({value:n.id})));
+    options('multihop-candidate',candidates.relay.filter(n=>multihopCapable(n)&&roleAllowed(n,'transit')&&!path.includes(n.id)).map(n=>({value:n.id})));
     el('multihop-add').disabled=!multihopEnabled||intermediates.length>=6||!el('multihop-candidate').value;
     el('multihop-controls').hidden=!multihopEnabled;
   }
   function eligibleNodes() {
     return candidates.relay.filter(relayCapable);
   }
-  function nodeOptions() {
-    return eligibleNodes().map(n => ({ value:n.id, label:shortId(n.id) + ' · ' + n.policy.capabilities.filter(c=>c==='tcp'||c==='udp').join('/') }));
+  function nodeOptions(role) {
+    return eligibleNodes().filter(node=>!role||roleAllowed(node,role)).map(n => ({ value:n.id, label:shortId(n.id) + ' · ' + n.policy.capabilities.filter(c=>c==='tcp'||c==='udp').join('/') }));
   }
   function populateNodes() {
-    const choices = nodeOptions();
+    const choices = nodeOptions('egress');
     const ingressOld = el('relay-ingress').value;
     const egressOld = el('relay-egress').value;
-    options('relay-ingress', choices, ingressOld);
+    options('relay-ingress', nodeOptions('ingress'), ingressOld);
     options('relay-egress', choices, egressOld);
     if (choices.length > 1 && el('relay-ingress').value === el('relay-egress').value) el('relay-egress').value = choices.find(c=>c.value!==el('relay-ingress').value).value;
-    options('relay-endpoint-node', choices);
+    options('relay-endpoint-node',eligibleNodes().filter(node=>node.readDetail==='full').map(node=>({value:node.id})));
     populateIngress();
     populateEndpointListen();
     updateHint();
@@ -83,7 +85,9 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     invalidate();
   }
   async function refreshProfiles() {
+    const version=sessionVersion;
     const data = await request('GET','transport-profiles');
+    if(version!==sessionVersion)return false;
     profileList = Array.isArray(data.profiles)?data.profiles:[];
     knownProfiles.clear();
     const body = el('relay-profile-rows');
@@ -110,9 +114,11 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     invalidate();
   }
   async function loadProfile(profileId,revision) {
+    const version=sessionVersion;
     const key=profileId+'/'+(revision??'current');
     if(knownProfiles.has(key)) return knownProfiles.get(key);
     const response=await request('GET','transport-profiles/'+encodeURIComponent(profileId)+(revision?'?revision='+revision:''));
+    if(version!==sessionVersion)return;
     knownProfiles.set(key,response);
     return response;
   }
@@ -245,6 +251,35 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     intermediates=s.path.via.slice(0,-1);el('relay-submit').textContent=copy?'复制为新链路（停用）':'更新链路 r'+item.revision;el('relay-cancel-edit').hidden=false;
     invalidate();display('relay');
   }
+  async function loadPathDraft(draft) {
+    const validId=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value);
+    if(!draft||!Array.isArray(draft.nodes)||draft.nodes.length<2||draft.nodes.length>8||
+        draft.nodes.some(node=>!validId(node))||new Set(draft.nodes).size!==draft.nodes.length||
+        !validId(draft.profileId)||!Number.isSafeInteger(draft.profileRevision)||draft.profileRevision<1||
+        !['tcp','udp','both'].includes(draft.protocol))throw Error('组线路径与精确传输修订无效');
+    if(!confirm('载入当前组合，准备一条新的停用转发？这会替换下方编辑内容；不会撤销或重放此前结果不确定的提交。'))return false;
+    cancelEdit();const version=++editVersion,nodes=[...draft.nodes];
+    const {profileId,profileRevision,protocol}=draft;
+    if(!await refresh(nodes)||version!==editVersion)return false;
+    const path=nodes.map(nodeId=>candidates.relay.find(node=>node.id===nodeId));
+    if(path.some((node,index)=>!node||!roleAllowed(node,index===0?'ingress':index===path.length-1?'egress':'transit')||
+        !(path.length>2?multihopCapable(node):relayCapable(node)))||path.length>2&&!multihopEnabled)
+      throw Error('组合中的用途、凭据、多跳能力或原执行开关不满足要求，请重新选择。');
+    const profile=await loadProfile(profileId,profileRevision);
+    if(version!==editVersion)return false;
+    const protocols=protocol==='both'?['tcp','udp']:[protocol];
+    if(profile.profileId!==profileId||profile.revision!==profileRevision||
+        protocols.some(protocol=>!profile.config?.protocols?.includes(protocol)||path.some(node=>!node.policy.capabilities.includes(protocol))))
+      throw Error('路径或精确传输修订不支持选择的业务协议');
+    const form=el('relay-forward-form');form.reset();
+    el('relay-ingress').value=nodes[0];el('relay-egress').value=nodes.at(-1);populateIngress();
+    el('relay-profile-select').value=profileId;pinnedProfileRevision=profileRevision;
+    intermediates=nodes.slice(1,-1);form.elements.namedItem('protocol').value=protocol;
+    form.elements.namedItem('enabled').checked=false;
+    form.elements.namedItem('targetHost').value='';form.elements.namedItem('targetPort').value='';
+    el('relay-submit').textContent='创建转发（当前组合）';el('relay-cancel-edit').hidden=false;
+    invalidate();display('relay');return true;
+  }
   el('deployment-close').addEventListener('click',()=>el('deployment-dialog').close());
   el('deployment-dialog').addEventListener('close',()=>{if(!el('deployment-dialog').open){deploymentVersion++;deploymentId=null;}});
   el('deployment-refresh').addEventListener('click',()=>deployment(deploymentId).catch(e=>notify(e.message,true)));
@@ -278,12 +313,15 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     if(!el('deployment-dialog').open)el('deployment-dialog').showModal();
   }
   async function refreshCandidates(pinnedIds){
+    const version=sessionVersion;
     invalidate();
     el('relay-preview').disabled=true;
     const ingress=el('relay-ingress').value;
     const preferred={address:el('relay-listen-address').value,port:el('relay-listen-port').value};
     const ids=pinnedIds??[ingress,el('relay-egress').value,el('relay-endpoint-node').value,...intermediates];
-    if (!await loadCandidates('relay',ids)) return false;
+    const purposes=pinnedIds?Object.fromEntries(pinnedIds.map((nodeId,index)=>[nodeId,index===0?'ingress':index===pinnedIds.length-1?'egress':'transit'])):
+      {...Object.fromEntries(intermediates.map(nodeId=>[nodeId,'transit'])),[ingress]:'ingress',[el('relay-egress').value]:'egress'};
+    if (!await loadCandidates('relay',ids,purposes)||version!==sessionVersion) return false;
     populateNodes();
     if(el('relay-ingress').value===ingress){
       el('relay-listen-address').value=preferred.address;el('relay-listen-port').value=preferred.port;
@@ -294,12 +332,17 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     return true;
   }
   async function refresh(pinnedIds){
-    const features=await request('GET','execution-capabilities');multihopEnabled=features.multihopEnabled===true;
+    const version=sessionVersion;
+    const features=await request('GET','execution-capabilities');
+    if(version!==sessionVersion)return false;
+    multihopEnabled=features.multihopEnabled===true;
     await Promise.all([loadCatalog(),refreshProfiles()]);
+    if(version!==sessionVersion)return false;
     if (!await refreshCandidates(pinnedIds)) return false;
     return true;
   }
   function clear() {
+    sessionVersion++;
     multihopEnabled=false;deploymentVersion++;deploymentId=null;cancelEdit();
     el('deployment-nodes').replaceChildren();el('deployment-topology').replaceChildren();el('deployment-state').textContent='';
     profileList=[];
@@ -313,7 +356,7 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     row.append(cell);tbody.append(row);
     populateNodes();
   }
-  return {refresh,populateNodes,refreshCandidates,clear,edit,copy:item=>edit(item,true),deployment};
+  return {refresh,populateNodes,refreshCandidates,clear,edit,copy:item=>edit(item,true),loadPathDraft,deployment};
 }
 
 return initRelayConsole;

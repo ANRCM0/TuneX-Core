@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/controlchannel"
 	"github.com/tunex/vnext/agent/internal/executionchannel"
 	"github.com/tunex/vnext/agent/internal/nativeexecution"
+	"github.com/tunex/vnext/agent/internal/payloadbudget"
 	"github.com/tunex/vnext/agent/internal/runtimeplatform"
 	"github.com/tunex/vnext/agent/internal/state"
 )
@@ -51,6 +53,7 @@ type running struct {
 	assignment adp3.Assignment
 	stream     execution
 	ticket     *authorization.Ticket
+	payload    *payloadbudget.AuthorizedGate
 }
 
 func (runner *Runner) assignmentCheck(driver executionDriver, ticket *authorization.Ticket) (func() error, error) {
@@ -118,6 +121,7 @@ type Runner struct {
 	probeCounterTailsEvicted   uint64
 	probeCounterTailsExpired   uint64
 	probeCounterCursor         uint64
+	payloadGates               map[string]*payloadbudget.Gate
 }
 
 func New(options Options) (*Runner, error) { return newRunner(options, defaultProviders()) }
@@ -218,7 +222,7 @@ func (runner *Runner) Run(ctx context.Context) error {
 	defer cancel()
 	defer runner.stop()
 	defer runner.channelProvider().CloseIdleConnections(runner.client)
-	hello := adp3.HelloRequest{ProtocolVersion: 3, NodeId: runner.options.NodeID, BootId: runner.options.BootID, AgentBuild: "vnext-adp3-direct", Capabilities: builtinExecutionDrivers.capabilities(runner.executionFeatures()), LastStoredSnapshotGeneration: runner.journal.Generation}
+	hello := adp3.HelloRequest{ProtocolVersion: 3, NodeId: runner.options.NodeID, BootId: runner.options.BootID, AgentBuild: "vnext-adp3-direct", Capabilities: runner.executionCapabilities(), LastStoredSnapshotGeneration: runner.journal.Generation}
 	body, _ := nativeexecution.EncodeRunnerHello(hello)
 	var raw []byte
 	var err error
@@ -349,6 +353,7 @@ func (runner *Runner) Run(ctx context.Context) error {
 						runner.drains[key] = drain
 					}
 				}
+				runner.stopPayloadLimitedLocked()
 				runner.mutex.Unlock()
 			}
 		}
@@ -495,11 +500,18 @@ func (runner *Runner) poll(ctx context.Context) error {
 			return fmt.Errorf("INTEGRITY_FAILURE: persisted snapshot corrupted")
 		}
 	}
+	limits, err := resourceLimitAssignments(snapshot)
+	if err != nil {
+		return err
+	}
 	drivers := make(map[string]executionDriver, len(snapshot.Assignments))
 	for _, assignment := range snapshot.Assignments {
 		driver, err := builtinExecutionDrivers.resolve(assignment, runner.executionFeatures())
 		if err != nil {
 			return err
+		}
+		if _, limited := limits[assignment.AssignmentId]; limited && !slices.Contains(driver.descriptor.capabilities, sharedPayloadCapability) {
+			return fmt.Errorf("UNSUPPORTED_CAPABILITY: Execution driver lacks shared payload enforcement")
 		}
 		drivers[assignment.AssignmentId] = driver
 		if driver.descriptor.requiresRelay {
@@ -546,6 +558,10 @@ func (runner *Runner) poll(ctx context.Context) error {
 		next = stored.Journal
 		runner.runtimeState = stored
 	}
+	gates, err := runner.configurePayloadGates(snapshot, limits)
+	if err != nil {
+		return err
+	}
 	runner.mutex.Lock()
 	defer runner.mutex.Unlock()
 	runner.journal = next
@@ -579,18 +595,51 @@ func (runner *Runner) poll(ctx context.Context) error {
 			condition = "draining"
 		}
 		obs := adp3.Observation{AssignmentId: assignment.AssignmentId, DeploymentGeneration: assignment.DeploymentGeneration, BindingFence: assignment.BindingFence, Phase: assignment.Phase, Condition: condition, Retryable: false}
-		if existing, ok := runner.instances[key]; ok && (existing.assignment.Driver.ConfigDigest != assignment.Driver.ConfigDigest || existing.assignment.DeploymentGeneration != assignment.DeploymentGeneration || existing.assignment.BindingFence != assignment.BindingFence) {
-			stream, startErr := driver.replaceInstance(existing, assignment, check)
+		gate := gates[assignment.AssignmentId]
+		var payload *payloadbudget.AuthorizedGate
+		if gate != nil {
+			payload = gate.WithAuthorization(check)
+			if problem := payload.Check(); problem != nil {
+				if existing, ok := runner.instances[key]; ok {
+					existing.stream.Close()
+					runner.retainForwardCounterTailLocked(existing)
+					delete(runner.instances, key)
+				}
+				code, retryable := driver.classify(problem)
+				obs.Condition, obs.ErrorCode, obs.Retryable = "error", &code, retryable
+				runner.observations = append(runner.observations, obs)
+				continue
+			}
+		}
+		host := runner.executionHost(driver)
+		if payload != nil {
+			host.payload = payload
+		}
+		if existing, ok := runner.instances[key]; ok && (existing.assignment.Driver.ConfigDigest != assignment.Driver.ConfigDigest || existing.assignment.DeploymentGeneration != assignment.DeploymentGeneration || existing.assignment.BindingFence != assignment.BindingFence || payloadBindingChanged(existing.payload, gate)) {
+			var stream execution
+			var startErr error
+			if existing.payload != nil || payload != nil {
+				// Legacy Replace has no host argument. A new binding must not inherit
+				// the old instance's gate, while its drain keeps that original gate.
+				startErr = fmt.Errorf("UNSUPPORTED_CAPABILITY: Metered replacement requires explicit host")
+			} else {
+				stream, startErr = driver.replaceInstance(existing, assignment, check)
+			}
 			if startErr == nil {
 				runner.beginDrain(existing, now, oldDeadline)
-				runner.instances[key] = running{assignment, stream, ticket}
+				runner.instances[key] = running{assignment: assignment, stream: stream, ticket: ticket, payload: payload}
 			}
 			if startErr != nil {
-				runner.beginDrain(existing, now, oldDeadline)
+				if payloadBindingChanged(existing.payload, gate) {
+					existing.stream.Close()
+					runner.retainForwardCounterTailLocked(existing)
+				} else {
+					runner.beginDrain(existing, now, oldDeadline)
+				}
 				delete(runner.instances, key)
-				stream, startErr = driver.start(runner.executionHost(driver), assignment, check)
+				stream, startErr = driver.start(host, assignment, check)
 				if startErr == nil {
-					runner.instances[key] = running{assignment, stream, ticket}
+					runner.instances[key] = running{assignment: assignment, stream: stream, ticket: ticket, payload: payload}
 					runner.observations = append(runner.observations, obs)
 					continue
 				}
@@ -600,16 +649,19 @@ func (runner *Runner) poll(ctx context.Context) error {
 				obs.Retryable = retryable
 			}
 		} else if !ok {
-			stream, startErr := driver.start(runner.executionHost(driver), assignment, check)
+			stream, startErr := driver.start(host, assignment, check)
 			if startErr != nil {
 				code, retryable := driver.classify(startErr)
 				obs.Condition = "error"
 				obs.ErrorCode = &code
 				obs.Retryable = retryable
 			} else {
-				runner.instances[key] = running{assignment, stream, ticket}
+				runner.instances[key] = running{assignment: assignment, stream: stream, ticket: ticket, payload: payload}
 			}
 		} else {
+			if existing.payload != nil {
+				existing.payload.SetAuthorization(check)
+			}
 			existing.stream.SetAuthorization(check)
 			if err := driver.phase(existing.stream, assignment.Phase); err != nil {
 				code, retryable := driver.classify(err)
@@ -656,6 +708,9 @@ func (runner *Runner) beginDrain(instance running, now, previousCutoff time.Time
 		return
 	}
 	instance.ticket = instance.ticket.Drain(time.Duration(instance.assignment.DrainTimeoutSeconds) * time.Second)
+	if instance.payload != nil {
+		instance.payload.SetAuthorization(instance.ticket.Allow)
+	}
 	instance.stream.SetAuthorization(instance.ticket.Allow)
 	instance.stream.Drain()
 	deadline := instance.ticket.Deadline()
@@ -677,6 +732,7 @@ func (runner *Runner) initializeGuard() error {
 		return err
 	}
 	runner.guard = guard
+	runner.clock = clock
 	return nil
 }
 func (runner *Runner) report(ctx context.Context) error {

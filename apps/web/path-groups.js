@@ -1,3 +1,4 @@
+import { resolveTemplateLines } from './template-reference.js';
 const id = value => typeof value === 'string' && value.length <= 128 && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value) && !/\s/.test(value);
 const integer = value => Number.isSafeInteger(value) && value >= 0;
 const positive = value => integer(value) && value > 0;
@@ -76,14 +77,9 @@ export function initPathGroups({ request, byId, notify, document = globalThis.do
     if (dropInspection) { inspected = null; el('topology').replaceChildren(); el('candidate').replaceChildren(); const option = document.createElement('option'); option.value = ''; option.textContent = '先读取精确组修订，再明确选择'; el('candidate').append(option); }
     controls();
   }
-  function draft() {
-    const lines = el('candidates').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-    const candidates = lines.map(line => {
-      const values = line.split(/\s+/);
-      if (values.length !== 4 || !/^[1-9][0-9]*$/.test(values[2])) throw Error('每行格式：候选ID TemplateID 精确修订 sha256:摘要。');
-      return { candidateId: values[0], template: { templateId: values[1], revision: Number(values[2]), configDigest: values[3] } };
-    });
-    return configView({ schemaVersion: 1, kind: el('kind').value, candidates });
+  async function draft() {
+    const candidates=await resolveTemplateLines(el('candidates').value,call,'candidateId');
+    return configView({schemaVersion:1,kind:el('kind').value,candidates});
   }
   function groupSelection() {
     const candidateId = el('candidate').value;
@@ -208,7 +204,7 @@ export function initPathGroups({ request, byId, notify, document = globalThis.do
       if (await digest(config) !== data.configDigest) throw Error('组配置摘要不匹配。');
       if (token !== epoch) return;
       inspected = clone({ ...data, config }); el('id').value = groupId; el('expected').value = String(data.currentRevision); el('read-revision').value = String(data.revision); el('kind').value = config.kind;
-      el('candidates').value = config.candidates.map(candidate => [candidate.candidateId,candidate.template.templateId,candidate.template.revision,candidate.template.configDigest].join(' ')).join('\n');
+      el('candidates').value = config.candidates.map(candidate => [candidate.candidateId,candidate.template.templateId,candidate.template.revision].join(' ')).join('\n');
       el('candidate').replaceChildren(); const empty = document.createElement('option'); empty.value = ''; empty.textContent = '明确选择一个候选（不自动选路）'; el('candidate').append(empty);
       for (const branch of topology.branches) {
         const option = document.createElement('option'); option.value = branch.candidateId; option.textContent = '优先级 ' + branch.priority + ' / ' + branch.candidateId; option.disabled = data.archived; el('candidate').append(option);
@@ -226,7 +222,11 @@ export function initPathGroups({ request, byId, notify, document = globalThis.do
       if (!replay) {
         const groupId = el('id').value.trim(), expected = el('expected').value;
         if (!id(groupId) || !/^(0|[1-9][0-9]*)$/.test(expected) || Number(expected) > 64 || method === 'DELETE' && Number(expected) < 1) throw Error('需要组 ID 和显式当前 CAS；新建发布使用 0。');
-        const body = { expectedRevision: Number(expected), ...(method === 'PUT' ? { config: draft() } : {}) };
+        sending=true;controls();
+        const config=method==='PUT'?await draft():null;
+        if(token!==epoch)return;
+        sending=false;controls();
+        const body={expectedRevision:Number(expected),...(config?{config}:{})};
         if (!confirm(method === 'PUT' ? '仅发布不可变组元数据？不会绑定 Forward、切换、预留资源或自动跟随最新路径。' : '永久归档此组标识？历史保留；不停止或改变已展开的规则。')) return;
         invalidate(true); token = epoch;
         pending = { kind: 'metadata', method, resource: resource(groupId), body: clone(body), groupId, key: randomUUID() };

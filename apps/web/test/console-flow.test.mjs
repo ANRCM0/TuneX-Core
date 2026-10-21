@@ -32,8 +32,8 @@ async function loadConsoleModule(url, context, modules) {
     }
   }
   source = source.replace(/^export\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"];[\t ]*$/gm, '');
-  const localExports = [...source.matchAll(/^export\s+(?:function|const)\s+([A-Za-z_$][\w$]*)/gm)].map(match => match[1]);
-  source = source.replace(/^export\s+(?=function|const)/gm, '');
+  const localExports = [...source.matchAll(/^export\s+(?:(?:async\s+)?function|const)\s+([A-Za-z_$][\w$]*)/gm)].map(match => match[1]);
+  source = source.replace(/^export\s+(?=(?:async\s+)?function|const)/gm, '');
   source = source.replace(/^export\s+\{([^}]+)\};[\t ]*$/gm, (_, names) => {
     localExports.push(...named(names));
     return '';
@@ -44,7 +44,9 @@ async function loadConsoleModule(url, context, modules) {
     // Expose existing closures only in this test copy, never in production code.
     source = source.replace(/\n}\s*$/, `
       globalThis.flow={load,loadOverview,editor,saveForward,action,refreshDirectCandidates,relayConsole,request,
-        connect(scope='scope-a'){clearConnectionData();auth.scope=scope;auth.token='x'.repeat(40);},
+        connect(scope='scope-a'){clearConnectionData();auth.scope=scope;auth.token='x'.repeat(40);
+          account={actorId:'actor-a',scopes:[{scopeId:scope,role:'manager',membership:'active',membershipRevision:1,canEnter:true,canManage:true}]};
+          updateAccountNavigation();},
         setPage(kind,value){page[kind]=value;},setFilters(kind,value){filters[kind]=value;},
         candidates,page,store,clearConnectionData};
     }`);
@@ -88,7 +90,7 @@ class Element {
   showModal() { this.open = true; }
 }
 const node = id => ({
-  id, revoked: false, credentialUntil: '2099-01-01T00:00:00Z',
+  id, canUse:true, allowedRoles:null, readDetail:'full', resourceSource:'private', revoked: false, credentialUntil: '2099-01-01T00:00:00Z',
   policy: { allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [25565],
     capabilities: ['adp.3','native.direct.v1','native.relay.v1','relay.wire.1','adp.execution.1','native.multihop.v1','multihop.wire.1','tcp','udp'] }
 });
@@ -115,10 +117,10 @@ async function harness(handler) {
       const id = input[2].match(/\bid="([^"]+)"/)?.[1];
       fields.set(name, id ? elements.get(id) : new Element(input[1]));
     }
-    elements.get(match[1]).elements = { namedItem: name => {
+    elements.get(match[1]).elements = Object.assign([...fields.values()], { namedItem: name => {
       assert.ok(fields.has(name), 'unknown form field ' + match[1] + '/' + name);
       return fields.get(name);
-    } };
+    } });
   }
   const calls = [], document = {
     getElementById(id) { assert.ok(elements.has(id), 'unknown HTML id ' + id); return elements.get(id); },
@@ -137,7 +139,7 @@ async function harness(handler) {
   return { flow: context.flow, elements, calls };
 }
 const page = (items = [], total = items.length) => ({ page: 1, limit: 25, items, total });
-test('scope-wide overview and candidate selectors do not depend on filtered list pages', async () => {
+test('personal overview and candidate selectors do not depend on filtered list pages', async () => {
   const h = await harness(resource => {
     if (resource === 'overview') return { nodes: 80, forwards: 60, activeOperations: 28, failedOperations: 32 };
     if (resource.startsWith('nodes/candidates')) return page(resource.includes('nodeId=outside-page') ? [node('outside-page')] : [node('candidate-first')], 40);
@@ -316,6 +318,27 @@ test('Direct candidate refresh never silently changes a revoked selection to a d
   assert.equal(h.elements.get('forward-node').value, '');
   assert.equal(h.elements.get('save-forward').disabled, true);
 });
+
+test('shared resource rows hide host reports and management actions while retaining the permitted personal usage entry',async()=>{
+  const shared={...node('shared-a'),resourceSource:'admin-shared',readDetail:'shared',allowedRoles:['egress'],lastReportAt:null};
+  const h=await harness(()=>page([shared]));h.flow.connect();await h.flow.load('nodes');
+  const rows=h.elements.get('node-rows'),text=element=>[element.textContent,...element.children.map(text)].join('\n');
+  assert.match(text(rows),/报告不可见/);
+  assert.match(text(rows),/共享用途授权不包含主机报告/);
+  const actions=rows.querySelectorAll('button').map(button=>button.dataset.action);
+  assert.deepEqual(actions,['node-port-usage']);
+  for(const action of ['node-detail','node-diagnostics','node-host-telemetry','node-telemetry-aggregate'])assert.equal(actions.includes(action),false);
+  assert.equal(h.calls.some(call=>/host-telemetry|diagnostics|port-usage/.test(call.resource)),false,'rendering never performs a hidden host or usage read');
+});
+
+test('Direct candidate form rejects missing explicit use permission even when native capabilities are present',async()=>{
+  for(const canUse of [false,undefined]){
+    const h=await harness(()=>page([{...node('denied'),canUse}]));h.flow.connect();await h.flow.editor(null);
+    assert.equal(h.elements.get('forward-node').value,'');
+    assert.equal(h.elements.get('save-forward').disabled,true);
+    assert.equal(h.calls.some(call=>call.options.method!=='GET'),false);
+  }
+});
 test('Relay selections survive independent candidate searches and fail closed after grant loss', async () => {
   let revoked = false;
   const h = await harness(resource => {
@@ -333,6 +356,8 @@ test('Relay selections survive independent candidate searches and fail closed af
   await h.flow.relayConsole.refreshCandidates();
   assert.equal(h.elements.get('relay-ingress').value, 'relay-a');
   assert.equal(h.elements.get('relay-egress').value, 'relay-b');
+  for(const [nodeId,role] of [['relay-a','ingress'],['relay-b','egress']])
+    assert.ok(h.calls.some(call=>{const query=new URLSearchParams(call.resource.split('?')[1]);return query.get('nodeId')===nodeId&&query.get('role')===role;}),nodeId+' is revalidated for its actual path role');
   assert.ok(h.flow.candidates.relay.some(n => n.id === 'relay-c'));
   revoked = true;
   await assert.rejects(h.flow.relayConsole.refreshCandidates(), /已失效/);

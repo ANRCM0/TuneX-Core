@@ -3,6 +3,8 @@ package executionstate
 import (
 	"fmt"
 	"maps"
+
+	"github.com/tunex/vnext/agent/internal/payloadbudget"
 )
 
 // Accept persists authenticated high-water before returning permission to change sockets.
@@ -22,6 +24,10 @@ func (host RuntimeHost) Accept(current RuntimeJournal, input SnapshotInput) (Run
 	if durable.FormatVersion != current.FormatVersion || !sameExtension(durable.ExecutionExtension, current.ExecutionExtension) || durable.ImportedHistoryDigest != current.ImportedHistoryDigest || durable.Journal.Generation != current.Journal.Generation || durable.Journal.Digest != current.Journal.Digest || !maps.Equal(durable.Journal.Fences, current.Journal.Fences) || !maps.Equal(durable.Journal.Retired, current.Journal.Retired) {
 		return current, fmt.Errorf("INTEGRITY_FAILURE: Caller Runtime state is stale")
 	}
+	// Payload writers may have advanced consumption since the Runner cached this
+	// Snapshot. The authenticated reload under this same lock is authoritative.
+	retained := current
+	retained.ResourceBudgets = durable.ResourceBudgets
 	snapshot, raw, err := input.EncodeValidated()
 	if err != nil {
 		return current, err
@@ -32,10 +38,18 @@ func (host RuntimeHost) Accept(current RuntimeJournal, input SnapshotInput) (Run
 	if !host.Codec.SupportsProtocol(current.FormatVersion) || current.NodeID != snapshot.NodeId || snapshot.SnapshotGeneration < current.Journal.Generation || snapshot.SnapshotGeneration == current.Journal.Generation && snapshot.SnapshotDigest != current.Journal.Digest {
 		return current, fmt.Errorf("INTEGRITY_FAILURE: Runtime history/binding differs")
 	}
-	if snapshot.SnapshotGeneration == current.Journal.Generation {
-		return current, nil
+	budgets, err := payloadbudget.AcceptHistory(retained.ResourceBudgets, snapshot.ResourceLimits, current.NodeID)
+	if err != nil {
+		return current, err
 	}
-	next := current
+	if snapshot.SnapshotGeneration == current.Journal.Generation {
+		if err := payloadbudget.ValidateRetainedPolicies(retained.ResourceBudgets, snapshot.ResourceLimits, current.NodeID); err != nil {
+			return current, err
+		}
+		return retained, nil
+	}
+	next := retained
+	next.ResourceBudgets = budgets
 	if snapshot.ExecutionExtension != nil {
 		version := *snapshot.ExecutionExtension
 		next.ExecutionExtension = &version

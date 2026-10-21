@@ -4,7 +4,7 @@ import type { Forward } from '@tunex/core';
 import { nativeDiagnosticProbeResult, nativeDiagnosticProbeResultBody, parseProbeServiceContext, probeServiceSelection } from '../../compatibility/public.ts';
 import type { NativeDiagnosticProbeResult } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import type { ForwardDiagnosticsApi } from './api.ts';
 import { validProbeBinding } from '../probe-owner/public.ts';
 import type { DiagnosticAssignment, DiagnosticDeployment, DiagnosticDrain, DiagnosticLease, DiagnosticNode, DiagnosticOperation,
@@ -65,6 +65,7 @@ function unique<T>(values: T[], key: (value: T) => string) {
 export class ForwardDiagnostics<Tx> implements ForwardDiagnosticsApi {
     private readonly db: TransactionBoundary<Tx>;
     private readonly auth: ScopeAuthorization<Tx>;
+    private readonly readAccess: ResourceReadAccess<Tx>;
     private readonly read: ForwardDiagnosticReadPort<Tx>;
     private readonly clock: () => number;
     private readonly freshnessMs: number;
@@ -73,11 +74,11 @@ export class ForwardDiagnostics<Tx> implements ForwardDiagnosticsApi {
     private active = 0;
     private readonly actors = new Map<string, { active: boolean; until: number }>();
 
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, read: ForwardDiagnosticReadPort<Tx>,
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, readAccess: ResourceReadAccess<Tx>, read: ForwardDiagnosticReadPort<Tx>,
         policy: { freshnessMs: number; clockSkewMs: number }, clock: () => number = nativeWallClockSource()) {
         if (!isCounter(policy.freshnessMs) || policy.freshnessMs > 300000 || !isCounter(policy.clockSkewMs, true) || policy.clockSkewMs > 300000)
             throw new Error('Bounded diagnostic timing policy required');
-        this.db = db; this.auth = auth; this.read = read; this.clock = clock;
+        this.db = db; this.auth = auth; this.readAccess = readAccess; this.read = read; this.clock = clock;
         this.freshnessMs = policy.freshnessMs; this.skewMs = policy.clockSkewMs;
     }
     async admitReadRequest<T>(action: () => Promise<T>): Promise<T> {
@@ -274,6 +275,7 @@ export class ForwardDiagnostics<Tx> implements ForwardDiagnosticsApi {
         if (![actor,scope,id].every(isId)) invalid('Valid diagnostic Scope and Forward required');
         return this.admitted(actor, () => this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
+            await this.readAccess.forward(tx, actor, scope, id);
             const found = await this.read.forward(tx,scope,id); if (!found) notFound();
             const parsed = parseForward({ id: found.id, scopeId: found.scopeId, revision: found.revision, spec: found.spec });
             if (!parsed.ok || found.id !== id || found.scopeId !== scope || !bool(found.deleting) || !bool(found.recoverySuspended)) corrupt();
@@ -285,6 +287,11 @@ export class ForwardDiagnostics<Tx> implements ForwardDiagnosticsApi {
             const leases = page(await this.read.leases(tx,scope,id),32), probes = page(await this.read.probes(tx,scope,id),8);
             const now = this.clock(); if (!time(now)) corrupt();
             if (!Array.isArray(rawNodes) || rawNodes.length > path.length || rawNodes.some(node => !path.includes(node.nodeId))) corrupt();
+            const fullNodeIds = new Set<string>();
+            for (const node of rawNodes) {
+                try { await this.readAccess.node(tx, actor, scope, node.nodeId, 'diagnostics'); fullNodeIds.add(node.nodeId); }
+                catch (error) { if (!(error instanceof ControlError) || error.code !== 'NOT_FOUND') throw error; }
+            }
             const nodeViews = unique(rawNodes.map(node => this.node(node,scope,now)),node => node.nodeId);
             const slotViews = unique(slots.items.map(row => this.slot(row)),row => row.nodeId+'/'+row.protocol+'/'+row.port);
             const listenerViews = unique(assignments.items.map(row => this.assignment(row,forward,nodeViews.find(node => node.nodeId === row.nodeId),slotViews,found.deleting,found.recoverySuspended)),identityKey);
@@ -309,7 +316,7 @@ export class ForwardDiagnostics<Tx> implements ForwardDiagnosticsApi {
                     transport: forward.spec.transport ? { profileId: forward.spec.transport.profileId, configRevision: forward.spec.transport.configRevision } : null },
                 operations: { limit: 8, truncated: operations.truncated, items: operationViews }, deployment: this.deployment(deployment,forward),
                 nodes: path.map((nodeId,index) => ({ position: index+1, role: path.length === 1 ? 'direct' : index === 0 ? 'ingress' : index === path.length-1 ? 'egress' : 'transit',
-                    nodeId, evidence: nodeViews.find(node => node.nodeId === nodeId) ?? null })),
+                    nodeId, evidence: fullNodeIds.has(nodeId) ? nodeViews.find(node => node.nodeId === nodeId) ?? null : null })),
                 listeners: { limit: 16, truncated: assignments.truncated, items: listenerViews }, adjacentSegments,
                 target: { nodeId: path.at(-1)!, endpoint: { host: forward.spec.target.host, port: forward.spec.target.port },
                     protocols: [...forward.spec.protocols], source: 'desired-target-and-published-config', connectivity: 'unknown', applicationHealth: 'unknown',

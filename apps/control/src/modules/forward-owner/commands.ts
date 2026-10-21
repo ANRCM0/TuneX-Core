@@ -1,8 +1,8 @@
 import { decideForwardChange, deepFreeze, isCounter, isId, MAX_COUNTER, parseForwardSpec } from '@tunex/core';
 import type { Forward, ForwardSpec } from '@tunex/core';
-import { nativeValueDigest as digest, nativeCommandRequest as requestIdentity } from '../../compatibility/public.ts';
+import { nativeValueDigest as digest, nativeCommandRequest as requestIdentity, nativeWallClockSource } from '../../compatibility/public.ts';
 import { ControlError, invalid } from '../../framework/public.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary, RequestIdentity } from '../../framework/public.ts';
+import type { IdempotentRequests, ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary, RequestIdentity, ResourceReadAccess } from '../../framework/public.ts';
 import type { ForwardWriter } from './contracts.ts';
 import type { ForwardCommandPreparation, ForwardOperationCommands } from './command-ports.ts';
 import { parsePathSelection } from '../path-owner/public.ts';
@@ -13,7 +13,7 @@ import type { ForwardPathGroups } from '../path-owner/public.ts';
 import { parsePublicationState } from '../path-owner/public.ts';
 import type { PathPublicationForwardPort, PublicationForwardState, PublicationProvenance } from '../path-owner/public.ts';
 
-import type { ForwardAccepted, ForwardCommandApi, ForwardBindingApi } from './command-api.ts';
+import type { ForwardAccepted, ForwardOwnerClassified, ForwardCommandApi, ForwardBindingApi } from './command-api.ts';
 export type { ForwardAccepted } from './command-api.ts';
 
 function revision(value: number): void {
@@ -22,24 +22,48 @@ function revision(value: number): void {
 
 export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, ForwardCommandApi, ForwardBindingApi {
     private readonly db: TransactionBoundary<Tx>;
-    private readonly identity: ScopeAuthorization<Tx>;
+    private readonly identity: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>;
+    private readonly access: ResourceReadAccess<Tx>;
     private readonly idempotency: IdempotentRequests<Tx>;
     private readonly forwarding: ForwardWriter<Tx>;
     private readonly operations: ForwardOperationCommands<Tx>;
     private readonly execution: ForwardCommandPreparation<Tx>;
     private readonly newId: () => string;
+    private readonly clock: () => number;
     private readonly paths: ForwardPathBindings<Tx> | undefined;
     private readonly groups: ForwardPathGroups<Tx> | undefined;
     private readonly publicationProvenance: PublicationProvenance<Tx> | undefined;
 
-    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, idempotency: IdempotentRequests<Tx>,
+    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>, access: ResourceReadAccess<Tx>, idempotency: IdempotentRequests<Tx>,
         forwarding: ForwardWriter<Tx>, operations: ForwardOperationCommands<Tx>, execution: ForwardCommandPreparation<Tx>,
-        newId: () => string, paths?: ForwardPathBindings<Tx>, groups?: ForwardPathGroups<Tx>, publicationProvenance?: PublicationProvenance<Tx>) {
-        for (const method of ['prepareCreate', 'planCreate', 'prepareUpdate', 'planUpdate', 'lock', 'lockRemoval', 'prepareRetry', 'assertCapacity'] as const)
+        newId: () => string, paths?: ForwardPathBindings<Tx>, groups?: ForwardPathGroups<Tx>, publicationProvenance?: PublicationProvenance<Tx>,
+        clock: () => number = nativeWallClockSource()) {
+        for (const method of ['prepareCreate', 'planCreate', 'prepareUpdate', 'planUpdate', 'lock', 'lockOwnership', 'lockRemoval', 'prepareRetry', 'assertCapacity'] as const)
             if (typeof execution?.[method] !== 'function') throw new Error('Forward execution preparation is required');
-        this.db = db; this.identity = identity; this.idempotency = idempotency; this.forwarding = forwarding;
+        this.db = db; this.identity = identity; this.access = access; this.idempotency = idempotency; this.forwarding = forwarding;
         this.operations = operations; this.execution = execution; this.newId = newId; this.paths = paths; this.groups = groups;
         this.publicationProvenance = publicationProvenance;
+        this.clock = clock;
+    }
+
+    async classifyOwner(actorId:string,scopeId:string,id:string,key:string|undefined,expectedRevision:number,ownerActorId:string):Promise<ForwardOwnerClassified> {
+        revision(expectedRevision);
+        if(![actorId,scopeId,id,ownerActorId].every(isId))invalid('Valid Forward ownership classification identity required');
+        const request=requestIdentity(actorId,scopeId,key,'POST',`/api/v1/scopes/${scopeId}/forwards/${id}/classify-owner`,{expectedRevision,ownerActorId});
+        return this.db.transaction(async tx=>{
+            await this.identity.owner(tx,actorId,scopeId);
+            const replay=await this.idempotency.claim<ForwardOwnerClassified>(tx,request);
+            await this.identity.scope(tx,ownerActorId,scopeId,true);
+            if(replay){await this.access.forward(tx,actorId,scopeId,id);return replay;}
+            const at=this.clock(),eventId=this.newId();
+            if(!Number.isSafeInteger(at)||at<0||at>8640000000000000||!isId(eventId))
+                throw new ControlError('INTEGRITY_FAILURE',409,'Invalid ownership classification audit identity or time');
+            const current=await this.forwarding.ownershipForUpdate(tx,scopeId,id);
+            await this.execution.lockOwnership(tx,current);
+            await this.forwarding.classifyOwner(tx,scopeId,id,expectedRevision,actorId,ownerActorId,eventId,at);
+            const response:ForwardOwnerClassified={status:200,body:{forwardId:id,revision:expectedRevision,ownerActorId,classified:true,operationId:null}};
+            await this.idempotency.respond(tx,request,response);return response;
+        });
     }
 
     async create(actorId: string, scopeId: string, key: string | undefined, input: unknown): Promise<ForwardAccepted> {
@@ -49,7 +73,7 @@ export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, Forw
             await this.identity.scope(tx, actorId, scopeId);
             const replay = await this.idempotency.claim<ForwardAccepted>(tx, request);
             if (replay) {
-                await this.forwarding.record(tx, scopeId, replay.body.forwardId);
+                await this.access.forward(tx, actorId, scopeId, replay.body.forwardId);
                 return replay;
             }
             await this.identity.scope(tx, actorId, scopeId, true);
@@ -138,8 +162,9 @@ export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, Forw
         return this.db.transaction(async tx => {
             await this.identity.scope(tx, actorId, scopeId);
             const replay = await this.idempotency.claim<ForwardAccepted>(tx, request);
-            if (replay) return replay;
+            if (replay) { await this.access.forward(tx, actorId, scopeId, replay.body.forwardId); return replay; }
             await this.identity.scope(tx, actorId, scopeId, true);
+            await this.access.forward(tx, actorId, scopeId, id);
             const current = await this.forwarding.currentForUpdate(tx, scopeId, id);
             const decision = decideForwardChange(current, expectedRevision, { kind: 'replace', spec });
             if (!decision.ok) throw new ControlError(decision.errors[0]!.code, 409, decision.errors[0]!.message);
@@ -157,8 +182,9 @@ export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, Forw
         const request = requestIdentity(actorId, scopeId, key, 'PUT', `/api/v1/scopes/${scopeId}/forwards/${id}/path-binding`, { expectedRevision, template: selection });
         return this.db.transaction(async tx => {
             await this.identity.scope(tx, actorId, scopeId, true);
-            const replay = await this.idempotency.claim<ForwardAccepted>(tx, request); if (replay) return replay;
+            const replay = await this.idempotency.claim<ForwardAccepted>(tx, request); if (replay) { await this.access.forward(tx, actorId, scopeId, replay.body.forwardId); return replay; }
             const current = await this.forwarding.currentForUpdate(tx, scopeId, id);
+            await this.access.owned(tx, actorId, scopeId, 'forward', id);
             if (current.revision !== expectedRevision || (await this.forwarding.record(tx, scopeId, id)).recoverySuspended)
                 throw new ControlError('REVISION_CONFLICT', 409, 'Forward changed or recovery suspended');
             const spec = await paths.resolve(tx, actorId, current, selection);
@@ -177,8 +203,9 @@ export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, Forw
         const request = requestIdentity(actorId, scopeId, key, 'PUT', `/api/v1/scopes/${scopeId}/forwards/${id}/path-group-binding`, { expectedRevision, group });
         return this.db.transaction(async tx => {
             await this.identity.scope(tx, actorId, scopeId, true);
-            const replay = await this.idempotency.claim<ForwardAccepted>(tx, request); if (replay) return replay;
+            const replay = await this.idempotency.claim<ForwardAccepted>(tx, request); if (replay) { await this.access.forward(tx, actorId, scopeId, replay.body.forwardId); return replay; }
             const current = await this.forwarding.currentForUpdate(tx, scopeId, id);
+            await this.access.owned(tx, actorId, scopeId, 'forward', id);
             if (current.revision !== expectedRevision || (await this.forwarding.record(tx, scopeId, id)).recoverySuspended)
                 throw new ControlError('REVISION_CONFLICT', 409, 'Forward changed or recovery suspended');
             const selection = await groups.resolve(tx, actorId, current, group);
@@ -191,6 +218,10 @@ export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, Forw
 
     private async acceptUpdate(tx: Tx, actorId: string, current: Forward, next: Forward, request: RequestIdentity,
         selection?: PathSelection, group?: PathGroupSelection, respond = true): Promise<ForwardAccepted> {
+        const record = await this.forwarding.record(tx, current.scopeId, current.id);
+        const governanceStop = record.ownerActorId !== actorId && current.spec.enabled && !next.spec.enabled &&
+            !selection && !group && digest({ ...current.spec, enabled: false }) === digest(next.spec);
+        await this.access.owned(tx, actorId, current.scopeId, 'forward', current.id, governanceStop);
         const recoverySuspended = next.spec.ingress.nodeId !== current.spec.ingress.nodeId ?
             (await this.forwarding.record(tx, current.scopeId, current.id)).recoverySuspended : false;
         await this.execution.prepareUpdate(tx, actorId, current, next, recoverySuspended);
@@ -201,7 +232,7 @@ export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, Forw
                 await this.groups?.preserve(tx, current, next);
                 await this.paths?.preserve(tx, current, next);
             }
-            await this.forwarding.setAuthorizer(tx, next.id, actorId);
+            if (!governanceStop) await this.forwarding.setAuthorizer(tx, next.id, actorId);
             await this.execution.planUpdate(tx, actorId, next);
             const kind = !next.spec.enabled ? 'disable' : !current.spec.enabled ? 'enable' : 'update';
             operationId = await this.operations.accept(tx, next, request, kind, current.spec);
@@ -221,6 +252,7 @@ export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, Forw
         revision(expectedRevision);
         if (![actor,scope,id].every(isId)) invalid('Valid publication Forward identity required');
         await this.identity.scope(tx, actor, scope, true);
+        await this.access.owned(tx, actor, scope, 'forward', id);
         const current = await this.forwarding.currentForUpdate(tx, scope, id), record = await this.forwarding.record(tx, scope, id);
         if (current.revision !== expectedRevision || record.deleting || record.recoverySuspended)
             throw new ControlError('PUBLICATION_STATE_CHANGED', 409, 'Publication Forward changed, deleting or recovery suspended');
@@ -290,14 +322,16 @@ export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, Forw
         return this.db.transaction(async tx => {
             await this.identity.scope(tx, actorId, scopeId);
             const replay = await this.idempotency.claim<ForwardAccepted>(tx, request);
-            if (replay) return replay;
+            if (replay) { await this.access.forward(tx, actorId, scopeId, replay.body.forwardId); return replay; }
             await this.identity.scope(tx, actorId, scopeId, true);
+            await this.access.forward(tx, actorId, scopeId, id);
             const current = await this.forwarding.currentForUpdate(tx, scopeId, id);
             return this.acceptRemove(tx, request, current, expectedRevision);
         });
     }
 
     private async acceptRemove(tx: Tx, request: RequestIdentity, current: Forward, expectedRevision: number, respond = true): Promise<ForwardAccepted> {
+        await this.access.owned(tx, request.actorId, current.scopeId, 'forward', current.id, true);
         await this.execution.lockRemoval(tx, current);
         if (current.revision !== expectedRevision) throw new ControlError('REVISION_CONFLICT', 409, 'Expected revision does not match');
         if (current.revision >= MAX_COUNTER) throw new ControlError('REVISION_EXHAUSTED', 409, 'Revision counter exhausted');
@@ -318,10 +352,11 @@ export class ForwardCommands<Tx> implements PathPublicationForwardPort<Tx>, Forw
         return this.db.transaction(async tx => {
             await this.identity.scope(tx, actorId, scopeId);
             const replay = await this.idempotency.claim<ForwardAccepted>(tx, request);
-            if (replay) return replay;
+            if (replay) { await this.access.forward(tx, actorId, scopeId, replay.body.forwardId); return replay; }
             await this.identity.scope(tx, actorId, scopeId, true);
             const reference = await this.operations.read(tx, scopeId, sourceOperationId);
             const forward = await this.forwarding.currentForUpdate(tx, scopeId, reference.forward_id);
+            await this.access.owned(tx, actorId, scopeId, 'forward', forward.id);
             await this.execution.lock(tx, forward);
             const source = await this.operations.get(tx, scopeId, sourceOperationId);
             if (source.recovery_invalidated)

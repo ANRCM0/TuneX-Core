@@ -1,5 +1,5 @@
 import { ControlError, invalid } from '../../framework/public.ts';
-import type { ManagementReadStore, ReadProjectionValues, ReadNodeRow } from '../../framework/public.ts';
+import type { ManagementReadStore, ReadProjectionValues, ReadNodeRow, ReadPrincipal, NodeUseRole } from '../../framework/public.ts';
 import type {
     ConsoleCandidates, ConsoleDiagnostics, ConsoleForward, ConsoleNode, ConsoleOperation,
     ConsoleOverview, ConsolePage, ConsoleReadPort, ConsoleFilters, ConsolePaging,
@@ -10,22 +10,37 @@ export class ConsoleReadModels<Tx> implements ConsoleReadPort<Tx> {
     private readonly values:ReadProjectionValues;
     constructor(store:ManagementReadStore<Tx>,values:ReadProjectionValues) {this.store=store;this.values=values;}
     private nodeItem(record:ReadNodeRow):ConsoleNode {
+        if (!['full', 'shared'].includes(record.read_detail)) throw new ControlError('INTEGRITY_FAILURE', 409, 'Missing Node read classification');
+        const facts = this.values.read<Record<string, unknown>>(record.facts);
+        if (!facts || typeof facts !== 'object' || Array.isArray(facts)) throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid Node policy');
+        const shared = record.read_detail === 'shared';
+        if(!['private','admin-shared','legacy-unclassified'].includes(record.resource_source)||
+            (record.resource_source==='private'?typeof record.owner_actor_id!=='string':record.owner_actor_id!==null))
+            throw new ControlError('INTEGRITY_FAILURE',409,'Invalid Node resource source');
+        const rawRoles=record.allowed_roles===null?null:this.values.read<unknown>(record.allowed_roles);
+        const roles:NodeUseRole[]=['ingress','transit','egress'];
+        if(rawRoles!==null&&(!Array.isArray(rawRoles)||!rawRoles.length||rawRoles.length>3||
+            rawRoles.some(role=>!roles.includes(role))||new Set(rawRoles).size!==rawRoles.length))
+            throw new ControlError('INTEGRITY_FAILURE',409,'Invalid Node grant purposes');
         return {
             id: record.id, revoked: Boolean(record.revoked),
+            resourceSource:record.resource_source,ownerActorId:record.owner_actor_id,
+            allowedRoles:record.resource_source==='private'?null:rawRoles as NodeUseRole[]|null,canUse:Boolean(record.can_use),
             credentialUntil: record.credential_until === null ? null : this.values.iso(record.credential_until),
-            policy: this.values.read<unknown>(record.facts), sessionEpoch: record.session_epoch ?? 0,
-            snapshotGeneration: record.snapshot_generation ?? 0,
-            lastReportAt: record.received_at === null ? null : this.values.iso(record.received_at),
+            policy: shared ? { capabilities: facts.capabilities, allowedListenerAddresses: facts.allowedListenerAddresses, allowedPorts: facts.allowedPorts } : facts,
+            readDetail: record.read_detail, sessionEpoch: shared ? 0 : record.session_epoch ?? 0,
+            snapshotGeneration: shared ? 0 : record.snapshot_generation ?? 0,
+            lastReportAt: shared || record.received_at === null ? null : this.values.iso(record.received_at),
         };
     }
-    async nodes(tx:Tx,scope:string,paging:ConsolePaging,filters:ConsoleFilters):Promise<ConsolePage<ConsoleNode>> {
-        return this.store.nodes<ConsolePage<ConsoleNode>>(tx,scope,paging,filters,({count,records})=>({
+    async nodes(tx:Tx,scope:string,principal:ReadPrincipal,paging:ConsolePaging,filters:ConsoleFilters):Promise<ConsolePage<ConsoleNode>> {
+        return this.store.nodes<ConsolePage<ConsoleNode>>(tx,scope,principal,paging,filters,({count,records})=>({
             page: paging.page, limit: paging.limit, total: Number(count?.n ?? 0),
             items: records.map(record=>this.nodeItem(record)),
         }));
     }
-    async forwards(tx:Tx,scope:string,paging:ConsolePaging,filters:ConsoleFilters):Promise<ConsolePage<ConsoleForward>> {
-        return this.store.forwards<ConsolePage<ConsoleForward>>(tx,scope,paging,filters,({count,records})=>({
+    async forwards(tx:Tx,scope:string,principal:ReadPrincipal,paging:ConsolePaging,filters:ConsoleFilters):Promise<ConsolePage<ConsoleForward>> {
+        return this.store.forwards<ConsolePage<ConsoleForward>>(tx,scope,principal,paging,filters,({count,records})=>({
             page: paging.page, limit: paging.limit, total: Number(count?.n ?? 0),
             items: records.map(record => ({
                 id: record.id, revision: record.revision, spec: this.values.read<unknown>(record.spec),
@@ -34,8 +49,8 @@ export class ConsoleReadModels<Tx> implements ConsoleReadPort<Tx> {
             })),
         }));
     }
-    async operations(tx:Tx,scope:string,paging:ConsolePaging,filters:ConsoleFilters):Promise<ConsolePage<ConsoleOperation>> {
-        return this.store.operations<ConsolePage<ConsoleOperation>>(tx,scope,paging,filters,({count,records})=>({
+    async operations(tx:Tx,scope:string,principal:ReadPrincipal,paging:ConsolePaging,filters:ConsoleFilters):Promise<ConsolePage<ConsoleOperation>> {
+        return this.store.operations<ConsolePage<ConsoleOperation>>(tx,scope,principal,paging,filters,({count,records})=>({
             page: paging.page, limit: paging.limit, total: Number(count?.n ?? 0),
             items: records.map(record => ({
                 id: record.id, forwardId: record.forward_id, kind: record.kind, status: record.status,
@@ -47,7 +62,7 @@ export class ConsoleReadModels<Tx> implements ConsoleReadPort<Tx> {
             })),
         }));
     }
-    async candidates(tx:Tx,actor:string,scope:string,paging:ConsolePaging,filters:ConsoleFilters):Promise<ConsoleCandidates> {
+    async candidates(tx:Tx,scope:string,principal:ReadPrincipal,paging:ConsolePaging,filters:ConsoleFilters):Promise<ConsoleCandidates> {
         const mode = filters.mode ?? 'direct';
         const caps = ['adp.3', 'native.direct.v1'];
         if (mode !== 'direct')
@@ -56,23 +71,23 @@ export class ConsoleReadModels<Tx> implements ConsoleReadPort<Tx> {
             caps.push('adp.execution.1', 'native.multihop.v1', 'multihop.wire.1');
         if (filters.protocol)
             caps.push(...(filters.protocol === 'both' ? ['tcp', 'udp'] : [filters.protocol]));
-        return this.store.candidates<ConsoleCandidates>(tx,actor,scope,paging,filters,caps,({count,records})=>({
+        return this.store.candidates<ConsoleCandidates>(tx,scope,principal,paging,filters,caps,({count,records})=>({
             page: paging.page, limit: paging.limit, total: Number(count?.n ?? 0), mode,
             items: records.map(record=>this.nodeItem(record)), source: 'persisted-control-state', independentProbe: false,
             fullPlanAuthorization: false, reserved: false,
         }));
     }
-    async overview(tx:Tx,scope:string):Promise<ConsoleOverview> {
-        return this.store.overview<ConsoleOverview>(tx,scope,record=>({
+    async overview(tx:Tx,scope:string,principal:ReadPrincipal):Promise<ConsoleOverview> {
+        return this.store.overview<ConsoleOverview>(tx,scope,principal,record=>({
             nodes: Number(record?.nodes ?? 0), forwards: Number(record?.forwards ?? 0),
             activeOperations: Number(record?.active ?? 0), failedOperations: Number(record?.failed ?? 0),
             observedAt: this.values.currentIso(), source: 'persisted-control-state', independentProbe: false,
         }));
     }
-    async diagnostics(tx:Tx,scope:string,nodeId:string):Promise<ConsoleDiagnostics> {
+    async diagnostics(tx:Tx,scope:string,principal:ReadPrincipal,nodeId:string):Promise<ConsoleDiagnostics> {
         if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(nodeId))
             invalid('Invalid Node identifier');
-        return this.store.diagnostics<ConsoleDiagnostics>(tx,scope,nodeId,record=>{
+        return this.store.diagnostics<ConsoleDiagnostics>(tx,scope,principal,nodeId,record=>{
             if (!record)
                 throw new ControlError('NOT_FOUND', 404, 'Node not found');
             const now = this.values.now();

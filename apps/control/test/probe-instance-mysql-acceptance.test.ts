@@ -50,8 +50,8 @@ async function fixture() {
         await db.migrate(); writer = await createConnection(url.toString());
         await writer.execute("INSERT INTO accounts(id,token_hash) VALUES('owner',?)", [randomBytes(32).toString('hex')]);
         await writer.execute("INSERT INTO scopes(id,owner_id) VALUES('scope','owner')");
-        await writer.execute(`INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts)
-            VALUES('node-a','scope',?,0,?,?)`, [randomBytes(32).toString('hex'), Date.now() + 600000,
+        await writer.execute(`INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision)
+            VALUES('node-a','scope',?,0,?,?,'private','owner',1)`, [randomBytes(32).toString('hex'), Date.now() + 600000,
             JSON.stringify({ capabilities: ['adp.3', 'native.direct.v1', 'tcp'] })]);
         await writer.execute("INSERT INTO runtime_nodes(node_id,boot_id,session_epoch) VALUES('node-a','boot-a',2)");
         await writer.execute("INSERT INTO node_credentials(fingerprint,node_id,issued_at,valid_until) VALUES(?,'node-a',?,?)",

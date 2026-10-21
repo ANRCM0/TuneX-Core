@@ -1,4 +1,4 @@
-export const PROBE_PLAN_MODULE_INTERFACE_VERSION=1 as const;
+export const PROBE_PLAN_MODULE_INTERFACE_VERSION=2 as const;
 export type * from './api.ts';
 export type * from './contracts.ts';
 export { PROBE_PLAN_LIMITS } from './policy.ts';

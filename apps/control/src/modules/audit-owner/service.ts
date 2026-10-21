@@ -1,7 +1,7 @@
 import { deepFreeze, isCounter, isId } from '@tunex/core';
 import { nativeValueDigest as digest, nativeParseJson as parseJson, nativeParseTime, nativeIsoTime, nativeMonotonicNow, nativeWallClockSource, jsonUtf8Bytes, nativeJsonBase64Url, nativeBase64UrlText } from '../../compatibility/public.ts';
 import { ControlError, invalid } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary } from '../../framework/public.ts';
 import type { AuditEventsApi } from './api.ts';
 import { AUDIT_ERROR_CODES, AUDIT_KINDS, AUDIT_SOURCES } from './contracts.ts';
 import type { AuditErrorCode, AuditFilters, AuditPosition, AuditReadPort, AuditReadQuery, AuditRecord, AuditSource } from './contracts.ts';
@@ -59,13 +59,13 @@ function decodeCursor(value: string | undefined, queryDigest: string, query: Pic
 /** A merged owner-record view, not a new authoritative event store or execution service. */
 export class AuditEvents<Tx> implements AuditEventsApi {
     private readonly db: TransactionBoundary<Tx>;
-    private readonly auth: ScopeAuthorization<Tx>;
+    private readonly auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>;
     private readonly read: AuditReadPort<Tx>;
     private readonly clock: () => number;
     private requests = 0;
     private active = 0;
     private readonly actors = new Map<string, { active: boolean; until: number }>();
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, read: AuditReadPort<Tx>, clock: () => number = nativeWallClockSource()) {
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>, read: AuditReadPort<Tx>, clock: () => number = nativeWallClockSource()) {
         this.db = db; this.auth = auth; this.read = read; this.clock = clock;
     }
     async admitReadRequest<T>(action: () => Promise<T>): Promise<T> {
@@ -90,7 +90,7 @@ export class AuditEvents<Tx> implements AuditEventsApi {
             !['initiator','unattributed','unattributed-recovery','requester-not-status-actor'].includes(row.actorAttribution) ||
             !['scope-access','node','transport-profile','path-template','forward','path-group','path-publication','ingress-group',
                 'ingress-deployment','ingress-migration'].includes(row.entityKind) || !isId(row.entityId) ||
-            !nullableCounter(row.revision) || ![null,'access','grant','config','forward','batch'].includes(row.revisionKind) ||
+            !nullableCounter(row.revision) || ![null,'access','grant','config','forward','batch','resource'].includes(row.revisionKind) ||
             !nullableCounter(row.sequence) || !nullableCounter(row.position) || !nullableId(row.nodeId) ||
             !['explicit-node','immutable-forward-spec','immutable-template-config','immutable-group-definition','none'].includes(row.nodeAssociation) ||
             !nullableId(row.forwardId) || !nullableId(row.operationId) ||
@@ -112,6 +112,11 @@ export class AuditEvents<Tx> implements AuditEventsApi {
             operation !== (row.actorAttribution === 'requester-not-status-actor')) corrupt();
         if (['path-publication','ingress-deployment','ingress-migration'].includes(source) &&
             (row.forwardId !== null || row.operationId !== null || row.position !== null)) corrupt();
+        if (source === 'resource-limits' && (row.entityKind !== 'node' || row.entityId !== row.nodeId ||
+            row.nodeAssociation !== 'explicit-node' || row.revisionKind !== 'resource' || row.revision === null ||
+            row.actorAttribution !== 'initiator' || row.subjectId === null || row.recordType !== 'owner-event' ||
+            row.outcome !== 'recorded' || row.forwardId !== null || row.operationId !== null || row.sequence !== null ||
+            row.position !== null || row.errorCode !== null || row.retryable !== null || row.recoveryInvalidated !== null)) corrupt();
         // Reconstruct the closed DTO rather than spreading persisted objects into the response.
         return { occurredAt: row.occurredAt, source, key: row.key, kind: row.kind, recordType: row.recordType, timeMeaning: row.timeMeaning,
             actorId: row.actorId, actorAttribution: row.actorAttribution, subjectId: row.subjectId, entityKind: row.entityKind, entityId: row.entityId,
@@ -147,7 +152,7 @@ export class AuditEvents<Tx> implements AuditEventsApi {
         const query = deepFreeze({ from, to, limit, filters: frozen, before: decodeCursor(input.cursor, queryDigest, { from, to, filters: frozen }) });
         const sources: readonly AuditSource[] = frozen.source === undefined ? AUDIT_SOURCES : [frozen.source];
         return this.admitted(actor, () => this.db.transaction(async tx => {
-            await this.auth.scope(tx, actor, scope, true);
+            await this.auth.owner(tx, actor, scope);
             const merged: AuditRecord[] = [];
             // A single supplied connection reads each family; no parallel connections or retry loop.
             for (const source of sources) {

@@ -18,6 +18,22 @@ import type { PathBindingRecord, PathSelection, PathTemplateRevision } from '../
 import type * as Lower from '../src/framework/public.ts';
 import type * as Old from '../src/modules/path-binding-ports.ts';
 
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { ControlError as ResourceAccessError } from '../src/framework/public.ts';
+import type { OwnedResourceKind } from '../src/framework/public.ts';
+
+function ownerAccess<Tx>(tx:Tx,scopeId:string,members:ReadonlyMap<string,boolean>,
+    claim:(kind:OwnedResourceKind,id:string)=>string|null|undefined,scopeOwner='scope-owner') {
+    const same=(actual:Tx,scope:string)=>{assert.equal(actual,tx);assert.equal(scope,scopeId);};
+    return new ResourceAccess<Tx>({async scope(actual,actor,scope,manage=false){
+        same(actual,scope);
+        if(!members.has(actor)||manage&&!members.get(actor))throw new ResourceAccessError('AUTHORIZATION_DENIED',403,'Fixture scope permission denied');
+    }},{async scopeOwner(actual,scope){same(actual,scope);return {ownerActorId:scopeOwner};},
+        async ownership(actual,scope,kind,id){same(actual,scope);const ownerActorId=claim(kind,id);return ownerActorId===undefined?undefined:{ownerActorId};},
+        async node(){throw Error('Node access is outside this owner fixture');}});
+}
+
+
 type Equal<A,B>=(<T>()=>T extends A?1:2) extends (<T>()=>T extends B?1:2)?true:false;
 type Same<T extends true>=T;
 type Flat<T>={[K in keyof T]:T[K]};
@@ -35,29 +51,30 @@ function fixture(){
     const tx:Tx={original:true},events:string[]=[],failure=new Error('original provider'),state={
         forward:{id:'forward',scopeId:'scope',revision:5,spec:spec(),deleting:false,recoverySuspended:false} as MutableForward & {deleting:boolean;recoverySuspended:boolean},
         pointer:null as PathBindingRecord|null,history:[] as PathBindingRecord[],archived:false,headRevision:2,
-        now:at,profileDigest:hash,fail:'',missingHead:false,missingRevision:false,total:1,page:undefined as any
+        now:at,profileDigest:hash,forwardOwner:'actor' as string|null,templateOwner:'actor' as string|null,fail:'',missingHead:false,missingRevision:false,total:1,page:undefined as any
     };
     const templates=new Map<number,PathTemplateRevision>([1,2].map(revision=>{const value=config(revision===1?['middle','egress']:['egress']);return [revision,{revision,config:value,profileDigest:hash,configDigest:digest({config:value,profileDigest:hash}),createdBy:'actor',createdAt:at}];}));
     const selection=(revision=1):PathSelection=>({templateId:'template',revision,configDigest:templates.get(revision)!.configDigest});
     function step(name:string,value:Tx){assert.equal(value,tx);events.push(name);if(state.fail===name)throw failure;}
     const db={async transaction<T>(action:(value:Tx)=>Promise<T>){events.push('begin');const before=structuredClone({pointer:state.pointer,history:state.history});try{const value=await action(tx);events.push('commit');return value;}catch(error){state.pointer=before.pointer;state.history=before.history;events.push('rollback');throw error;}}};
+    const access=ownerAccess(tx,'scope',new Map([['actor',true]]),(kind,id)=>kind==='forward'&&id==='forward'?state.forwardOwner:kind==='path-template'&&id==='template'?state.templateOwner:undefined);
     const auth={async scope(value:Tx,actor:string,scope:string,manage=false){assert.equal(this,auth);assert.equal(actor,'actor');assert.equal(scope,'scope');step('auth:'+manage,value);}};
-    const reader={async head(value:Tx,scope:string,id:string,lock?:boolean){assert.equal(this,reader);assert.equal(scope,'scope');assert.equal(id,'template');step('head:'+String(lock),value);return state.missingHead?null:{templateId:id,currentRevision:state.headRevision,archived:state.archived};},
+    const reader={async head(value:Tx,scope:string,id:string,lock?:boolean){assert.equal(this,reader);assert.equal(scope,'scope');assert.equal(id,'template');step('head:'+String(lock),value);return state.missingHead?null:{templateId:id,ownerActorId:state.templateOwner,currentRevision:state.headRevision,archived:state.archived};},
         async revision(value:Tx,scope:string,id:string,revision:number){assert.equal(this,reader);assert.equal(scope,'scope');assert.equal(id,'template');step('revision:'+revision,value);return state.missingRevision?null:templates.get(revision)??null;},async list(){throw Error('not used');}};
     const references={async validate(value:Tx,actor:string,scope:string,input:unknown){assert.equal(this,references);assert.equal(actor,'actor');assert.equal(scope,'scope');assert.ok([...templates.values()].some(value=>digest(value.config)===digest(input)));step('references',value);return {profileDigest:state.profileDigest};}};
     const store={async current(value:Tx,scope:string,id:string){assert.equal(this,store);assert.equal(scope,'scope');assert.equal(id,'forward');step('current',value);return state.pointer;},
         async history(value:Tx,scope:string,id:string){assert.equal(this,store);assert.equal(scope,'scope');assert.equal(id,'forward');step('history',value);return state.history;},
-        async references(value:Tx,scope:string,id:string,paging:unknown,revision?:number){assert.equal(this,store);assert.equal(scope,'scope');assert.equal(id,'template');assert.deepEqual(paging,{page:1,limit:25,offset:0});assert.ok(revision===undefined||revision===1);step('page',value);return state.page??{total:state.total,items:state.pointer?[{forward:state.forward,recoverySuspended:state.forward.recoverySuspended,binding:state.pointer}]:[]};},
+        async references(value:Tx,scope:string,principal:Lower.ReadPrincipal,id:string,paging:unknown,revision?:number){assert.equal(this,store);assert.equal(scope,'scope');assert.deepEqual(principal,{actorId:'actor',governance:false});assert.equal(id,'template');assert.deepEqual(paging,{page:1,limit:25,offset:0});assert.ok(revision===undefined||revision===1);step('page',value);return state.page??{total:state.total,items:state.pointer?[{forward:state.forward,recoverySuspended:state.forward.recoverySuspended,binding:state.pointer}]:[]};},
         async append(value:Tx,scope:string,id:string,input:Omit<PathBindingRecord,'sequence'>){assert.equal(this,store);assert.equal(scope,'scope');assert.equal(id,'forward');step('append',value);const record={...input,sequence:state.history.length+1};state.history.push(record);state.pointer=record;return record;},
         async detach(value:Tx,scope:string,id:string){assert.equal(this,store);assert.equal(scope,'scope');assert.equal(id,'forward');step('detach',value);state.pointer=null;}};
-    const forwards={async record(value:Tx,scope:string,id:string){assert.equal(this,forwards);assert.equal(scope,'scope');assert.equal(id,'forward');step('forward',value);return state.forward;}};
-    const paths=new PathBindings(db,auth,reader,references,store,forwards,()=>{events.push('clock');if(state.fail==='clock')throw failure;return state.now;});
+    const forwards={async record(value:Tx,scope:string,id:string){assert.equal(this,forwards);assert.equal(scope,'scope');assert.equal(id,'forward');step('forward',value);return {...state.forward,ownerActorId:state.forwardOwner};}};
+    const paths=new PathBindings(db,auth,access,reader,references,store,forwards,()=>{events.push('clock');if(state.fail==='clock')throw failure;return state.now;});
     function attach(){const record:PathBindingRecord={...selection(),sequence:1,forwardRevision:4,expandedSpec:state.forward.spec,specDigest:digest(state.forward.spec),actorId:'actor',createdAt:at};state.pointer=record;state.history=[record];return record;}
-    return {tx,events,state,failure,templates,selection,paths,attach};
+    return {tx,events,state,failure,templates,selection,paths,attach,access};
 }
 
 test('56 public and legacy parser expansion and owner retain identities closed input exact bounds and async public shape',()=>{
-    assert.equal(PathBindings,OldBindings);assert.equal(parsePathSelection,oldParse);assert.equal(expandPath,oldExpand);assert.equal(PathBindings.length,6);
+    assert.equal(PathBindings,OldBindings);assert.equal(parsePathSelection,oldParse);assert.equal(expandPath,oldExpand);assert.equal(PathBindings.length,7);
     for(const method of ['resolve','resolveCreateIn','accept','preserve','currentIn','detachIn','get','preview','previewIn','references']){
         const descriptor=Object.getOwnPropertyDescriptor(PathBindings.prototype,method)!;assert.equal(descriptor.enumerable,false);assert.equal(descriptor.configurable,true);assert.equal(descriptor.writable,true);assert.equal(descriptor.value.constructor.name,'AsyncFunction');
     }
@@ -138,8 +155,8 @@ test('56 actual native default captures original Date.now without reading and fi
     const readValues=loaded('compatibility/native-read-projection.ts',{'./stored-value.ts':{readStoredValue:(value:unknown)=>value}}).nativeReadProjectionValues;
     const actual=loaded('modules/path-owner/bindings.ts',{'@tunex/core':Core,'../../framework/public.ts':Framework,'../../compatibility/public.ts':{...Compatibility,nativeWallClockSource:moduleValues.nativeWallClockSource,nativeIsoTime:moduleValues.nativeIsoTime,nativeReadProjectionValues:readValues},'./template-state.ts':TemplateState,'./binding-values.ts':BindingValues});
     assert.equal(events.length,0);
-    const f=fixture(),empty={async current(){events.push('current');return null;},async append(){events.push('append');throw failure;},async references(){events.push('page');return {total:0,items:[]};}},template={async head(){events.push('head');return {templateId:'template',currentRevision:1,archived:false};}},db={async transaction(action:(tx:Tx)=>unknown){events.push('begin');try{const value=await action(f.tx);events.push('commit');return value;}catch(error){events.push('rollback');throw error;}}};
-    const owner=new actual.PathBindings(db,{async scope(){events.push('auth');}},template,{},empty,{});assert.equal(events.length,0);
+    const f=fixture(),empty={async current(){events.push('current');return null;},async append(){events.push('append');throw failure;},async references(){events.push('page');return {total:0,items:[]};}},template={async head(){events.push('head');return {templateId:'template',ownerActorId:'actor',currentRevision:1,archived:false};}},db={async transaction(action:(tx:Tx)=>unknown){events.push('begin');try{const value=await action(f.tx);events.push('commit');return value;}catch(error){events.push('rollback');throw error;}}};
+    const owner=new actual.PathBindings(db,{async scope(){events.push('auth');}},f.access,template,{},empty,{});assert.equal(events.length,0);
     NativeDate.now=laterNow;
     await assert.rejects(owner.accept(f.tx,'actor',f.state.forward,f.selection()),e=>e===failure);assert.deepEqual(events,['current','captured-now','append']);
     events.length=0;const first=await owner.references('actor','scope','template');assert.equal(first.observedAt,new RealDate(at).toISOString());assert.deepEqual(events,['begin','auth','head','page','new-date','commit']);assert.deepEqual(dateArguments,[[]]);

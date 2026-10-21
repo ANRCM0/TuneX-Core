@@ -20,7 +20,7 @@ function forward(id:string,node='node-a',enabled=true,path?:string[]):Forward{
 }
 function fixture(){
     const tx={marker:Symbol()},calls:unknown[][]=[],effects:string[]=[],failure=new Error('original reconciliation failure');
-    const options={fail:'',foreign:false},values=[forward('enabled','node-a',true,['node-middle','node-tail']),forward('disabled','node-b',false)],records=new Map(values.map(value=>[value.id,{...value,deleting:false,recoverySuspended:false}])),authorizers=new Map(values.map(value=>[value.id,'member']));
+    const options={fail:'',foreign:false},values=[forward('enabled','node-a',true,['node-middle','node-tail']),forward('disabled','node-b',false)],records=new Map(values.map(value=>[value.id,{...value,ownerActorId:'member',deleting:false,recoverySuspended:false}])),authorizers=new Map(values.map(value=>[value.id,'member']));
     const allowed=new Map(values.map(value=>[value.id,true])),until=new Map<string,number|null>([['node-a',0],['node-middle',23],['node-tail',17],['node-b',null]]);
     function called(self:unknown,owner:unknown,name:string,args:unknown[]){assert.equal(self,owner);assert.equal(args[0],tx);calls.push([name,...args]);if(options.fail===name)throw failure;}
     const forwards={async forProfileActor(this:unknown,...args:unknown[]){called(this,forwards,'profileReferences',args);return values;},
@@ -40,7 +40,7 @@ function fixture(){
         async assertNodeCapacity(this:unknown,...args:unknown[]){called(this,execution,'nodeCapacity',args);}};
     const facts:AuthorizedNodeFacts={nodeId:'node-middle',scopeId:'scope-a',capabilities:[],egressPolicyRevision:1,allowedListenerAddresses:[],allowedPorts:[],allowedDestinationCidrs:[],allowMetadataTargets:false};
     const profile=new ProfileGrantReconciler(forwards,execution),access=new AccessChangeReconciler(forwards,execution),node=new NodeChangeReconciler(forwards,execution);
-    const grant={profileId:'profile',actorId:'member',revision:1,allowed:true,changed:true},member={actorId:'member',revision:1,role:'manager',active:true,changed:true},nodeGrant={nodeId:'node-middle',actorId:'member',revision:1,allowed:true,changed:true};
+    const grant={profileId:'profile',actorId:'member',revision:1,allowed:true,changed:true},member={actorId:'member',revision:1,role:'manager',active:true,changed:true},nodeGrant={nodeId:'node-middle',actorId:'member',revision:1,allowed:true,allowedRoles:null,portLimits:null,changed:true};
     return {tx,calls,effects,options,failure,values,records,authorizers,allowed,until,forwards,execution,facts,profile,access,node,grant,member,nodeGrant,names:()=>calls.map(row=>row[0]),clear(){calls.length=0;effects.length=0;},
         async transaction(action:()=>Promise<unknown>){const before=[...effects];try{return await action();}catch(error){effects.splice(0,effects.length,...before);throw error;}}};
 }

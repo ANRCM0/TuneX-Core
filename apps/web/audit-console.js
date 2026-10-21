@@ -1,15 +1,16 @@
-const sources = ['access','node-security','transport','path-template','path-binding','path-group','path-group-binding',
+const sources = ['access','node-security','forward-ownership','resource-limits','transport','path-template','path-binding','path-group','path-group-binding',
   'path-publication','path-publication-attempt','ingress-group','ingress-deployment','ingress-deployment-attempt',
   'ingress-migration','ingress-migration-attempt','operation'];
 const limits = { defaultWindowMs: 86400000, maxWindowMs: 2678400000, maxPageSize: 50, maxResponseBytes: 131072,
   activeRequests: 2, actorKeys: 128, cooldownMs: 1000 };
 const kinds = {
   access: ['member_change','node_grant_change'],
-  'node-security': ['credential_rotation','policy_update','node_revocation','relay_endpoint_update','relay_credential_issue'],
-  transport: ['grant-change'], 'path-template': ['publish','archive'], 'path-binding': ['bind'],
-  'path-group': ['publish','archive'], 'path-group-binding': ['bind'],
+  'node-security': ['credential_rotation','policy_update','node_revocation','relay_endpoint_update','relay_credential_issue','resource_classification'],
+  'forward-ownership': ['classify-owner'], 'resource-limits': ['configure'],
+  transport: ['grant-change'], 'path-template': ['publish','archive','classify-owner'], 'path-binding': ['bind'],
+  'path-group': ['publish','archive','classify-owner'], 'path-group-binding': ['bind'],
   'path-publication': ['create','apply','compensate','cancel','recovery'], 'path-publication-attempt': ['apply','compensate'],
-  'ingress-group': ['publish','archive'], 'ingress-deployment': ['create','compensate','cancel','recovery'],
+  'ingress-group': ['publish','archive','classify-owner'], 'ingress-deployment': ['create','compensate','cancel','recovery'],
   'ingress-deployment-attempt': ['create','compensate'], 'ingress-migration': ['create','apply','compensate','cancel','recovery'],
   'ingress-migration-attempt': ['apply','compensate'], operation: ['create','update','enable','disable','delete','retry','policy','revoke'],
 };
@@ -41,7 +42,7 @@ const rowValid = shape({ occurredAt: instant, source: one(...sources), key: hash
   timeMeaning: one('recorded-at','latest-operation-update'), actorId: nullable(id),
   actorAttribution: one('initiator','unattributed','unattributed-recovery','requester-not-status-actor'), subjectId: nullable(id),
   entityKind: one('scope-access','node','transport-profile','path-template','forward','path-group','path-publication','ingress-group','ingress-deployment','ingress-migration'),
-  entityId: id, revision: nullable(positive), revisionKind: nullable(one('access','grant','config','forward','batch')), sequence: nullable(positive), position: nullable(positive),
+  entityId: id, revision: nullable(positive), revisionKind: nullable(one('access','grant','config','forward','batch','resource')), sequence: nullable(positive), position: nullable(positive),
   nodeId: nullable(id), nodeAssociation: one('explicit-node','immutable-forward-spec','immutable-template-config','immutable-group-definition','none'),
   forwardId: nullable(id), operationId: nullable(id), outcome: one('recorded','accepted','rejected','running','succeeded','failed','superseded'),
   errorCode: nullable(one(...errorCodes)), retryable: nullable(bool), recoveryInvalidated: nullable(bool) });
@@ -111,6 +112,17 @@ export function initAuditConsole({ request, notify, byId, getScope, document = g
           row.actorAttribution === 'initiator' && row.actorId === null || (row.revision === null) !== (row.revisionKind === null) ||
           ['path-publication','ingress-deployment','ingress-migration'].includes(row.source) &&
             (row.forwardId !== null || row.operationId !== null || row.position !== null)) return false;
+      if (row.source === 'resource-limits' && (row.entityKind !== 'node' || row.entityId !== row.nodeId ||
+          row.nodeAssociation !== 'explicit-node' || row.revisionKind !== 'resource' || row.revision === null ||
+          row.actorAttribution !== 'initiator' || row.subjectId === null || row.recordType !== 'owner-event' ||
+          row.outcome !== 'recorded' || row.forwardId !== null || row.operationId !== null || row.sequence !== null ||
+          row.position !== null || row.errorCode !== null || row.retryable !== null || row.recoveryInvalidated !== null)) return false;
+      if (row.source === 'node-security' && row.kind === 'resource_classification' &&
+          (row.entityKind !== 'node' || row.entityId !== row.nodeId || row.nodeAssociation !== 'explicit-node' || row.revisionKind !== 'resource')) return false;
+      if (row.source === 'forward-ownership' && (row.entityKind !== 'forward' || row.entityId !== row.forwardId ||
+          row.revisionKind !== 'forward' || row.subjectId === null || row.nodeAssociation !== 'immutable-forward-spec')) return false;
+      if (row.revisionKind === 'resource' && row.source !== 'resource-limits' &&
+          !(row.source === 'node-security' && row.kind === 'resource_classification')) return false;
     }
     return true;
   }

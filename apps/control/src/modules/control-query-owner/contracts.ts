@@ -1,6 +1,6 @@
 import type { ForwardIntent, ForwardRuntimeStatus, RelayDeploymentStatus } from '../../framework/public.ts';
 
-export const CONTROL_DETAIL_INTERFACE_VERSION=1 as const;
+export const CONTROL_DETAIL_INTERFACE_VERSION=2 as const;
 
 export interface ExecutionCapabilities {
     multihopEnabled:boolean;maxPathNodes:8;executionExtension:1;probeIssuanceEnabled:boolean;

@@ -2,7 +2,7 @@ import type { NetworkProtocol } from '@tunex/core';
 import type { Policy } from './policy.ts';
 import type { ExecutionPhase, Observation, Drain } from './execution-observation.ts';
 
-export const RUNTIME_VALUES_INTERFACE_VERSION=2 as const;
+export const RUNTIME_VALUES_INTERFACE_VERSION=3 as const;
 export type ExecutionRole='direct'|'relay-ingress'|'relay-egress'|'multihop-ingress'|'multihop-transit'|'multihop-egress';
 export interface RuntimeResourceValue {address:string;port:number;protocol:NetworkProtocol}
 export interface RuntimeDriverValue {id:string;configDigest:string}
@@ -18,7 +18,14 @@ export interface RuntimeTombstoneValue {
 export interface RuntimeSnapshotValue<Assignment extends RuntimeAssignmentValue=RuntimeAssignmentValue> {
     nodeId:string;sessionEpoch:number;snapshotGeneration:number;complete:true;issuedAt:string;validUntil:string;
     snapshotDigest:string;assignments:Assignment[];tombstones:RuntimeTombstoneValue[];
+    resourceLimits?:RuntimeResourceLimitsValue;
 }
+export interface RuntimeResourceLimitBucketValue {
+    bucketId:string;scopeId:string;actorId:string;nodeId:string;revision:number;
+    startsAt:string;endsAt:string;bytesPerSecond:number|null;burstBytes:number;
+    byteLimit:number|null;assignmentIds:string[];
+}
+export interface RuntimeResourceLimitsValue {version:1;buckets:RuntimeResourceLimitBucketValue[]}
 export interface RuntimeHelloRequestValue {
     nodeId:string;bootId:string;agentBuild:string;capabilities:string[];lastStoredSnapshotGeneration:number;
 }

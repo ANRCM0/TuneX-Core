@@ -98,7 +98,7 @@ test('upgrade assessment preserves MySQL, authenticated journals and Authority; 
             assert.equal(summary.snapshotDigest, snapshot.snapshotDigest);
             assert.deepEqual(await fileInventory(directory), beforeInspect);
             const build = { revision: 'a'.repeat(40), imageDigest: 'sha256:' + 'b'.repeat(64), profile: 'adp3-multihop-v1' };
-            const controlBuild = { ...build, profile: 'adp3-probe-plan-json-integers-v1' };
+            const controlBuild = { ...build, profile: 'adp3-shared-resource-limits-v1' };
             const plan = parseUpgradePlan(JSON.stringify({
                 version: 1, operation: 'upgrade', source: { control: controlBuild, agent: build },
                 target: { control: controlBuild, agent: build }, controlMultihop: false, agentMultihop: false, journals: [summary],
@@ -114,6 +114,42 @@ test('upgrade assessment preserves MySQL, authenticated journals and Authority; 
                 return report;
             }
             assert.equal((await unchangedAssessment()).decision, 'compatible');
+            for (const migration of ['0039-product-resource-access.sql', '0040-shared-node-port-limits.sql','0041-shared-resource-payload-limits.sql']) {
+                const [ledger]: [RowDataPacket[], unknown] = await writer.query<RowDataPacket[]>('SELECT name,applied_at FROM vnext_migrations WHERE name=?', [migration]);
+                assert.equal(ledger.length, 1);
+                await writer.query('DELETE FROM vnext_migrations WHERE name=?', [migration]);
+                try {
+                    const interrupted = await unchangedAssessment();
+                    assert.equal(interrupted.decision, 'blocked');
+                    assert.ok(interrupted.database.schemaIssues.includes(migration));
+                } finally {
+                    await writer.query('INSERT INTO vnext_migrations(name,applied_at) VALUES(?,?)', [ledger[0]!.name, ledger[0]!.applied_at]);
+                }
+                assert.equal((await unchangedAssessment()).decision, 'compatible');
+            }
+            // Existing limited Snapshots require the explicit executor even when
+            // the supplied old Journal has no debit extension or bucket history.
+            const limited={...snapshot,resourceLimits:{version:1 as const,buckets:[{bucketId:'resource-bucket',scopeId:'scope',actorId:'owner',nodeId:node,
+                revision:1,startsAt:new Date(snapshot.issuedAt).toISOString(),endsAt:new Date(snapshot.validUntil).toISOString(),
+                bytesPerSecond:1024,burstBytes:4096,byteLimit:1048576,assignmentIds:[snapshot.assignments[0]!.assignmentId]}]}};
+            const {snapshotDigest:_unlimitedDigest,...limitedBody}=limited;
+            limited.snapshotDigest=digest(limitedBody);
+            try {
+                await writer.query('UPDATE snapshots SET body=? WHERE node_id=? AND generation=?',[JSON.stringify(limited),node,generation]);
+                const unsupportedExecutor=await unchangedAssessment();
+                assert.equal(unsupportedExecutor.database.resourceLimitSnapshots,1);
+                assert.equal(unsupportedExecutor.database.schemaIssues.length,0);
+                assert.equal(unsupportedExecutor.database.pendingMigrations.length,0);
+                assert.equal(unsupportedExecutor.decision,'blocked');
+                assert.ok(unsupportedExecutor.checks.some(check=>check.code==='RESOURCE_LIMIT_EXECUTOR_REQUIRED'&&check.status==='block'));
+                await writer.query('UPDATE snapshots SET body=? WHERE node_id=? AND generation=?',[JSON.stringify({...snapshot,resourceLimits:null}),node,generation]);
+                const malformed=await unchangedAssessment();
+                assert.equal(malformed.database.resourceLimitSnapshots,1);
+                assert.ok(malformed.checks.some(check=>check.code==='PERSISTED_PROTOCOL'&&check.status==='block'));
+            } finally {
+                await writer.query('UPDATE snapshots SET body=? WHERE node_id=? AND generation=?',[JSON.stringify(snapshot),node,generation]);
+            }
+            assert.equal((await unchangedAssessment()).decision,'compatible');
             const cliArgs = ['scripts/ops/cli.ts', 'assess-upgrade', planPath];
             const env = { ...process.env, DATABASE_URL: readerUrl.toString(), TUNEX_CONTROL_STATE: stateDirectory, TUNEX_CA_CERT: caPath };
             const beforeCli = await fileInventory(directory), beforeDb = await databaseDigest(writer);

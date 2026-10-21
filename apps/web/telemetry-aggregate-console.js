@@ -127,8 +127,8 @@ async function responseValid(data, query, scope) {
       !canonicalTime(data.observedAt) || !sameLimits(data.retention) || !object(data.window, ['from','to','resolution','limit','seriesKey','after','nextAfter','truncated'])) return false;
   const w = data.window, losses = data.losses;
   if (['from','to','resolution','limit','seriesKey','after'].some(key => w[key] !== query[key]) || !cursor(w.nextAfter) || !bool(w.truncated) ||
-      !object(losses, ['scope','minuteEvicted','hourEvicted','cursorEvicted','cursorExpired']) || losses.scope !== (query.kind === 'node' ? 'node-family' : 'scope-family') ||
-      ![losses.minuteEvicted,losses.hourEvicted,losses.cursorEvicted,losses.cursorExpired].every(wide) || !Array.isArray(data.items) || data.items.length > query.limit ||
+      !object(losses, ['scope','minuteEvicted','hourEvicted','cursorEvicted','cursorExpired']) || !(query.kind === 'node'?losses.scope==='node-family':['scope-family','withheld-scope-family'].includes(losses.scope)) ||
+      ![losses.minuteEvicted,losses.hourEvicted,losses.cursorEvicted,losses.cursorExpired].every(losses.scope==='withheld-scope-family'?value=>value===null:wide) || !Array.isArray(data.items) || data.items.length > query.limit ||
       (w.truncated ? data.items.length !== query.limit || w.nextAfter === null : w.nextAfter !== null)) return false;
   let previous = query.after === null ? null : JSON.parse(atob(query.after.replace(/-/g, '+').replace(/_/g, '/')));
   const digests = new Map();
@@ -187,7 +187,7 @@ export function initTelemetryAggregateConsole({ request, notify, byId, getScope,
     el('meta').textContent = query.kind + ': ' + query.id + ' / ' + query.family + ' / ' + query.resolution + '\n查询观察时间: ' + stamp(data.observedAt) +
       '\n固定窗口 [from,to):\n' + stamp(query.from) + '\n' + stamp(query.to) + '\nSeries 筛选: ' + (query.seriesKey ?? '全部精确 series，逐行分开，不合并') +
       '\n桶数: ' + data.items.length + '/' + query.limit + '; truncated=' + data.window.truncated + '\n淘汰统计范围=' + losses.scope +
-      '; minute evicted=' + losses.minuteEvicted + '; hour evicted=' + losses.hourEvicted + '; cursors evicted=' + losses.cursorEvicted + '; cursors expired=' + losses.cursorExpired +
+      (losses.scope==='withheld-scope-family'?'；工作空间累计淘汰统计不可见，不表示零损失。':'; minute evicted=' + losses.minuteEvicted + '; hour evicted=' + losses.hourEvicted + '; cursors evicted=' + losses.cursorEvicted + '; cursors expired=' + losses.cursorExpired) +
       '\nKeyset 分页不是全库快照；并发更新或清理可能改变剩余结果，不保证完整历史。';
     for (const { body: b, recoverySuspended } of data.items) {
       const row = document.createElement('tr'), gaugeLines = [], counterLines = [], deltaLines = [], q = b.quality, c = b.coverage;

@@ -7,7 +7,7 @@ import { observeNodeReport } from '../src/modules/node-report-observation.ts';
 import type { AuthorizedNodeReportReader, NodeObservationContext, NodeReportEvidence } from '../src/modules/observation-ports.ts';
 import { MySqlNodeObservationReader } from '../src/infrastructure/mysql-node-observation.ts';
 import type { MySqlUnitOfWork, Transaction } from '../src/infrastructure/mysql.ts';
-import type { CancellationSignal } from '../src/framework/public.ts';
+import type { ResourceReadAccess, CancellationSignal } from '../src/framework/public.ts';
 
 const command = { source: 'persisted-agent-report', version: 1 };
 const policy = { freshnessMs: 30000, clockSkewMs: 5000 };
@@ -208,7 +208,7 @@ test('the raw-report projection guard distinguishes selected bodies from bounded
     assert.doesNotMatch("SELECT LEFT(JSON_UNQUOTE(JSON_EXTRACT(r.last_report,'$.nodeId')),129) report_node, JSON_LENGTH(r.last_report,'$.observations') observation_count FROM runtime_nodes r", rawReportProjection);
 });
 
-function mysqlFixture(allowed = true, signal?: CancellationSignal) {
+function mysqlFixture(allowed = true, signal?: CancellationSignal, detailAllowed = true) {
     const events: string[] = [], controller = new AbortController(), now = Date.now();
     const tx = {
         connection: { stream: { destroy: (_error: Error) => { events.push('transport-stop'); } } },
@@ -231,11 +231,20 @@ function mysqlFixture(allowed = true, signal?: CancellationSignal) {
     };
     const db = { pool: { getConnection: async () => tx }, guard: async () => { events.push('guard'); } } as unknown as
         Pick<MySqlUnitOfWork, 'pool' | 'guard'>;
+    const access: ResourceReadAccess<Transaction> = {
+        async node(current, actor, scope, node, detail) {
+            assert.equal(current, tx); assert.deepEqual([actor, scope, node, detail], ['actor-a', 'scope-a', 'node-a', 'diagnostics']);
+            events.push('resource-access'); if (!detailAllowed) throw new ControlError('NOT_FOUND', 404, 'detail unavailable'); return 'full';
+        },
+        principal: async () => assert.fail('adapter delegates its Node read policy'),
+        forward: async () => assert.fail('Node observation cannot read Forward ownership'),
+        owned: async () => assert.fail('Node observation cannot enter mutation ownership'),
+    };
     const reader = new MySqlNodeObservationReader(db, { scope: async (current, actor, scope, manage) => {
         assert.equal(current, tx); assert.equal(actor, 'actor-a'); assert.equal(scope, 'scope-a'); assert.ok(!manage);
         events.push('authorize');
         if (!allowed) throw new ControlError('NOT_FOUND', 404, 'denied');
-    } });
+    } }, access);
     const context: NodeObservationContext = Object.freeze({
         actorId: 'actor-a', scopeId: 'scope-a', nodeId: 'node-a', deadlineAt: now + 2000, signal: signal ?? controller.signal,
     });
@@ -246,10 +255,13 @@ test('the MySQL observer authorizes before its scoped projection in one transact
     const f = mysqlFixture();
     const result = await f.reader.read(f.context);
     assert.equal(result.report?.reportSequence, 4); assert.equal(result.invalidReport, false);
-    assert.deepEqual(f.events, ['guard', 'isolation', 'begin', 'authorize', 'read', 'guard', 'rollback', 'release']);
+    assert.deepEqual(f.events, ['guard', 'isolation', 'begin', 'authorize', 'resource-access', 'read', 'guard', 'rollback', 'release']);
     const denied = mysqlFixture(false);
     await assert.rejects(denied.reader.read(denied.context), errorCode('NOT_FOUND'));
     assert.deepEqual(denied.events, ['guard', 'isolation', 'begin', 'authorize', 'rollback', 'release']);
+    const shared = mysqlFixture(true, undefined, false);
+    await assert.rejects(shared.reader.read(shared.context), errorCode('NOT_FOUND'));
+    assert.deepEqual(shared.events, ['guard', 'isolation', 'begin', 'authorize', 'resource-access', 'rollback', 'release']);
 });
 
 test('MySQL cancellation destroys only the observation connection and never releases a dirty transaction', async () => {

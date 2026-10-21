@@ -5,7 +5,7 @@ import { initRelayConsole } from '../relay.js';
 import { createNativeRelayForms, createNativeRelayConsole } from '../browser-native/public.js';
 
 const names = ['relayCapable','multihopCapable','multihopSpec','relayProfile','relayEndpoint','relaySpec'];
-const node = id => ({ id, revoked:false, credentialUntil:'2099-01-01T00:00:00Z', policy:{
+const node = id => ({ id, canUse:true, allowedRoles:null, readDetail:'full', revoked:false, credentialUntil:'2099-01-01T00:00:00Z', policy:{
   capabilities:['adp.3','native.direct.v1','native.relay.v1','relay.wire.1','adp.execution.1','native.multihop.v1','multihop.wire.1','tcp','udp'],
   allowedListenerAddresses:['127.0.0.1'], allowedPorts:[25565] } });
 const profile = { profileId:'profile-a',revision:2,config:{protocols:['tcp','udp']} };
@@ -62,7 +62,7 @@ class Element {
   replaceChildren(...items){this.children=[];this.value='';this.append(...items);}
   append(...items){for(const item of items){this.children.push(item);if(item.selected||this.children.length===1)this.value=item.value??this.value;}}
   addEventListener(type,fn){this.listeners[type]=fn;}
-  setAttribute(){} showModal(){this.open=true;}close(){this.open=false;this.listeners.close?.();}
+  setAttribute(){} reset(){} showModal(){this.open=true;}close(){this.open=false;this.listeners.close?.();}
 }
 function consoleHarness(handler=()=>{},overrides={}) {
   const elements=new Map(),requests=[],mutations=[],effects=[];
@@ -87,7 +87,7 @@ test('Relay legacy init retains signature listener surface fresh per-init profil
   assert.equal(initRelayConsole.name,'initRelayConsole');assert.equal(initRelayConsole.length,1);
   const native=createNativeRelayConsole(Object.fromEntries(names.map(name=>[name,legacy[name]])));
   assert.equal(native.name,initRelayConsole.name);assert.equal(native.length,1);
-  assert.deepEqual(Object.keys(a.api),['refresh','populateNodes','refreshCandidates','clear','edit','copy','deployment']);
+  assert.deepEqual(Object.keys(a.api),['refresh','populateNodes','refreshCandidates','clear','edit','copy','loadPathDraft','deployment']);
   assert.deepEqual(a.requests,[]);assert.deepEqual(b.requests,[]);
   const item={id:'forward-a',revision:7,spec:legacy.relaySpec(form,node('a'),node('b'),profile)};
   await a.api.edit(item); assert.equal(a.el('relay-ingress').disabled,true);assert.equal(a.el('relay-submit').textContent,'更新链路 r7');
@@ -103,6 +103,45 @@ test('Relay legacy init retains signature listener surface fresh per-init profil
   a.api.clear();assert.equal(a.el('relay-submit').disabled,true);assert.equal(a.el('relay-cancel-edit').hidden,true);assert.equal(a.el('relay-profile-select').disabled,true);
   await a.api.edit(item);await a.el('relay-preview').listeners.click();assert.equal(a.requests.filter(x=>x[1]==='transport-profiles/profile-a?revision=2').length,2);
   assert.equal(b.el('relay-ingress').disabled,true);assert.equal(b.el('relay-submit').disabled,false);
+});
+
+test('unsaved composition loads the original form without publishing or submitting and rejects removed purposes',async t=>{
+  const originalDocument=Object.getOwnPropertyDescriptor(globalThis,'document'),originalConfirm=Object.getOwnPropertyDescriptor(globalThis,'confirm');
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});
+  Object.defineProperty(globalThis,'confirm',{configurable:true,value:()=>true});
+  t.after(()=>{
+    originalDocument?Object.defineProperty(globalThis,'document',originalDocument):delete globalThis.document;
+    originalConfirm?Object.defineProperty(globalThis,'confirm',originalConfirm):delete globalThis.confirm;
+  });
+  const data=(_method,path)=>path==='execution-capabilities'?{multihopEnabled:true}:
+    path==='transport-profiles'?{profiles:[{profileId:'profile-a',currentRevision:3}]}:path.startsWith('transport-profiles/')?profile:{};
+  const h=consoleHarness(data),draft={nodes:['a','b'],profileId:'profile-a',profileRevision:2,protocol:'both'};
+  assert.equal(await h.api.loadPathDraft(draft),true);
+  assert.equal(h.el('relay-ingress').value,'a');assert.equal(h.el('relay-egress').value,'b');
+  assert.equal(h.el('field-enabled').checked,false);assert.equal(h.el('field-targetHost').value,'');
+  assert.equal(h.el('relay-submit').disabled,true);assert.equal(h.mutations.length,0);
+  assert.ok(h.requests.every(call=>call[0]==='GET'));
+  assert.ok(h.requests.some(call=>call[1]==='transport-profiles/profile-a?revision=2'));
+  h.callbacks.candidates.relay[1].allowedRoles=['transit'];
+  await assert.rejects(h.api.loadPathDraft(draft),/用途/);assert.equal(h.mutations.length,0);
+  await assert.rejects(h.api.loadPathDraft({...draft,nodes:['a','a']}),/组线路径/);
+});
+
+test('clearing an unsaved draft discards delayed capability reads before profiles or form loading',async t=>{
+  const originalDocument=Object.getOwnPropertyDescriptor(globalThis,'document'),originalConfirm=Object.getOwnPropertyDescriptor(globalThis,'confirm');
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});
+  Object.defineProperty(globalThis,'confirm',{configurable:true,value:()=>true});
+  t.after(()=>{
+    originalDocument?Object.defineProperty(globalThis,'document',originalDocument):delete globalThis.document;
+    originalConfirm?Object.defineProperty(globalThis,'confirm',originalConfirm):delete globalThis.confirm;
+  });
+  let release;
+  const h=consoleHarness((_method,path)=>path==='execution-capabilities'?new Promise(resolve=>{release=resolve;}):{});
+  const pending=h.api.loadPathDraft({nodes:['a','b'],profileId:'profile-a',profileRevision:2,protocol:'both'});
+  h.api.clear();release({multihopEnabled:true});assert.equal(await pending,false);
+  assert.deepEqual(h.requests.map(call=>call[1]),['execution-capabilities']);
+  assert.equal(h.el('relay-profile-select').children.length,0);assert.equal(h.mutations.length,0);
+  assert.equal(h.el('relay-submit').disabled,true);
 });
 
 test('Relay init isolates unknown write outcomes stale plans and deployment history restore CAS across clear',async t=>{

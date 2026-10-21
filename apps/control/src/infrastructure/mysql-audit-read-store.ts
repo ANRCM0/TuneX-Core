@@ -29,6 +29,7 @@ function definitionJoins(config: string, members: 'candidates' | 'members', scop
 function metadata(table: string, id: string, revisions: string, entity: string, members?: 'candidates' | 'members'): Projection {
     return { from: `${table} e JOIN ${revisions} r ON r.scope_id=e.scope_id AND r.${id}=e.${id} AND r.revision=e.revision`,
         scope: 'e.scope_id=?', pk: ['e.id'], columns: { occurredAt: 'e.created_at', kind: 'e.kind', actorId: 'e.actor_id',
+            subjectId: "CASE WHEN e.kind='classify-owner' THEN e.owner_actor_id ELSE NULL END",
             entityKind: literal(entity), entityId: `e.${id}`, revision: 'e.revision', revisionKind: "'config'",
             nodeAssociation: literal(members ? 'immutable-group-definition' : 'immutable-template-config') },
         node: configNode(members?'audit_template.config':'r.config'),
@@ -94,12 +95,19 @@ function projection(source: string): Projection {
                 nodeId: node, nodeAssociation: "CASE WHEN e.kind='node_grant_change' THEN 'explicit-node' ELSE 'none' END" }, node: `CAST((${node}) AS BINARY)=CAST(${nodeToken} AS BINARY)` };
         }
         case 'node-security': {
-            const revision = `COALESCE(${integer('e.details','$.policyRevision')},${integer('e.details','$.revision')})`;
+            const revision = `COALESCE(${integer('e.details','$.resource.resource_revision')},${integer('e.details','$.policyRevision')},${integer('e.details','$.revision')})`;
             return { from: 'node_security_events e JOIN nodes owner ON owner.id=e.node_id', scope: 'owner.scope_id=?', pk: ['e.id'],
                 columns: { occurredAt: 'e.created_at', kind: 'e.kind', actorId: 'e.actor_id',
                     actorAttribution: "CASE WHEN e.actor_id IS NULL THEN 'unattributed' ELSE 'initiator' END", entityKind: "'node'", entityId: 'e.node_id',
-                    revision, revisionKind: `CASE WHEN (${revision}) IS NULL THEN NULL ELSE 'config' END`, nodeId: 'e.node_id', nodeAssociation: "'explicit-node'" }, node: `CAST(e.node_id AS BINARY)=CAST(${nodeToken} AS BINARY)` };
+                    revision, revisionKind: `CASE WHEN (${revision}) IS NULL THEN NULL WHEN e.kind='resource_classification' THEN 'resource' ELSE 'config' END`, nodeId: 'e.node_id', nodeAssociation: "'explicit-node'" }, node: `CAST(e.node_id AS BINARY)=CAST(${nodeToken} AS BINARY)` };
         }
+        case 'forward-ownership': return { from:'forward_ownership_events e JOIN forward_revisions r ON r.forward_id=e.forward_id AND r.revision=e.revision',
+            scope:'e.scope_id=?',pk:['e.id'],columns:{occurredAt:'e.created_at',kind:"'classify-owner'",actorId:'e.actor_id',subjectId:'e.owner_actor_id',
+                entityKind:"'forward'",entityId:'e.forward_id',revision:'e.revision',revisionKind:"'forward'",forwardId:'e.forward_id',nodeAssociation:"'immutable-forward-spec'"},node:specNode('r.spec') };
+        case 'resource-limits': return { from:'shared_resource_limit_audit e JOIN shared_resource_limit_buckets b ON b.bucket_id=e.bucket_id',
+            scope:'b.scope_id=?',pk:['e.event_id'],columns:{occurredAt:'e.at_ms',kind:"'configure'",actorId:'e.actor_id',subjectId:'b.actor_id',
+                entityKind:"'node'",entityId:'b.node_id',revision:integer('e.body','$.revision'),revisionKind:"'resource'",
+                nodeId:'b.node_id',nodeAssociation:"'explicit-node'"},node:`CAST(b.node_id AS BINARY)=CAST(${nodeToken} AS BINARY)` };
         case 'transport': return { from: 'transport_events e JOIN transport_profiles owner ON owner.id=e.profile_id', scope: 'owner.scope_id=?',
             pk: ['e.id'], columns: { occurredAt: 'e.created_at', kind: "'grant-change'", actorId: 'e.actor_id', subjectId: 'e.subject_id',
                 entityKind: "'transport-profile'", entityId: 'e.profile_id', revision: 'e.revision', revisionKind: "'grant'" } };

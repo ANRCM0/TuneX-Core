@@ -12,39 +12,50 @@ import { MySqlUnitOfWork, rows, write, json } from '../src/infrastructure/mysql.
 import { consolePageSql } from '../src/infrastructure/mysql-read-pagination.ts';
 import { PathTemplateCommands, PathTemplateQueries, parsePathTemplate } from '../src/modules/path-owner/public.ts';
 import { Identity } from '../src/modules/identity.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { MySqlResourceAccessStore } from '../src/infrastructure/mysql-resource-access.ts';
 import { Idempotency } from '../src/modules/idempotency.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
-import type { PathTemplateStorage } from '../src/framework/public.ts';
+import type { PathTemplateStorage, ReadPrincipal } from '../src/framework/public.ts';
 import type { PathTemplateRevision } from '../src/modules/path-owner/public.ts';
 
 type Statement=readonly [string,readonly unknown[]];
 const hash='sha256:'+'a'.repeat(64),at=1800000000000,paging={page:2,limit:3,offset:3};
+const principal:ReadPrincipal=Object.freeze({actorId:'actor',governance:true}),memberPrincipal:ReadPrincipal=Object.freeze({actorId:'member',governance:false});
 const config=()=>parsePathTemplate({version:1,protocols:['tcp','udp'],nodes:['ingress','egress'],endpoints:[{nodeId:'egress',revision:1}],transport:{profileId:'profile',configRevision:1}});
 const record=(revision=1):PathTemplateRevision=>{const value=config();return {revision,config:value,profileDigest:hash,configDigest:digest({config:value,profileDigest:hash}),createdBy:'actor',createdAt:at};};
-const native={n:'007',template_id:'id',current_revision:0,archived:2,revision:0,config:{opaque:'not product validated'},profile_digest:'invalid',config_digest:'bad',created_by:'bad/id',created_at:-1};
+const native={n:'007',template_id:'id',owner_actor_id:'actor',current_revision:0,archived:2,revision:0,config:{opaque:'not product validated'},profile_digest:'invalid',config_digest:'bad',created_by:'bad/id',created_at:-1};
 const countSQL='SELECT COUNT(*) n FROM path_templates WHERE scope_id=?';
-const headSQL='SELECT template_id,current_revision,archived FROM path_templates WHERE scope_id=? AND template_id=?';
+const headSQL='SELECT template_id,owner_actor_id,current_revision,archived FROM path_templates WHERE scope_id=? AND template_id=?';
 const revisionSQL='SELECT revision,config,profile_digest,config_digest,created_by,created_at FROM path_template_revisions WHERE scope_id=? AND template_id=? AND revision=?';
 const insertRevision='INSERT INTO path_template_revisions(scope_id,template_id,revision,config,profile_digest,config_digest,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)';
-const createHead='INSERT INTO path_templates(scope_id,template_id,current_revision) VALUES(?,?,1)';
+const createHead='INSERT INTO path_templates(scope_id,template_id,current_revision,owner_actor_id) VALUES(?,?,1,?)';
 const updateHead='UPDATE path_templates SET current_revision=? WHERE scope_id=? AND template_id=?';
+const classifySQL='UPDATE path_templates SET owner_actor_id=? WHERE scope_id=? AND template_id=? AND current_revision=? AND owner_actor_id IS NULL';
+const ownershipAuditSQL="INSERT INTO path_template_events(id,scope_id,template_id,actor_id,owner_actor_id,revision,kind,created_at) VALUES(?,?,?,?,?,?,'classify-owner',?)";
 const auditSQL='INSERT INTO path_template_events(id,scope_id,template_id,actor_id,revision,kind,created_at) VALUES(?,?,?,?,?,?,?)';
 type Store=PathTemplateStorage<Transaction,unknown>;
 type Case={name:string;run:(s:Store,tx:Transaction)=>Promise<unknown>;statements:Statement[];result:unknown};
 const cases:Case[]=[
     {name:'scope lock',run:(s,t)=>s.lockScope(t,'scope'),statements:[['SELECT id FROM scopes WHERE id=? FOR UPDATE',['scope']]],result:undefined},
     {name:'raw count',run:(s,t)=>s.count(t,'scope'),statements:[[countSQL,['scope']]],result:'007'},
-    ...[false,true].map(lock=>({name:'head lock '+lock,run:(s:Store,t:Transaction)=>s.head(t,'scope','id',lock),statements:[[headSQL+(lock?' FOR UPDATE':''),['scope','id']]] as Statement[],result:{templateId:'id',currentRevision:0,archived:true}})),
+    ...[false,true].map(lock=>({name:'head lock '+lock,run:(s:Store,t:Transaction)=>s.head(t,'scope','id',lock),statements:[[headSQL+(lock?' FOR UPDATE':''),['scope','id']]] as Statement[],result:{templateId:'id',ownerActorId:'actor',currentRevision:0,archived:true}})),
     {name:'raw revision',run:(s,t)=>s.revision(t,'scope','id',0),statements:[[revisionSQL,['scope','id',0]]],result:{revision:0,config:native.config,profileDigest:'invalid',configDigest:'bad',createdBy:'bad/id',createdAt:-1}},
-    {name:'count before page',run:(s,t)=>s.list(t,'scope',paging,'id'),statements:[
+    {name:'count before page',run:(s,t)=>s.list(t,'scope',principal,paging,'id'),statements:[
         ['SELECT COUNT(*) n FROM path_templates WHERE scope_id=? AND LEFT(template_id,CHAR_LENGTH(?))=?',['scope','id','id']],
-        ['SELECT template_id,current_revision,archived FROM path_templates WHERE scope_id=? AND LEFT(template_id,CHAR_LENGTH(?))=? ORDER BY template_id LIMIT 3 OFFSET 3',['scope','id','id']]
-    ],result:{total:'007',items:[{templateId:'id',currentRevision:0,archived:true}]}},
+        ['SELECT template_id,owner_actor_id,current_revision,archived FROM path_templates WHERE scope_id=? AND LEFT(template_id,CHAR_LENGTH(?))=? ORDER BY template_id LIMIT 3 OFFSET 3',['scope','id','id']]
+    ],result:{total:'007',items:[{templateId:'id',ownerActorId:'actor',currentRevision:0,archived:true}]}},
     ...[1,2].map(revision=>({name:'publish revision '+revision,run:(s:Store,t:Transaction)=>s.publish(t,'scope','id',record(revision)),statements:[
-        ...(revision===1?[[createHead,['scope','id']] as Statement]:[]),
+        ...(revision===1?[[createHead,['scope','id','actor']] as Statement]:[]),
         [insertRevision,['scope','id',revision,JSON.stringify(config()),hash,record().configDigest,'actor',at]] as Statement,
         [updateHead,[revision,'scope','id']] as Statement
     ],result:undefined})),
+    {name:'member count before page',run:(s,t)=>s.list(t,'scope',memberPrincipal,paging,'id'),statements:[
+        ['SELECT COUNT(*) n FROM path_templates WHERE scope_id=? AND LEFT(template_id,CHAR_LENGTH(?))=? AND owner_actor_id=?',['scope','id','id','member']],
+        ['SELECT template_id,owner_actor_id,current_revision,archived FROM path_templates WHERE scope_id=? AND LEFT(template_id,CHAR_LENGTH(?))=? AND owner_actor_id=? ORDER BY template_id LIMIT 3 OFFSET 3',['scope','id','id','member']]
+    ],result:{total:'007',items:[{templateId:'id',ownerActorId:'actor',currentRevision:0,archived:true}]}},
+    {name:'classify original null claim with exact revision',run:(s,t)=>s.classifyOwner(t,'scope','id',2,'owner'),statements:[[classifySQL,['owner','scope','id',2]]],result:0},
+    {name:'audit explicit classification',run:(s,t)=>s.auditOwnership(t,'scope','id','actor','owner',2,at),statements:[[ownershipAuditSQL,['$uuid','scope','id','actor','owner',2,at]]],result:undefined},
     {name:'archive',run:(s,t)=>s.archive(t,'scope','id'),statements:[['UPDATE path_templates SET archived=TRUE WHERE scope_id=? AND template_id=?',['scope','id']]],result:undefined},
     {name:'audit',run:(s,t)=>s.audit(t,'scope','id','actor',2,'archive',at),statements:[[auditSQL,['$uuid','scope','id','actor',2,'archive',at]]],result:undefined}
 ];
@@ -52,7 +63,7 @@ for(const entry of cases)test('55 Path lower and zeroarg legacy '+entry.name+' e
     for(const store of [new MySqlPathTemplateStore<unknown>(),new MySqlPathTemplates() as Store])for(const failAt of [-1,...entry.statements.map((_,index)=>index)]){
         const calls:Statement[]=[],failure=new Error('original native statement');let tx:Transaction;
         tx={async execute(this:unknown,sql:string,args:unknown[]=[]){assert.equal(this,tx);const captured=[...args];
-            if(sql===auditSQL){assert.match(String(captured[0]),/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);captured[0]='$uuid';}
+            if(sql===auditSQL||sql===ownershipAuditSQL){assert.match(String(captured[0]),/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);captured[0]='$uuid';}
             calls.push([sql,captured]);if(calls.length-1===failAt)throw failure;return [sql.startsWith('SELECT')?[native]:{affectedRows:0},[]];
         }} as unknown as Transaction;
         if(failAt<0){const result=await entry.run(store,tx);assert.deepEqual(result,entry.result);if(entry.name==='raw revision')assert.equal((result as {config:unknown}).config,native.config);}
@@ -73,11 +84,11 @@ test('55 nullable reads Boolean archive raw JSON malformed decode and pagination
         }
         response=[{...native,config:'not JSON'}];await assert.rejects(store.revision(tx,'scope','id',0),SyntaxError);
         for(const invalid of [{page:0,limit:1,offset:0},{page:10001,limit:1,offset:10000},{page:1,limit:101,offset:0},{page:1,limit:1,offset:1},{page:1.5,limit:1,offset:0},{page:1,limit:NaN,offset:0}]){
-            response=[{n:0}];calls.length=0;await assert.rejects(store.list(tx,'scope',invalid,'%'),e=>(e as {code:string}).code==='INVALID_CONFIG');
+            response=[{n:0}];calls.length=0;await assert.rejects(store.list(tx,'scope',principal,invalid,'%'),e=>(e as {code:string}).code==='INVALID_CONFIG');
             assert.deepEqual(calls,[['SELECT COUNT(*) n FROM path_templates WHERE scope_id=? AND LEFT(template_id,CHAR_LENGTH(?))=?',['scope','%','%']]]);
         }
         const emptyTx={async execute(sql:string){return [sql.startsWith('SELECT COUNT')?[{n:0}]:[],[]];}} as unknown as Transaction;
-        assert.deepEqual(await store.list(emptyTx,'scope',{page:10000,limit:100,offset:999900},''),{total:0,items:[]});
+        assert.deepEqual(await store.list(emptyTx,'scope',principal,{page:10000,limit:100,offset:999900},''),{total:0,items:[]});
     }
 });
 
@@ -95,12 +106,12 @@ test('55 lower native module initialization audit UUID timing lazy publication e
     await store.audit(tx,'scope','id','actor',2,'archive',at);assert.deepEqual(events,['uuid','execute']);assert.deepEqual(calls,[[auditSQL,['controlled-id','scope','id','actor',2,'archive',at]]]);
     events.length=0;calls.length=0;uuidFailure=true;await assert.rejects(store.audit(tx,'scope','id','actor',2,'archive',at),e=>e===failure);assert.deepEqual(events,['uuid']);assert.equal(calls.length,0);
     events.length=0;const value={...record(),get config(){events.push('config');return {toJSON(){events.push('json');throw failure;}};}};
-    await assert.rejects(store.publish(tx,'scope','id',value),e=>e===failure);assert.deepEqual(events,['execute','config','json']);assert.deepEqual(calls,[[createHead,['scope','id']]]);
+    await assert.rejects(store.publish(tx,'scope','id',value),e=>e===failure);assert.deepEqual(events,['execute','config','json']);assert.deepEqual(calls,[[createHead,['scope','id','actor']]]);
     let constructions=0;const delegated:unknown[][]=[];
     class Lower {constructor(){constructions++;}}
     const wrapper=loaded('mysql-path-templates.ts',{'./mysql-path-template-store.ts':{MySqlPathTemplateStore:Lower}});
     assert.equal(constructions,1);assert.equal(delegated.length,0);const legacy=new wrapper.exports.MySqlPathTemplates();assert.equal(constructions,1);
-    const args:Record<string,unknown[]>={lockScope:[tx,'scope'],count:[tx,'scope'],head:[tx,'scope','id'],revision:[tx,'scope','id',2],list:[tx,'scope',paging,'id'],publish:[tx,'scope','id',record()],archive:[tx,'scope','id'],audit:[tx,'scope','id','actor',2,'publish',at]};
+    const args:Record<string,unknown[]>={lockScope:[tx,'scope'],count:[tx,'scope'],head:[tx,'scope','id'],revision:[tx,'scope','id',2],list:[tx,'scope',principal,paging,'id'],publish:[tx,'scope','id',record()],archive:[tx,'scope','id'],classifyOwner:[tx,'scope','id',2,'owner'],auditOwnership:[tx,'scope','id','actor','owner',2,at],audit:[tx,'scope','id','actor',2,'publish',at]};
     for(const [method,input] of Object.entries(args)){
         const result={method},descriptor=Object.getOwnPropertyDescriptor(wrapper.exports.MySqlPathTemplates.prototype,method)!;
         assert.equal(descriptor.enumerable,false);assert.equal(descriptor.writable,true);assert.equal(descriptor.configurable,true);assert.equal(descriptor.value.constructor.name,'AsyncFunction');
@@ -135,7 +146,8 @@ test('54/55 real canonical MySQL original command atomicity preserves every tabl
             return action(supplied);
         });}};
         const references={async validate(){return {profileDigest:hash};}},store=new MySqlPathTemplates(),identity=new Identity(db),requests=new Idempotency();
-        const commands=new PathTemplateCommands(boundary,identity,requests,store,references,()=>at),queries=new PathTemplateQueries(boundary,identity,store);
+        const access=new ResourceAccess(identity,new MySqlResourceAccessStore());
+        const commands=new PathTemplateCommands(boundary,identity,access,requests,store,references,()=>at),queries=new PathTemplateQueries(boundary,identity,access,store);
         async function everyWrite<T>(action:()=>Promise<T>,count:number){
             const before=await snapshot(db);for(let n=0;n<count;n++){failAt=n;ordinal=0;transactions=0;await assert.rejects(action(),e=>e===failure);assert.equal(ordinal,n+1);assert.equal(transactions,1);assert.deepEqual(await snapshot(db),before,'all original tables after write '+n);}
             failAt=-1;ordinal=0;transactions=0;statements.length=0;const result=await action();assert.equal(ordinal,count);assert.equal(transactions,1);return result;
@@ -158,12 +170,13 @@ test('55 real MySQL lower reads retain archived metadata literal prefix corrupt 
         const store=new MySqlPathTemplates();await db.transaction(tx=>store.publish(tx,'scope','a',record()));
         let intervened=false;
         const result=await db.transaction(async tx=>store.list(new Proxy(tx,{get(target,key){if(key==='execute')return async(sql:string,args:unknown[]=[])=>(
-            await Reflect.apply(target.execute,target,[sql,args]).then(async(value:unknown)=>{if(sql.startsWith('SELECT COUNT')&&!intervened){intervened=true;await db.transaction(other=>store.publish(other,'scope','b',record()));}return value;}));return Reflect.get(target,key);}}),'scope',{page:1,limit:100,offset:0},''));
+            await Reflect.apply(target.execute,target,[sql,args]).then(async(value:unknown)=>{if(sql.startsWith('SELECT COUNT')&&!intervened){intervened=true;await db.transaction(other=>store.publish(other,'scope','b',record()));}return value;}));return Reflect.get(target,key);}}),'scope',principal,{page:1,limit:100,offset:0},''));
         assert.equal(intervened,true);assert.equal(result.total,1);assert.deepEqual(result.items.map(value=>value.templateId),['a','b']);
         await db.transaction(async tx=>{await store.archive(tx,'scope','a');await write(tx,'UPDATE path_template_revisions SET config=? WHERE scope_id=? AND template_id=?',['{"corrupt":"product shape"}','scope','a']);await store.publish(tx,'scope','literal%tail',record());});
         const raw=await db.transaction(tx=>store.revision(tx,'scope','a',1));assert.deepEqual(raw!.config,{corrupt:'product shape'});
-        const queries=new PathTemplateQueries(db,new Identity(db),store);await assert.rejects(queries.get('actor','scope','a'),e=>(e as {code:string}).code==='INTEGRITY_FAILURE');
-        const literal=await db.transaction(tx=>store.list(tx,'scope',{page:1,limit:100,offset:0},'literal%'));assert.equal(literal.total,1);assert.equal(literal.items[0]!.templateId,'literal%tail');
+        const identity=new Identity(db),access=new ResourceAccess(identity,new MySqlResourceAccessStore());
+        const queries=new PathTemplateQueries(db,identity,access,store);await assert.rejects(queries.get('actor','scope','a'),e=>(e as {code:string}).code==='INTEGRITY_FAILURE');
+        const literal=await db.transaction(tx=>store.list(tx,'scope',principal,{page:1,limit:100,offset:0},'literal%'));assert.equal(literal.total,1);assert.equal(literal.items[0]!.templateId,'literal%tail');
         assert.equal((await db.transaction(tx=>store.head(tx,'scope','a')))!.archived,true);
         assert.equal(await db.transaction(tx=>store.head(tx,'scope','absent')),null);assert.equal(await db.transaction(tx=>store.revision(tx,'scope','a',2)),null);
     });

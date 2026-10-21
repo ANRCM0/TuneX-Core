@@ -14,6 +14,7 @@ import { RuntimeHost, RuntimeLedgerHost, RuntimeRelayHost, RuntimeResources } fr
 import { MySqlRuntimeStateStore } from '../src/infrastructure/mysql-runtime-host.ts';
 import { MySqlRuntimeStatusStore } from '../src/infrastructure/mysql-runtime-status-store.ts';
 import { MySqlRuntimeLedgerStore } from '../src/infrastructure/mysql-runtime-ledger.ts';
+import { NodePortLimitPolicy } from '../src/modules/node-owner/public.ts';
 import { MySqlRuntimeResourceStore } from '../src/infrastructure/mysql-runtime-resources.ts';
 import { MySqlRelayDeploymentStore, MySqlRelayObservations } from '../src/infrastructure/mysql-runtime-relay.ts';
 import { RuntimeStatusQueries } from '../src/modules/runtime-status-owner/public.ts';
@@ -67,6 +68,7 @@ test('203/205 RuntimeLedger retains policy spread resource short circuit native 
     assert.deepEqual(defaults.policy,DEFAULT_POLICY); assert.notEqual(defaults.policy,DEFAULT_POLICY);
     assert.ok(defaults.resources instanceof RuntimeResources); assert.ok(bindings(defaults.resources).store instanceof MySqlRuntimeResourceStore);
     assert.equal(bindings(defaults.resources).maxAssignmentsPerNode,DEFAULT_POLICY.maxAssignmentsPerNode);
+    assert.ok(bindings(defaults.resources).portPolicy instanceof NodePortLimitPolicy);
     const selected=new RuntimeLedger({...DEFAULT_POLICY,maxAssignmentsPerNode:19},undefined,collector as never);
     assert.equal(bindings(bindings(selected).resources).maxAssignmentsPerNode,19);
     assert.throws(()=>new RuntimeLedger(undefined,undefined,undefined as never),/Snapshot assignment collector is required/);

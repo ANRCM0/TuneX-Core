@@ -11,6 +11,7 @@ import (
 
 	"github.com/tunex/vnext/agent/internal/contracts"
 	"github.com/tunex/vnext/agent/internal/egress"
+	"github.com/tunex/vnext/agent/internal/executionhost"
 	"github.com/tunex/vnext/agent/internal/payloadstats"
 )
 
@@ -45,6 +46,7 @@ type TCP struct {
 	done          sync.WaitGroup
 	closeOnce     sync.Once
 	payload       *payloadstats.Counters
+	payloadGate   executionhost.PayloadGate
 }
 
 func validateTCPAssignment(assignment contracts.Assignment) error {
@@ -55,17 +57,26 @@ func validateTCPAssignment(assignment contracts.Assignment) error {
 }
 
 func newTCP(slot *tcpListenerSlot, assignment contracts.Assignment, permits chan struct{}, timeout time.Duration) *TCP {
+	return newTCPWithPayload(slot, assignment, permits, timeout, nil)
+}
+func newTCPWithPayload(slot *tcpListenerSlot, assignment contracts.Assignment, permits chan struct{}, timeout time.Duration, gate executionhost.PayloadGate) *TCP {
 	ctx, cancel := context.WithCancel(context.Background())
 	config := assignment.Driver.Config
 	config.AllowedDestinationCidrs = append([]string(nil), config.AllowedDestinationCidrs...)
 	return &TCP{slot: slot, binding: assignment.Listener, config: config, ctx: ctx, cancel: cancel,
-		connections: make(map[net.Conn]net.Conn), permits: permits, timeout: timeout, payload: payloadstats.New()}
+		connections: make(map[net.Conn]net.Conn), permits: permits, timeout: timeout, payload: payloadstats.New(), payloadGate: gate}
 }
 
 func Start(assignment contracts.Assignment, policy contracts.Policy) (*TCP, error) {
 	return StartAuthorized(assignment, policy, nil)
 }
 func StartAuthorized(assignment contracts.Assignment, policy contracts.Policy, authorize func() error) (*TCP, error) {
+	return StartAuthorizedMetered(assignment, policy, authorize, nil)
+}
+
+// StartAuthorizedMetered binds the immutable payload gate before listening.
+// A nil gate retains the legacy unmetered entrypoint behavior.
+func StartAuthorizedMetered(assignment contracts.Assignment, policy contracts.Policy, authorize func() error, gate executionhost.PayloadGate) (*TCP, error) {
 	if authorize != nil {
 		if err := authorize(); err != nil {
 			return nil, err
@@ -77,19 +88,22 @@ func StartAuthorized(assignment contracts.Assignment, policy contracts.Policy, a
 	if policy.MaxTcpConnectionsPerAssignment == 0 || policy.ConnectTimeoutSeconds == 0 {
 		return nil, fmt.Errorf("INVALID_CONFIG: invalid TCP resource policy")
 	}
+	slot := &tcpListenerSlot{nodePermits: tcpNodePermits, done: make(chan struct{})}
+	stream := newTCPWithPayload(slot, assignment, make(chan struct{}, min(policy.MaxTcpConnectionsPerAssignment, 1024)), time.Duration(min(policy.ConnectTimeoutSeconds, 10))*time.Second, gate)
+	stream.authorization.Set(authorize)
 	listener, err := net.Listen("tcp", net.JoinHostPort(assignment.Listener.Address, fmt.Sprint(assignment.Listener.Port)))
 	if err != nil {
+		stream.cancel()
 		return nil, err
 	}
 	if authorize != nil {
 		if err := authorize(); err != nil {
 			listener.Close()
+			stream.cancel()
 			return nil, err
 		}
 	}
-	slot := &tcpListenerSlot{listener: listener, nodePermits: tcpNodePermits, done: make(chan struct{})}
-	stream := newTCP(slot, assignment, make(chan struct{}, min(policy.MaxTcpConnectionsPerAssignment, 1024)), time.Duration(min(policy.ConnectTimeoutSeconds, 10))*time.Second)
-	stream.authorization.Set(authorize)
+	slot.listener = listener
 	slot.current = stream
 	go slot.accept()
 	return stream, nil
@@ -106,6 +120,9 @@ func (stream *TCP) ReplaceAuthorized(assignment contracts.Assignment, authorize 
 		if err := authorize(); err != nil {
 			return nil, err
 		}
+	}
+	if stream.payloadGate != nil {
+		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY: metered TCP replacement requires a new bound host")
 	}
 	if err := validateTCPAssignment(assignment); err != nil {
 		return nil, err
@@ -213,22 +230,26 @@ func (stream *TCP) copy(client net.Conn) {
 	stream.connections[client] = target
 	stream.mutex.Unlock()
 	stream.payload.TCPConnect()
+	payloadCtx, payloadCancel := context.WithCancel(stream.ctx)
+	defer payloadCancel()
 	finished := make(chan struct{}, 1)
 	go func() {
-		_, err := io.Copy(authorizedWriter{payloadWriter{target: target, counters: stream.payload}, &stream.authorization}, authorizedReader{client, &stream.authorization})
+		_, err := io.Copy(authorizedWriter{payloadWriter{target: quotaWriter{target: target, ctx: payloadCtx, gate: stream.payloadGate, allow: stream.authorization.Allow}, counters: stream.payload}, &stream.authorization}, authorizedReader{client, &stream.authorization})
 		if tcp, ok := target.(*net.TCPConn); ok {
 			tcp.CloseWrite()
 		}
 		if err != nil {
+			payloadCancel()
 			target.Close()
 		}
 		finished <- struct{}{}
 	}()
-	_, err = io.Copy(authorizedWriter{payloadWriter{target: client, counters: stream.payload, received: true}, &stream.authorization}, authorizedReader{target, &stream.authorization})
+	_, err = io.Copy(authorizedWriter{payloadWriter{target: quotaWriter{target: client, ctx: payloadCtx, gate: stream.payloadGate, allow: stream.authorization.Allow}, counters: stream.payload, received: true}, &stream.authorization}, authorizedReader{target, &stream.authorization})
 	if tcp, ok := client.(*net.TCPConn); ok {
 		tcp.CloseWrite()
 	}
 	if err != nil {
+		payloadCancel()
 		client.Close()
 	}
 	<-finished

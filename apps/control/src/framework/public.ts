@@ -150,3 +150,13 @@ export type { NotificationSecretBinding, NotificationDestination, NotificationSe
     NotificationSendCode, NotificationSendResult, NotificationSender } from './notification-effects-ports.ts';
 export { NODE_REPORT_READ_INTERFACE_VERSION } from './node-report-read-ports.ts';
 export type { NodeObservationContext, AgentReportProvenance, NodeReportEvidence, AuthorizedNodeReportReader } from './node-report-read-ports.ts';
+export { RESOURCE_ACCESS_INTERFACE_VERSION } from './resource-access-ports.ts';
+export type { ReadPrincipal, OwnedResourceKind, NodeReadDetail, ResourceOwnershipRecord, ResourceNodeReadRecord,
+    ResourceAccessStore, ResourceReadAccess } from './resource-access-ports.ts';
+export type { NodeUseRole, NodeResourceSource, NodeResourceClaim, NodeResourceAccess,
+    NodeUseAuthorization } from './node-authority-ports.ts';
+export type { IdentityScopeContextWindow, IdentityScopeContextRecord } from './identity-access-ports.ts';
+export { RUNTIME_PORT_POLICY_INTERFACE_VERSION } from './runtime-port-policy-ports.ts';
+export type { RuntimePortUsageStore, RuntimePortReservationPolicy } from './runtime-port-policy-ports.ts';
+export { RESOURCE_LIMIT_INTERFACE_VERSION } from './resource-limit-ports.ts';
+export type { RuntimePayloadPolicy, OfflinePayloadPolicy, SharedResourceLimitRecord, SharedResourceLimitReceipt, SharedResourceLimitStore } from './resource-limit-ports.ts';

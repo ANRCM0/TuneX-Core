@@ -31,12 +31,19 @@ const controlSchemaCeiling: Record<CompatibilityProfile, string> = {
     'adp3-probe-services-v1': '0036-',
     'adp3-probe-echo-v1': '0037-',
     'adp3-probe-plan-json-integers-v1': '0038-',
+    'adp3-product-resource-access-v1': '0039-',
+    'adp3-shared-node-port-limits-v1': '0040-',
+    'adp3-shared-resource-limits-v1': '0041-',
 };
 profiles.add('adp3-typed-probes-v1');
 profiles.add('adp3-observation-services-v1');
 profiles.add('adp3-probe-services-v1');
 profiles.add('adp3-probe-echo-v1');
 profiles.add('adp3-probe-plan-json-integers-v1');
+profiles.add('adp3-product-resource-access-v1');
+profiles.add('adp3-shared-node-port-limits-v1');
+profiles.add('adp3-shared-resource-limits-v1');
+const supportsMultihop=(profile:CompatibilityProfile)=>profile==='adp3-multihop-v1'||profile==='adp3-shared-resource-limits-v1';
 const invalid = (): never => { throw new Error('INVALID_UPGRADE_PLAN'); };
 function object(value: unknown, keys: string[]): Record<string, unknown> {
     if (!value || typeof value !== 'object' || Array.isArray(value) ||
@@ -56,7 +63,7 @@ function build(value: unknown): Build {
 function release(value: unknown): Release {
     const v = object(value, ['control', 'agent']);
     const control = build(v.control), agent = build(v.agent);
-    if (agent.profile !== 'adp3-runtime-v1' && agent.profile !== 'adp3-multihop-v1') invalid();
+    if (agent.profile !== 'adp3-runtime-v1' && !supportsMultihop(agent.profile)) invalid();
     return { control, agent };
 }
 export function parseUpgradePlan(raw: string): UpgradePlan {
@@ -67,14 +74,22 @@ export function parseUpgradePlan(raw: string): UpgradePlan {
         !Array.isArray(v.journals) || v.journals.length > 1000) invalid();
     const source = release(v.source), target = release(v.target), seen = new Set<string>();
     for (const journal of v.journals as unknown[]) {
+        const inspectionVersion=journal&&typeof journal==='object'&&!Array.isArray(journal)?(journal as Record<string,unknown>).version:undefined;
         const j = object(journal, ['version', 'nodeId', 'protocolVersion', 'executionExtension',
-            'generation', 'snapshotDigest', 'fileDigest', 'maxBindingFence', 'maxRetiredFence', 'importedTransit']);
-        if (j.version !== 1 || typeof j.nodeId !== 'string' || !isId(j.nodeId) || seen.has(j.nodeId) || j.protocolVersion !== 3 ||
+            'generation', 'snapshotDigest', 'fileDigest', 'maxBindingFence', 'maxRetiredFence', 'importedTransit',
+            ...(inspectionVersion===2?['resourceBudgetVersion','resourceBudgetBuckets','prechargedBytes']:[])]);
+        if (![1,2].includes(j.version as number) || typeof j.nodeId !== 'string' || !isId(j.nodeId) || seen.has(j.nodeId) || j.protocolVersion !== 3 ||
             ![0, 1].includes(j.executionExtension as number) || !counter(j.generation) ||
             typeof j.snapshotDigest !== 'string' || (j.generation === 0 ? j.snapshotDigest !== '' : !nativeUpgradeFormat.digest(j.snapshotDigest)) ||
             typeof j.fileDigest !== 'string' || !nativeUpgradeFormat.digest(j.fileDigest) ||
             !counter(j.maxBindingFence) || !counter(j.maxRetiredFence) ||
             typeof j.importedTransit !== 'boolean' || j.importedTransit && j.executionExtension !== 1) invalid();
+        if(j.version===2&&(![0,1].includes(j.resourceBudgetVersion as number)||!counter(j.resourceBudgetBuckets)||
+            (j.resourceBudgetBuckets as number)>1024||typeof j.prechargedBytes!=='string'||
+            !/^(0|[1-9][0-9]{0,19})$(?![\s\S])/.test(j.prechargedBytes)||
+            BigInt(j.prechargedBytes)>1024n*BigInt(MAX_COUNTER)||
+            j.resourceBudgetVersion===0&&(j.resourceBudgetBuckets!==0||j.prechargedBytes!=='0')||
+            j.resourceBudgetVersion===1&&j.resourceBudgetBuckets===0))invalid();
         seen.add(j.nodeId as string);
     }
     return { ...v, source, target } as unknown as UpgradePlan;
@@ -103,7 +118,7 @@ export function assessUpgrade(plan: UpgradePlan, inspection: UpgradeInspection) 
     const pending = prefix ? known.filter(m => m.slice(0, 5) <= targetMigration && !applied.includes(m)) : [];
     if (pending.length) add('DDL_MAINTENANCE_REQUIRED', 'review', 'database');
     if (plan.controlMultihop && (plan.target.control.profile === 'adp3-runtime-v1' ||
-        plan.target.agent.profile !== 'adp3-multihop-v1' || !plan.agentMultihop))
+        !supportsMultihop(plan.target.agent.profile) || !plan.agentMultihop))
         add('MULTIHOP_EXECUTOR_REQUIRED', 'block');
     if (!plan.controlMultihop && (db.multihopDeployments > 0 || db.enabledMultihopForwards > 0))
         add('MULTIHOP_WITHDRAWAL_REQUIRED', 'block');
@@ -115,16 +130,24 @@ export function assessUpgrade(plan: UpgradePlan, inspection: UpgradeInspection) 
         add('CONTROL_HISTORY_NOT_BEHIND_AGENT', journal.generation > node.generation ? 'block' : 'pass', journal.nodeId);
         if (journal.generation > 0 && journal.generation === node.generation)
             add('SNAPSHOT_HISTORY_DIGEST', journal.snapshotDigest === node.snapshotDigest ? 'pass' : 'block', journal.nodeId);
-        if (journal.executionExtension === 1 && plan.source.agent.profile === 'adp3-runtime-v1')
+        if (journal.executionExtension === 1 && !supportsMultihop(plan.source.agent.profile))
             add('SOURCE_JOURNAL_PROFILE_MISMATCH', 'block', journal.nodeId);
-        if (journal.executionExtension === 1 && (plan.target.agent.profile !== 'adp3-multihop-v1' || !plan.agentMultihop))
+        if (journal.executionExtension === 1 && (!supportsMultihop(plan.target.agent.profile) || !plan.agentMultihop))
             add('JOURNAL_DOWNGRADE_FORBIDDEN', 'block', journal.nodeId);
         if (journal.executionExtension === 0 && plan.agentMultihop)
             add('EXPLICIT_JOURNAL_MIGRATION_REQUIRED', 'review', journal.nodeId);
+        if(journal.resourceBudgetVersion===1){
+            if(plan.source.agent.profile!=='adp3-shared-resource-limits-v1')add('SOURCE_RESOURCE_BUDGET_PROFILE_MISMATCH','block',journal.nodeId);
+            if(plan.target.agent.profile!=='adp3-shared-resource-limits-v1')add('RESOURCE_BUDGET_DOWNGRADE_FORBIDDEN','block',journal.nodeId);
+        }
+        if(journal.version===1&&plan.source.agent.profile==='adp3-shared-resource-limits-v1')
+            add('RESOURCE_BUDGET_INSPECTION_REQUIRED','review',journal.nodeId);
     }
     for (const nodeId of nodes.keys()) add('JOURNAL_INVENTORY_MISSING', 'review', nodeId);
-    if (plan.agentMultihop && plan.target.agent.profile !== 'adp3-multihop-v1')
+    if (plan.agentMultihop && !supportsMultihop(plan.target.agent.profile))
         add('AGENT_EXECUTION_EXTENSION_UNSUPPORTED', 'block');
+    if(db.resourceLimitSnapshots>0&&plan.target.agent.profile!=='adp3-shared-resource-limits-v1')
+        add('RESOURCE_LIMIT_EXECUTOR_REQUIRED','block');
     if (plan.operation === 'rollback') add('ROLLBACK_REVIEW_REQUIRED', 'review');
     if (plan.operation === 'recover') {
         add('RECOVERY_MAINTENANCE', a.maintenance ? 'pass' : 'block', 'authority');
@@ -138,7 +161,8 @@ export function assessUpgrade(plan: UpgradePlan, inspection: UpgradeInspection) 
         source: plan.source, target: plan.target, identitySource: 'operator-declared',
         database: { mysqlVersion: db.mysqlVersion, migrations: applied, schemaFiles,
             pendingMigrations: pending, schemaIssues: db.schemaIssues, latestLeaseUntil: db.latestLeaseUntil,
-            multihopDeployments: db.multihopDeployments, enabledMultihopForwards: db.enabledMultihopForwards },
+            multihopDeployments: db.multihopDeployments, enabledMultihopForwards: db.enabledMultihopForwards,
+            resourceLimitSnapshots:db.resourceLimitSnapshots },
         authority: { sequence: a.sequence, maintenance: a.maintenance,
             latestValidUntil: a.latestValidUntil, maxClockSkewSeconds: a.maxClockSkewSeconds },
         journals: plan.journals, checks,

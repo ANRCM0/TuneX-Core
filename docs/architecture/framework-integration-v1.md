@@ -1,18 +1,67 @@
 # Classified Integration Framework v1
 
-Date: 2026-10-18 (Asia/Shanghai).
-Status: source scope closed; unverified. See [ADR-0047](../decisions/0047-classified-integration-framework-v1.md).
+Original source handoff: 2026-10-18 (Asia/Shanghai), ADR-0047 scope closed and then
+unverified. See [ADR-0047](../decisions/0047-classified-integration-framework-v1.md).
+Documentation status clarified: 2026-10-21.
 
 The later [ADR-0048](../decisions/0048-foundation-layer-boundaries.md) adds the
 human's stricter [four-layer scope](foundation-layers-v1.md) and
-[foundation DoD](../development/foundation-readiness.md). That larger scope is still
-open and the parallel-development gate is closed. This document's source closure
-refers only to ADR-0047, not completion of the new foundation criteria.
+[foundation DoD](../development/foundation-readiness.md). B subsequently accepted
+the bounded frozen public contract/consumer/compatibility/example scope at source
+`e208a3abf17129b0c2898ba2022c69f60f45445a`, actually tested as
+`c3ce8a67b901f61234b4116190409854818cb6c7`. The
+[candidate index](foundation-candidate-index-v1.md) and
+[verification record](../development/foundation-verification-2026-10-19.md) govern
+that later decision. Dated source-only/unexecuted entries below retain their
+historical handoff meaning. They do not negate B acceptance or certify a successor.
+
+Future modules need an authorized task on that accepted contract set or a verified
+successor, with their own branch/worktree, public contract, tests and integration
+instructions. Physical-host, load/long-run, independent Responder and release gates
+remain separate. This clarification does not open an implementation task.
 
 This is the development foundation for subsequent features. Core v1's current
 surface is the protected baseline. Application services compose owners, Runtime
 coordinates execution, and the Agent Runner controls actual execution authority.
 Source closure does not approve a release or replace final-source acceptance.
+
+## N Product Source Integration (2026-10-21)
+
+The authorized [N stage](../development/product-development-stage-n-2026-10-21.md)
+integrates successors under FR-0028–0032. Consume the explicit successor counters
+in the [candidate index](foundation-candidate-index-v1.md); the following original
+extension table retains its dated contract scope. N has no current acceptance.
+
+The actual chain is account context -> resource-filtered Console queries ->
+original Node/Forward/Path/Ingress commands -> original transaction/CAS/Operation
+-> Runtime resource admission -> original Snapshot/Agent authority and reports.
+L1 ResourceReadAccess and RuntimePortReservationPolicy are injected contracts;
+ResourceAccess and Node policy remain L3, SQL remains in original L2 stores.
+Direct NodeService construction requires the port policy, RuntimeResources and
+exclusive reservations require the same original-ledger policy, and aliases bind
+native providers explicitly. Old provider fakes must implement the successor
+ports; unclassified records and absent purpose fields are not compatibility
+shortcuts. No historical green run validates these later changes.
+
+Browser selection reads exact Profile/Endpoint revisions and purpose-specific
+Node candidates, then explicitly saves a template or enters an unsaved disabled
+Forward draft. Original previews and commands reauthorize; no UI selection is an
+execution grant. Personal port usage reads only the current account's original
+physical slots. Probe support reads issue no tasks and distinguish an unsupported
+measurement from an authorization/read failure. Detailed entry and acceptance
+instructions are in [Web integration](../../apps/web/PRODUCT-INTEGRATION.md) and
+[Node integration](../../apps/control/src/modules/node-owner/PRODUCT-INTEGRATION.md).
+
+Payload limits use `RuntimeHostOptions.payloadPolicy` in the same locked Runtime
+transaction; `TransitStagingOptions.payloadPolicy` refuses configured offline
+shared resources. Production Runtime/Transit aliases bind the real original
+stores and product owner, while direct hosts require explicit providers.
+SharedResourceLimits owns policy/CAS/receipts/audit only; execution is original
+Snapshot -> Runner -> driver/engine gate -> authenticated Journal precharge.
+Consume the [public example](../../examples/shared-resource-limits/README.md) and
+[specification](../spec/shared-resource-payload-limits-v1.md). Nil-gate engines
+are explicitly unmetered, not a fallback for unsupported limited drivers. Online
+consumption remains unknown; rates/quotas are not inferred from telemetry.
 
 ## 1. Concrete extension points
 

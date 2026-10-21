@@ -24,13 +24,17 @@ export function explainNodePreflight(node, options = {}) {
   const fail = (code, message) => { reasons.push(reason(code, message)); status = 'unsupported'; };
   const unknown = (code, message) => { reasons.push(reason(code, message)); if (status === 'supported') status = 'unknown'; };
 
+  if(node?.canUse===false)fail('NODE_NOT_AUTHORIZED','当前账号没有节点用途授权');
+  if(options.role&&Array.isArray(node?.allowedRoles)&&!node.allowedRoles.includes(options.role))fail('ROLE_NOT_AUTHORIZED','当前用途未获授权');
   if (node?.revoked === true) fail('NODE_REVOKED', '节点已撤销');
   if (!node?.credentialUntil) unknown('CREDENTIAL_MISSING', '无有效凭据记录');
   else if (!isTime(node.credentialUntil)) unknown('CREDENTIAL_INVALID', '凭据时间格式无效');
   else if (Date.parse(node.credentialUntil) <= now) fail('CREDENTIAL_EXPIRED', '凭据已过期');
 
   let facts = { status: 'unknown', reportAgeMs: null, lastReportAt: null };
-  if (!node?.lastReportAt) {
+  if(node?.readDetail==='shared'){
+    facts={status:'hidden',reportAgeMs:null,lastReportAt:null};
+  } else if (!node?.lastReportAt) {
     unknown('REPORT_MISSING', '无 Agent 报告时间');
   } else if (!isTime(node.lastReportAt)) {
     unknown('REPORT_INVALID', 'Agent 报告时间格式无效');
@@ -62,7 +66,7 @@ export function explainNodePreflight(node, options = {}) {
     capabilities: declared,
     dimensions: {
       platform: 'unknown',
-      roles: 'unknown',
+      roles: node?.canUse===true?(node.allowedRoles===null?'全部用途':Array.isArray(node.allowedRoles)?node.allowedRoles.join('/'):'未知'):'未授权',
       flags: 'unknown',
       facts: facts.status,
     },

@@ -1,4 +1,8 @@
-export const NODE_MODULE_INTERFACE_VERSION=1 as const;
+export const NODE_MODULE_INTERFACE_VERSION=3 as const;
+export { NodePortLimitPolicy, nodeGrantPortLimits } from './port-limits.ts';
+export type { NodeGrantPortLimits } from './port-limits.ts';
+export { NodeResourcePolicy, nodeGrantRoles, nodeResourceClaim } from './resource-policy.ts';
+export type { NodeResourceClaim, NodeResourceSource, NodeResourceAccess, NodeUseRole, NodeUseAuthorization } from '../../framework/public.ts';
 export { NodeChangeReconciler } from './change-reconciler.ts';
 export type { NodeManagementExecution } from './execution-ports.ts';
 export type { ForwardNodeAuthorization, RelayNodeAuthority } from './execution-contracts.ts';
@@ -12,4 +16,5 @@ export type { NodePolicy, NodeManagementCommand, NodeManagementChange, NodeManag
 export type { NodeGrantState, NodeGrantWriter } from './grant-contracts.ts';
 export type { NodeAuthorityRecord as NodeRecord, NodeAuthorityOptions } from '../../framework/public.ts';
 export type { RelayEndpointNodeAccess, NodeProvisioned, NodeEnrollment, NodeRotation, NodeRelayCredential,
-    NodeGrantView, NodeView, NodeApi } from './contracts.ts';
+    NodeGrantView, NodeView, NodeBasicView, NodeFullView, NodeApi, NodePortUsageView, NodePortUsageQueries } from './contracts.ts';
+export { NODE_PORT_USAGE_QUERY_INTERFACE_VERSION } from './contracts.ts';

@@ -4,7 +4,7 @@ import type { AuthorizedNodeFacts } from './node-facts.ts';
 import type { TransactionBoundary } from './application-ports.ts';
 import type { RuntimeNodeResources } from './runtime-resource-ports.ts';
 import type { NodeAuthorityStore, NodeAuthorityOptions, NodeCertificateSigner, NodeMachineLookup,
-    NodeScopeAuthority, NodeSecrets, NodeAuthorityCodec } from './node-authority-ports.ts';
+    NodeScopeAuthority, NodeSecrets, NodeAuthorityCodec, NodeUseAuthorization, NodeUseRole } from './node-authority-ports.ts';
 
 /** Coordinates the original Node credential owner; it does not create a new authority. */
 export class NodeAuthorityHost<Tx> {
@@ -15,6 +15,7 @@ export class NodeAuthorityHost<Tx> {
     protected readonly secrets:NodeSecrets;
     protected readonly codec:NodeAuthorityCodec;
     protected readonly now:()=>number;
+    private readonly useAuthorization:NodeUseAuthorization<Tx>;
     private readonly ca:NodeCertificateSigner;
     private readonly machines:NodeMachineLookup;
     private readonly overlapSeconds:number;
@@ -33,6 +34,7 @@ export class NodeAuthorityHost<Tx> {
         this.db=options.db;this.identity=options.identity;this.store=options.store;this.runtime=options.resources;
         this.secrets=options.secrets;this.codec=options.codec;this.now=options.now;this.ca=options.signer;this.machines=options.machine;
         this.overlapSeconds=overlapSeconds;this.relayCredentialSeconds=relayCredentialSeconds;
+        this.useAuthorization=options.useAuthorization;
     }
     async enroll(nodeId: string, token: string, csr: string): Promise<{
         certificate: string;
@@ -102,18 +104,24 @@ export class NodeAuthorityHost<Tx> {
         const grant = await this.store.scopeGrant(tx,forward.spec.ingress.nodeId,actor,forward.scopeId);
         if (!grant)
             notFound();
+        if(!await this.useAllowed(tx,actor,forward.scopeId,forward.spec.ingress.nodeId,'ingress',forward))notFound();
         const { facts } = await this.facts(tx, forward.spec.ingress.nodeId);
         if (!this.intentAllowed(facts, forward))
             throw new ControlError('AUTHORIZATION_DENIED', 403, 'Forward violates Node network policy');
         return facts;
     }
-    async authorizedRelayNode(tx:Tx,actor:string,scopeId:string,nodeId:string):Promise<AuthorizedNodeFacts>{
-        if(!this.codec.isId(nodeId))invalid('Valid Relay Node ID required');await this.identity.scope(tx,actor,scopeId,true);const grant=await this.store.relayGrant(tx,nodeId,scopeId,actor);if(!grant)notFound();const {facts}=await this.facts(tx,nodeId);return facts;
+    private useAllowed(tx:Tx,actor:string,scopeId:string,nodeId:string,role:NodeUseRole,forward?:Forward):Promise<boolean>{
+        if(!['ingress','transit','egress'].includes(role)||!this.useAuthorization)return Promise.resolve(false);
+        return this.useAuthorization.allowed(tx,actor,scopeId,nodeId,role,forward);
+    }
+    async authorizedRelayNode(tx:Tx,actor:string,scopeId:string,nodeId:string,role:NodeUseRole,forward?:Forward):Promise<AuthorizedNodeFacts>{
+        if(!this.codec.isId(nodeId))invalid('Valid Relay Node ID required');await this.identity.scope(tx,actor,scopeId,true);const grant=await this.store.relayGrant(tx,nodeId,scopeId,actor);if(!grant||!await this.useAllowed(tx,actor,scopeId,nodeId,role,forward))notFound();const {facts}=await this.facts(tx,nodeId);return facts;
     }
     hasGrant(tx:Tx,nodeId:string,actorId:string):Promise<boolean> { return this.store.hasGrant(tx,nodeId,actorId); }
     async canExecute(tx: Tx, actorId: string, forward: Forward): Promise<boolean> {
         if (!await this.identity.executing(tx, actorId, forward.scopeId) || !await this.hasGrant(tx, forward.spec.ingress.nodeId, actorId))
             return false;
+        if(!await this.useAllowed(tx,actorId,forward.scopeId,forward.spec.ingress.nodeId,'ingress',forward))return false;
         const node = await this.state(tx, forward.spec.ingress.nodeId);
         return !node.revoked && node.credentialUntil > this.now() && this.intentAllowed(node.facts, forward);
     }
@@ -121,7 +129,7 @@ export class NodeAuthorityHost<Tx> {
         return facts.nodeId === forward.spec.ingress.nodeId && facts.scopeId === forward.scopeId && facts.allowedListenerAddresses.includes(forward.spec.ingress.listen.address) && facts.allowedPorts.includes(forward.spec.ingress.listen.port) && this.codec.supportsDirectRuntime(facts) && forward.spec.protocols.every(protocol => facts.capabilities.includes(protocol)) && this.codec.targetAllowed(forward.spec.target.host, facts);
     }
     async capabilities(tx:Tx,nodeId:string,capabilities:string[]):Promise<void> { const {facts}=await this.facts(tx,nodeId);await this.store.setFacts(tx,nodeId,{...facts,capabilities}); }
-    audit(tx:Tx,nodeId:string,actor:string|null,kind:'credential_rotation'|'policy_update'|'node_revocation'|'relay_endpoint_update'|'relay_credential_issue',details:unknown):Promise<void> { return this.store.securityEvent(tx,this.secrets.newID(),nodeId,actor,kind,this.now(),details); }
+    audit(tx:Tx,nodeId:string,actor:string|null,kind:'credential_rotation'|'policy_update'|'node_revocation'|'relay_endpoint_update'|'relay_credential_issue'|'resource_classification',details:unknown):Promise<void> { return this.store.securityEvent(tx,this.secrets.newID(),nodeId,actor,kind,this.now(),details); }
     async relayCredential(nodeId:string,fingerprint:string,epoch:number,requestId:string,csr:string):Promise<{nodeId:string;certificate:string;ca:string;fingerprint:string;validUntil:string;certificateNotAfter:string;overlapUntil:string|null}>{
         if(!this.codec.isId(requestId)||!this.codec.validCredentialRequest(csr))invalid('Valid Relay request ID and CSR required');const requestDigest=this.codec.digest({csr});
         return this.db.transaction(async tx=>{await this.runtime.lockNode(tx,nodeId,epoch);const node=await this.store.currentForUpdate(tx,nodeId);if(!node||node.revoked)throw new ControlError('AUTHORIZATION_DENIED',403,'Node is revoked');const machineUntil=await this.credential(tx,nodeId,fingerprint);

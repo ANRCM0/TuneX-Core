@@ -9,8 +9,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { Forward } from '@tunex/core';
 import { NodeAuthorityHost } from '../src/framework/public.ts';
-import type { AuthorizedNodeFacts, NodeAuthorityOptions, NodeAuthorityStore, NodeEnrollmentRecord, NodeCurrentCredentialRecord, NodeScopeAuthority, NodeAuthorityCodec, SignedNodeCredential } from '../src/framework/public.ts';
-import { NodeService, snapshotNodeCommand, validatePolicy } from '../src/modules/node-owner/public.ts';
+import type { AuthorizedNodeFacts, NodeAuthorityOptions, NodeAuthorityStore, NodeEnrollmentRecord, NodeCurrentCredentialRecord, NodeScopeAuthority, NodeAuthorityCodec, SignedNodeCredential, NodeUseRole, RuntimePortUsageStore } from '../src/framework/public.ts';
+import { NodeService, NodeResourcePolicy, NodePortLimitPolicy, snapshotNodeCommand, validatePolicy } from '../src/modules/node-owner/public.ts';
 import { nativeNodeCodec } from '../src/compatibility/public.ts';
 import { nativeNodeSecrets, newToken, tokenHash } from '../src/infrastructure/identity-secrets.ts';
 import { Nodes } from '../src/modules/nodes.ts';
@@ -21,29 +21,34 @@ const csr='-----BEGIN CERTIFICATE REQUEST-----\noriginal';
 const token='a'.repeat(32);
 const facts:AuthorizedNodeFacts={nodeId:'node-a',scopeId:'scope-a',capabilities:['adp.3','native.direct.v1','tcp'],allowedListenerAddresses:['127.0.0.1'],allowedPorts:[32001],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false};
 const signed:SignedNodeCredential={certificate:'CERTIFICATE',ca:'CA',fingerprint:'new-fingerprint',until:500000};
+const grantRoles=['ingress','egress'] as const;
+const grantPortLimits={allowedPorts:[32001],maxBindings:2};
 function fixture(){
  const tx:Tx=Object.freeze({owner:Symbol()}),events:string[]=[],calls:{name:string;args:unknown[]}[]=[];
  const state={now:1000,fail:'',error:new Error('original provider failure'),sign:()=>{},credentialReads:0,
-  enrollment:{id:'node-a',scope_id:'scope-a',facts,revoked:0,credential_until:100000,enrollment_until:2000,csr_digest:null,enrollment_response:null} as NodeEnrollmentRecord|undefined,
-  current:{id:'node-a',scope_id:'scope-a',facts,revoked:0,credential_until:100000,credential_fingerprint:'old'} as NodeCurrentCredentialRecord|undefined,
+  enrollment:{id:'node-a',scope_id:'scope-a',resource_source:'admin-shared',owner_actor_id:null,resource_revision:1,facts,revoked:0,credential_until:100000,enrollment_until:2000,csr_digest:null,enrollment_response:null} as NodeEnrollmentRecord|undefined,
+  current:{id:'node-a',scope_id:'scope-a',resource_source:'admin-shared',owner_actor_id:null,resource_revision:1,facts,revoked:0,credential_until:100000,credential_fingerprint:'old'} as NodeCurrentCredentialRecord|undefined,
   credential:{valid_until:100000,retire_after:null} as {valid_until:number;retire_after:number|null}|undefined,
   replay:undefined as {request_digest:string;response:unknown}|undefined,active:[] as {fingerprint:string;valid_until:number}[],
   relay:[] as {fingerprint:string;certificate:string;valid_until:number;retire_after:number|null}[],grant:false,revision:1,visible:true,
-  maximum:null as number|null,writes:[] as unknown[],machine:{node_id:'node-a'} as {node_id:string}|undefined};
+  roles:[...grantRoles] as readonly NodeUseRole[],maximum:null as number|null,writes:[] as unknown[],machine:{node_id:'node-a'} as {node_id:string}|undefined};
  const record=(name:string,args:unknown[]=[])=>{events.push(name);calls.push({name,args});if(state.fail===name)throw state.error;};
- const answers:Record<string,()=>unknown>={enrollment:()=>state.enrollment,currentForUpdate:()=>state.current,state:()=>state.current,
+ const answers:Record<string,(...args:unknown[])=>unknown>={enrollment:()=>state.enrollment,currentForUpdate:()=>state.current,state:()=>state.current,
   credential:()=>{state.credentialReads++;return state.credential;},rotationReplay:()=>state.replay,relayReplay:()=>state.replay,
   activeRelayCredentials:()=>state.active,relayCredentials:()=>state.relay,hasGrant:()=>state.grant,scopeGrant:()=>state.grant,relayGrant:()=>state.grant,
-  grantRevisionForUpdate:()=>({grant_revision:state.revision}),grantRevision:()=>({grant_revision:state.revision}),grantActors:()=>[{actor_id:'subject'}],
+  grantRevisionForUpdate:()=>({grant_revision:state.revision}),grantRevision:()=>({grant_revision:state.revision}),grantActors:()=>state.grant?[{actor_id:'subject',allowed_roles:state.roles,port_limits:grantPortLimits}]:[],
+  resourceAccess:(_node,_scope,actor)=>state.current?{...state.current,grant_actor_id:state.grant?actor:null,allowed_roles:state.roles,port_limits:grantPortLimits}:undefined,
   visible:()=>state.visible,scopedNode:()=>state.current,credentials:()=>[]};
- const store=new Proxy({} as NodeAuthorityStore<Tx>,{get(_target,key){return async function(this:unknown,current:Tx,...args:unknown[]){assert.equal(this,store);assert.equal(current,tx);const name=String(key);record(name,args);if(answers[name])return answers[name]!();state.writes.push([name,...args]);};}});
+ const store=new Proxy({} as NodeAuthorityStore<Tx>,{get(_target,key){return async function(this:unknown,current:Tx,...args:unknown[]){assert.equal(this,store);assert.equal(current,tx);const name=String(key);record(name,args);if(answers[name])return answers[name]!(...args);state.writes.push([name,...args]);};}});
+ const usage:RuntimePortUsageStore<Tx>={async forwardPortOwner(current,id){assert.equal(current,tx);assert.equal(id,'forward-a');record('forwardPortOwner',[id]);return {scopeId:'scope-a',ownerActorId:'actor'};},async actorPortSlots(current,node,actor){assert.equal(current,tx);assert.equal(node,'node-a');assert.equal(actor,'actor');record('actorPortSlots',[node,actor]);return [];}};
+ const portLimits=new NodePortLimitPolicy(store,usage);
  const identity:NodeScopeAuthority<Tx>={async scope(current,...args){assert.equal(this,identity);assert.equal(current,tx);record('scope',args);},async owner(current,...args){assert.equal(this,identity);assert.equal(current,tx);record('owner',args);},async executing(current,...args){assert.equal(this,identity);assert.equal(current,tx);record('executing',args);return true;},async audit(current,...args){assert.equal(this,identity);assert.equal(current,tx);record('accessAudit',args);}};
  const resources={async initializeNode(current:Tx,...args:unknown[]){assert.equal(this,resources);assert.equal(current,tx);record('initializeNode',args);},async lockNode(current:Tx,...args:unknown[]){assert.equal(this,resources);assert.equal(current,tx);record('lockNode',args);},async maximumAuthorization(current:Tx,...args:unknown[]){assert.equal(this,resources);assert.equal(current,tx);record('maximumAuthorization',args);return state.maximum;}};
  const secrets={newID(){assert.equal(this,secrets);record('newID');return 'event-a';},newToken(){assert.equal(this,secrets);record('newToken');return token;},tokenHash(value:string){assert.equal(this,secrets);record('tokenHash',[value]);return tokenHash(value);}};
  const codec=new Proxy({...nativeNodeCodec} as NodeAuthorityCodec,{get(target,key,receiver){const value=Reflect.get(target,key,receiver);if(typeof value!=='function')return value;return function(this:unknown,...args:unknown[]){assert.equal(this,codec);record(String(key),args);return Reflect.apply(value,target,args);};}});
  const signer={async sign(...args:Parameters<NodeAuthorityOptions<Tx>['signer']['sign']>){assert.equal(this,signer);record('sign',args);state.sign();return {...signed};}};
  const machine={async machine(...args:unknown[]){assert.equal(this,machine);record('machine',args);return state.machine;}};
- const options:NodeAuthorityOptions<Tx>={db:{async transaction(action){record('begin');const before=structuredClone(state.writes);try{const result=await action(tx);record('commit');return result;}catch(error){state.writes=before;events.push('rollback');throw error;}}},identity,store,resources,secrets,codec,signer,machine,now:()=>{record('now');return state.now;},overlapSeconds:1,relayCredentialSeconds:60};
+ const options:NodeAuthorityOptions<Tx>&{portLimits:NodePortLimitPolicy<Tx>}={db:{async transaction(action){record('begin');const before=structuredClone(state.writes);try{const result=await action(tx);record('commit');return result;}catch(error){state.writes=before;events.push('rollback');throw error;}}},identity,store,resources,secrets,codec,signer,machine,portLimits,useAuthorization:new NodeResourcePolicy(store,portLimits),now:()=>{record('now');return state.now;},overlapSeconds:1,relayCredentialSeconds:60};
  const host=new NodeService(options);
  return {tx,events,calls,state,options,host,clear(){events.length=0;calls.length=0;state.credentialReads=0;}};
 }
@@ -131,18 +136,18 @@ test('12 Relay authority overlap is bounded by original machine certificate life
 });
 
 test('12 grant no-op change conflict revoked and exhaustion preserve visibility Runtime lock and scoped read before write and access audit',async()=>{
- const order=['isCounter','owner','scope','visible','lockNode','scopedNode','grantRevisionForUpdate'];
- for(const allowed of [false,true])for(const previous of [false,true]){const f=fixture();f.state.grant=previous;const result=await f.options.db.transaction(tx=>f.host.changeGrant(tx,'owner','scope-a','node-a','subject',1,allowed));
-  assert.deepEqual(result,{nodeId:'node-a',actorId:'subject',revision:allowed===previous?1:2,allowed,changed:allowed!==previous});
-  assert.deepEqual(sequence(f),['begin',...order,...(allowed?['scope']:[]),'hasGrant',...(allowed!==previous?[allowed?'insertGrant':'deleteGrant','setGrantRevision','accessAudit']:[]),'commit']);
-  if(allowed!==previous)assert.deepEqual(f.calls.find(c=>c.name==='accessAudit')!.args,['scope-a','owner','subject','node_grant_change',2,{nodeId:'node-a',allowed}]);
+ const order=['isCounter','owner','scope','visible','lockNode','scopedNode','owner','grantRevisionForUpdate'];
+ for(const allowed of [false,true])for(const previous of [false,true]){const f=fixture();f.state.grant=previous;const result=await f.options.db.transaction(tx=>f.host.changeGrant(tx,'owner','scope-a','node-a','subject',1,allowed,allowed?grantRoles:null,allowed?grantPortLimits:null));
+  assert.deepEqual(result,{nodeId:'node-a',actorId:'subject',revision:allowed===previous?1:2,allowed,changed:allowed!==previous,allowedRoles:allowed?grantRoles:null,portLimits:allowed?grantPortLimits:null});
+  assert.deepEqual(sequence(f),['begin',...order,...(allowed?['scope']:[]),'hasGrant','grantActors',...(allowed!==previous?[allowed?'insertGrant':'deleteGrant','setGrantRevision','accessAudit']:[]),'commit']);
+  if(allowed!==previous)assert.deepEqual(f.calls.find(c=>c.name==='accessAudit')!.args,['scope-a','owner','subject','node_grant_change',2,{nodeId:'node-a',allowed,allowedRoles:allowed?grantRoles:null,portLimits:allowed?grantPortLimits:null}]);
  }
  for(const mode of ['conflict','revoked','exhausted','invisible','missing'] as const){const f=fixture();if(mode==='conflict')f.state.revision=2;if(mode==='revoked')f.state.current!.revoked=1;if(mode==='exhausted')f.state.revision=Number.MAX_SAFE_INTEGER;if(mode==='invisible')f.state.visible=false;if(mode==='missing')f.state.current=undefined;
-  await assert.rejects(f.host.changeGrant(f.tx,'owner','scope-a','node-a','subject',mode==='exhausted'?Number.MAX_SAFE_INTEGER:1,true),code(mode==='conflict'?'REVISION_CONFLICT':mode==='revoked'?'AUTHORIZATION_DENIED':mode==='exhausted'?'REVISION_EXHAUSTED':'NOT_FOUND'));assert.deepEqual(f.state.writes,[]);
+  await assert.rejects(f.host.changeGrant(f.tx,'owner','scope-a','node-a','subject',mode==='exhausted'?Number.MAX_SAFE_INTEGER:1,true,grantRoles,grantPortLimits),code(mode==='conflict'?'REVISION_CONFLICT':mode==='revoked'?'AUTHORIZATION_DENIED':mode==='exhausted'?'REVISION_EXHAUSTED':'NOT_FOUND'));assert.deepEqual(f.state.writes,[]);
   if(mode==='invisible')assert.equal(f.events.includes('lockNode'),false);
  }
- for(const failure of ['owner','scope','visible','lockNode','scopedNode','grantRevisionForUpdate','hasGrant','insertGrant','setGrantRevision','accessAudit']){const f=fixture();f.state.fail=failure;await assert.rejects(f.options.db.transaction(tx=>f.host.changeGrant(tx,'owner','scope-a','node-a','subject',1,true)),e=>e===f.state.error);assert.deepEqual(f.state.writes,[]);assert.equal(f.events.at(-1),'rollback');}
- for(const allowed of [false,true]){const f=fixture();f.state.grant=allowed;f.state.revision=Number.MAX_SAFE_INTEGER;assert.equal((await f.host.changeGrant(f.tx,'owner','scope-a','node-a','subject',Number.MAX_SAFE_INTEGER,allowed)).changed,false);assert.deepEqual(f.state.writes,[]);}
+ for(const failure of ['owner','scope','visible','lockNode','scopedNode','grantRevisionForUpdate','hasGrant','grantActors','insertGrant','setGrantRevision','accessAudit']){const f=fixture();f.state.fail=failure;await assert.rejects(f.options.db.transaction(tx=>f.host.changeGrant(tx,'owner','scope-a','node-a','subject',1,true,grantRoles,grantPortLimits)),e=>e===f.state.error);assert.deepEqual(f.state.writes,[]);assert.equal(f.events.at(-1),'rollback');}
+ for(const allowed of [false,true]){const f=fixture();f.state.grant=allowed;f.state.revision=Number.MAX_SAFE_INTEGER;assert.equal((await f.host.changeGrant(f.tx,'owner','scope-a','node-a','subject',Number.MAX_SAFE_INTEGER,allowed,allowed?grantRoles:null,allowed?grantPortLimits:null)).changed,false);assert.deepEqual(f.state.writes,[]);}
  const revoked=fixture();revoked.state.current!.revoked=1;revoked.state.grant=true;assert.equal((await revoked.host.changeGrant(revoked.tx,'owner','scope-a','node-a','subject',1,false)).changed,true);
  for(const args of [['',1,true],['subject',0,true],['subject',1,'true']] as const){const f=fixture();await assert.rejects(f.host.changeGrant(f.tx,'owner','scope-a','node-a',args[0],args[1],args[2] as boolean),code('INVALID_CONFIG'));assert.deepEqual(f.events.filter(x=>x==='owner'||x==='scope'),[]);}
 });
@@ -150,7 +155,7 @@ test('12 grant no-op change conflict revoked and exhaustion preserve visibility 
 test('12 machine pool lookup credential bounds policy revision pending revocation and no-lease view retain native fields',async()=>{
  const f=fixture();assert.equal(await f.host.machine('old'),'node-a');assert.deepEqual(f.calls.find(c=>c.name==='machine')!.args,['old',1000,1000]);f.state.machine=undefined;await assert.rejects(f.host.machine('old'),code('AUTHORIZATION_DENIED'));
  for(const pair of [[10000,null],[10000,2000],[10000,1000],[1000,null]] as const){f.state.credential={valid_until:pair[0],retire_after:pair[1]};if(Math.min(pair[0],pair[1]??pair[0])<=1000)await assert.rejects(f.host.credential(f.tx,'node-a','old'),code('AUTHORIZATION_DENIED'));else assert.equal(await f.host.credential(f.tx,'node-a','old'),Math.min(pair[0],pair[1]??pair[0]));}
- f.state.current!.revoked=1;for(const maximum of [null,0,1,1000]){f.state.maximum=maximum;const result=await f.host.view('actor','scope-a','node-a');assert.equal(result.pendingRevocation,Boolean(maximum&&maximum+5000>1000));assert.equal(result.latestAuthorizationUntil,maximum?nativeNodeCodec.formatTime(maximum+5000):null);assert.deepEqual(result.credentials,[]);}
+ f.state.current!.revoked=1;for(const maximum of [null,0,1,1000]){f.state.maximum=maximum;const result=await f.host.view('actor','scope-a','node-a');assert.equal(result.detail,'full');if(result.detail!=='full')assert.fail('Governance fixture must receive full Node view');assert.equal(result.pendingRevocation,Boolean(maximum&&maximum+5000>1000));assert.equal(result.latestAuthorizationUntil,maximum?nativeNodeCodec.formatTime(maximum+5000):null);assert.deepEqual(result.credentials,[]);}
  f.state.current!.revoked=0;const {nodeId:_n,scopeId:_s,capabilities:_c,...policy}=facts;
  const updated=await f.host.storePolicy(f.tx,'node-a',{...policy,egressPolicyRevision:2},1);assert.deepEqual(updated,{...policy,egressPolicyRevision:2,nodeId:'node-a',scopeId:'scope-a',capabilities:facts.capabilities});
  await assert.rejects(f.host.storePolicy(f.tx,'node-a',{...policy,egressPolicyRevision:3},1),code('INVALID_CONFIG'));await assert.rejects(f.host.storePolicy(f.tx,'node-a',policy,2),code('REVISION_CONFLICT'));
@@ -175,15 +180,28 @@ test('12/134 native legacy constructor captures original clock defaults provider
 test('12 authorization grant and execution refusal retain scope/grant/state/network order without new authority',async()=>{
  const forward:Forward={id:'forward-a',scopeId:'scope-a',revision:1,spec:{enabled:true,protocols:['tcp'],ingress:{nodeId:'node-a',listen:{address:'127.0.0.1',port:32001}},target:{host:'127.0.0.1',port:80}}};
  for(const method of ['authorized','authorizedRelayNode'] as const)for(const mode of ['scope','grant','missing','revoked','expired','network','ok'] as const){const f=fixture();f.state.grant=mode!=='grant';if(mode==='scope')f.state.fail='scope';if(mode==='missing')f.state.current=undefined;if(mode==='revoked')f.state.current!.revoked=1;if(mode==='expired')f.state.current!.credential_until=1000;if(mode==='network')f.state.current!.facts={...facts,allowedPorts:[]};
-  const invoke=()=>method==='authorized'?f.host.authorized(f.tx,'actor',forward):f.host.authorizedRelayNode(f.tx,'actor','scope-a','node-a');
+  const invoke=()=>method==='authorized'?f.host.authorized(f.tx,'actor',forward):f.host.authorizedRelayNode(f.tx,'actor','scope-a','node-a','egress');
   if(mode==='ok'||(method==='authorizedRelayNode'&&mode==='network'))assert.deepEqual(await invoke(),f.state.current!.facts);
   else await assert.rejects(invoke(),mode==='scope'?e=>e===f.state.error:code(mode==='grant'||mode==='missing'?'NOT_FOUND':'AUTHORIZATION_DENIED'));
   assert.deepEqual(sequence(f).slice(0,mode==='scope'?1:2),['scope',...(mode==='scope'?[]:[method==='authorized'?'scopeGrant':'relayGrant'])]);assert.deepEqual(f.state.writes,[]);
  }
  const f=fixture();f.state.grant=false;assert.equal(await f.host.canExecute(f.tx,'actor',forward),false);assert.deepEqual(sequence(f),['executing','hasGrant']);f.clear();
- f.state.grant=true;assert.equal(await f.host.canExecute(f.tx,'actor',forward),true);assert.deepEqual(sequence(f),['executing','hasGrant','state','supportsDirectRuntime','targetAllowed']);
+ f.state.grant=true;assert.equal(await f.host.canExecute(f.tx,'actor',forward),true);assert.deepEqual(sequence(f),['executing','hasGrant','resourceAccess','forwardPortOwner','resourceAccess','actorPortSlots','forwardPortOwner','resourceAccess','actorPortSlots','state','supportsDirectRuntime','targetAllowed']);
  f.options.identity.executing=async()=>false;f.clear();assert.equal(await f.host.canExecute(f.tx,'actor',forward),false);assert.deepEqual(f.events,[]);
  await assert.rejects(f.host.cleanupFacts(f.tx,'node-a','other-scope'),code('NOT_FOUND'));f.state.current!.revoked=1;f.state.current!.credential_until=0;assert.deepEqual(await f.host.cleanupFacts(f.tx,'node-a','scope-a'),facts);
+});
+
+test('Node authority v5 keeps explicit shared purposes and classified ownership as execution refusals',async()=>{
+ const forward:Forward={id:'forward-a',scopeId:'scope-a',revision:1,spec:{enabled:true,protocols:['tcp'],ingress:{nodeId:'node-a',listen:{address:'127.0.0.1',port:32001}},target:{host:'127.0.0.1',port:80}}};
+ const purpose=fixture();purpose.state.grant=true;purpose.state.roles=['egress'];
+ await assert.rejects(purpose.host.authorized(purpose.tx,'actor',forward),code('NOT_FOUND'));
+ assert.equal(await purpose.host.canExecute(purpose.tx,'actor',forward),false);
+ assert.deepEqual(await purpose.host.authorizedRelayNode(purpose.tx,'actor','scope-a','node-a','egress'),facts);
+ for(const source of ['legacy-unclassified','private'] as const){const f=fixture();f.state.grant=true;f.state.current!.resource_source=source;f.state.current!.owner_actor_id=source==='private'?'another-actor':null;
+  await assert.rejects(f.host.authorized(f.tx,'actor',forward),code('NOT_FOUND'));assert.equal(await f.host.canExecute(f.tx,'actor',forward),false);assert.deepEqual(f.state.writes,[]);
+ }
+ const malformed=fixture();malformed.state.grant=true;malformed.state.current!.resource_revision=0;
+ await assert.rejects(malformed.host.authorized(malformed.tx,'actor',forward),code('INTEGRITY_FAILURE'));
 });
 
 test('12 native policy closed fields snapshot deep immutability and exactly one revision remain original',()=>{

@@ -43,8 +43,10 @@ jobs:
           key: vnext-go-${{ runner.os }}-${{ hashFiles('agent/go.sum') }}
       - run: npm ci --ignore-scripts --no-audit --no-fund
         id: dependencies
-      - name: Public foundation extension preview through declared interfaces
-        run: node examples/foundation-extension/main.ts
+      - name: Public foundation extension and shared resource provider examples
+        run: |
+          node examples/foundation-extension/main.ts
+          node examples/shared-resource-limits/main.ts
       - name: Native execution registry and host authorization contracts
         run: node scripts/run-go.mjs test ./internal/control -run '^TestExecution' -count=1
       - name: Control query and Transport resolution port regressions
@@ -256,6 +258,9 @@ jobs:
       - name: Read-only upgrade assessment with SELECT-only MySQL and authenticated Agent journal
         if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
+      - name: Shared resource limits original transaction CAS replay history and rollback
+        if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
+        run: node --test apps/control/test/shared-resource-limits-mysql-acceptance.test.ts
       - name: Console scoped filters, independent candidates and full-scope overview with SELECT-only MySQL
         if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/console-mysql-acceptance.test.ts

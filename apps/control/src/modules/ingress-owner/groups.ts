@@ -3,7 +3,7 @@ import { nativeValueDigest as digest, nativeCommandRequest as requestIdentity, n
 import { pageWindow as consolePage } from '../../framework/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
 import { validateTemplateHead, validateTemplateRevision } from '../path-owner/public.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { IdempotentRequests, ResourceReadAccess, ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary } from '../../framework/public.ts';
 import { INGRESS_LIMITS, parseIngressGroup, parseIngressSelection } from './values.ts';
 import type { IngressGroupConfig, IngressGroupHead, IngressGroupRevision, IngressGroupSelection, IngressGroupStore, IngressGroupMember as Member, IngressGroupResolver } from './contracts.ts';
 import type { PathTemplateReader, PathTemplateReferences } from '../path-owner/public.ts';
@@ -17,7 +17,7 @@ function identity(actor: string, scope: string, id?: string): void {
     if (![actor,scope,...(id === undefined ? [] : [id])].every(isId)) invalid('Valid ingress group identity required');
 }
 function head(value: IngressGroupHead, id: string): IngressGroupHead {
-    if (!value || value.groupId !== id || !isId(id) || !isCounter(value.currentRevision) || value.currentRevision > INGRESS_LIMITS.revisionsPerGroup || typeof value.archived !== 'boolean') corrupt('Invalid ingress group head');
+    if (!value || value.groupId !== id || !isId(id) || !isCounter(value.currentRevision) || value.currentRevision > INGRESS_LIMITS.revisionsPerGroup || typeof value.archived !== 'boolean' || value.ownerActorId !== null && !isId(value.ownerActorId)) corrupt('Invalid ingress group head');
     return { ...value };
 }
 function revision(value: IngressGroupRevision, expected: number): IngressGroupRevision {
@@ -30,22 +30,26 @@ function revision(value: IngressGroupRevision, expected: number): IngressGroupRe
 /** Ingress definitions expand to separate original Forwards, never shared execution resources. */
 export class IngressGroups<Tx> implements IngressGroupApi,IngressGroupResolver<Tx> {
     private readonly db: TransactionBoundary<Tx>;
-    private readonly auth: ScopeAuthorization<Tx>;
+    private readonly auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>;
     private readonly requests: IdempotentRequests<Tx>;
     private readonly store: IngressGroupStore<Tx>;
     private readonly templates: PathTemplateReader<Tx>;
     private readonly references: PathTemplateReferences<Tx>;
     private readonly clock: () => number;
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, requests: IdempotentRequests<Tx>, store: IngressGroupStore<Tx>,
+    private readonly access:ResourceReadAccess<Tx>;
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>, access: ResourceReadAccess<Tx>, requests: IdempotentRequests<Tx>, store: IngressGroupStore<Tx>,
         templates: PathTemplateReader<Tx>, references: PathTemplateReferences<Tx>, clock: () => number = nativeWallClockSource()) {
+        this.access=access;
+
         this.db = db; this.auth = auth; this.requests = requests; this.store = store;
         this.templates = templates; this.references = references; this.clock = clock;
     }
     private now(): number { const at = this.clock(); if (!time(at)) corrupt('Invalid ingress group command time'); return at; }
-    private async members(tx: Tx, scope: string, config: IngressGroupConfig, actor?: string): Promise<Member[]> {
+    private async members(tx: Tx, scope: string, config: IngressGroupConfig, actor?: string, readActor = actor): Promise<Member[]> {
         const resolved = new Map<string,Member>();
         const ordered = [...config.members].sort((a,b) => a.template.templateId < b.template.templateId ? -1 : a.template.templateId > b.template.templateId ? 1 : a.template.revision - b.template.revision);
         for (const member of ordered) {
+            if (readActor !== undefined) await this.access.owned(tx, readActor, scope, 'path-template', member.template.templateId, actor === undefined);
             const found = await this.templates.head(tx, scope, member.template.templateId, actor !== undefined);
             if (!found) { if (actor === undefined) corrupt('Immutable ingress template head is missing'); notFound(); }
             const metadata = validateTemplateHead(found, member.template.templateId);
@@ -87,7 +91,8 @@ export class IngressGroups<Tx> implements IngressGroupApi,IngressGroupResolver<T
         const paging = Object.freeze(consolePage(input.page, input.limit)), prefix = input.prefix ?? '';
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
-            const result = await this.store.list(tx, scope, paging, prefix);
+            const principal = await this.access.principal(tx, actor, scope);
+            const result = await this.store.list(tx, scope, principal, paging, prefix);
             if (!Number.isSafeInteger(result.total) || result.total < 0 || result.total > INGRESS_LIMITS.groupsPerScope || !Array.isArray(result.items) || result.items.length > paging.limit ||
                 new Set(result.items.map(item => item.groupId)).size !== result.items.length || result.items.some(item => !item.groupId.startsWith(prefix))) corrupt('Invalid bounded ingress group page');
             return deepFreeze({ ...paging, total: result.total, items: result.items.map(item => head(item, item.groupId)), ...flags });
@@ -98,14 +103,33 @@ export class IngressGroups<Tx> implements IngressGroupApi,IngressGroupResolver<T
         if (requestedRevision !== undefined && (!isCounter(requestedRevision) || requestedRevision > INGRESS_LIMITS.revisionsPerGroup)) invalid('Exact bounded ingress group revision required');
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
+            await this.access.owned(tx, actor, scope, 'ingress-group', id, true);
             const found = await this.store.head(tx, scope, id); if (!found) notFound();
             const metadata = head(found, id), loaded = await this.load(tx, scope, id, requestedRevision ?? metadata.currentRevision);
-            const members = await this.members(tx, scope, loaded.record.config);
+            const members = await this.members(tx, scope, loaded.record.config, undefined, actor);
             return deepFreeze({ ...loaded.metadata, ...loaded.record, createdAt: nativeIsoTime(loaded.record.createdAt), members, ...flags });
         });
     }
     publish(actor: string, scope: string, id: string, key: string | undefined, expectedRevision: number, input: unknown) {
         return this.command(actor, scope, id, key, expectedRevision, parseIngressGroup(input));
+    }
+    async classifyOwner(actor:string,scope:string,id:string,key:string|undefined,expectedRevision:number,ownerActorId:string) {
+        identity(actor,scope,id);
+        if (!isId(ownerActorId) || !isCounter(expectedRevision) || expectedRevision>INGRESS_LIMITS.revisionsPerGroup) invalid('Explicit ingress group owner and revision required');
+        const request=requestIdentity(actor,scope,key,'POST',`/api/v1/scopes/${scope}/ingress-groups/${id}/classify-owner`,{expectedRevision,ownerActorId});
+        return this.db.transaction(async tx=>{
+            await this.auth.owner(tx,actor,scope);
+            await this.auth.scope(tx,ownerActorId,scope,true);
+            const replay=await this.requests.claim<{status:200;body:{groupId:string;revision:number;ownerActorId:string;classified:true}}>(tx,request);
+            if (replay) return deepFreeze(replay);
+            await this.store.lockScope(tx,scope);
+            const found=await this.store.head(tx,scope,id,true);if(!found)notFound();const metadata=head(found,id);
+            if(metadata.currentRevision!==expectedRevision || metadata.ownerActorId!==null) throw new ControlError('REVISION_CONFLICT',409,'Only an unclassified ingress group at the exact revision can be classified');
+            await this.store.classifyOwner(tx,scope,id,expectedRevision,ownerActorId);
+            await this.store.audit(tx,scope,id,actor,expectedRevision,'classify-owner',this.now(),ownerActorId);
+            const response={status:200 as const,body:{groupId:id,revision:expectedRevision,ownerActorId,classified:true as const}};
+            await this.requests.respond(tx,request,response);return deepFreeze(response);
+        });
     }
     archive(actor: string, scope: string, id: string, key: string | undefined, expectedRevision: number) {
         if (expectedRevision === 0) invalid('Archival requires an existing ingress group');
@@ -120,6 +144,7 @@ export class IngressGroups<Tx> implements IngressGroupApi,IngressGroupResolver<T
             const replay = await this.requests.claim<GroupResponse>(tx, request); if (replay) return deepFreeze(replay);
             await this.store.lockScope(tx, scope);
             const found = await this.store.head(tx, scope, id, true), metadata = found ? head(found, id) : null;
+            if (metadata) await this.access.owned(tx, actor, scope, 'ingress-group', id);
             if ((metadata?.currentRevision ?? 0) !== expectedRevision) throw new ControlError('REVISION_CONFLICT', 409, 'Ingress group revision conflict');
             if (!config && !metadata) notFound();
             if (config && metadata?.archived) throw new ControlError('GROUP_ARCHIVED', 409, 'Archived ingress identifiers cannot be reused');
@@ -151,9 +176,10 @@ export class IngressGroups<Tx> implements IngressGroupApi,IngressGroupResolver<T
     async describeIn(tx: Tx, actor: string, scope: string, input: IngressGroupSelection, active = false) {
         identity(actor, scope); const selection = parseIngressSelection(input);
         await this.auth.scope(tx, actor, scope, true);
+        await this.access.owned(tx, actor, scope, 'ingress-group', selection.groupId);
         const loaded = await this.load(tx, scope, selection.groupId, selection.revision, true, active);
         if (loaded.record.configDigest !== selection.configDigest) throw new ControlError('REVISION_CONFLICT', 409, 'Exact ingress definition digest differs');
-        return deepFreeze({ config: loaded.record.config, members: await this.members(tx, scope, loaded.record.config) });
+        return deepFreeze({ config: loaded.record.config, members: await this.members(tx, scope, loaded.record.config, undefined, actor) });
     }
     async resolveIn(tx: Tx, actor: string, scope: string, input: IngressGroupSelection, memberIds: string[]): Promise<Member[]> {
         identity(actor, scope);
@@ -161,9 +187,10 @@ export class IngressGroups<Tx> implements IngressGroupApi,IngressGroupResolver<T
         if (!Array.isArray(memberIds) || !memberIds.length || memberIds.length > INGRESS_LIMITS.membersPerGroup || memberIds.some(id => !isId(id)) || new Set(memberIds).size !== memberIds.length) invalid('One to eight unique explicit ingress members required');
         const requested = [...memberIds];
         await this.auth.scope(tx, actor, scope, true);
+        await this.access.owned(tx, actor, scope, 'ingress-group', selection.groupId);
         const loaded = await this.load(tx, scope, selection.groupId, selection.revision, true, true);
         if (loaded.record.configDigest !== selection.configDigest) throw new ControlError('REVISION_CONFLICT', 409, 'Exact ingress group digest differs');
-        const members = await this.members(tx, scope, loaded.record.config), byId = new Map(members.map(member => [member.memberId,member]));
+        const members = await this.members(tx, scope, loaded.record.config, undefined, actor), byId = new Map(members.map(member => [member.memberId,member]));
         if (requested.some(id => !byId.has(id))) invalid('Requested member does not belong to the immutable ingress group');
         return deepFreeze(requested.map(id => byId.get(id)!));
     }

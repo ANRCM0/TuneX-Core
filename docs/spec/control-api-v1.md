@@ -1,5 +1,16 @@
 # Control API / Operation v1
 
+## 2026-10-21 N Product Source Successor
+
+[Product Resource Access v1](product-resource-access-v1.md) describes the current
+source-only account context, private/shared provision, immutable resource owners,
+purpose grants, original-ledger port limits, personal usage and explicit legacy
+classification contracts. [Probe capabilities](forward-probe-capabilities-v1.md)
+describes the separate read-only support query. [Shared payload limits](shared-resource-payload-limits-v1.md)
+defines personal/governance GET and CAS/idempotent PUT for explicit per-user/Node
+periods, unavailable consumption and original Agent enforcement. FR-0028–0032 have no executed N
+acceptance here; the dated API descriptions below retain their original scope.
+
 ## 2026-10-18 Controlled Direct Ingress TLS 增量
 
 完整契约：[direct-ingress-tls-probes-v1](direct-ingress-tls-probes-v1.md) /

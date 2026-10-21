@@ -120,18 +120,38 @@ type HelloResponse struct {
 	Policy          Policy  `json:"policy"`
 }
 
+type ResourceLimitBucket struct {
+	BucketId       Id             `json:"bucketId"`
+	ScopeId        Id             `json:"scopeId"`
+	ActorId        Id             `json:"actorId"`
+	NodeId         Id             `json:"nodeId"`
+	Revision       Counter        `json:"revision"`
+	StartsAt       string         `json:"startsAt"`
+	EndsAt         string         `json:"endsAt"`
+	BytesPerSecond *CounterOrZero `json:"bytesPerSecond"`
+	BurstBytes     uint64         `json:"burstBytes"`
+	ByteLimit      *CounterOrZero `json:"byteLimit"`
+	AssignmentIds  []Id           `json:"assignmentIds"`
+}
+
+type ResourceLimits struct {
+	Version uint64                `json:"version"`
+	Buckets []ResourceLimitBucket `json:"buckets"`
+}
+
 type Snapshot struct {
-	ProtocolVersion    uint64       `json:"protocolVersion"`
-	NodeId             Id           `json:"nodeId"`
-	SessionEpoch       Counter      `json:"sessionEpoch"`
-	SnapshotGeneration Counter      `json:"snapshotGeneration"`
-	Complete           bool         `json:"complete"`
-	IssuedAt           Time         `json:"issuedAt"`
-	ValidUntil         Time         `json:"validUntil"`
-	SnapshotDigest     Digest       `json:"snapshotDigest"`
-	Assignments        []Assignment `json:"assignments"`
-	Tombstones         []Tombstone  `json:"tombstones"`
-	ExecutionExtension *uint64      `json:"executionExtension,omitempty"`
+	ResourceLimits     *ResourceLimits `json:"resourceLimits,omitempty"`
+	ProtocolVersion    uint64          `json:"protocolVersion"`
+	NodeId             Id              `json:"nodeId"`
+	SessionEpoch       Counter         `json:"sessionEpoch"`
+	SnapshotGeneration Counter         `json:"snapshotGeneration"`
+	Complete           bool            `json:"complete"`
+	IssuedAt           Time            `json:"issuedAt"`
+	ValidUntil         Time            `json:"validUntil"`
+	SnapshotDigest     Digest          `json:"snapshotDigest"`
+	Assignments        []Assignment    `json:"assignments"`
+	Tombstones         []Tombstone     `json:"tombstones"`
+	ExecutionExtension *uint64         `json:"executionExtension,omitempty"`
 }
 
 type ReportRequest struct {

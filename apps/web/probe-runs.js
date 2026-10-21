@@ -103,7 +103,7 @@ async function validRun(run, scope, capturedAt) {
   }
   return bytes(stored) <= limits.maxRecordBytes && await digest(stored) === run.contentDigest;
 }
-const losses = shape({ rowsExpired: uint, rowsEvicted: uint, updatesWithoutHead: uint });
+const losses = nullable(shape({ rowsExpired: uint, rowsEvicted: uint, updatesWithoutHead: uint }));
 const envelope = (fields, scope) => shape({ probeRunsVersion: one(1), scopeId: one(scope), capturedAt: time,
   source: one('persisted-probe-run-history'), coverage: one('new-accepted-probes-since-history-enabled'), historyComplete: one(false),
   readOnly: one(true), executionAuthorized: one(false), health: one('unknown'), networkCheck: one('not-performed-by-read'),
@@ -173,7 +173,7 @@ export function initProbeRuns({ request, notify, byId, getScope, document = glob
   function metadata(data) {
     el('meta').textContent = 'Scope: ' + data.scopeId + '\nCaptured: ' + stamp(data.capturedAt) + '\n' + data.source + '\n' +
       data.coverage + '\nhistoryComplete=false; read-committed, not a global snapshot; health=unknown; executionAuthorized=false.';
-    el('losses').textContent = 'Scope-wide cumulative loss counters (not this query or complete coverage):\n' + JSON.stringify(data.losses, null, 2);
+    el('losses').textContent = data.losses===null?'当前账号不可见工作空间累计淘汰统计；不表示零损失。':'Scope-wide cumulative loss counters (not this query or complete coverage):\n' + JSON.stringify(data.losses, null, 2);
   }
   function render(data) {
     metadata(data);

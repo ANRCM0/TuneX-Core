@@ -24,6 +24,8 @@ function fixture() {
         operation: work as RuntimeWorkRecord | undefined, assignments: [assignment], cleanup: [] as string[] };
     const trace = (current: typeof tx, name: string) => { assert.equal(current, tx); events.push(name); };
     const ports: RuntimeHostOptions<typeof tx> = {
+        // This fixture explicitly declares unlimited payload; production must inject its owner.
+        payloadPolicy: { limits: async current => { trace(current, 'payload-policy'); return { excludedAssignmentIds: [] }; } },
         now: () => data.now,
         db: { transaction: async action => { events.push('begin'); try { const result = await action(tx); events.push('commit'); return result; }
             catch (error) { events.push('rollback'); throw error; } } },
@@ -115,7 +117,7 @@ test('Runtime Hello refuses retired boots, changed capabilities, lost history an
 test('Runtime publication records protected authority before Snapshot and leases in one transaction', async () => {
     const f = fixture(), snapshot = await f.host().snapshot('node', 2);
     assert.equal(snapshot.snapshotGeneration, 5); assert.equal(snapshot.validUntil, '60000');
-    assert.deepEqual(f.events, ['begin', 'lock:node', 'state', 'snapshot', 'awaiting', 'assignments', 'retire:5', 'tombstones:5', 'compile',
+    assert.deepEqual(f.events, ['begin', 'lock:node', 'state', 'snapshot', 'awaiting', 'assignments', 'payload-policy', 'retire:5', 'tombstones:5', 'compile',
         'verify', `authority:60000/${DEFAULT_POLICY.leaseSeconds}/${DEFAULT_POLICY.maxClockSkewSeconds}`, 'save-snapshot:5', 'leases', 'complete', 'commit']);
 });
 
@@ -125,6 +127,59 @@ test('Runtime publication stops on authority/save failures and never records lea
         await assert.rejects(f.host().snapshot('node', 2), error => error === failure);
         assert.equal(f.events.at(-1), 'rollback'); assert.equal(f.events.includes('leases'), false); assert.equal(f.events.includes('complete'), false);
         if (stage === 'authorityFailure') assert.equal(f.events.some(value => value.startsWith('save-snapshot:')), false);
+    }
+});
+
+test('FR0032 publication policy runs in the original transaction before compile and may fail before authority or persistence', async () => {
+    const f = fixture(), failure = new Error('payload policy refusal');
+    f.ports.payloadPolicy.limits = async (tx, node, capabilities, assignments, at, previous) => {
+        assert.equal(tx, f.tx); assert.equal(node, 'node'); assert.deepEqual(capabilities, f.facts.capabilities);
+        assert.deepEqual(assignments, f.data.assignments); assert.equal(at, f.data.now); assert.equal(previous, undefined);
+        f.events.push('payload-policy-refused'); throw failure;
+    };
+    await assert.rejects(f.host().snapshot('node', 2), error => error === failure);
+    assert.equal(f.events.at(-1), 'rollback'); assert.equal(f.events.includes('compile'), false);
+    assert.equal(f.events.some(event => event.startsWith('authority:') || event.startsWith('save-snapshot:')), false);
+});
+
+test('FR0032 changed payload policy prevents both queued hold and ordinary reuse before protected save', async () => {
+    for (const queued of [false, true]) {
+        const f = fixture(); f.assignment.role = 'multihop-ingress'; f.data.awaiting = queued ? 1 : 0; f.data.previous = f.previous();
+        f.data.credentialUntil = 600000; f.data.previous.validUntil = '600000';
+        const resourceLimits = { version: 1 as const, buckets: [{ bucketId: 'bucket', scopeId: 'scope', actorId: 'actor', nodeId: 'node',
+            revision: 2, startsAt: '1970-01-01T00:00:00.000Z', endsAt: '1970-01-01T00:01:00.000Z',
+            bytesPerSecond: 10, burstBytes: 10, byteLimit: 100, assignmentIds: ['assignment'] }] };
+        f.ports.payloadPolicy.limits = async tx => { assert.equal(tx, f.tx); f.events.push('payload-policy'); return { excludedAssignmentIds: [], resourceLimits }; };
+        const snapshot = await f.host().snapshot('node', 2);
+        assert.notEqual(snapshot, f.data.previous); assert.equal(snapshot.snapshotGeneration, 5); assert.deepEqual(snapshot.resourceLimits, resourceLimits);
+        assert.ok(f.events.indexOf('payload-policy') < f.events.indexOf('compile'));
+        assert.ok(f.events.indexOf('compile') < f.events.findIndex(event => event.startsWith('authority:')));
+        assert.ok(f.events.findIndex(event => event.startsWith('authority:')) < f.events.indexOf('save-snapshot:5'));
+    }
+});
+
+test('FR0032 unsupported and zero-limit exclusions withdraw assignments while empty control buckets grant no execution', async () => {
+    for (const mode of ['unsupported-capability', 'zero-rate', 'zero-byte-limit']) {
+        const f = fixture(); f.data.previous = f.previous();
+        const bucket = { bucketId: 'bucket', scopeId: 'scope', actorId: 'actor', nodeId: 'node', revision: 1,
+            startsAt: '1970-01-01T00:00:00.000Z', endsAt: '1970-01-01T00:01:00.000Z',
+            bytesPerSecond: mode === 'zero-rate' ? 0 : null, burstBytes: 10, byteLimit: mode === 'zero-byte-limit' ? 0 : null, assignmentIds: [] };
+        f.ports.payloadPolicy.limits = async tx => { assert.equal(tx, f.tx); f.events.push('payload-policy');
+            return { excludedAssignmentIds: ['assignment'], ...(mode === 'unsupported-capability' ? {} : { resourceLimits: { version: 1 as const, buckets: [bucket] } }) }; };
+        const snapshot = await f.host().snapshot('node', 2); assert.deepEqual(snapshot.assignments, []);
+        assert.equal(snapshot.snapshotGeneration, 5); assert.ok(f.events.includes('retire:5'));
+        assert.ok(f.events.findIndex(event => event.startsWith('authority:')) < f.events.indexOf('save-snapshot:5'));
+        if (snapshot.resourceLimits) assert.deepEqual(snapshot.resourceLimits.buckets[0]!.assignmentIds, []);
+    }
+});
+
+test('FR0032 Runtime rejects missing policy before clock sampling and invalid exclusion identity before retirement', async () => {
+    const absent = fixture(); let sampled = 0; Object.assign(absent.ports, { payloadPolicy: undefined, now: () => { sampled++; return 0; } });
+    assert.throws(() => absent.host(), { message: 'Runtime payload publication policy is required' }); assert.equal(sampled, 0);
+    for (const excludedAssignmentIds of [['foreign'], ['assignment', 'assignment']]) {
+        const f = fixture(); f.ports.payloadPolicy.limits = async tx => { assert.equal(tx, f.tx); return { excludedAssignmentIds }; };
+        await assert.rejects(f.host().snapshot('node', 2), { code: 'INTEGRITY_FAILURE' });
+        assert.equal(f.events.includes('retire:5'), false); assert.equal(f.events.includes('compile'), false);
     }
 });
 

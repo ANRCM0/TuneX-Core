@@ -36,7 +36,7 @@ function fixture(){
     const nodes={async authorized(this:unknown,...actual:unknown[]){call(this,nodes,'authorized',actual);return options.invalidFacts?{...facts,allowedPorts:[1]}:facts;},
         async authorizedRelayNode(this:unknown,...actual:unknown[]){call(this,nodes,`authorizedRelayNode:${actual[3]}`,actual);return facts;},
         async state(this:unknown,...actual:unknown[]){call(this,nodes,'state',actual);return {revoked:options.oldRevoked};}};
-    const resources={async lockNode(this:unknown,...actual:unknown[]){call(this,resources,`lockNode:${actual[1]}`,actual);},
+    const resources={async lockOwnership(this:unknown,...actual:unknown[]){call(this,resources,'lockOwnership',actual);},async lockNode(this:unknown,...actual:unknown[]){call(this,resources,`lockNode:${actual[1]}`,actual);},
         async reserve(this:unknown,...actual:unknown[]){call(this,resources,'reserve',actual);return options.invalidSlots?[]:slots;},
         async transition(this:unknown,...actual:unknown[]){call(this,resources,'resourceTransition',actual);return options.invalidSlots?[]:slots;}};
     const relay={async lockNodes(this:unknown,...actual:unknown[]){call(this,relay,'lockNodes',actual);},
@@ -115,7 +115,7 @@ test('115 factory is a fresh frozen ordered triple holding exact supplied collab
 
 test('115 real Direct adapter authorizes locks validates before allocation recompiles returned slots and retains no-op planning',async()=>{
     const f=fixture(),direct=f.adapters[0]!,intent=forward(),next={...intent,revision:3};
-    await direct.prepareCreate(f.tx,'actor',intent);assert.deepEqual(f.events,['authorized','lockNode:node-z','reserve']);assert.deepEqual(f.args,[['authorized',f.tx,'actor',intent],['lockNode:node-z',f.tx,'node-z'],['reserve',f.tx,intent]]);
+    await direct.prepareCreate(f.tx,'actor',intent);assert.deepEqual(f.events,['authorized','lockNode:node-z','reserve']);assert.deepEqual(f.args,[['authorized',f.tx,'actor',intent],['lockNode:node-z',f.tx,'node-z'],['reserve',f.tx,intent,'actor']]);
     f.clear();await direct.prepareUpdate(f.tx,'actor',intent,{...intent});assert.deepEqual(f.events,['authorized','lock']);
     f.clear();await direct.prepareUpdate(f.tx,'actor',intent,next);assert.deepEqual(f.events,['authorized','lock','resourceTransition']);assert.deepEqual(f.args[2],['resourceTransition',f.tx,intent,next]);
     f.clear();await direct.planCreate(f.tx,'actor',intent);await direct.planUpdate(f.tx,'actor',intent);assert.deepEqual(f.events,[]);
@@ -139,7 +139,7 @@ test('115 both Path adapters keep sorted authorize-lock order plan creation whil
     for(let count=1;count<=2;count++){
         const f=fixture(),path=f.adapters[count]!,intent=forward(count),disabled=forward(count,false);
         await path.prepareCreate(f.tx,'actor',intent);const nodeIds=[intent.spec.ingress.nodeId,...intent.spec.path!.via].sort();assert.deepEqual(f.events,nodeIds.flatMap(id=>[`authorizedRelayNode:${id}`,`lockNode:${id}`]));
-        for(let i=0;i<nodeIds.length;i++){assert.deepEqual(f.args[i*2],[`authorizedRelayNode:${nodeIds[i]}`,f.tx,'actor','scope-a',nodeIds[i]]);assert.deepEqual(f.args[i*2+1],[`lockNode:${nodeIds[i]}`,f.tx,nodeIds[i]]);}
+        for(let i=0;i<nodeIds.length;i++){assert.deepEqual(f.args[i*2],[`authorizedRelayNode:${nodeIds[i]}`,f.tx,'actor','scope-a',nodeIds[i],nodeIds[i]===intent.spec.ingress.nodeId?'ingress':nodeIds[i]===intent.spec.path!.via.at(-1)?'egress':'transit',intent]);assert.deepEqual(f.args[i*2+1],[`lockNode:${nodeIds[i]}`,f.tx,nodeIds[i]]);}
         f.clear();await path.planCreate(f.tx,'actor',disabled);assert.deepEqual(f.args,[['acceptPlan',f.tx,'actor',disabled]]);
         f.clear();await path.prepareUpdate(f.tx,'actor',intent,disabled);await path.planUpdate(f.tx,'actor',disabled);assert.deepEqual(f.args,[['lockNodes',f.tx,disabled]]);
         f.clear();await path.prepareUpdate(f.tx,'actor',disabled,intent);await path.planUpdate(f.tx,'actor',intent);assert.deepEqual(f.args,[['lockNodes',f.tx,intent],['canExecute',f.tx,'actor',intent],['acceptPlan',f.tx,'actor',intent]]);

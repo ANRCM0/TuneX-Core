@@ -84,7 +84,7 @@ function fixture() {
         async close() { events.push('sender-close'); },
     };
     const host = new NotificationDeliveries({ db, store, endpoints, secrets, sender, enabled: true, clock: () => now,
-        auth: { async scope(tx, actor, scope, manage) {
+        auth: { async owner(tx, actor, scope) { checked(tx, 'authorize:' + actor); assert.equal(scope, 'scope'); if (state.deny) throw new ControlError('AUTHORIZATION_DENIED', 403, 'denied'); }, async scope(tx, actor, scope, manage) {
             checked(tx, 'authorize:' + actor); assert.equal(scope, 'scope'); assert.equal(manage, true);
             if (state.deny) throw new ControlError('AUTHORIZATION_DENIED', 403, 'denied');
         } },

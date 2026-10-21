@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { createConnection } from 'mysql2/promise';
+import { Identity } from '../src/modules/identity.ts';
 import { MySqlUnitOfWork, rows, write } from '../src/infrastructure/mysql.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
 import { MySqlAuditReadStore } from '../src/infrastructure/mysql-audit-read-store.ts';
@@ -20,7 +21,7 @@ const rejected=(code:unknown='CONNECT_FAILED')=>({accepted:false,error:{code,mes
 async function insert(tx:Transaction,table:string,value:Record<string,unknown>){const keys=Object.keys(value);await write(tx,`INSERT INTO ${table}(${keys.join(',')}) VALUES(${keys.map(()=>'?').join(',')})`,Object.values(value));}
 async function database(action:(db:MySqlUnitOfWork)=>Promise<void>){
  const admin=await createConnection(databaseURL!),name='tunex_audit_truth_'+randomUUID().replaceAll('-',''),url=new URL(databaseURL!);url.pathname='/'+name;const db=new MySqlUnitOfWork(url.toString());let created=false;
- try{await admin.query(`CREATE DATABASE \`${name}\``);created=true;await db.migrate();await db.transaction(async tx=>{await insert(tx,'accounts',{id:'actor',token_hash:'a'.repeat(64)});for(const scope of ['scope','foreign'])await insert(tx,'scopes',{id:scope,owner_id:'actor'});});await action(db);}
+ try{await admin.query(`CREATE DATABASE \`${name}\``);created=true;await db.migrate();await db.transaction(async tx=>{await insert(tx,'accounts',{id:'actor',token_hash:'a'.repeat(64)});await insert(tx,'accounts',{id:'selfservice-manager',token_hash:'b'.repeat(64)});for(const scope of ['scope','foreign']){await insert(tx,'scopes',{id:scope,owner_id:'actor'});await insert(tx,'scope_members',{scope_id:scope,actor_id:'actor',can_manage:true,active:true});}await insert(tx,'scope_members',{scope_id:'scope',actor_id:'selfservice-manager',can_manage:true,active:true});});await action(db);}
  finally{try{await db.close();if(created)await admin.query(`DROP DATABASE \`${name}\``);}finally{await admin.end();}}
 }
 async function snapshot(db:MySqlUnitOfWork){const tables=await rows<{name:string}>(db.pool,'SELECT TABLE_NAME name FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME');return Object.fromEntries(await Promise.all(tables.map(async({name})=>[name,(await rows(db.pool,`SELECT * FROM \`${name}\``)).map(row=>JSON.stringify(row)).sort()])));}
@@ -139,7 +140,7 @@ test('68 actual owner and HTTP route populated native SQL share read-only caller
  const before=await snapshot(db),trace:string[]=[],store=new MySqlAuditReadStore(auditStoragePolicy);let transaction:Transaction|undefined,denied=false;
  const failure=new Error('denied audit');
  const boundary={async transaction<T>(action:(tx:Transaction)=>Promise<T>){return db.transaction(async original=>{let proxy:Transaction;proxy=new Proxy(original,{get(target,key,receiver){if(key==='execute')return async function(this:unknown,sql:string,args:unknown[]){assert.equal(this,proxy);assert.equal(transaction,proxy);assert.equal(trace.at(0),'authorize');assert.match(sql,/^SELECT audit\.\* FROM /);assert.doesNotMatch(sql,/FOR UPDATE|INSERT |UPDATE |DELETE /);trace.push('read');return Reflect.apply(target.execute,target,[sql,args]);};return Reflect.get(target,key,receiver);}});transaction=proxy;return action(proxy);});}};
- function owner(){return new AuditEvents(boundary,{async scope(tx,actor,scope,manage){assert.equal(tx,transaction);assert.equal(actor,'actor');assert.equal(scope,'scope');assert.equal(manage,true);trace.push('authorize');if(denied)throw failure;}},new AuditReadModels(store),()=>1000);}
+ function owner(){return new AuditEvents(boundary,{async scope(){assert.fail('Audit reader must use owner authorization');},async owner(tx,actor,scope,...extra:unknown[]){assert.equal(tx,transaction);assert.equal(actor,'actor');assert.equal(scope,'scope');assert.deepEqual(extra,[]);trace.push('authorize');if(denied)throw failure;}},new AuditReadModels(store),()=>1000);}
  for(const family of families){trace.length=0;const result=await owner().query('actor','scope',{from:new Date(0).toISOString(),to:new Date(1000).toISOString(),source:family.source+'-attempt',nodeId:'accepted-node'});assert.deepEqual(trace,['authorize','read']);assert.deepEqual(result.items.map(row=>[row.kind,row.forwardId,row.revision,row.outcome,row.errorCode]),[['compensate','accepted-forward',11,'rejected','OTHER_ERROR'],[family.first,'accepted-forward',11,'accepted',null]]);assert.equal(result.readOnly,true);assert.equal(result.executionAuthorized,false);assert.equal(result.networkCheck,'not-performed');safe(result);
   for(const at of [102,103]){trace.length=0;await assert.rejects(owner().query('actor','scope',{from:new Date(at).toISOString(),to:new Date(at+1).toISOString(),source:family.source+'-attempt'}),{code:'INTEGRITY_FAILURE'});assert.deepEqual(trace,['authorize','read']);}
  }
@@ -151,6 +152,9 @@ test('68 actual owner and HTTP route populated native SQL share read-only caller
  trace.length=0;routeTrace.length=0;response=await app.request(path+'&source=path-publication-attempt',{headers:{authorization:'Bearer test'}});assert.equal(response.status,422);assert.deepEqual(trace,[]);assert.deepEqual(routeTrace,['authority','admit','authenticate','release']);
  trace.length=0;routeTrace.length=0;response=await app.request(path,{headers:{authorization:'Bearer test',cookie:'session=ignored'}});assert.equal(response.status,401);assert.deepEqual(trace,[]);assert.deepEqual(routeTrace,['authority','admit','release']);
  const missingIdentity=createControlApp({...options,services:{audit:owner()}});trace.length=0;response=await missingIdentity.request(path,{headers:{authorization:'Bearer test'}});assert.equal(response.status,503);assert.equal((await response.json() as {code:string}).code,'AUDIT_UNAVAILABLE');assert.deepEqual(trace,[]);
+ const identity=new Identity(db);await db.transaction(tx=>identity.scope(tx,'selfservice-manager','scope',true));
+ const managerDenied=new AuditEvents(db,identity,{async source(){assert.fail('selfservice manager reached a protected audit source');}},()=>1000);
+ await assert.rejects(managerDenied.query('selfservice-manager','scope',{from:new Date(0).toISOString(),to:new Date(1000).toISOString()}),{code:'AUTHORIZATION_DENIED'});
  const original=Buffer.byteLength;t.mock.method(Buffer,'byteLength',(...args:Parameters<typeof Buffer.byteLength>)=>typeof args[0]==='string'&&args[0].includes('"auditVersion":1')?131073:original(...args));const bounded=createControlApp({...options,services:{...options.services,audit:owner()}});trace.length=0;response=await bounded.request(path,{headers:{authorization:'Bearer test'}});assert.equal(response.status,409);assert.equal((await response.json() as {code:string}).code,'INTEGRITY_FAILURE');assert.deepEqual(trace,['authorize','read']);
  assert.deepEqual(await snapshot(db),before);
 }));

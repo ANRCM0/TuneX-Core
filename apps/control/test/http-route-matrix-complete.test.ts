@@ -27,6 +27,10 @@ function writeArgs(route:Route):unknown[]{
     return args;
 }
 const routes:Route[]=[
+    {method:'PUT',path:'nodes/node-a/payload-limits/subject-a',owner:'resourceLimits.set',
+        body:{expectedRevision:0,startsAt:'2026-11-01T00:00:00.000Z',endsAt:'2026-12-01T00:00:00.000Z',bytesPerSecond:0,burstBytes:65536,byteLimit:null},
+        args:[actor,'scope-a','node-a','subject-a',key,{expectedRevision:0,startsAt:'2026-11-01T00:00:00.000Z',endsAt:'2026-12-01T00:00:00.000Z',bytesPerSecond:0,burstBytes:65536,byteLimit:null}],
+        limit:8192,plain:true,query:true},
     {method:'POST',path:'relay-plan',owner:'planRelay',body:config,args:[actor,'scope-a',config],limit:32768,plain:true},
     {method:'PUT',path:'transport-profiles/profile-a/grants/target-a',owner:'profileGrants.change',body:{allowed:false,expectedRevision:1},args:[actor,'scope-a','profile-a','target-a',key,1,false],limit:8192,bad:[{allowed:false,expectedRevision:0},{allowed:0,expectedRevision:1}]},
     {method:'PUT',path:'nodes/node-a/relay-endpoint',owner:'relayEndpoints.change',body:{config,expectedRevision:0},args:[actor,'scope-a','node-a',key,0,config],limit:8192,bad:[{config,expectedRevision:-1}]},
@@ -54,7 +58,7 @@ const routes:Route[]=[
     }),
     {method:'PUT',path:'transport-profiles/profile-a',owner:'transport.publish',body:{config,expectedRevision:0},args:[actor,'scope-a','profile-a',key,0,config],limit:8192},
     {method:'PUT',path:'members/target-a',owner:'changeMember',body:{expectedRevision:1,role:'viewer',token:'secret-a'},args:[actor,'scope-a','target-a',key,{expectedRevision:1,role:'viewer',token:'secret-a'}],limit:32768,bad:[{expectedRevision:1,role:'admin'},{expectedRevision:1,role:'viewer',token:1}]},
-    {method:'PUT',path:'nodes/node-a/grants/target-a',owner:'changeNodeGrant',body:{expectedRevision:1,allowed:false},args:[actor,'scope-a','node-a','target-a',key,1,false],limit:1048576},
+    {method:'PUT',path:'nodes/node-a/grants/target-a',owner:'changeNodeGrant',body:{expectedRevision:1,allowed:false},args:[actor,'scope-a','node-a','target-a',key,1,false,undefined,undefined],limit:1048576},
     {method:'POST',path:'forwards',owner:'create',body:spec,args:[actor,'scope-a',key,spec],limit:1048576},
     {method:'PUT',path:'forwards/forward-a',owner:'update',body:{expectedRevision:1,spec},args:[actor,'scope-a','forward-a',key,1,spec],limit:1048576},
     {method:'DELETE',path:'forwards/forward-a',owner:'remove',body:{expectedRevision:1},args:[actor,'scope-a','forward-a',key,1],limit:1048576},
@@ -113,6 +117,7 @@ for(const route of routes)test(`137 original HTTP ${route.method} ${route.path} 
 });
 
 const reads:[string,string,unknown[]][]=[
+    ['nodes/node-a/payload-limits/subject-a','resourceLimits.get',['node-a','subject-a']],
     ['native-drivers','nativeDrivers.list',[]],['execution-capabilities','details.capabilities',[]],
     ['forwards/forward-a/deployment','details.deployment',['forward-a']],['forwards/forward-a/revisions','details.revisions',['forward-a']],
     ['transport-profiles/profile-a/grants','transport.grants',['profile-a']],['nodes/node-a/relay-endpoint','relayEndpoints.get',['node-a']],
@@ -277,7 +282,7 @@ test('137 every registered Console asset dispatches its exact native name with o
     const trace:string[]=[],fault={stage:''},names:string[]=[],factory=await machineFactory(trace,fault,{async nativeControlConsoleAsset(name:string){names.push(name);return 'native:'+name;}});
     const options:ControlHttpOptions={control:{} as ControlApi,runtime:{} as ControlHttpOptions['runtime'],authority:{allow:async()=>{},read:async()=>({maintenance:false})}};
     const app=factory(options),original=createControlApp(options);
-    const assets=['app.js','model.js','console-model-owner/public.js','console-model-owner/service.js','browser-native/public.js','console-request-owner/public.js','console-request-owner/service.js','rule-command-owner/public.js','rule-command-owner/service.js','browser-native/rule-console.js','browser-native/control-console.js','browser-native/relay-forms.js','browser-native/relay-console.js','relay-model.js','relay.js','probe.js','transport-console.js','rule-console.js','tunnel-console.js','path-templates.js','observation-services.js','path-groups.js','path-publications.js','ingress-groups.js','ingress-migrations.js','forward-diagnostics.js','audit-console.js','station-alerts.js','notification-endpoints.js','notification-deliveries.js','probe-runs.js','probe-plans.js','telemetry-console.js','forward-telemetry-console.js','host-telemetry-console.js','probe-telemetry-console.js','telemetry-aggregate-console.js','style.css'];
+    const assets=['account-context.js','line-builder.js','template-reference.js','admin-resource-console.js','resource-limit-console.js','app.js','model.js','console-model-owner/public.js','console-model-owner/service.js','browser-native/public.js','console-request-owner/public.js','console-request-owner/service.js','rule-command-owner/public.js','rule-command-owner/service.js','browser-native/rule-console.js','browser-native/control-console.js','browser-native/relay-forms.js','browser-native/relay-console.js','relay-model.js','relay.js','probe.js','transport-console.js','rule-console.js','tunnel-console.js','path-templates.js','observation-services.js','path-groups.js','path-publications.js','ingress-groups.js','ingress-migrations.js','forward-diagnostics.js','audit-console.js','station-alerts.js','notification-endpoints.js','notification-deliveries.js','probe-runs.js','probe-plans.js','telemetry-console.js','forward-telemetry-console.js','host-telemetry-console.js','probe-telemetry-console.js','telemetry-aggregate-console.js','style.css'];
     for(const path of ['','/',...assets.map(name=>'/'+name)]){
         const response=await app.request('/console'+path),name=path===''||path==='/'?'index.html':path.slice(1);assert.equal(response.status,200);assert.equal(await response.text(),'native:'+name);assert.equal(names.pop(),name);assert.equal(names.length,0);
         assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(response.headers.get('x-content-type-options'),'nosniff');assert.equal(response.headers.get('x-frame-options'),'DENY');assert.equal(response.headers.get('referrer-policy'),'no-referrer');assert.equal(response.headers.get('content-security-policy'),"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");

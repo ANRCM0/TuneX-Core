@@ -51,6 +51,7 @@ export function compileSnapshot(input: SnapshotInput): Snapshot {
     protocolVersion: 3 as const, ...(assignments.some(a=>a.driver.id==="native.multihop.v1")||tombstones.some(t=>t.role.startsWith("multihop-"))?{executionExtension:1 as const}:{}), nodeId: input.nodeId, sessionEpoch: input.sessionEpoch,
     snapshotGeneration: input.snapshotGeneration, complete: true as const,
     issuedAt: input.issuedAt, validUntil: input.validUntil, assignments, tombstones,
+    ...(input.resourceLimits?{resourceLimits:input.resourceLimits}:{}),
   };
   const raw = JSON.stringify({ ...body, snapshotDigest: digest(body) });
   if (Buffer.byteLength(raw) > policy.maxSnapshotBytes) throw new Error('RESOURCE_LIMIT: Complete snapshot too large');

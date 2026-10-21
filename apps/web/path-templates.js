@@ -189,7 +189,16 @@ export function initPathTemplates({request,byId,notify,tunnelManagement=false,on
       try {onSelectDefinition(JSON.parse(JSON.stringify(inspected)));}catch(error){notify(error.message,true);}
     }
   });
-  clear();return {list,inspect,capture,clear};
+  async function loadDraft({name,nodes,protocol,profileId,profileRevision}) {
+    if(pending||sending)throw Error('先处理或明确放弃原线路命令，再载入新草稿。');
+    invalidate();
+    el('id').value=name;el('expected').value='0';el('read-revision').value='';
+    el('nodes').value=nodes.join('\n');el('protocol').value=protocol;
+    el('profile').value=profileId;el('profile-revision').value=String(profileRevision);
+    await capture();
+    if(!locks||stamp!==JSON.stringify(draft()))throw Error('未读取完整 Endpoint 精确修订，请重新准备线路。');
+  }
+  clear();return {list,inspect,capture,clear,loadDraft};
 }
 
 export function initPathSwitch({request,byId,notify,preparePathBatch,tunnelManagement=false,document=globalThis.document,confirm=globalThis.confirm,randomUUID=()=>crypto.randomUUID()}) {

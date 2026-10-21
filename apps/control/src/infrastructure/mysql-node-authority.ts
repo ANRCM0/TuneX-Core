@@ -3,6 +3,7 @@ import type { AuthorizedNodeFacts, NodeAuthorityStore, NodeAuthorityRecord, Node
     SignedNodeCredential, NodeSecurityEventKind, NodeMachineLookup } from '../framework/public.ts';
 import { rows, write } from './mysql.ts';
 import type { MySqlUnitOfWork, Transaction } from './mysql.ts';
+import type { NodeResourceClaim, NodeResourceAccess, NodeUseRole } from '../framework/public.ts';
 
 export class MySqlNodeAuthorityStore implements NodeAuthorityStore<Transaction> {
     async quarantine(tx:Transaction):Promise<void> {
@@ -10,10 +11,17 @@ export class MySqlNodeAuthorityStore implements NodeAuthorityStore<Transaction> 
         await write(tx,'UPDATE node_credentials SET revoked=TRUE');
         await write(tx,'UPDATE node_relay_credentials SET revoked=TRUE');
     }
-    async create(tx:Transaction,nodeId:string,scopeId:string,actor:string,enrollmentHash:string,until:number,facts:AuthorizedNodeFacts):Promise<void> {
-        await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,facts) VALUES(?,?,?,?,?)',[nodeId,scopeId,enrollmentHash,until,JSON.stringify(facts)]);
-        await write(tx,'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[nodeId,actor]);
+    async create(tx:Transaction,nodeId:string,scopeId:string,_actor:string,enrollmentHash:string,until:number,facts:AuthorizedNodeFacts,resource:NodeResourceClaim):Promise<void> {
+        await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,?,?)',[nodeId,scopeId,enrollmentHash,until,JSON.stringify(facts),resource.resource_source,resource.owner_actor_id,resource.resource_revision]);
     }
+    async resourceAccess(tx:Transaction,nodeId:string,scopeId:string,actor:string):Promise<NodeResourceAccess|undefined> {
+        return (await rows<NodeResourceAccess>(tx,'SELECT n.id,n.scope_id,n.resource_source,n.owner_actor_id,n.resource_revision,g.actor_id AS grant_actor_id,g.allowed_roles,g.port_limits FROM nodes n LEFT JOIN node_grants g ON g.node_id=n.id AND g.actor_id=? WHERE n.id=? AND n.scope_id=? FOR SHARE',[actor,nodeId,scopeId]))[0];
+    }
+    async classify(tx:Transaction,nodeId:string,expectedRevision:number,resource:NodeResourceClaim):Promise<boolean> {
+        const result=await write(tx,"UPDATE nodes SET resource_source=?,owner_actor_id=?,resource_revision=? WHERE id=? AND resource_source='legacy-unclassified' AND resource_revision=?",[resource.resource_source,resource.owner_actor_id,resource.resource_revision,nodeId,expectedRevision]);
+        return result===1;
+    }
+    async clearGrants(tx:Transaction,nodeId:string):Promise<void> { await write(tx,'DELETE FROM node_grants WHERE node_id=?',[nodeId]); }
     async enrollment(tx:Transaction,nodeId:string,enrollmentHash:string):Promise<NodeEnrollmentRecord|undefined> {
         return (await rows<NodeEnrollmentRecord>(tx,'SELECT * FROM nodes WHERE id=? AND enrollment_hash=? FOR UPDATE',[nodeId,enrollmentHash]))[0];
     }
@@ -83,10 +91,11 @@ export class MySqlNodeAuthorityStore implements NodeAuthorityStore<Transaction> 
     async grantRevision(tx:Transaction,nodeId:string,scopeId:string):Promise<{grant_revision:number}|undefined> {
         return (await rows<{grant_revision:number}>(tx,'SELECT grant_revision FROM nodes WHERE id=? AND scope_id=?',[nodeId,scopeId]))[0];
     }
-    grantActors(tx:Transaction,nodeId:string):Promise<{actor_id:string}[]> {
-        return rows(tx,'SELECT actor_id FROM node_grants WHERE node_id=? ORDER BY actor_id',[nodeId]);
+    grantActors(tx:Transaction,nodeId:string):Promise<{actor_id:string;allowed_roles:unknown;port_limits:unknown}[]> {
+        return rows(tx,'SELECT actor_id,allowed_roles,port_limits FROM node_grants WHERE node_id=? ORDER BY actor_id',[nodeId]);
     }
-    async insertGrant(tx:Transaction,nodeId:string,actor:string):Promise<void> { await write(tx,'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[nodeId,actor]); }
+    async insertGrant(tx:Transaction,nodeId:string,actor:string,roles:readonly NodeUseRole[]|null,portLimits:unknown):Promise<void> { await write(tx,'INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)',[nodeId,actor,roles===null?null:JSON.stringify(roles),portLimits===null?null:JSON.stringify(portLimits)]); }
+    async setGrantRoles(tx:Transaction,nodeId:string,actor:string,roles:readonly NodeUseRole[]|null,portLimits:unknown):Promise<void> { await write(tx,'UPDATE node_grants SET allowed_roles=?,port_limits=? WHERE node_id=? AND actor_id=?',[roles===null?null:JSON.stringify(roles),portLimits===null?null:JSON.stringify(portLimits),nodeId,actor]); }
     async deleteGrant(tx:Transaction,nodeId:string,actor:string):Promise<void> { await write(tx,'DELETE FROM node_grants WHERE node_id=? AND actor_id=?',[nodeId,actor]); }
     async setGrantRevision(tx:Transaction,nodeId:string,revision:number):Promise<void> { await write(tx,'UPDATE nodes SET grant_revision=? WHERE id=?',[revision,nodeId]); }
     async visible(tx:Transaction,nodeId:string,scopeId:string):Promise<boolean> {

@@ -1,3 +1,4 @@
+import type { ReadPrincipal } from '../framework/public.ts';
 import { ConsoleReadModels } from '../application/management-read-models.ts';
 import { validateConsoleFilters } from '../application/console-query.ts';
 import { nativeReadProjectionValues } from '../compatibility/public.ts';
@@ -11,10 +12,10 @@ const reader=new ConsoleReadModels(new MySqlManagementReadStore({now:nativeReadP
 
 /** Stateless compatibility methods keep the old class structurally substitutable. */
 export class MySqlConsoleReadModels implements ConsoleReadPort<Transaction> {
-    async nodes(tx:Transaction,scope:string,paging:ConsolePaging,filters:ConsoleFilters) {return reader.nodes(tx,scope,paging,filters);}
-    async forwards(tx:Transaction,scope:string,paging:ConsolePaging,filters:ConsoleFilters) {return reader.forwards(tx,scope,paging,filters);}
-    async operations(tx:Transaction,scope:string,paging:ConsolePaging,filters:ConsoleFilters) {return reader.operations(tx,scope,paging,filters);}
-    async candidates(tx:Transaction,actor:string,scope:string,paging:ConsolePaging,filters:ConsoleFilters) {return reader.candidates(tx,actor,scope,paging,filters);}
-    async overview(tx:Transaction,scope:string) {return reader.overview(tx,scope);}
-    async diagnostics(tx:Transaction,scope:string,nodeId:string) {return reader.diagnostics(tx,scope,nodeId);}
+    async nodes(tx:Transaction,scope:string,principal:ReadPrincipal,paging:ConsolePaging,filters:ConsoleFilters) {return reader.nodes(tx,scope,principal,paging,filters);}
+    async forwards(tx:Transaction,scope:string,principal:ReadPrincipal,paging:ConsolePaging,filters:ConsoleFilters) {return reader.forwards(tx,scope,principal,paging,filters);}
+    async operations(tx:Transaction,scope:string,principal:ReadPrincipal,paging:ConsolePaging,filters:ConsoleFilters) {return reader.operations(tx,scope,principal,paging,filters);}
+    async candidates(tx:Transaction,scope:string,principal:ReadPrincipal,paging:ConsolePaging,filters:ConsoleFilters) {return reader.candidates(tx,scope,principal,paging,filters);}
+    async overview(tx:Transaction,scope:string,principal:ReadPrincipal) {return reader.overview(tx,scope,principal);}
+    async diagnostics(tx:Transaction,scope:string,principal:ReadPrincipal,nodeId:string) {return reader.diagnostics(tx,scope,principal,nodeId);}
 }

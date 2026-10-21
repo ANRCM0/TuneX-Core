@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
 import { ControlError } from '../src/framework/public.ts';
 import { nativeValueDigest } from '../src/compatibility/public.ts';
 import { ProbePlans, probePlanStorageValues, PROBE_PLAN_REJECTIONS } from '../src/modules/probe-plan-owner/public.ts';
@@ -55,9 +56,15 @@ function ownerFixture(){
     const db={async transaction<T>(action:(actual:typeof tx)=>Promise<T>){trace.push('begin');const before=structuredClone({head:state.head,decisions:state.decisions,issued:state.issued,replies:state.replies});try{const result=await action(tx);trace.push('commit');return result;}catch(error){Object.assign(state,before);trace.push('outer-rollback');throw error;}}};
     const lower=new MySqlProbePlanStore(probePlanStorageValues);
     const store={async lockScope(actual:unknown){same(actual,'lock');},async get(actual:unknown){same(actual,'get');return state.head;},async isolate<T>(actual:typeof tx,action:()=>Promise<T>){same(actual,'isolate');return lower.isolate(actual as unknown as Transaction,action);},async append(actual:unknown,_scope:string,_id:string,value:ProbePlanDecision){same(actual,'append');state.decisions.push(value);},async put(actual:unknown,value:ProbePlanHead){same(actual,'put');state.head=value;}} as unknown as ProbePlanStore<typeof tx>;
-    const owner=new ProbePlans({db,auth:{async scope(actual,actor,scope,manage){same(actual,'auth:'+actor);assert.equal(scope,'scope-a');assert.equal(manage,true);}},requests:{async claim(actual){same(actual,'claim');return undefined;},async respond(actual,_request,response){same(actual,'respond');state.replies.push(response);}},store,
-        issuer:{async previewIn(){assert.fail('manual saved plan never previews');},async issueIn(actual,actor,scope,value){same(actual,'issue');assert.equal(actor,'manager');assert.equal(scope,'scope-a');assert.deepEqual(value,state.head.config);state.issued.push('original permit mutation');if(state.error)throw state.error;return {status:202,body:{probeId:'permit',forwardId:config.forwardId,issuedAt:new Date(at).toISOString(),expiresAt:new Date(at+2000).toISOString(),dispatch:'agent-poll',executionEnabled:false}};}},executionEnabled:true,scheduleEnabled:false,clock:()=>at});
-    return {state,trace,failure,run:()=>owner.command('manager','scope-a','plan','request-key','run',{expectedRevision:1})};
+    const auth={async scope(actual:typeof tx,actor:string,scope:string,manage?:boolean){same(actual,'auth:'+actor);assert.equal(scope,'scope-a');assert.ok(['creator','manager'].includes(actor));if(manage!==undefined)assert.equal(manage,true);}};
+    const access=new ResourceAccess(auth,{
+        async scopeOwner(actual,scope){same(actual,'scope-owner');assert.equal(scope,'scope-a');return {ownerActorId:'administrator'};},
+        async ownership(actual,scope,kind,id){same(actual,'ownership');assert.deepEqual([scope,kind,id],['scope-a','probe-plan','plan']);return {ownerActorId:state.head.createdBy};},
+        node:async()=>assert.fail('saved Probe plan command must not enter Node detail'),
+    });
+    const owner=new ProbePlans({db,auth,access,requests:{async claim(actual){same(actual,'claim');return undefined;},async respond(actual,_request,response){same(actual,'respond');state.replies.push(response);}},store,
+        issuer:{async previewIn(){assert.fail('manual saved plan never previews');},async issueIn(actual,actor,scope,value){same(actual,'issue');assert.equal(actor,'creator');assert.equal(scope,'scope-a');assert.deepEqual(value,state.head.config);state.issued.push('original permit mutation');if(state.error)throw state.error;return {status:202,body:{probeId:'permit',forwardId:config.forwardId,issuedAt:new Date(at).toISOString(),expiresAt:new Date(at+2000).toISOString(),dispatch:'agent-poll',executionEnabled:false}};}},executionEnabled:true,scheduleEnabled:false,clock:()=>at});
+    return {state,trace,failure,run:(actor='creator')=>owner.command(actor,'scope-a','plan','request-key','run',{expectedRevision:1})};
 }
 
 test('36 actual original ProbePlans owner persists every recognized native refusal after isolated issuer rollback while unknown and retryable nonquota errors abort the whole transaction',async()=>{
@@ -77,4 +84,11 @@ test('36 actual owner native savepoint release rollback and late decision provid
         assert.equal(f.trace.filter(name=>name==='issue').length,fault===save?0:1);assert.equal(f.trace.filter(name=>name===save).length,1);
         if(fault===rollback)assert.equal(f.trace.includes(release),false);if(fault===save||fault===release||fault===rollback)assert.equal(f.trace.includes('append'),false);
     }
+});
+
+test('36 another manager cannot run the creator plan or enter its original savepoint',async()=>{
+    const f=ownerFixture();await assert.rejects(f.run('manager'),{code:'NOT_FOUND'});
+    assert.deepEqual(f.trace,['begin','auth:manager','auth:manager','scope-owner','ownership','outer-rollback']);
+    assert.deepEqual(f.state.issued,[]);assert.deepEqual(f.state.decisions,[]);assert.deepEqual(f.state.replies,[]);
+    assert.equal(f.state.head.revision,1);assert.equal(f.trace.includes(save),false);
 });

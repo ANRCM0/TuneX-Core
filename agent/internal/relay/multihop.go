@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/binary"
@@ -15,6 +16,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/adp3relay"
 	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/executionhost"
 	"github.com/tunex/vnext/agent/internal/relaycontracts"
 )
 
@@ -23,6 +25,12 @@ const MultihopALPN = "tunex-multihop/1"
 // PrepareMultihop reuses the bounded stream/UDP implementation, with a distinct
 // validated execution contract and wire handshake. No legacy Relay peer accepts it.
 func PrepareMultihop(a adp3.Assignment, identity Identity, maximum int, allow func() error) (*Engine, error) {
+	return PrepareMultihopMetered(a, identity, maximum, allow, nil)
+}
+
+// PrepareMultihopMetered binds one original host gate to this machine's hop.
+// Transit charges decoded payload once at each outgoing direction, not per edge.
+func PrepareMultihopMetered(a adp3.Assignment, identity Identity, maximum int, allow func() error, gate executionhost.PayloadGate) (*Engine, error) {
 	version := uint64(1)
 	h := a.Driver.Config.Hop
 	if h == nil || len(h.Path) < 3 || h.HopIndex >= uint64(len(h.Path)) {
@@ -46,7 +54,7 @@ func PrepareMultihop(a adp3.Assignment, identity Identity, maximum int, allow fu
 	if err != nil {
 		return nil, err
 	}
-	return prepare(synthetic, identity, maximum, allow, owned)
+	return prepareWithPayload(synthetic, identity, maximum, allow, owned, gate)
 }
 
 func hopBinding(h adp3.HopConfig, edge int) adp3relay.Binding {
@@ -145,6 +153,8 @@ func (e *Engine) writeOpen(w io.Writer, open relaycontracts.Open) error {
 	return writeControlBytes(w, raw)
 }
 func (e *Engine) bridgeFrames(up, down *tls.Conn) {
+	ctx, cancel := context.WithCancel(e.ctx)
+	defer cancel()
 	done := make(chan error, 2)
 	idle := time.Duration(e.assignment.Driver.Config.Profile.IdleTimeoutSeconds) * time.Second
 	var activity sync.Mutex
@@ -176,7 +186,7 @@ func (e *Engine) bridgeFrames(up, down *tls.Conn) {
 				return
 			}
 			to.SetWriteDeadline(time.Now().Add(time.Duration(e.assignment.Driver.Config.Profile.HandshakeTimeoutSeconds) * time.Second))
-			if err = WriteFrame(to, kind, payload, e.assignment.Protocol, maximum); err != nil {
+			if err = e.writePayloadFrame(ctx, to, kind, payload, maximum); err != nil {
 				done <- err
 				return
 			}
@@ -196,6 +206,7 @@ func (e *Engine) bridgeFrames(up, down *tls.Conn) {
 	go pump(up, down)
 	go pump(down, up)
 	if err := <-done; err != nil {
+		cancel()
 		closeSocket(up)
 		closeSocket(down)
 	}

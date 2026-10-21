@@ -19,6 +19,23 @@ import { MySqlProbeHistoryStore } from '../src/infrastructure/mysql-probe-histor
 import { MySqlUnitOfWork } from '../src/infrastructure/mysql.ts';
 import { Identity } from '../src/modules/identity.ts';
 
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { ControlError as ResourceAccessError } from '../src/framework/public.ts';
+import type { OwnedResourceKind } from '../src/framework/public.ts';
+
+function ownerAccess<Tx>(tx:Tx,scopeId:string,members:ReadonlyMap<string,boolean>,
+    claim:(kind:OwnedResourceKind,id:string)=>string|null|undefined,scopeOwner='scope-owner') {
+    const same=(actual:Tx,scope:string)=>{assert.equal(actual,tx);assert.equal(scope,scopeId);};
+    return new ResourceAccess<Tx>({async scope(actual,actor,scope,manage=false){
+        same(actual,scope);
+        if(!members.has(actor)||manage&&!members.get(actor))throw new ResourceAccessError('AUTHORIZATION_DENIED',403,'Fixture scope permission denied');
+    }},{async scopeOwner(actual,scope){same(actual,scope);return {ownerActorId:scopeOwner};},
+        async ownership(actual,scope,kind,id){same(actual,scope);const ownerActorId=claim(kind,id);return ownerActorId===undefined?undefined:{ownerActorId};},
+        async node(){throw Error('Node access is outside this owner fixture');}});
+}
+
+
+
 // Readiness 186: staged v4 parsing/history is deliberately separate from the v1/v2/v3 machine API.
 const fixture = JSON.parse(await readFile(new URL('../../../docs/protocol/fixtures/probe-result-v1.json', import.meta.url), 'utf8')) as { request: ProbeResultRequest };
 const base = fixture.request, issued = Date.parse(base.issuedAt), consumed = Date.parse(base.consumedAt), accepted = Date.parse(base.measuredAt) + 10;
@@ -257,11 +274,12 @@ function ownerHarness(value: ProbePermitRecord, failure?: 'capture' | 'commit' |
         close: async (tx, id, state, at) => { same(tx); assert.equal(allowRevoke, true); assert.equal(id, value.id); assert.equal(state, 'revoked'); assert.equal(at, accepted); events.push('close-revoked'); },
         withdraw: async (tx, id, at) => { same(tx); assert.equal(allowRevoke, true); assert.equal(id, value.id); assert.equal(at, accepted); events.push('withdraw'); },
     };
+    const access=ownerAccess(f.tx,value.scopeId,new Map([[value.actorId,true]]),(kind,id)=>kind==='forward'&&id===value.binding.forwardId?value.actorId:kind==='probe-run'&&id===value.id?value.actorId:undefined);
     const host = new ProbePermits({ transaction: async action => {
         events.push('begin'); const before = f.current, saved = result, counters = structuredClone(f.losses);
         try { const answer = await action(f.tx); if (failure === 'commit') throw new Error('commit refused'); events.push('commit'); return answer; }
         catch (error) { f.restore(before, counters); result = saved; events.push('rollback'); throw error; }
-    } }, { scope: async tx => { same(tx); events.push('scope'); } }, {
+    } }, { scope: async (tx,actor,scope,manage) => { same(tx); assert.equal(actor,value.actorId);assert.equal(scope,value.scopeId);assert.equal(manage,true);events.push('scope'); } }, access, {
         authorize: async tx => { same(tx); events.push('plan'); const descriptor = probeMeasurement(value.measurement ?? 'tcp-connect-v1');
             return { version: 1, executable: false, dispatch: 'not-implemented', independentProbe: false, health: 'unknown', scopeId: value.scopeId,
                 binding: value.binding, timeoutMs: value.timeoutMs, maxAttempts: 1, applicationPayloadBytes: 0, plannedAt: base.issuedAt,

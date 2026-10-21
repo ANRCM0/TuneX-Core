@@ -16,10 +16,10 @@ export interface ProbePlanEnvelope {
 export interface ProbePlanPreview extends ProbePlanEnvelope {
     config:ProbePlanConfig;preflight:ForwardProbePlan;previewDigest:string;configStoredOnly:boolean;
 }
-export interface ProbePlanDetail extends ProbePlanEnvelope {plan:ProbePlanView;decisions:ProbePlanDecision[];losses:ProbePlanLosses}
+export interface ProbePlanDetail extends ProbePlanEnvelope {plan:ProbePlanView;decisions:ProbePlanDecision[];losses:ProbePlanLosses|null}
 export interface ProbePlanHistory extends ProbePlanEnvelope {
     window:{from:number;to:number};filters:{forwardId:string|null;mode:string|null;state:string|null};limit:number;
-    items:ProbePlanView[];hasMore:boolean;nextCursor:string|null;losses:ProbePlanLosses;
+    items:ProbePlanView[];hasMore:boolean;nextCursor:string|null;losses:ProbePlanLosses|null;
 }
 export interface ProbePlansApi {
     admitRequest<T>(action:()=>Promise<T>):Promise<T>;

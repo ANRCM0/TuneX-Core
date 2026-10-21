@@ -4,7 +4,7 @@ import { nativeValueDigest as digest, nativeCommandRequest as requestIdentity, n
 import { pageWindow as consolePage } from '../../framework/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
 import { validateTemplateHead, validateTemplateRevision } from './template-state.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { IdempotentRequests, ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import { expandPath } from './binding-values.ts';
 import { PATH_GROUP_LIMITS, parsePathGroupConfig, parsePathGroupSelection } from './group-values.ts';
 import type { PathGroupConfig, PathGroupSelection } from './group-contracts.ts';
@@ -12,7 +12,7 @@ import type { ForwardPathGroups, PathGroupBindingRecord, PathGroupBindingWriter,
 import type { PathBindingReceipt, PathSelection } from './binding-contracts.ts';
 import type { PathTemplateReader, PathTemplateReferences } from './template-contracts.ts';
 import type { ForwardWriter } from '../forward-owner/public.ts';
-import type { PathGroupApi, PathGroupResponse as GroupResponse } from './group-api.ts';
+import type { PathGroupApi, PathGroupOwnerClassified, PathGroupResponse as GroupResponse } from './group-api.ts';
 
 const flags = { source: 'persisted-control-state', reserved: false, executionAuthorized: false, fullPlanAuthorization: false } as const;
 const hash = (v: unknown): v is string => typeof v === 'string' && v.length === 71 && /^sha256:[a-f0-9]{64}$/.test(v);
@@ -26,7 +26,7 @@ function identity(actor: string, scope: string, id?: string): void {
     if (![actor,scope,...(id === undefined ? [] : [id])].every(isId)) invalid('Valid path group identity required');
 }
 function head(record: PathGroupHead, id: string): PathGroupHead {
-    if (!record || record.groupId !== id || !isId(id) || !isCounter(record.currentRevision) || record.currentRevision > PATH_GROUP_LIMITS.revisionsPerGroup || typeof record.archived !== 'boolean') corrupt('Invalid path group head');
+    if (!record || record.groupId !== id || !isId(id) || !isCounter(record.currentRevision) || record.currentRevision > PATH_GROUP_LIMITS.revisionsPerGroup || typeof record.archived !== 'boolean' || record.ownerActorId !== null && !isId(record.ownerActorId)) corrupt('Invalid path group head');
     return { ...record };
 }
 function revision(record: PathGroupRevision, expected: number): PathGroupRevision {
@@ -36,10 +36,11 @@ function revision(record: PathGroupRevision, expected: number): PathGroupRevisio
     return { ...record, config };
 }
 
-/** Scope-owned immutable choices; all execution acceptance stays with Forwarding. */
+/** Business-owned immutable choices; all execution acceptance stays with Forwarding. */
 export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
     private readonly db: TransactionBoundary<Tx>;
-    private readonly auth: ScopeAuthorization<Tx>;
+    private readonly auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>;
+    private readonly access: ResourceReadAccess<Tx>;
     private readonly requests: IdempotentRequests<Tx>;
     private readonly store: PathGroupWriter<Tx>;
     private readonly templates: PathTemplateReader<Tx>;
@@ -50,16 +51,42 @@ export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
     private readonly originalPaths: PathGroupOriginalPaths<Tx>;
     private readonly clock: () => number;
     constructor(
-        db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, requests: IdempotentRequests<Tx>, store: PathGroupWriter<Tx>,
+        db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>, access: ResourceReadAccess<Tx>, requests: IdempotentRequests<Tx>, store: PathGroupWriter<Tx>,
         templates: PathTemplateReader<Tx>, referencesOwner: PathTemplateReferences<Tx>, bindings: PathGroupBindingWriter<Tx>,
         forwards: Pick<ForwardWriter<Tx>, 'record'>, paths: PathGroupPathPreview<Tx>, originalPaths: PathGroupOriginalPaths<Tx>,
         clock: () => number = nativeWallClockSource(),
     ) {
-        this.db = db; this.auth = auth; this.requests = requests; this.store = store; this.templates = templates;
+        this.db = db; this.auth = auth; this.access = access; this.requests = requests; this.store = store; this.templates = templates;
         this.referencesOwner = referencesOwner; this.bindings = bindings; this.forwards = forwards;
         this.paths = paths; this.originalPaths = originalPaths; this.clock = clock;
     }
     private now(): number { const at = this.clock(); if (!time(at)) corrupt('Invalid path group command time'); return at; }
+    async classifyOwner(actor:string,scope:string,id:string,key:string|undefined,expectedRevision:number,ownerActorId:string):Promise<PathGroupOwnerClassified> {
+        identity(actor,scope,id);
+        if(!isId(ownerActorId)||!isCounter(expectedRevision)||expectedRevision>PATH_GROUP_LIMITS.revisionsPerGroup)
+            invalid('Exact group revision and target owner required');
+        const request=requestIdentity(actor,scope,key,'POST',`/api/v1/scopes/${scope}/path-groups/${id}/classify-owner`,{expectedRevision,ownerActorId});
+        return this.db.transaction(async tx=>{
+            await this.auth.owner(tx,actor,scope);
+            const replay=await this.requests.claim<PathGroupOwnerClassified>(tx,request);
+            if(replay){
+                await this.auth.scope(tx,ownerActorId,scope,true);
+                await this.access.owned(tx,actor,scope,'path-group',id,true);return replay;
+            }
+            await this.store.lockScope(tx,scope);
+            await this.auth.scope(tx,ownerActorId,scope,true);
+            const found=await this.store.head(tx,scope,id,true);if(!found)notFound();
+            const current=head(found,id);
+            if(current.currentRevision!==expectedRevision||current.ownerActorId!==null)
+                throw new ControlError('REVISION_CONFLICT',409,'Group revision changed or ownership is already classified');
+            const at=this.now();
+            if(await this.store.classifyOwner(tx,scope,id,expectedRevision,ownerActorId)!==1)
+                throw new ControlError('REVISION_CONFLICT',409,'Group ownership classification raced');
+            await this.store.auditOwnership(tx,scope,id,actor,ownerActorId,expectedRevision,at);
+            const response:PathGroupOwnerClassified={status:200,body:{groupId:id,revision:expectedRevision,ownerActorId,classified:true}};
+            await this.requests.respond(tx,request,response);return response;
+        });
+    }
     private async load(tx: Tx, scope: string, id: string, number: number, lock = false, active = false) {
         const found = await this.store.head(tx, scope, id, lock); if (!found) notFound();
         const metadata = head(found, id);
@@ -74,6 +101,7 @@ export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
         const ordered = config.candidates.map((candidate,index) => ({ candidate, index })).sort((a,b) =>
             a.candidate.template.templateId < b.candidate.template.templateId ? -1 : a.candidate.template.templateId > b.candidate.template.templateId ? 1 : a.candidate.template.revision - b.candidate.template.revision);
         for (const { candidate, index } of ordered) {
+            if (actor !== undefined) await this.access.owned(tx, actor, scope, 'path-template', candidate.template.templateId);
             const found = await this.templates.head(tx, scope, candidate.template.templateId, actor !== undefined);
             if (!found) { if (actor === undefined) corrupt('Immutable group template head is missing'); notFound(); }
             const metadata = validateTemplateHead(found, candidate.template.templateId);
@@ -124,7 +152,7 @@ export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
         const paging = Object.freeze(consolePage(input.page, input.limit)), prefix = input.prefix ?? '';
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
-            const page = await this.store.list(tx, scope, paging, prefix);
+            const page = await this.store.list(tx, scope, await this.access.principal(tx, actor, scope), paging, prefix);
             if (!Number.isSafeInteger(page.total) || page.total < 0 || page.total > PATH_GROUP_LIMITS.groupsPerScope || page.items.length > paging.limit ||
                 new Set(page.items.map(item => item.groupId)).size !== page.items.length || page.items.some(item => !item.groupId.startsWith(prefix))) corrupt('Invalid bounded group page');
             return deepFreeze({ ...paging, total: page.total, items: page.items.map(item => head(item, item.groupId)), ...flags, health: 'unknown', automaticSelection: false });
@@ -135,6 +163,7 @@ export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
         if (requestedRevision !== undefined && (!isCounter(requestedRevision) || requestedRevision > PATH_GROUP_LIMITS.revisionsPerGroup)) invalid('Exact bounded group revision required');
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
+            await this.access.owned(tx, actor, scope, 'path-group', id, true);
             const found = await this.store.head(tx, scope, id); if (!found) notFound();
             const metadata = head(found, id), loaded = await this.load(tx, scope, id, requestedRevision ?? metadata.currentRevision);
             const candidates = await this.candidates(tx, scope, loaded.record.config);
@@ -156,9 +185,10 @@ export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
         const request = requestIdentity(actor, scope, key, config ? 'PUT' : 'DELETE', `/api/v1/scopes/${scope}/path-groups/${id}`, { expectedRevision, ...(config ? { config } : {}) });
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope, true);
-            const replay = await this.requests.claim<GroupResponse>(tx, request); if (replay) return deepFreeze(replay);
+            const replay = await this.requests.claim<GroupResponse>(tx, request); if (replay) { await this.access.owned(tx, actor, scope, 'path-group', id, true); return deepFreeze(replay); }
             await this.store.lockScope(tx, scope);
             const found = await this.store.head(tx, scope, id, true), metadata = found ? head(found, id) : null;
+            if (metadata) await this.access.owned(tx, actor, scope, 'path-group', id, config === null);
             if ((metadata?.currentRevision ?? 0) !== expectedRevision) throw new ControlError('REVISION_CONFLICT', 409, 'Path group revision conflict');
             if (!config && !metadata) notFound();
             if (config && metadata?.archived) throw new ControlError('GROUP_ARCHIVED', 409, 'Archived group identifiers cannot be reused');
@@ -220,9 +250,16 @@ export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
         const selection = parsePathGroupSelection(input), old = await this.bindings.current(tx, current.scopeId, current.id);
         if (old) await this.checked(tx, current, old);
         identity(actor, current.scopeId, current.id);
-        return (await this.selected(tx, current, selection, true)).template;
+        await this.access.owned(tx, actor, current.scopeId, 'forward', current.id);
+        await this.access.owned(tx, actor, current.scopeId, 'path-group', selection.groupId);
+        const selected = await this.selected(tx, current, selection, true);
+        await this.access.owned(tx, actor, current.scopeId, 'path-template', selected.template.templateId);
+        return selected.template;
     }
     async accept(tx: Tx, actor: string, next: Forward, input: PathGroupSelection, path: PathBindingReceipt) {
+        await this.access.owned(tx, actor, next.scopeId, 'forward', next.id);
+        await this.access.owned(tx, actor, next.scopeId, 'path-group', input.groupId);
+        await this.access.owned(tx, actor, next.scopeId, 'path-template', path.templateId);
         const selection = parsePathGroupSelection(input), old = await this.bindings.current(tx, next.scopeId, next.id);
         if (old) await this.checked(tx, next, old, false);
         const loaded = await this.load(tx, next.scopeId, selection.groupId, selection.revision, false, true);
@@ -256,13 +293,14 @@ export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
         identity(actor, scope, forwardId);
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
+            await this.access.forward(tx, actor, scope, forwardId);
             const forward = await this.forwards.record(tx, scope, forwardId), binding = await this.bindings.current(tx, scope, forwardId), history = await this.bindings.history(tx, scope, forwardId);
             if (binding) await this.checked(tx, forward, binding);
             if (history.length > PATH_GROUP_LIMITS.bindingsPerForward || history.some((record,index) => record.sequence !== index + 1) || binding && !history.some(record => record.sequence === binding.sequence)) corrupt('Invalid bounded immutable group history');
             const items = [];
             for (const record of history) items.push({ ...await this.checked(tx, forward, record, record.sequence === binding?.sequence), expandedSpec: record.expandedSpec,
                 specDigest: record.specDigest, actorId: record.actorId, createdAt: nativeIsoTime(record.createdAt), current: record.sequence === binding?.sequence });
-            return deepFreeze({ forwardId, revision: forward.revision, deleting: forward.deleting, recoverySuspended: forward.recoverySuspended,
+            return deepFreeze({ forwardId, ownerActorId: forward.ownerActorId, revision: forward.revision, deleting: forward.deleting, recoverySuspended: forward.recoverySuspended,
                 binding: binding ? items.find(item => item.sequence === binding.sequence) : null, history: items, ...flags,
                 health: 'unknown', automaticSelection: false, referenceAuthorization: 'not-rechecked-by-this-query', consistency: 'read-committed-not-global-snapshot' });
         });
@@ -274,8 +312,9 @@ export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
         const query = Object.freeze({ ...input }), paging = Object.freeze(consolePage(query.page, query.limit));
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
+            await this.access.owned(tx, actor, scope, 'path-group', id, true);
             const found = await this.store.head(tx, scope, id); if (!found) notFound();
-            const metadata = head(found, id), result = await this.bindings.references(tx, scope, id, paging, query.revision);
+            const metadata = head(found, id), result = await this.bindings.references(tx, scope, await this.access.principal(tx, actor, scope), id, paging, query.revision);
             if (!Number.isSafeInteger(result.total) || result.total < 0 || result.items.length > paging.limit || new Set(result.items.map(item => item.forward.id)).size !== result.items.length) corrupt('Invalid bounded group reference page');
             const items = [];
             for (const item of result.items) {
@@ -293,10 +332,13 @@ export class PathGroups<Tx> implements ForwardPathGroups<Tx>,PathGroupApi {
         const selection = parsePathGroupSelection(input);
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope, true);
+            await this.access.owned(tx, actor, scope, 'forward', forwardId);
+            await this.access.owned(tx, actor, scope, 'path-group', selection.groupId);
             const current = await this.forwards.record(tx, scope, forwardId);
             if (current.revision !== expectedRevision || current.deleting || current.recoverySuspended) throw new ControlError('REVISION_CONFLICT', 409, 'Forward changed, deleting or recovery suspended');
             const old = await this.bindings.current(tx, scope, forwardId); if (old) await this.checked(tx, current, old);
             const candidate = await this.selected(tx, current, selection, false);
+            await this.access.owned(tx, actor, scope, 'path-template', candidate.template.templateId);
             const preview = await this.paths.previewIn(tx, actor, scope, forwardId, expectedRevision, candidate.template);
             return deepFreeze({ ...preview, group: selection, priority: candidate.priority, automaticSelection: false, health: 'unknown' });
         });

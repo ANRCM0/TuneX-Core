@@ -1,4 +1,4 @@
-export const IDENTITY_MODULE_INTERFACE_VERSION=1 as const;
+export const IDENTITY_MODULE_INTERFACE_VERSION=2 as const;
 export { AccessChangeReconciler } from './access-reconciler.ts';
 export type { AccessExecution } from './execution-ports.ts';
 export { IdentityService } from './service.ts';
@@ -8,3 +8,4 @@ export type { MemberChangeResponse, NodeGrantResponse, AccessCommandApi } from '
 export type { AccessExecutionResult, AccessChangeEffects } from './command-effects.ts';
 export type { MemberChangeInput, MemberChangeState, MemberWriter, IdentityMemberChange, IdentityMemberView, RecoveryIdentity,
     IdentityQueries, IdentityOwner, IdentityModuleOptions } from './contracts.ts';
+export type { IdentityContextQuery, IdentityScopeView, IdentityContextView } from './contracts.ts';

@@ -8,6 +8,8 @@ import * as framework from '../src/framework/public.ts';
 import * as telemetry from '../src/modules/telemetry-owner/public.ts';
 import { test } from 'node:test';
 import { ForwardTelemetry, ProbeTelemetry, NodeTelemetry, HostTelemetry } from '../src/modules/telemetry-owner/public.ts';
+import type { ResourceReadAccess } from '../src/framework/public.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
 import { ControlError } from '../src/framework/public.ts';
 import { nativeValueDigest as digest } from '../src/compatibility/public.ts';
 import { NodeTelemetry as LegacyNode } from '../src/application/node-telemetry.ts';
@@ -23,6 +25,12 @@ type Any = Record<string, any>;
 type Family = 'forward' | 'probe';
 const at = 1800000000000, epoch = 'a'.repeat(32), hash = 'sha256:' + 'b'.repeat(64), fingerprint = 'b'.repeat(64);
 const time = new Date(at).toISOString();
+const intakeOnlyAccess: ResourceReadAccess<unknown> = {
+    principal: async () => assert.fail('machine intake cannot request a read principal'),
+    node: async () => assert.fail('machine intake cannot request Node read authority'),
+    forward: async () => assert.fail('machine intake cannot request Forward read authority'),
+    owned: async () => assert.fail('machine intake cannot request product ownership'),
+};
 test('75 77 legacy application and rollup value entrypoints retain exact owner identity without a competing implementation', () => {
     assert.equal(LegacyNode, NodeTelemetry); assert.equal(LegacyHost, HostTelemetry); assert.equal(LegacyForward, ForwardTelemetry);
     assert.equal(LegacyProbe, ProbeTelemetry); assert.equal(LegacyRollups, TelemetryRollups); assert.equal(LegacyValues, telemetryRollupStorageValues); assert.equal(LegacyFold, foldTelemetryRollup);
@@ -38,7 +46,7 @@ test('75 76 77 each original owner captures one default clock source lazily and 
             if (path === '@tunex/core') return core; if (path === '../../compatibility/public.ts') return compat; if (path === '../../framework/public.ts') return framework;
             if (path === './policy.ts' || path === './rollup-values.ts') return telemetry; throw new Error('Unexpected telemetry owner import ' + path);
         });
-        const owner: any = exports[name], collaborators = [{}, {}, {}, {}, ...(mapped ? [{}] : [])], service = new owner(...collaborators);
+        const owner: any = exports[name], collaborators = [{}, {}, {}, {}, {}, ...(mapped ? [{}] : [])], service = new owner(...collaborators);
         assert.equal(factories, 1); assert.equal(reads, 0); assert.equal(service.enabled, false);
         assert.equal(service.now(), at); assert.equal(reads, 1);
         const second = new owner(...collaborators); assert.notEqual(service.readStarts, second.readStarts);
@@ -102,7 +110,7 @@ function input(family: Family): Any {
         items: [{ ...point, state: 'current', capturedAt: time, endedAt: null, availability: 'available', counterEpoch: epoch, overflowed: false }] };
 }
 function fixture(family: Family) {
-    const tx = {}, trace: string[] = [], sample = input(family), state: Any = { now: at, denied: false, failRollup: false, rows: [], latest: [], observations: [],
+    const tx = {}, trace: string[] = [], sample = input(family), state: Any = { now: at, denied: false, ownerActorId: 'reader', failRollup: false, rows: [], latest: [], observations: [],
         current: { nodeId: 'node', scopeId: 'scope', revoked: false, credentialUntil: at + 3600000, sessionEpoch: 1, bootId: 'boot' },
         forward: { scopeId: 'scope', forwardId: 'forward', revision: 1, deleting: false, recoverySuspended: false },
         head: { nodeId: 'node', scopeId: 'scope', sessionEpoch: 1, bootId: 'boot', sampleEpoch: epoch, lastSequence: 0,
@@ -113,6 +121,15 @@ function fixture(family: Family) {
     const db = { async transaction(action: any) { const saved = structuredClone({ rows: state.rows, head: state.head, observations: state.observations }); trace.push('begin');
         try { const result = await action(tx); trace.push('commit'); return result; } catch (error) { Object.assign(state, saved); trace.push('rollback'); throw error; } } };
     const auth = { async scope(actual: unknown, actor: string, scope: string) { check(actual, 'scope'); assert.deepEqual([actor, scope], ['reader', 'scope']); if (state.denied) throw new ControlError('AUTHORIZATION_DENIED', 403, 'denied'); } };
+    const access: ResourceReadAccess<typeof tx> = {
+        async forward(actual, actor, scope, forward) {
+            check(actual, 'access:forward'); assert.deepEqual([actor, scope, forward], ['reader', 'scope', 'forward']);
+            if (state.ownerActorId !== actor) throw new ControlError('NOT_FOUND', 404, 'not found');
+        },
+        principal: async () => assert.fail('raw Forward history does not read Scope counters'),
+        node: async () => assert.fail('Forward history must not disclose whole-host detail'),
+        owned: async () => assert.fail('Forward history must not enter mutation ownership'),
+    };
     const machine = { async credential(actual: unknown, node: string, fp: string) { check(actual, 'credential'); assert.deepEqual([node, fp], ['node', fingerprint]); if (state.denied) throw new ControlError('AUTHORIZATION_DENIED', 403, 'denied'); return 1; } };
     const store = { async node(actual: unknown) { check(actual, 'node'); return state.current; }, async lockHead(actual: unknown) { check(actual, 'head'); return state.head; },
         async append(actual: unknown, scope: string, value: Any, accepted: Any[], requestDigest: string, now: number) { check(actual, 'append'); assert.equal(scope, 'scope'); state.accepted = accepted;
@@ -127,7 +144,7 @@ function fixture(family: Family) {
     const mapping = { async resolve(actual: unknown, ...args: unknown[]) { check(actual, 'mapping'); state.mappingArgs = args; return state.mappings; } };
     const rollups = { async append(actual: unknown, observations: Any[]) { check(actual, 'rollups'); state.observations.push(...observations); if (state.failRollup) throw new Error('rollup failure'); } };
     const ctor: any = family === 'forward' ? ForwardTelemetry : ProbeTelemetry;
-    return { service: new ctor(db, auth, machine, store, mapping, true, () => state.now, rollups), sample, state, trace };
+    return { service: new ctor(db, auth, access, machine, store, mapping, true, () => state.now, rollups), sample, state, trace };
 }
 function record(family: Family, sample: Any, receivedAt: number, changes: Any = {}): Any {
     const { items, nodeId, bootId, sessionEpoch, ...rest } = sample;
@@ -193,7 +210,7 @@ for (const family of ['forward', 'probe'] as const) {
         if (family === 'forward') second.items[0].counters.payloadSentBytes = '17'; else { second.items[0].counters.attempted = '5'; second.items[0].counters.succeeded = '2'; }
         f.state.now = at + 2000; const rows = [record(family, first, at), record(family, second, at + 1000)]; f.state.rows = rows; f.state.latest = [rows[1], rows[0]];
         const result = await f.service.history('reader', 'scope', 'forward');
-        assert.deepEqual(f.trace, ['begin', 'scope', 'forward', 'history', 'latest', 'nodes', 'commit']); assert.equal(result.items[0].delta.status, 'baseline'); assert.equal(result.items[1].delta.status, 'continuous');
+        assert.deepEqual(f.trace, ['begin', 'scope', 'access:forward', 'forward', 'history', 'latest', 'nodes', 'commit']); assert.equal(result.items[0].delta.status, 'baseline'); assert.equal(result.items[1].delta.status, 'continuous');
         assert.equal(result.items[1].delta.elapsedMs, 1000); assert.equal(result.items[1].delta[family === 'forward' ? 'payloadSentBytes' : 'attempted'], family === 'forward' ? '7' : '1');
         if (family === 'probe') assert.equal(result.items[1].delta.inFlightBefore, '1');
         assert.equal(result.latest.mapping.currentBinding, 'not-rechecked'); assert.equal(result.executionAuthorized, false); assert.equal(result.health, 'unknown'); assert.equal(result.retention.historyComplete, false); assert.ok(Object.isFrozen(result));
@@ -263,14 +280,23 @@ for (const family of ['node', 'host'] as const) {
     function rawRow(body: Any, receivedAt: number): Any { return { nodeId: 'node', scopeId: 'scope', sessionEpoch: body.sessionEpoch, bootId: body.bootId,
         sampleEpoch: body.sampleEpoch, sequence: body.sequence, capturedAt: Date.parse(body.capturedAt), receivedAt, uptimeMs: body.uptimeMs, body, digest: digest(body), recoverySuspended: false }; }
     function rawOwner() {
-        const tx = {}, state: Any = { rows: [], latest: [], now: at + 2000, current: { nodeId: 'node', scopeId: 'scope', revoked: false, credentialUntil: at + 3600000, sessionEpoch: 1, bootId: 'boot' } }, trace: string[] = [];
+        const tx = {}, state: Any = { rows: [], latest: [], ownerActorId: 'reader', resourceSource: 'private', now: at + 2000, current: { nodeId: 'node', scopeId: 'scope', revoked: false, credentialUntil: at + 3600000, sessionEpoch: 1, bootId: 'boot' } }, trace: string[] = [];
         const check = (actual: unknown, name: string) => { assert.equal(actual, tx); trace.push(name); };
         const db = { async transaction(action: any) { trace.push('begin'); const value = await action(tx); trace.push('commit'); return value; } };
         const auth = { async scope(actual: unknown) { check(actual, 'scope'); } }, machine = { async credential() { return 1; } };
+        const access: ResourceReadAccess<typeof tx> = {
+            async node(actual, actor, scope, node, detail) {
+                check(actual, 'access:host'); assert.deepEqual([actor, scope, node, detail], ['reader', 'scope', 'node', 'host']);
+                if (state.resourceSource !== 'private' || state.ownerActorId !== actor) throw new ControlError('NOT_FOUND', 404, 'not found'); return 'full';
+            },
+            principal: async () => assert.fail('Node history must not inspect Scope totals'),
+            forward: async () => assert.fail('Node history must not inspect Forward ownership'),
+            owned: async () => assert.fail('Node history must not enter mutation ownership'),
+        };
         const store = { async node(actual: unknown) { check(actual, 'node'); return state.current; }, async history(actual: unknown, ...args: unknown[]) { check(actual, 'history'); state.window = args; return state.rows; },
             async latest(actual: unknown) { check(actual, 'latest'); return state.latest; }, async prune() { return 0; }, async lockHead() { return {}; }, async append() {} };
         const ctor: any = family === 'node' ? NodeTelemetry : HostTelemetry;
-        return { state, trace, service: new ctor(db, auth, machine, store, true, () => state.now) };
+        return { state, trace, service: new ctor(db, auth, access, machine, store, true, () => state.now) };
     }
     test(`75 ${family} history validates native body and wide arithmetic while preserving gap reset historical freshness and CPU unavailable meaning`, async () => {
         for (const variant of ['continuous', 'gap', 'counter-reset', 'historical', 'unavailable', 'stale'] as const) {
@@ -283,13 +309,20 @@ for (const family of ['node', 'host'] as const) {
             if (variant === 'stale') f.state.now = at + 31001;
             const rows = [rawRow(before, at), rawRow(current, at + 1000)]; f.state.rows = rows; f.state.latest = [rows[1], rows[0]];
             const result = await f.service.history('reader', 'scope', 'node');
-            assert.deepEqual(f.trace, ['begin', 'scope', 'node', 'history', 'latest', 'commit']);
+            assert.deepEqual(f.trace, ['begin', 'scope', 'access:host', 'node', 'history', 'latest', 'commit']);
             const item = result.items[1], expected = variant === 'unavailable' || variant === 'stale' ? 'continuous' : variant;
             assert.equal(item.delta.status, expected); assert.equal(result.latest.delta.status, expected); assert.equal(result.executionAuthorized, false); assert.equal(result.health, 'unknown');
             const metric = family === 'node' ? 'cpuTimeNanos' : 'cpuTotalTicks';
             if (expected === 'continuous') assert.equal(item.delta[metric], variant === 'unavailable' ? null : family === 'node' ? '9' : '10');
             if (variant === 'stale' || variant === 'historical') assert.equal(item.freshness, variant);
             assert.ok(Object.isFrozen(item.delta));
+        }
+    });
+    test(`75 ${family} shared whole-host and another user's private history stop before persisted rows`, async () => {
+        for (const source of ['admin-shared', 'private']) {
+            const f = rawOwner(); f.state.resourceSource = source; f.state.ownerActorId = source === 'private' ? 'other' : null;
+            await assert.rejects(f.service.history('reader', 'scope', 'node'), { code: 'NOT_FOUND' });
+            assert.deepEqual(f.trace, ['begin', 'scope', 'access:host']);
         }
     });
     test(`75 ${family} history rejects persisted digest association duplicated epoch sequence and out of order latest rows`, async () => {
@@ -313,7 +346,7 @@ for (const family of ['node', 'host'] as const) {
             const store = { async node(actual: unknown) { check(actual, 'node'); return state.current; }, async lockHead(actual: unknown) { check(actual, 'head'); return state.head; },
                 async append(actual: unknown) { check(actual, 'append'); }, async history() { return []; }, async latest() { return []; }, async prune() { return 0; } };
             const ctor: any = family === 'node' ? NodeTelemetry : HostTelemetry;
-            const service = new ctor(db, { async scope() {} }, { async credential(actual: unknown) { check(actual, 'credential'); return 1; } }, store, true, () => { state.trace.push('clock'); return state.now; });
+            const service = new ctor(db, { async scope() {} }, intakeOnlyAccess, { async credential(actual: unknown) { check(actual, 'credential'); return 1; } }, store, true, () => { state.trace.push('clock'); return state.now; });
             return { state, service };
         }
         for (const [head, body, now, code] of [
@@ -355,10 +388,44 @@ for (const family of ['node', 'host'] as const) {
                 async lockHead(actual: unknown) { same(actual); return state.head; }, async append(actual: unknown) { same(actual); trace.push('append'); state.head.lastSequence = 1; state.rows.push(body); if (fault === 'append') throw new Error('append failure'); },
                 async history() { return []; }, async latest() { return []; }, async prune() { return 0; } };
             const rollups = { async append(actual: unknown, values: Any[]) { same(actual); trace.push('rollup'); state.observations.push(...values); if (fault === 'rollup') throw new Error('rollup failure'); } };
-            const ctor: any = family === 'node' ? NodeTelemetry : HostTelemetry, service = new ctor(db, { async scope() {} }, { async credential(actual: unknown) { same(actual); return 1; } }, store, true, () => at, rollups);
+            const ctor: any = family === 'node' ? NodeTelemetry : HostTelemetry, service = new ctor(db, { async scope() {} }, intakeOnlyAccess, { async credential(actual: unknown) { same(actual); return 1; } }, store, true, () => at, rollups);
             if (fault === 'ack') service.ack = () => { trace.push('ack'); throw new Error('ack failure'); };
             await assert.rejects(service.ingest('node', fingerprint, 1, body), new RegExp(fault + ' failure'));
             assert.deepEqual(state, before); assert.equal(trace.at(-1), 'rollback'); assert.equal(service.active, 0); assert.equal(trace.filter(value => value === 'append').length, 1);
         }
     });
 }
+
+for (const family of ['forward', 'probe'] as const) {
+    test(`76 ${family} personal history cannot disclose another owner's persisted listener series`, async () => {
+        const f = fixture(family); f.state.ownerActorId = 'other';
+        await assert.rejects(f.service.history('reader', 'scope', 'forward'), { code: 'NOT_FOUND' });
+        assert.deepEqual(f.trace, ['begin', 'scope', 'access:forward', 'rollback']);
+        assert.deepEqual(f.state.rows, []);
+    });
+}
+
+test('77 real product policy keeps personal Forward loss counters withheld and Scope capacity governance-only', async () => {
+    for (const actor of ['reader', 'administrator']) {
+        const tx = {}, trace: string[] = [];
+        const same = (actual: unknown, event: string) => { assert.equal(actual, tx); trace.push(event); };
+        const auth = { async scope(actual: unknown, who: string, scope: string) { same(actual, 'scope'); assert.deepEqual([who, scope], [actor, 'scope']); } };
+        const access = new ResourceAccess(auth, {
+            async scopeOwner(actual, scope) { same(actual, 'scope-owner'); assert.equal(scope, 'scope'); return { ownerActorId: 'administrator' }; },
+            async ownership(actual, scope, kind, id) { same(actual, 'ownership'); assert.deepEqual([scope, kind, id], ['scope', 'forward', 'forward']); return { ownerActorId: 'reader' }; },
+            node: async () => assert.fail('Forward aggregate cannot inspect Node detail'),
+        });
+        const db = { async transaction<T>(action: (actual: typeof tx) => Promise<T>) { trace.push('begin'); try { const value = await action(tx); trace.push('commit'); return value; } catch (error) { trace.push('rollback'); throw error; } } };
+        const losses = { minuteEvicted: '1', hourEvicted: '2', cursorEvicted: '3', cursorExpired: '4' };
+        const store = { async history(actual: unknown) { same(actual, 'history'); return []; }, async losses(actual: unknown) { same(actual, 'losses'); return losses; },
+            async capacity(actual: unknown) { same(actual, 'capacity'); return { minuteRows: 0, hourRows: 0, cursorRows: 0, nodeFamilies: 0 }; }, async append() {}, async prune() { return 0; } };
+        const targets = { async forward(actual: unknown) { same(actual, 'forward'); return { forwardId: 'forward', scopeId: 'scope' }; }, node: async () => assert.fail('Forward aggregate must not read a Node') };
+        let now = at;
+        const service = new TelemetryRollups(db, auth, access, store, targets, true, () => now);
+        const result = await service.history(actor, 'scope', 'forward', 'forward', { family: 'forward' });
+        assert.deepEqual(result.losses, actor === 'administrator' ? { scope: 'scope-family', ...losses } : { scope: 'withheld-scope-family', minuteEvicted: null, hourEvicted: null, cursorEvicted: null, cursorExpired: null });
+        assert.equal(trace.includes('losses'), actor === 'administrator'); trace.length = 0; now += 1000;
+        if (actor === 'administrator') { await service.capacity(actor, 'scope'); assert.ok(trace.includes('capacity')); }
+        else { await assert.rejects(service.capacity(actor, 'scope'), { code: 'NOT_FOUND' }); assert.equal(trace.includes('capacity'), false); assert.equal(trace.at(-1), 'rollback'); }
+    }
+});

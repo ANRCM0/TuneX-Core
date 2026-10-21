@@ -5,11 +5,13 @@ import type { ConsoleReadPort } from '../src/application/console-queries.ts';
 import type { ConsoleFilters, ConsolePaging } from '../src/application/console-query.ts';
 import type { ScopeAuthorization, TransactionBoundary } from '../src/application/ports.ts';
 
+import type { ReadPrincipal, ResourceReadAccess } from '../src/framework/public.ts';
+
 type Tx = Readonly<{ id: symbol }>;
 function fixture(permit = true) {
     const tx: Tx = Object.freeze({ id: Symbol('transaction') });
     const events: string[] = [], calls: {
-        kind: string; tx: Tx; scope: string; actor?: string; paging?: ConsolePaging; filters?: ConsoleFilters;
+        kind: string; tx: Tx; scope: string; actor?: string; paging?: ConsolePaging; filters?: ConsoleFilters; principal?: ReadPrincipal;
     }[] = [];
     const db: TransactionBoundary<Tx> = {
         transaction: async action => {
@@ -33,8 +35,14 @@ function fixture(permit = true) {
             if (!permit) throw new Error('denied');
         },
     };
-    const page = (kind: string, current: Tx, scope: string, paging: ConsolePaging, filters: ConsoleFilters) => {
-        calls.push({ kind, tx: current, scope, paging, filters });
+    const principal: ReadPrincipal = Object.freeze({actorId: 'actor-a', governance: false});
+    const access: ResourceReadAccess<Tx> = {
+        async principal(current, actor, scope) { assert.equal(current, tx); assert.equal(actor, principal.actorId); assert.equal(scope, 'scope-a'); events.push('principal'); return principal; },
+        async node(current, actor, scope, id, detail) { assert.equal(current, tx); assert.equal(actor, principal.actorId); assert.equal(scope, 'scope-a'); assert.equal(detail, 'diagnostics'); if(id!=='node-a') throw new Error('personal Node denied'); events.push('node-access'); return 'full'; },
+        async forward() { throw new Error('Unused'); }, async owned() { throw new Error('Unused'); },
+    };
+    const page = (kind: string, current: Tx, scope: string, supplied: ReadPrincipal, paging: ConsolePaging, filters: ConsoleFilters) => {
+        assert.equal(supplied, principal); calls.push({ kind, tx: current, scope, principal: supplied, paging, filters });
         events.push(kind);
         return { page: paging.page, limit: paging.limit, total: 0, items: [] };
     };
@@ -42,17 +50,18 @@ function fixture(permit = true) {
         nodes: async (...args) => page('nodes', ...args),
         forwards: async (...args) => page('forwards', ...args),
         operations: async (...args) => page('operations', ...args),
-        candidates: async (current, actor, scope, paging, filters) => {
-            assert.equal(actor, 'actor-a');
-            return { ...page('candidates', current, scope, paging, filters), mode: filters.mode ?? 'direct',
+        candidates: async (current, scope, supplied, paging, filters) => {
+            return { ...page('candidates', current, scope, supplied, paging, filters), mode: filters.mode ?? 'direct',
                 source: 'persisted-control-state', independentProbe: false, fullPlanAuthorization: false, reserved: false };
         },
-        overview: async (current, scope) => {
+        overview: async (current, scope, supplied) => {
+            assert.equal(supplied, principal);
             calls.push({ kind: 'overview', tx: current, scope }); events.push('overview');
             return { nodes: 0, forwards: 0, activeOperations: 0, failedOperations: 0,
                 observedAt: '2026-10-16T00:00:00.000Z', source: 'persisted-control-state', independentProbe: false };
         },
-        diagnostics: async (current, scope, nodeId) => {
+        diagnostics: async (current, scope, supplied, nodeId) => {
+            assert.equal(supplied, principal);
             calls.push({ kind: 'diagnostics', tx: current, scope }); events.push('diagnostics');
             return { nodeId, observedAt: '2026-10-16T00:00:00.000Z', source: 'persisted-control-state',
                 independentProbe: false, revoked: false, credentialUntil: null, sessionEpoch: 0,
@@ -61,7 +70,7 @@ function fixture(permit = true) {
                 totalReportedObservations: 0, errors: [], note: 'No independent probe.' };
         },
     };
-    return { tx, events, calls, identity, read, queries: new ConsoleQueries(db, identity, read) };
+    return { tx, events, calls, identity, read, queries: new ConsoleQueries(db, identity, read, access) };
 }
 
 test('query ports preserve one authorized transaction without a concrete Control or SQL connection', async () => {
@@ -69,7 +78,7 @@ test('query ports preserve one authorized transaction without a concrete Control
     for (const kind of ['nodes', 'forwards', 'operations', 'candidates'] as const) {
         f.events.length = 0;
         const result = await f.queries[kind]('actor-a', 'scope-a', '2', '40');
-        assert.deepEqual(f.events, ['begin', kind === 'candidates' ? 'manage' : 'view', kind, 'commit']);
+        assert.deepEqual(f.events, ['begin', kind === 'candidates' ? 'manage' : 'view', 'principal', kind, 'commit']);
         assert.equal(result.page, 2); assert.equal(result.limit, 40);
         assert.deepEqual(f.calls.at(-1)!.paging, { page: 2, limit: 40, offset: 40 });
     }
@@ -77,7 +86,7 @@ test('query ports preserve one authorized transaction without a concrete Control
         f.events.length = 0;
         if (kind === 'overview') await f.queries.overview('actor-a', 'scope-a');
         else await f.queries.diagnostics('actor-a', 'scope-a', 'node-a');
-        assert.deepEqual(f.events, ['begin', 'view', kind, 'commit']);
+        assert.deepEqual(f.events, ['begin', 'view', 'principal', ...(kind==='diagnostics'?['node-access']:[]), kind, 'commit']);
     }
     assert.equal(f.calls.length, 6);
     assert.ok(f.calls.every(call => call.tx === f.tx && call.scope === 'scope-a'));
@@ -128,3 +137,5 @@ test('query inputs are detached before asynchronous authorization and adapter fa
     await assert.rejects(f.queries.overview('actor-a', 'scope-a'), error => error === failure);
     assert.equal(f.events.at(-1), 'rollback');
 });
+
+ test('personal Node rejection prevents diagnostic projection in the same transaction',async()=>{const f=fixture();await assert.rejects(f.queries.diagnostics('actor-a','scope-a','other-node'),/personal Node denied/);assert.deepEqual(f.calls,[]);assert.deepEqual(f.events,['begin','view','principal','rollback']);});

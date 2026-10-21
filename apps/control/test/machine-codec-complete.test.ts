@@ -40,6 +40,8 @@ function fixture() {
             complete:true,snapshotDigest:'compiled',assignments:[...input.assignments],tombstones:input.tombstones};},
     };
     const ports:RuntimeHostOptions<Tx,NativeRuntimeFamily>={codec,now:()=>{events.push(`now:${data.now}`);return data.now;},
+        // Explicit unlimited fixture; retain the original codec trace independently of policy.
+        payloadPolicy:{async limits(current){assert.equal(current,tx);return {excludedAssignmentIds:[]};}},
         db:{async transaction(action){events.push('begin');try{const result=await action(tx);events.push('commit');return result;}catch(error){events.push('rollback');throw error;}}},
         nodes:{async credential(current){trace(current,'credential');return data.credentialUntil;},async facts(current){trace(current,'facts');return {facts};},
             async state(current){trace(current,'state');return {facts,revoked:data.revoked,credentialUntil:data.credentialUntil};},

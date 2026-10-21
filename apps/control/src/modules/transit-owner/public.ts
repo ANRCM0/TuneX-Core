@@ -1,4 +1,4 @@
-export const TRANSIT_MODULE_INTERFACE_VERSION=1 as const;
+export const TRANSIT_MODULE_INTERFACE_VERSION=2 as const;
 export { TRANSIT_API_INTERFACE_VERSION } from './contracts.ts';
 export type { TransitNegotiationApi, TransitDeliveryApi } from './contracts.ts';
 export { TransitNegotiationService } from './negotiation.ts';

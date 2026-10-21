@@ -23,7 +23,7 @@ function fixture(): { plan: UpgradePlan; inspection: UpgradeInspection } {
         inspection: {
             database: { binding: 'server:database', mysqlVersion: '8.4.9', migrations: names,
                 schemaIssues: [], nodes: [{ nodeId: 'node-a', generation: 9, snapshotDigest: hash }],
-                unsupportedSnapshots: 0, multihopDeployments: 0, enabledMultihopForwards: 0, latestLeaseUntil: 1000 },
+                unsupportedSnapshots: 0, resourceLimitSnapshots:0, multihopDeployments: 0, enabledMultihopForwards: 0, latestLeaseUntil: 1000 },
             authority: { version: 1, sequence: 12, database: 'server:database', trustDigest: hash,
                 maintenance: false, latestValidUntil: 1001, maxLeaseSeconds: 18, maxClockSkewSeconds: 5,
                 maintenanceSince: null, recoveryId: null },
@@ -45,6 +45,71 @@ test('compatible static assessment is not execution, recovery, backup or product
     assert.ok(report.unchecked.includes('backup-existence-and-integrity'));
     assert.ok(report.unchecked.includes('atomic-multi-host-snapshot'));
     assert.equal(JSON.stringify(f), before);
+});
+
+test('0041 shared payload profile supports explicit new Agent debit inspection and refuses older executor or reader',async()=>{
+    const f=fixture(),catalog=await upgradeSchemaCatalog();
+    f.inspection.database.migrations=catalog.files.map(file=>file.name);
+    f.inspection.schemaFiles=catalog.files.map(({name,sha256})=>({name,sha256}));
+    for(const release of [f.plan.source,f.plan.target])release.control.profile=release.agent.profile='adp3-shared-resource-limits-v1';
+    f.plan.journals[0]={...f.plan.journals[0]!,version:2,resourceBudgetVersion:1,resourceBudgetBuckets:1,prechargedBytes:'9007199254740992'};
+    f.inspection.database.resourceLimitSnapshots=1;
+    const accepted=assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)),f.inspection);
+    assert.equal(accepted.decision,'compatible');assert.equal(accepted.database.resourceLimitSnapshots,1);
+    assert.equal(accepted.runtimeReady,false);assert.equal(accepted.productionApproved,false);
+    for(const profile of ['adp3-runtime-v1','adp3-multihop-v1'] as const){
+        f.plan.target.agent.profile=profile;
+        const rejected=assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)),f.inspection);
+        assert.equal(rejected.decision,'blocked');
+        assert.ok(rejected.checks.some(check=>check.code==='RESOURCE_BUDGET_DOWNGRADE_FORBIDDEN'&&check.status==='block'));
+        assert.ok(rejected.checks.some(check=>check.code==='RESOURCE_LIMIT_EXECUTOR_REQUIRED'&&check.status==='block'));
+    }
+    f.plan.target.agent.profile='adp3-shared-resource-limits-v1';
+    f.plan.target.control.profile='adp3-shared-node-port-limits-v1';
+    assert.ok(assessUpgrade(f.plan,f.inspection).checks.some(check=>check.code==='CONTROL_SCHEMA_READER'&&check.subject==='target'&&check.status==='block'));
+});
+
+test('limited database Snapshot alone rejects an old Agent even with legacy inspection and no imported budget history',()=>{
+    const f=fixture();f.inspection.database.resourceLimitSnapshots=1;
+    const report=assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)),f.inspection);
+    assert.equal(report.decision,'blocked');
+    assert.ok(report.checks.some(check=>check.code==='RESOURCE_LIMIT_EXECUTOR_REQUIRED'&&check.status==='block'));
+    assert.equal(report.checks.some(check=>check.code==='RESOURCE_BUDGET_DOWNGRADE_FORBIDDEN'),false);
+});
+
+test('Journal v2 is a closed bounded decimal debit inspection while Journal v1 remains unchanged',()=>{
+    const base=fixture().plan;
+    const v2={...base.journals[0]!,version:2 as const,resourceBudgetVersion:1 as const,resourceBudgetBuckets:1024,
+        prechargedBytes:(1024n*BigInt(Number.MAX_SAFE_INTEGER)).toString()};
+    base.journals=[v2];assert.doesNotThrow(()=>parseUpgradePlan(JSON.stringify(base)));
+    const invalid=[{...v2,resourceBudgetVersion:2},{...v2,resourceBudgetBuckets:-1},{...v2,resourceBudgetBuckets:1025},
+        {...v2,resourceBudgetVersion:0},{...v2,resourceBudgetBuckets:0},{...v2,prechargedBytes:0},
+        ...['','00','01','-1','1.0','1e3',' 1','1\n',(1024n*BigInt(Number.MAX_SAFE_INTEGER)+1n).toString()].map(prechargedBytes=>({...v2,prechargedBytes})),
+        {...v2,unexpected:true}];
+    for(const value of invalid){base.journals=[value as typeof v2];assert.throws(()=>parseUpgradePlan(JSON.stringify(base)));}
+    for(const key of ['resourceBudgetVersion','resourceBudgetBuckets','prechargedBytes']){
+        const value:Record<string,unknown>={...v2};delete value[key];base.journals=[value as unknown as typeof v2];
+        assert.throws(()=>parseUpgradePlan(JSON.stringify(base)));
+    }
+    base.journals=[{...v2,resourceBudgetVersion:0,resourceBudgetBuckets:0,prechargedBytes:'0'}];
+    assert.equal(assessUpgrade(parseUpgradePlan(JSON.stringify(base)),fixture().inspection).decision,'compatible');
+    const legacy=fixture().plan;
+    assert.deepEqual(parseUpgradePlan(JSON.stringify(legacy)),legacy);
+    legacy.journals[0]!.resourceBudgetVersion=0;
+    assert.throws(()=>parseUpgradePlan(JSON.stringify(legacy)));
+});
+
+test('budget history cannot claim an old source binary and a new source with v1 export demands review',()=>{
+    const f=fixture();
+    f.plan.target.agent.profile='adp3-shared-resource-limits-v1';
+    f.plan.journals[0]={...f.plan.journals[0]!,version:2,resourceBudgetVersion:1,resourceBudgetBuckets:1,prechargedBytes:'1'};
+    const mismatch=assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)),f.inspection);
+    assert.ok(mismatch.checks.some(check=>check.code==='SOURCE_RESOURCE_BUDGET_PROFILE_MISMATCH'&&check.status==='block'));
+    f.plan.source.agent.profile='adp3-shared-resource-limits-v1';
+    f.plan.journals=fixture().plan.journals;
+    const oldExport=assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)),f.inspection);
+    assert.equal(oldExport.decision,'review-required');
+    assert.ok(oldExport.checks.some(check=>check.code==='RESOURCE_BUDGET_INSPECTION_REQUIRED'&&check.status==='review'));
 });
 test('new Control supports unmigrated old Agents when multihop remains off', () => {
     const report = result(f => {
@@ -153,9 +218,14 @@ test('plan parsing rejects duplicates, unknown fields, unsafe counters, legacy p
 });
 test('known migration footprints cover tables, multi-column DDL and superseded enums', async () => {
     const catalog = await upgradeSchemaCatalog();
-    assert.equal(catalog.files.length, 38);
-    assert.equal(catalog.files.at(-1)?.name, '0038-probe-plan-json-integers.sql');
-    assert.deepEqual(schemaMarkers('0038-probe-plan-json-integers.sql', catalog.files.at(-1)!.sql), []);
+    assert.equal(catalog.files.length, 41);
+    assert.equal(catalog.files.at(-1)?.name, '0041-shared-resource-payload-limits.sql');
+    assert.deepEqual(schemaMarkers('0038-probe-plan-json-integers.sql', catalog.files.find(file => file.name === '0038-probe-plan-json-integers.sql')!.sql), []);
+    assert.ok(catalog.markers.some(m => m.migration === '0039-product-resource-access.sql' && m.table === 'nodes' && m.column === 'resource_source'));
+    assert.ok(catalog.markers.some(m => m.migration === '0039-product-resource-access.sql' && m.table === 'forward_ownership_events' && m.column === undefined));
+    assert.ok(catalog.markers.some(m => m.migration === '0040-shared-node-port-limits.sql' && m.table === 'node_grants' && m.column === 'port_limits'));
+    for(const table of ['shared_resource_limit_heads','shared_resource_limit_buckets','shared_resource_limit_requests','shared_resource_limit_audit'])
+        assert.ok(catalog.markers.some(m=>m.migration==='0041-shared-resource-payload-limits.sql'&&m.table===table&&m.column===undefined),table);
     assert.ok(catalog.markers.some(m => m.migration === '0037-probe-echo.sql' && m.table === 'probe_runs' && m.column === 'result_response_bytes'));
     assert.ok(catalog.markers.some(m => m.migration === '0019-path-bindings.sql' && m.table === 'forward_path_bindings'));
     assert.ok(catalog.markers.some(m => m.migration === '0019-path-bindings.sql' && m.table === 'current_path_bindings'));
@@ -182,6 +252,39 @@ test('known migration footprints cover tables, multi-column DDL and superseded e
     assert.deepEqual(inspectSchema([migration, newer], all, columns), []);
     assert.deepEqual(inspectSchema([migration], all, columns), [migration]);
 });
+test('product ownership and port-limit footprints detect applied, unrecorded and incomplete successor DDL', async () => {
+    for (const name of ['0039-product-resource-access.sql', '0040-shared-node-port-limits.sql']) {
+        const sql = await readFile(new URL('../migrations/' + name, import.meta.url), 'utf8');
+        const markers = schemaMarkers(name, sql);
+        const columns = markers.map(marker => ({table: marker.table, column: marker.column ?? 'id', type: marker.enumType ?? 'json'}));
+        assert.deepEqual(inspectSchema([name], markers, columns), []);
+        assert.deepEqual(inspectSchema([], markers, columns), [name]);
+        assert.deepEqual(inspectSchema([name], markers, []), [name]);
+        const required = name.startsWith('0039') ? [
+            ['nodes', 'resource_source'], ['nodes', 'owner_actor_id'], ['nodes', 'resource_revision'],
+            ['node_grants', 'allowed_roles'], ['forwards', 'owner_actor_id'], ['path_templates', 'owner_actor_id'],
+            ['path_groups', 'owner_actor_id'], ['ingress_groups', 'owner_actor_id'],
+            ['forward_ownership_events', 'id'], ['node_security_events', 'kind'],
+            ['path_template_events', 'owner_actor_id'], ['path_group_events', 'owner_actor_id'], ['ingress_group_events', 'owner_actor_id'],
+        ] : [['node_grants', 'port_limits']];
+        for (const [table, column] of required) {
+            assert.ok(columns.some(value => value.table === table && value.column === column), name + ':' + table + '.' + column);
+            assert.deepEqual(inspectSchema([name], markers, columns.filter(value => value.table !== table || value.column !== column)), [name]);
+        }
+        assert.equal(markers.some(marker => marker.table === 'path_publications' && marker.column === 'owner_actor_id'), false);
+    }
+});
+
+test('0041 shared debit policy footprint keeps every original head bucket receipt and audit table visible',async()=>{
+    const name='0041-shared-resource-payload-limits.sql',sql=await readFile(new URL('../migrations/'+name,import.meta.url),'utf8');
+    const markers=schemaMarkers(name,sql),tables=['shared_resource_limit_heads','shared_resource_limit_buckets','shared_resource_limit_requests','shared_resource_limit_audit'];
+    const columns=tables.map(table=>({table,column:'owner-local-id',type:'varchar(128)'}));
+    for(const table of tables)assert.ok(markers.some(marker=>marker.table===table&&marker.column===undefined));
+    assert.deepEqual(inspectSchema([name],markers,columns),[]);
+    assert.deepEqual(inspectSchema([],markers,columns),[name]);
+    for(const missing of tables)assert.deepEqual(inspectSchema([name],markers,columns.filter(column=>column.table!==missing)),[name]);
+});
+
 test('Probe registry DDL has an explicit Control-only reader ceiling and cannot silently downgrade', () => {
     const f = fixture(), migration = '0014-probe-instances.sql';
     f.inspection.schemaFiles.push({ name: migration, sha256: 'c'.repeat(64) });

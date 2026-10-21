@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { NativeDrivers } from '../src/application/native-drivers.ts';
 import { TransportQueries } from '../src/application/transport-queries.ts';
 import type { ProfileReference, ProfileReferenceQuery, TransportReferenceReader } from '../src/application/transport-queries.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../src/application/ports.ts';
+import type { ResourceReadAccess, ReadPrincipal, ScopeAuthorization, TransactionBoundary } from '../src/framework/public.ts';
 import type { TransportProfileResolver } from '../src/modules/transport-ports.ts';
 import { transportReferenceQuery } from '../src/api/transport-query.ts';
 
@@ -19,10 +19,19 @@ function fixture() {
         assert.equal(current, tx); assert.equal(actor, 'actor'); assert.equal(scope, 'scope'); events.push(manage ? 'manage' : 'read');
         await options.delay?.(); if (options.deny) throw Error('denied');
     } };
+    const principal: ReadPrincipal = Object.freeze({ actorId: 'actor', governance: false });
+    const access: ResourceReadAccess<Tx> = {
+        principal: async (current, actor, scope) => {
+            assert.equal(current, tx); assert.deepEqual([actor, scope], ['actor', 'scope']); events.push('principal'); return principal;
+        },
+        node: async () => assert.fail('Profile references must not request Node detail'),
+        forward: async () => assert.fail('Reference ownership belongs in the bounded read provider'),
+        owned: async () => assert.fail('Profile references must not enter mutation ownership'),
+    };
     const read: TransportReferenceReader<Tx> = {
         profile: async (current, scope, profile) => { assert.equal(current, tx); assert.equal(scope, 'scope'); assert.equal(profile, 'p1'); events.push('profile'); return options.profile ? { currentRevision: 2 } : null; },
-        references: async (current, scope, profile, paging, revision) => {
-            assert.equal(current, tx); assert.equal(scope, 'scope'); assert.equal(profile, 'p1'); assert.ok(Object.isFrozen(paging)); events.push('references:' + revision);
+        references: async (current, scope, caller, profile, paging, revision) => {
+            assert.equal(current, tx); assert.equal(scope, 'scope'); assert.equal(profile, 'p1'); assert.equal(caller, principal); assert.ok(Object.isFrozen(paging)); events.push('references:' + revision);
             const selected = revision ? items.filter(i => i.configRevision === revision) : items;
             return { total: selected.length, items: options.corrupt ? [{ ...items[0]!, configRevision: 3 }] : selected.slice(0, options.limit) };
         }
@@ -32,7 +41,7 @@ function fixture() {
         events.push('resolve:' + revision); if (!options.grant) throw Error('missing explicit Profile Grant');
         return { profileId: profile, revision, configDigest: 'sha256:' + 'a'.repeat(64), config: {} as never };
     } };
-    return { queries: new TransportQueries(db, identity, read, resolver), db, identity, events, options, items };
+    return { queries: new TransportQueries(db, identity, read, resolver, access), db, identity, events, options, items };
 }
 
 test('native catalog needs current scope access and separates process gates from Node proof or authorization', async () => {
@@ -48,7 +57,7 @@ test('native catalog needs current scope access and separates process gates from
 test('reference listing is authorized first in the same transaction and does not require an execution grant', async () => {
     const f = fixture(); f.options.grant = false;
     const response = await f.queries.references('actor', 'scope', 'p1');
-    assert.deepEqual(f.events, ['begin', 'read', 'profile', 'references:undefined', 'commit']);
+    assert.deepEqual(f.events, ['begin', 'read', 'principal', 'profile', 'references:undefined', 'commit']);
     assert.equal(response.total, 2); assert.equal(response.target, null); assert.equal(response.fullPlanAuthorization, false);
     assert.ok(response.items.every(i => i.proposedSpec === null && i.changed === null));
     assert.ok(Object.isFrozen(response.items[0]!.spec));
@@ -57,7 +66,7 @@ test('reference listing is authorized first in the same transaction and does not
 test('impact preview requires manager and exact Profile revision grant but never mutates the source or authorizes deployment', async () => {
     const f = fixture(), before = structuredClone(f.items);
     const result = await f.queries.references('actor', 'scope', 'p1', { targetRevision: 2 });
-    assert.deepEqual(f.events, ['begin', 'manage', 'profile', 'resolve:2', 'references:undefined', 'commit']);
+    assert.deepEqual(f.events, ['begin', 'manage', 'principal', 'profile', 'resolve:2', 'references:undefined', 'commit']);
     assert.deepEqual(result.items.map(i => i.changed), [true, false]); assert.equal(result.items[0]!.expectedRevision, 7);
     assert.equal(result.items[0]!.proposedSpec!.transport!.configRevision, 2); assert.equal(result.reserved, false);
     assert.equal(result.fullPlanAuthorization, false); assert.deepEqual(f.items, before);
@@ -69,7 +78,7 @@ test('scope denial and invisible Profiles stop before projection/resolution', as
     await assert.rejects(f.queries.references('actor', 'scope', 'p1', { targetRevision: 2 }), /denied/);
     assert.deepEqual(f.events, ['begin', 'manage']); f.events.length = 0; f.options.deny = false; f.options.profile = false;
     await assert.rejects(f.queries.references('actor', 'scope', 'p1'), /not found/);
-    assert.deepEqual(f.events, ['begin', 'read', 'profile']);
+    assert.deepEqual(f.events, ['begin', 'read', 'principal', 'profile']);
 });
 
 test('query parameters are closed, bounded and canonical before any transaction', async () => {

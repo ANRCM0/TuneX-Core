@@ -19,6 +19,7 @@ export interface ForwardOperationCommands<Tx> {
 }
 
 export interface ForwardCommandPreparation<Tx> {
+    lockOwnership(tx: Tx, forward: Forward): Promise<void>;
     prepareCreate(tx: Tx, actor: string, forward: Forward): Promise<void>;
     planCreate(tx: Tx, actor: string, forward: Forward): Promise<void>;
     prepareUpdate(tx: Tx, actor: string, current: Forward, next: Forward, recoverySuspended: boolean): Promise<void>;

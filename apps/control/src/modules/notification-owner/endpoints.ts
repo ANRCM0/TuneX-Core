@@ -2,7 +2,7 @@ import { deepFreeze, isCounter, isId } from '@tunex/core';
 import { nativeValueDigest as digest, nativeMonotonicNow, nativeWallClockSource, jsonUtf8Bytes, nativeModuleId as randomUUID } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
 import { nativeCommandRequest as requestIdentity } from '../../compatibility/public.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { IdempotentRequests, ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary } from '../../framework/public.ts';
 import type { NotificationEndpoint, NotificationEndpointReceipt, NotificationEndpointStore, NotificationSecrets } from './endpoint-contracts.ts';
 import type { StationAlertStore } from '../station-alert-owner/public.ts';
 import type { NotificationEndpointsApi } from './api.ts';
@@ -31,7 +31,7 @@ export class NotificationEndpoints<Tx> implements NotificationEndpointsApi {
     private admittedRequests=0;
     private readonly actors=new Map<string,{active:boolean;until:number}>();
     private readonly db: TransactionBoundary<Tx>;
-    private readonly auth: ScopeAuthorization<Tx>;
+    private readonly auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>;
     private readonly requests: IdempotentRequests<Tx>;
     private readonly store: NotificationEndpointStore<Tx>;
     private readonly policies: Pick<StationAlertStore<Tx>,'policy'>;
@@ -39,7 +39,7 @@ export class NotificationEndpoints<Tx> implements NotificationEndpointsApi {
     private readonly authorityBinding: ()=>Promise<string>;
     private readonly clock: ()=>number;
     private readonly deliveryEnabled: boolean;
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, requests: IdempotentRequests<Tx>, store: NotificationEndpointStore<Tx>,
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>, requests: IdempotentRequests<Tx>, store: NotificationEndpointStore<Tx>,
         policies: Pick<StationAlertStore<Tx>,'policy'>, secrets: NotificationSecrets | undefined, authorityBinding: ()=>Promise<string>, clock: ()=>number=nativeWallClockSource(), deliveryEnabled=false) {
         this.db=db;this.auth=auth;this.requests=requests;this.store=store;this.policies=policies;this.secrets=secrets;
         this.authorityBinding=authorityBinding;this.clock=clock;this.deliveryEnabled=deliveryEnabled;
@@ -70,7 +70,7 @@ export class NotificationEndpoints<Tx> implements NotificationEndpointsApi {
     async list(actor: string, scope: string) {
         identities(actor,scope);
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);
+            await this.auth.owner(tx,actor,scope);
             const raw=await this.store.list(tx,scope);
             if (!Array.isArray(raw)||raw.length>16) corrupt();
             const items=raw.map(item=>stored(parseNotificationEndpoint,item));
@@ -84,7 +84,7 @@ export class NotificationEndpoints<Tx> implements NotificationEndpointsApi {
     async get(actor: string, scope: string, id: string) {
         identities(actor,scope,id);
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);
+            await this.auth.owner(tx,actor,scope);
             const raw=await this.store.get(tx,scope,id); if (!raw) notFound();
             const value=stored(parseNotificationEndpoint,raw); if (value.endpointId!==id) corrupt();
             const rawAudit=await this.store.audits(tx,scope,id);
@@ -101,7 +101,7 @@ export class NotificationEndpoints<Tx> implements NotificationEndpointsApi {
         const config=parseNotificationEndpointConfig(input), destination=parseNotificationDestination(destinationInput);
         const request=requestIdentity(actor,scope,key,'PUT',`/api/v1/scopes/${scope}/notification-endpoints/${id}`,{expectedRevision,config,destination});
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);
+            await this.auth.owner(tx,actor,scope);
             const replay=await this.requests.claim<NotificationEndpointReceipt>(tx,request); if (replay) return this.bounded(receipt(replay,id));
             if (!this.secrets) throw new ControlError('NOTIFICATION_SECRETS_UNAVAILABLE',503,'Protected notification store is not configured');
             await this.store.lockScope(tx,scope);
@@ -133,7 +133,7 @@ export class NotificationEndpoints<Tx> implements NotificationEndpointsApi {
         identities(actor,scope,id); if (!isCounter(expectedRevision)) invalid('Valid notification disable CAS required');
         const request=requestIdentity(actor,scope,key,'POST',`/api/v1/scopes/${scope}/notification-endpoints/${id}/disable`,{expectedRevision});
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);
+            await this.auth.owner(tx,actor,scope);
             const replay=await this.requests.claim<NotificationEndpointReceipt>(tx,request); if (replay) return this.bounded(receipt(replay,id));
             await this.store.lockScope(tx,scope);
             const raw=await this.store.get(tx,scope,id,true); if (!raw) notFound();

@@ -14,6 +14,8 @@ import type { NodeCertificateAuthority } from '../src/infrastructure/pki.ts';
 import type { AuthorityStore } from '../src/infrastructure/authority.ts';
 import { Identity, tokenHash } from '../src/modules/identity.ts';
 import { Nodes } from '../src/modules/nodes.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { MySqlResourceAccessStore } from '../src/infrastructure/mysql-resource-access.ts';
 import { NativePathReferences } from '../src/modules/native-path-references.ts';
 import { parsePathTemplate, pathRequirements } from '../src/modules/path-template-contract.ts';
 import type { RuntimeController } from '../src/modules/runtime/controller.ts';
@@ -53,10 +55,10 @@ test('path binding uses real original owner transactions: immutable expanded pro
             for (const id of config.nodes) {
                 const facts = { nodeId: id, scopeId: 'scope-a', capabilities: pathRequirements(parsePathTemplate(config)), allowedPorts: [32001],
                     allowedListenerAddresses: ['127.0.0.1'], egressPolicyRevision: 1, allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false };
-                await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',
+                await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,\'admin-shared\',NULL,1)',
                     [id, 'scope-a', createHash('sha256').update(id).digest('hex'), now, now + 3600000, JSON.stringify(facts)]);
                 await connection.execute('INSERT INTO runtime_nodes(node_id) VALUES(?)', [id]);
-                for (const actor of ['owner', 'manager']) await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)', [id, actor]);
+                for (const actor of ['owner', 'manager']) await connection.execute('INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)', [id, actor, JSON.stringify([id.startsWith('ingress')?'ingress':id==='middle'?'transit':'egress']), JSON.stringify({allowedPorts:id==='ingress'?[32001]:[32002,32003],maxBindings:8})]);
                 if (id !== 'ingress') await connection.execute('INSERT INTO node_relay_endpoints(node_id,revision,config,created_by,updated_at) VALUES(?,1,?,?,?)',
                     [id, JSON.stringify({ listenAddress: '127.0.0.1', advertisedHost: '127.0.0.1', allowedTcpPorts: [32002, 32003] }), 'owner', now]);
             }
@@ -71,7 +73,7 @@ test('path binding uses real original owner transactions: immutable expanded pro
             const spec = { enabled: false, protocols: ['tcp', 'udp'], ingress: { nodeId: 'ingress', listen: { address: '127.0.0.1', port: 32001 } },
                 target: { host: '127.0.0.1', port: 9000 }, path: { via: ['middle', 'egress'] }, transport: config.transport };
             for (const id of ['main', 'race', 'quota']) {
-                await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES(?,?,1,?,?)', [id, 'scope-a', JSON.stringify(spec), 'manager']);
+                await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor,owner_actor_id) VALUES(?,?,1,?,?,?)', [id, 'scope-a', JSON.stringify(spec), 'manager', 'manager']);
                 await connection.execute('INSERT INTO forward_revisions(forward_id,revision,spec) VALUES(?,1,?)', [id, JSON.stringify(spec)]);
             }
             async function call(method: string, path: string, input?: unknown, status = 200, actor = 'manager', key: string = randomUUID()) {
@@ -102,7 +104,7 @@ test('path binding uses real original owner transactions: immutable expanded pro
             await connection.execute('DELETE FROM node_grants WHERE node_id=? AND actor_id=?', ['middle', 'manager']);
             before = await inventory(connection); await call('PUT', 'forwards/main/path-binding', input(2, 1), 404); assert.equal(await inventory(connection), before);
             assert.deepEqual(await call('PUT', 'forwards/main/path-binding', input(1, 2), 202, 'manager', 'switch'), switched);
-            await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)', ['middle', 'manager']);
+            await connection.execute('INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)', ['middle', 'manager',JSON.stringify(['transit']),JSON.stringify({allowedPorts:[32002,32003],maxBindings:8})]);
             await connection.execute('UPDATE node_relay_endpoints SET revision=2 WHERE node_id=?', ['middle']);
             before = await inventory(connection); await call('PUT', 'forwards/main/path-binding', input(2, 1), 409); assert.equal(await inventory(connection), before);
             await connection.execute('UPDATE node_relay_endpoints SET revision=1 WHERE node_id=?', ['middle']);
@@ -151,10 +153,10 @@ test('path binding uses real original owner transactions: immutable expanded pro
             await assert.rejects(reader.pool.query('DELETE FROM current_path_bindings'));
             const readIdentity = new Identity(reader), readNodes = new Nodes(reader, readIdentity, {} as NodeCertificateAuthority);
             const readStore = new MySqlPathBindings(), pathStore = new MySqlPathTemplates();
-            const readPaths = new PathBindings(reader, readIdentity, pathStore, new NativePathReferences(readNodes, control.transport, control.relayEndpoints), readStore, control.forwarding);
+            const readPaths = new PathBindings(reader, readIdentity, new ResourceAccess(readIdentity,new MySqlResourceAccessStore()), pathStore, new NativePathReferences(readNodes, control.transport, control.relayEndpoints), readStore, control.forwarding);
             const readApp = createApp({ identity: readIdentity, pathBindings: readPaths } as unknown as ControlApplication,
                 {} as RuntimeController, { allow: async () => undefined } as unknown as AuthorityStore);
-            async function read(path: string, status = 200, actor = 'viewer') {
+            async function read(path: string, status = 200, actor = 'manager') {
                 const response = await readApp.request('/api/v1/scopes/scope-a/' + path, { headers: { authorization: 'Bearer ' + tokens[actor] } });
                 const body = await response.json() as any; assert.equal(response.status, status, JSON.stringify(body)); return body;
             }
@@ -162,7 +164,7 @@ test('path binding uses real original owner transactions: immutable expanded pro
             assert.equal((await read('forwards/main/path-binding')).history.length, 2);
             const page = await read('path-templates/saved/references?page=1&limit=1'); assert.equal(page.items.length, 1); assert.equal(page.total, 2);
             const next = await read('path-templates/saved/references?page=2&limit=1'); assert.notEqual(page.items[0].forwardId, next.items[0].forwardId);
-            await read('path-templates/saved/references?targetRevision=1', 403); await read('path-templates/saved/references?revision=01', 422);
+            await read('path-templates/saved/references?targetRevision=1', 404, 'viewer'); await read('path-templates/saved/references?revision=01', 422);
             await read('path-templates/saved/references?limit=1&limit=2', 422); await read('forwards/main/path-binding?revision=1', 422);
             await read('forwards/main/path-binding', 404, 'outsider'); await read('path-templates/Saved/references', 404);
             assert.equal(await inventory(connection), before);

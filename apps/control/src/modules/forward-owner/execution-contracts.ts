@@ -12,7 +12,8 @@ export interface ForwardAuthorizationExecution<Tx> {
 
 export interface ForwardResourceHost<Tx> {
     lockNode(tx: Tx, nodeId: string): Promise<void>;
-    reserve(tx: Tx, forward: Forward): Promise<ReservedSlot[]>;
+    lockOwnership(tx: Tx, forward: Forward): Promise<void>;
+    reserve(tx: Tx, forward: Forward, creatingOwnerActorId?:string): Promise<ReservedSlot[]>;
     transition(tx: Tx, current: Forward, next: Forward): Promise<ReservedSlot[]>;
 }
 

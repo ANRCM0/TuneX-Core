@@ -68,7 +68,7 @@ test('211 lower cancellation has its exact minimal keys and observation registra
     const tx = { connection: { stream: { destroy(error: Error) { assert.equal(error.message, 'Observation connection stopped'); events.push('stop'); } } },
         destroy() { assert.equal(this, tx); events.push('destroy'); }, release() { assert.fail('cancelled connection must not reenter pool'); } };
     const db = { pool: { async getConnection() { events.push('pool'); return tx; } }, guard() { assert.fail('registration cancellation precedes guard'); } } as unknown as MySqlUnitOfWork;
-    const reader = new MySqlNodeObservationReader(db, { scope: async () => assert.fail('registration cancellation precedes authorization') });
+    const reader = new MySqlNodeObservationReader(db, { scope: async () => assert.fail('registration cancellation precedes authorization') }, { principal: async () => assert.fail('registration cancellation precedes principal'), forward: async () => assert.fail('observation does not authorize a Forward'), node: async () => assert.fail('registration cancellation precedes Node authorization'), owned: async () => assert.fail('observation does not mutate ownership') });
     const context = { actorId: 'actor', scopeId: 'scope', nodeId: 'node', deadlineAt: 1, signal };
     await assert.rejects(reader.read(context), error => error === reason);
     assert.deepEqual(events, ['throw', 'pool', 'subscribe', 'stop', 'destroy', 'throw', 'remove']);

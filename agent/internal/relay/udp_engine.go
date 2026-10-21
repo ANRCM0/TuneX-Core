@@ -92,6 +92,9 @@ func (s *association) run() {
 			if e.peerCheck(peer) != nil {
 				return
 			}
+			if _, err := reservePayload(s.ctx, e.payloadGate, func() error { return e.peerCheck(peer) }, len(packet), true); err != nil {
+				return
+			}
 			peer.SetWriteDeadline(time.Now().Add(time.Duration(e.assignment.Driver.Config.Profile.HandshakeTimeoutSeconds) * time.Second))
 			if err := WriteFrame(peer, FrameUDP, packet, "udp", int(e.assignment.Driver.Config.Profile.MaxUdpDatagramBytes)); err != nil {
 				return
@@ -136,6 +139,9 @@ func (s *association) replies() {
 		if !allowed {
 			e.dropped.Add(1)
 			continue
+		}
+		if _, err := reservePayload(s.ctx, e.payloadGate, func() error { return e.peerCheck(s.connection) }, len(packet), true); err != nil {
+			return
 		}
 		e.udp.SetWriteDeadline(time.Now().Add(time.Second))
 		n, err := e.udp.WriteToUDPAddrPort(packet, s.client)
@@ -195,6 +201,9 @@ func (e *Engine) bridgeUDP(target net.Conn, connection *tls.Conn) {
 				e.dropped.Add(1)
 				continue
 			}
+			if _, err := reservePayload(sessionCtx, e.payloadGate, func() error { return e.peerCheck(connection) }, n, true); err != nil {
+				return
+			}
 			connection.SetWriteDeadline(time.Now().Add(time.Duration(e.assignment.Driver.Config.Profile.HandshakeTimeoutSeconds) * time.Second))
 			if err := WriteFrame(connection, FrameUDP, packet[:n], "udp", maximum); err != nil {
 				return
@@ -206,6 +215,9 @@ func (e *Engine) bridgeUDP(target net.Conn, connection *tls.Conn) {
 		connection.SetReadDeadline(time.Now().Add(idle))
 		kind, packet, err := ReadFrame(connection, "udp", maximum)
 		if err != nil || kind == FrameClose || sessionCtx.Err() != nil || e.peerCheck(connection) != nil {
+			return
+		}
+		if _, err := reservePayload(sessionCtx, e.payloadGate, func() error { return e.peerCheck(connection) }, len(packet), true); err != nil {
 			return
 		}
 		lock.Lock()

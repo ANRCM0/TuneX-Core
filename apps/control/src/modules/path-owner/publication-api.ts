@@ -3,7 +3,7 @@ import type { PathBindingEvidence } from './binding-api.ts';
 import type { PathPublicationAttempt, PathPublicationHead, PathPublicationPlan, PublicationOperation } from './publication-contracts.ts';
 import type { PATH_PUBLICATION_LIMITS } from './limits.ts';
 
-export const PATH_PUBLICATION_API_INTERFACE_VERSION=1 as const;
+export const PATH_PUBLICATION_API_INTERFACE_VERSION=2 as const;
 
 export interface PathPublicationEvidence extends PathBindingEvidence {health:'unknown';automaticExecution:false;atomicAcrossForwards:false}
 export type PathPublicationHeadView=Omit<PathPublicationHead,'createdAt'>&{createdAt:string};

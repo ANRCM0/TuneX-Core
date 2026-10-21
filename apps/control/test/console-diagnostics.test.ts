@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConsoleQueries } from '../src/application/console-queries.ts';
 import { MySqlConsoleReadModels } from '../src/infrastructure/mysql-console-read.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
 
 function fixture(permit: boolean, returned = true) {
@@ -21,11 +22,11 @@ function fixture(permit: boolean, returned = true) {
       }]:[])],[]];
     }
   };
+  const identity={scope:async (_tx:Transaction,actor:string,scope:string)=>{ if(!permit||actor!=='viewer'||scope!=='allowed-scope')throw Error('Denied'); }};
+  const access=new ResourceAccess(identity,{async scopeOwner(){return {ownerActorId:'owner'};},async ownership(){throw new Error('Unused');},async node(current,actor,scope,id){assert.equal(current,tx);assert.equal(actor,'viewer');assert.equal(scope,'allowed-scope');return returned&&id==='node-1'?{source:'private' as const,ownerActorId:'viewer',granted:false}:undefined;}});
   const queries=new ConsoleQueries<Transaction>(
     {transaction:async action=>action(tx as unknown as Transaction)},
-    {scope:async (_tx:Transaction,actor:string,scope:string)=>{
-      if(!permit||actor!=='viewer'||scope!=='allowed-scope')throw Error('Denied');
-    }}, new MySqlConsoleReadModels()
+    identity, new MySqlConsoleReadModels(), access
   );
   return {queries,statements};
 }
@@ -47,7 +48,7 @@ test('Node diagnostics is read-only, scoped, sanitized and never claims probe he
   assert.deepEqual(result.errors,[{assignmentId:'b',condition:'error',errorCode:'TARGET_UNAVAILABLE',retryable:true}]);
   assert.equal(JSON.stringify(result).includes('MUST_NOT_LEAK'),false);
   assert.equal(f.statements.length,1);
-  assert.deepEqual(f.statements[0]!.args,['node-1','allowed-scope']);
+  assert.deepEqual(f.statements[0]!.args,['node-1','allowed-scope','viewer']);
 });
 test('Node diagnostics returns 404 for out-of-scope or missing Node',async()=>{
   const f=fixture(true,false);

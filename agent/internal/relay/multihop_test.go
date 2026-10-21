@@ -13,9 +13,13 @@ import (
 
 	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/executionhost"
 )
 
 func multihopChain(t *testing.T, count int, protocol string, target uint64, allow func() error) []*Engine {
+	return meteredMultihopChain(t, count, protocol, target, allow, nil)
+}
+func meteredMultihopChain(t *testing.T, count int, protocol string, target uint64, allow func() error, gates []executionhost.PayloadGate) []*Engine {
 	t.Helper()
 	ca := createCA(t)
 	certs := make([]tls.Certificate, count)
@@ -54,7 +58,11 @@ func multihopChain(t *testing.T, count int, protocol string, target uint64, allo
 			role = "multihop-egress"
 		}
 		a := adp3.Assignment{AssignmentId: path[i].AssignmentId, ForwardId: "forward-a", ForwardRevision: 1, DeploymentGeneration: 1, BindingFence: path[i].BindingFence, Role: role, Protocol: protocol, Phase: "prepared", Resource: adp3.Resource{Address: "127.0.0.1", Port: path[i].Port, Protocol: physical}, Driver: adp3.Driver{Id: "native.multihop.v1", SchemaVersion: 1, ConfigDigest: configHash, Config: config}, DrainTimeoutSeconds: 1}
-		engines[i], err = PrepareMultihop(a, Identity{certs[i], ca.roots}, 8, allow)
+		var gate executionhost.PayloadGate
+		if i < len(gates) {
+			gate = gates[i]
+		}
+		engines[i], err = PrepareMultihopMetered(a, Identity{certs[i], ca.roots}, 8, allow, gate)
 		if err != nil {
 			t.Fatal(err)
 		}

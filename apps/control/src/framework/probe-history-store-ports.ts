@@ -1,4 +1,5 @@
-export const PROBE_HISTORY_STORAGE_INTERFACE_VERSION=1 as const;
+import type { ReadPrincipal } from './resource-access-ports.ts';
+export const PROBE_HISTORY_STORAGE_INTERFACE_VERSION=2 as const;
 
 // Historical capture/persistence envelopes only, not executable grants or an issuer.
 export interface ProbeHistoryPermit<Binding extends {forwardId:string;nodeId:string}={forwardId:string;nodeId:string},State extends string=string,Measurement extends string=string,Service=unknown,Challenge=unknown> {
@@ -28,7 +29,7 @@ export interface ProbeHistoryStorage<Tx,Record extends ProbeHistoryRecord> {
     insert(tx:Tx,value:Record,now:number):Promise<void>;
     get(tx:Tx,scope:string,id:string,lock?:boolean):Promise<Record|null>;
     put(tx:Tx,value:Record):Promise<void>;
-    history(tx:Tx,scope:string,query:ProbeHistoryQuery<Record['state'],NonNullable<Record['result']>['status']>):Promise<Record[]>;
+    history(tx:Tx,scope:string,principal:ReadPrincipal,query:ProbeHistoryQuery<Record['state'],NonNullable<Record['result']>['status']>):Promise<Record[]>;
 }
 
 export interface ProbePlanStoredHead<Config extends {forwardId:string;mode:string;expiresAt:number}={forwardId:string;mode:string;expiresAt:number},Binding=unknown,State extends string=string,Code extends string=string> {
@@ -61,7 +62,7 @@ export interface ProbePlanStorage<Tx,Head extends ProbePlanStoredHead,Decision e
     put(tx:Tx,head:Head):Promise<void>;
     append(tx:Tx,scope:string,id:string,decision:Decision):Promise<void>;
     decisions(tx:Tx,scope:string,id:string):Promise<Decision[]>;
-    history(tx:Tx,scope:string,query:ProbePlanStoredQuery<Head['state'],Head['config']['mode']>):Promise<Head[]>;
+    history(tx:Tx,scope:string,principal:ReadPrincipal,query:ProbePlanStoredQuery<Head['state'],Head['config']['mode']>):Promise<Head[]>;
     due(tx:Tx,now:number):Promise<ProbePlanStoredHeader|null>;
     defer(tx:Tx,header:ProbePlanStoredHeader,cutoff:number,retryAt:number):Promise<void>;
     isolate<T>(tx:Tx,action:()=>Promise<T>):Promise<{accepted:true;value:T}|{accepted:false;error:Failure}>;

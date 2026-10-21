@@ -32,7 +32,7 @@ export type AccessNodeCatalogOriginalDeclarations=[
 
 function fixture(){
     const tx:Tx={original:Symbol('one original transaction')},events:string[]=[],calls:unknown[][]=[],error=new Error('original effect error');
-    const input={role:'viewer' as const,expectedRevision:0},grant={nodeId:'node-a',actorId:'subject-a',revision:4,allowed:false,changed:true};
+    const input={role:'viewer' as const,expectedRevision:0},grant={nodeId:'node-a',actorId:'subject-a',revision:4,allowed:false,allowedRoles:null,portLimits:null,changed:true};
     const member={actorId:'subject-a',revision:3,role:'viewer',active:true,changed:true};
     const facts:AuthorizedNodeFacts={nodeId:'node-a',scopeId:'scope-a',capabilities:['adp.3','native.direct.v1','tcp'],allowedPorts:[32001],allowedListenerAddresses:['127.0.0.1'],allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false,egressPolicyRevision:7};
     const change:Node.NodeManagementChange={nodeId:'node-a',kind:'revoke',facts},result:Identity.AccessExecutionResult={operationIds:['operation-a'],maximumAuthorization:10000};

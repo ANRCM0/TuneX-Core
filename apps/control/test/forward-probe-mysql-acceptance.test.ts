@@ -58,14 +58,14 @@ async function fixture() {
         const facts: AuthorizedNodeFacts = { nodeId: 'node-a', scopeId: 'scope-a',
             capabilities: ['adp.3', 'native.direct.v1', 'tcp'], allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [22001],
             egressPolicyRevision: 1, allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false };
-        await connection.execute(`INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,revoked,facts)
-            VALUES(?,?,?,0,?,FALSE,?)`, ['node-a', 'scope-a', createHash('sha256').update('node-a').digest('hex'),
+        await connection.execute(`INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,revoked,facts,resource_source,owner_actor_id,resource_revision)
+            VALUES(?,?,?,0,?,FALSE,?,'admin-shared',NULL,1)`, ['node-a', 'scope-a', createHash('sha256').update('node-a').digest('hex'),
             Date.now() + 120000, JSON.stringify(facts)]);
-        await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)', ['node-a', 'owner']);
-        await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES(?,?,1,?,?)',
-            ['forward-a', 'scope-a', JSON.stringify(forward.spec), 'owner']);
-        await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES(?,?,1,?,?)',
-            ['foreign-forward', 'scope-b', JSON.stringify(forward.spec), 'outsider']);
+        await connection.execute('INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)', ['node-a', 'owner', JSON.stringify(['ingress']), JSON.stringify({allowedPorts:[22001],maxBindings:1})]);
+        await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor,owner_actor_id) VALUES(?,?,1,?,?,?)',
+            ['forward-a', 'scope-a', JSON.stringify(forward.spec), 'owner', 'owner']);
+        await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor,owner_actor_id) VALUES(?,?,1,?,?,?)',
+            ['foreign-forward', 'scope-b', JSON.stringify(forward.spec), 'outsider', 'outsider']);
         await connection.execute('INSERT INTO runtime_nodes(node_id,session_epoch,boot_id,snapshot_generation) VALUES(?,2,?,3)',
             ['node-a', 'boot-a']);
         const snapshot = () => {
@@ -116,7 +116,7 @@ test('probe preflight production API is SELECT-only, manager-plus-grant authoriz
             await f.request({ id: 'missing-forward', status: 404 });
             await f.connection.execute("DELETE FROM node_grants WHERE node_id='node-a' AND actor_id='owner'");
             await f.request({ status: 404 });
-            await f.connection.execute("INSERT INTO node_grants(node_id,actor_id) VALUES('node-a','owner')");
+            await f.connection.execute("INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES('node-a','owner',?,?)", [JSON.stringify(['ingress']), JSON.stringify({allowedPorts:[22001],maxBindings:1})]);
             await f.request({ input: { ...command, expectedRevision: 2 }, status: 409 });
             await f.request({ input: { ...command, target: '169.254.169.254' }, status: 422 });
             await f.request({ input: { ...command, timeoutMs: 2001 }, status: 422 });

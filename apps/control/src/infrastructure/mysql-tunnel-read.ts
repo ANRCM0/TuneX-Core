@@ -1,3 +1,4 @@
+import type { ReadPrincipal } from '../framework/public.ts';
 import { TunnelReadModels } from '../application/management-read-models.ts';
 import { nativeReadProjectionValues } from '../compatibility/public.ts';
 import { MySqlTunnelMetadataReadStore } from './mysql-management-read.ts';
@@ -12,5 +13,5 @@ export class MySqlTunnelReader implements TunnelReadPort<Transaction> {
     async node(tx:Transaction,scope:string,node:string) {return reader.node(tx,scope,node);}
     async endpoint(tx:Transaction,node:string) {return reader.endpoint(tx,node);}
     async peers(tx:Transaction,node:string,now:number) {return reader.peers(tx,node,now);}
-    async references(tx:Transaction,scope:string,node:string,paging:ConsolePaging) {return reader.references(tx,scope,node,paging);}
+    async references(tx:Transaction,scope:string,principal:ReadPrincipal,node:string,paging:ConsolePaging) {return reader.references(tx,scope,principal,node,paging);}
 }

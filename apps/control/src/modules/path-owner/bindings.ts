@@ -3,7 +3,7 @@ import type { Forward, ForwardSpec } from '@tunex/core';
 import { nativeValueDigest as digest, nativeIsoTime, nativeWallClockSource, nativeReadProjectionValues } from '../../compatibility/public.ts';
 import { pageWindow as consolePage } from '../../framework/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import { validateTemplateHead, validateTemplateRevision } from './template-state.ts';
 import { expandPath, parsePathSelection } from './binding-values.ts';
 import type { ForwardPathBindings, PathBindingPreview, PathBindingRecord, PathBindingWriter, PathSelection } from './binding-contracts.ts';
@@ -21,14 +21,15 @@ const flags = { source: 'persisted-control-state', reserved: false, executionAut
 export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi {
     private readonly db: TransactionBoundary<Tx>;
     private readonly auth: ScopeAuthorization<Tx>;
+    private readonly access: ResourceReadAccess<Tx>;
     private readonly templates: PathTemplateReader<Tx>;
     private readonly referencesOwner: PathTemplateReferences<Tx>;
     private readonly store: PathBindingWriter<Tx>;
     private readonly forwards: Pick<ForwardWriter<Tx>, 'record'>;
     private readonly clock: () => number;
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, templates: PathTemplateReader<Tx>,
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, access: ResourceReadAccess<Tx>, templates: PathTemplateReader<Tx>,
         references: PathTemplateReferences<Tx>, store: PathBindingWriter<Tx>, forwards: Pick<ForwardWriter<Tx>, 'record'>, clock: () => number = nativeWallClockSource()) {
-        this.db = db; this.auth = auth; this.templates = templates; this.referencesOwner = references;
+        this.db = db; this.auth = auth; this.access = access; this.templates = templates; this.referencesOwner = references;
         this.store = store; this.forwards = forwards; this.clock = clock;
     }
     private async template(tx: Tx, scope: string, selection: PathSelection, lock: boolean, requireActive: boolean) {
@@ -42,6 +43,8 @@ export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi 
         return record;
     }
     async resolve(tx: Tx, actor: string, current: Forward, selection: PathSelection) {
+        await this.access.owned(tx, actor, current.scopeId, 'forward', current.id);
+        await this.access.owned(tx, actor, current.scopeId, 'path-template', selection.templateId);
         const old = await this.store.current(tx, current.scopeId, current.id);
         if (old) await this.checked(tx, current, old);
         const record = await this.template(tx, current.scopeId, selection, true, true);
@@ -52,7 +55,9 @@ export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi 
     async resolveCreateIn(tx: Tx, actor: string, scope: string, input: ForwardSpec, selectionInput: PathSelection): Promise<ForwardSpec> {
         if (![actor,scope].every(isId)) invalid('Valid native creation identity required');
         const spec = parseForwardSpec(input); if (!spec.ok) invalid('Valid native creation spec required');
-        const selection = parsePathSelection(selectionInput), record = await this.template(tx, scope, selection, true, true);
+        const selection = parsePathSelection(selectionInput);
+        await this.access.owned(tx, actor, scope, 'path-template', selection.templateId);
+        const record = await this.template(tx, scope, selection, true, true);
         const resolved = await this.referencesOwner.validate(tx, actor, scope, record.config);
         if (resolved.profileDigest !== record.profileDigest) throw new ControlError('INTEGRITY_FAILURE', 409, 'Immutable Profile digest differs');
         return expandPath(spec.value, record.config);
@@ -75,6 +80,8 @@ export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi 
             sequence: binding.sequence, forwardRevision: binding.forwardRevision };
     }
     async accept(tx: Tx, actor: string, next: Forward, selection: PathSelection) {
+        await this.access.owned(tx, actor, next.scopeId, 'forward', next.id);
+        await this.access.owned(tx, actor, next.scopeId, 'path-template', selection.templateId);
         const old = await this.store.current(tx, next.scopeId, next.id);
         if (old && sameSelection(old, selection) && sameTopology(next, { ...next, spec: old.expandedSpec })) {
             return { ...await this.checked(tx, next, old), changed: false };
@@ -104,6 +111,7 @@ export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi 
         if (![actor, scope, forwardId].every(isId)) invalid('Valid Forward identity required');
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
+            await this.access.forward(tx, actor, scope, forwardId);
             const forward = await this.forwards.record(tx, scope, forwardId), binding = await this.store.current(tx, scope, forwardId);
             if (binding) await this.checked(tx, forward, binding);
             const history = await this.store.history(tx, scope, forwardId);
@@ -117,7 +125,7 @@ export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi 
             }
             if (binding && !history.some(item => item.sequence === binding.sequence))
                 throw new ControlError('INTEGRITY_FAILURE', 409, 'Current path pointer is not present in immutable history');
-            return deepFreeze({ forwardId, revision: forward.revision, deleting: forward.deleting, recoverySuspended: forward.recoverySuspended,
+            return deepFreeze({ forwardId, ownerActorId: forward.ownerActorId, revision: forward.revision, deleting: forward.deleting, recoverySuspended: forward.recoverySuspended,
                 binding: binding ? checkedHistory.find(item => item.sequence === binding.sequence) : null, history: checkedHistory,
                 ...flags, referenceAuthorization: 'not-rechecked-by-this-query', consistency: 'read-committed-not-global-snapshot' });
         });
@@ -131,6 +139,8 @@ export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi 
         const selection = parsePathSelection(input);
         if (![actor, scope, forwardId].every(isId) || !isCounter(expectedRevision)) invalid('Exact Forward identity and CAS required');
         await this.auth.scope(tx, actor, scope, true);
+        await this.access.owned(tx, actor, scope, 'forward', forwardId);
+        await this.access.owned(tx, actor, scope, 'path-template', selection.templateId);
         const current = await this.forwards.record(tx, scope, forwardId);
         if (current.deleting || current.recoverySuspended || current.revision !== expectedRevision)
             throw new ControlError('REVISION_CONFLICT', 409, 'Current Forward changed, is deleting or recovery suspended');
@@ -151,6 +161,8 @@ export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi 
         const query = Object.freeze({ ...input }), paging = Object.freeze(consolePage(query.page, query.limit));
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope, query.targetRevision !== undefined);
+            await this.access.owned(tx, actor, scope, 'path-template', id, query.targetRevision === undefined);
+            const principal = await this.access.principal(tx, actor, scope);
             const found = await this.templates.head(tx, scope, id); if (!found) notFound();
             const head = validateTemplateHead(found, id);
             let target: (PathSelection & { config: PathTemplateConfig }) | null = null;
@@ -164,7 +176,7 @@ export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi 
                     if (resolved.profileDigest !== record.profileDigest) throw new ControlError('INTEGRITY_FAILURE', 409, 'Immutable Profile digest differs');
                 }
             }
-            const result = await this.store.references(tx, scope, id, paging, query.revision);
+            const result = await this.store.references(tx, scope, principal, id, paging, query.revision);
             if (!Number.isSafeInteger(result.total) || result.total < 0 || result.items.length > paging.limit ||
                 new Set(result.items.map(item => item.forward.id)).size !== result.items.length) throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid path reference page');
             const items = [];
@@ -183,7 +195,7 @@ export class PathBindings<Tx> implements ForwardPathBindings<Tx>,PathBindingApi 
                 items.push({ forwardId: item.forward.id, expectedRevision: item.forward.revision, binding, recoverySuspended: item.recoverySuspended,
                     spec: item.forward.spec, proposedSpec, unavailableReason, changed: proposedSpec ? digest(proposedSpec) !== digest(item.forward.spec) || !sameSelection(binding, target!) : null });
             }
-            return deepFreeze({ templateId: id, currentRevision: head.currentRevision, archived: head.archived, ...paging, total: result.total,
+            return deepFreeze({ templateId: id, ownerActorId: head.ownerActorId, currentRevision: head.currentRevision, archived: head.archived, ...paging, total: result.total,
                 referenceRevision: query.revision ?? null, target, items, ...flags, previewOnly: true,
                 consistency: 'read-committed-page-not-global-snapshot', observedAt: nativeReadProjectionValues.currentIso() });
         });

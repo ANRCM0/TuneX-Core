@@ -4,7 +4,7 @@ import { pageWindow as consolePage } from '../../framework/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
 import type { IngressGroupResolver } from './contracts.ts';
 import type { IngressMigrationApi, IngressMigrationCreated as Created, IngressMigrationActed as Acted, IngressMigrationCancelled as Cancelled } from './migration-api.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { IdempotentRequests, ResourceReadAccess, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
 import { INGRESS_MIGRATION_LIMITS, parseIngressLineage, parseIngressMigrationInput, parseIngressMigrationPlan, parseIngressOriginRef } from './migration-values.ts';
 import { parsePublicationState, PATH_PUBLICATION_REJECTIONS, publicationHash } from '../path-owner/public.ts';
 import type { IngressDefinitionChange, IngressLineage, IngressMigrationAttempt, IngressMigrationForwardPort, IngressMigrationInput, IngressMigrationPlan, IngressMigrationRecord, IngressMigrationStore, IngressOriginRef, IngressOrigins } from './migration-contracts.ts';
@@ -100,8 +100,11 @@ export class IngressMigrations<Tx> implements IngressMigrationApi {
     private readonly forwards: IngressMigrationForwardPort<Tx>;
     private readonly clock: () => number;
     private readonly newId: () => string;
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, requests: IdempotentRequests<Tx>, store: IngressMigrationStore<Tx>, groups: IngressGroupResolver<Tx>,
+    private readonly access:ResourceReadAccess<Tx>;
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, access: ResourceReadAccess<Tx>, requests: IdempotentRequests<Tx>, store: IngressMigrationStore<Tx>, groups: IngressGroupResolver<Tx>,
         origins: IngressOrigins<Tx>, forwards: IngressMigrationForwardPort<Tx>, clock: () => number = nativeWallClockSource(), newId: () => string = randomUUID) {
+        this.access=access;
+
         this.db = db; this.auth = auth; this.requests = requests; this.store = store; this.groups = groups; this.origins = origins; this.forwards = forwards; this.clock = clock; this.newId = newId;
     }
     private now() { const at = this.clock(); if (!time(at)) corrupt(); return at; }
@@ -185,6 +188,7 @@ export class IngressMigrations<Tx> implements IngressMigrationApi {
         identity(actor, scope); const ref = parseIngressOriginRef(input);
         if (ref.kind !== 'migration') invalid('Exact migration origin required');
         await this.auth.scope(tx, actor, scope);
+        await this.access.owned(tx, actor, scope, 'ingress-migration', ref.batchId);
         const record = await this.read(tx, scope, ref.batchId);
         if (record.head.recoveryInvalidated) throw new ControlError('RECOVERY_REPLAY_REQUIRES_REVIEW', 409, 'Restored migration origin cannot authorize new migration');
         const item = record.plan.items[ref.position - 1], applied = record.attempts.find(attempt => attempt.position === ref.position && attempt.kind === 'apply'), compensation = record.attempts.find(attempt => attempt.position === ref.position && attempt.kind === 'compensate');
@@ -204,7 +208,8 @@ export class IngressMigrations<Tx> implements IngressMigrationApi {
         const paging = Object.freeze(consolePage(input.page,input.limit)), groupId = input.groupId;
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
-            const page = await this.store.list(tx, scope, paging, groupId);
+            const principal = await this.access.principal(tx, actor, scope);
+            const page = await this.store.list(tx, scope, principal, paging, groupId);
             if (!Number.isSafeInteger(page.total) || page.total < 0 || page.total > INGRESS_MIGRATION_LIMITS.batchesPerScope || !Array.isArray(page.items) || page.items.length > paging.limit || new Set(page.items.map(item => item.batchId)).size !== page.items.length) corrupt();
             return deepFreeze({ ...paging, total: page.total, items: page.items.map(item => ({ ...checkedHead(item), createdAt: nativeIsoTime(item.createdAt) })), ...flags });
         });
@@ -213,6 +218,7 @@ export class IngressMigrations<Tx> implements IngressMigrationApi {
         identity(actor, scope, id);
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
+            await this.access.owned(tx, actor, scope, 'ingress-migration', id, true);
             const record = await this.read(tx, scope, id), refs = record.attempts.flatMap(attempt => attempt.outcome.accepted && attempt.outcome.result.accepted.body.operationId ? [attempt.outcome.result.accepted.body] : []);
             const ids = [...new Set(refs.map(ref => ref.operationId!))], operations = ids.length ? await this.store.operations(tx, scope, ids) : [];
             if (operations.length > ids.length || new Set(operations.map(item => item.operationId)).size !== operations.length || operations.some(item =>

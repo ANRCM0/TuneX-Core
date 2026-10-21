@@ -1,6 +1,6 @@
 import type { Forward } from '@tunex/core';
 
-export const RUNTIME_RESOURCE_INTERFACE_VERSION=1 as const;
+export const RUNTIME_RESOURCE_INTERFACE_VERSION=2 as const;
 
 export interface RuntimeSlotKey {
     nodeId:string;
@@ -54,8 +54,10 @@ export interface RuntimeNodeResources<Tx> {
     maximumAuthorization(tx:Tx,nodeId:string):Promise<number|null>;
 }
 export interface RuntimeResourceAccess<Tx> extends RuntimeNodeResources<Tx> {
-    reserve(tx:Tx,forward:Forward):Promise<ReservedSlot[]>;
-    reserveRelay(tx:Tx,forward:Forward,resources:readonly RelayResource[],generation:number):Promise<ReservedRelayResource[]>;
+    /** Caller holds the original Forward row lock; serialize changes to counted ownership. */
+    lockOwnership(tx:Tx,forward:Forward):Promise<void>;
+    reserve(tx:Tx,forward:Forward,creatingOwnerActorId?:string):Promise<ReservedSlot[]>;
+    reserveRelay(tx:Tx,forward:Forward,resources:readonly RelayResource[],generation:number,creatingOwnerActorId?:string):Promise<ReservedRelayResource[]>;
     transition(tx:Tx,current:Forward,next:Forward):Promise<ReservedSlot[]>;
     releaseForwardSlots(tx:Tx,forwardId:string):Promise<void>;
     releaseObsoleteSlots(tx:Tx,forward:Forward):Promise<void>;

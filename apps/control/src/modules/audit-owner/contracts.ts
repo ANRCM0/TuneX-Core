@@ -1,14 +1,16 @@
-export const AUDIT_SOURCES = ['access','node-security','transport','path-template','path-binding','path-group','path-group-binding',
+export const AUDIT_SOURCES = ['access','node-security','forward-ownership','resource-limits','transport','path-template','path-binding','path-group','path-group-binding',
     'path-publication','path-publication-attempt','ingress-group','ingress-deployment','ingress-deployment-attempt',
     'ingress-migration','ingress-migration-attempt','operation'] as const;
 export type AuditSource = typeof AUDIT_SOURCES[number];
 export const AUDIT_KINDS: Readonly<Record<AuditSource, readonly string[]>> = {
     access: ['member_change','node_grant_change'],
-    'node-security': ['credential_rotation','policy_update','node_revocation','relay_endpoint_update','relay_credential_issue'],
-    transport: ['grant-change'], 'path-template': ['publish','archive'], 'path-binding': ['bind'],
-    'path-group': ['publish','archive'], 'path-group-binding': ['bind'],
+    'node-security': ['credential_rotation','policy_update','node_revocation','relay_endpoint_update','relay_credential_issue','resource_classification'],
+    'forward-ownership': ['classify-owner'],
+    'resource-limits': ['configure'],
+    transport: ['grant-change'], 'path-template': ['publish','archive','classify-owner'], 'path-binding': ['bind'],
+    'path-group': ['publish','archive','classify-owner'], 'path-group-binding': ['bind'],
     'path-publication': ['create','apply','compensate','cancel','recovery'], 'path-publication-attempt': ['apply','compensate'],
-    'ingress-group': ['publish','archive'], 'ingress-deployment': ['create','compensate','cancel','recovery'],
+    'ingress-group': ['publish','archive','classify-owner'], 'ingress-deployment': ['create','compensate','cancel','recovery'],
     'ingress-deployment-attempt': ['create','compensate'], 'ingress-migration': ['create','apply','compensate','cancel','recovery'],
     'ingress-migration-attempt': ['apply','compensate'], operation: ['create','update','enable','disable','delete','retry','policy','revoke'],
 };
@@ -35,7 +37,7 @@ export interface AuditRecord extends AuditPosition {
         'ingress-group' | 'ingress-deployment' | 'ingress-migration';
     entityId: string;
     revision: number | null;
-    revisionKind: 'access' | 'grant' | 'config' | 'forward' | 'batch' | null;
+    revisionKind: 'access' | 'grant' | 'config' | 'forward' | 'batch' | 'resource' | null;
     sequence: number | null;
     position: number | null;
     nodeId: string | null;

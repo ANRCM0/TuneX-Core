@@ -2,7 +2,7 @@ import { nativeReadProjectionValues } from '../../compatibility/public.ts';
 import { deepFreeze, isCounter, isId, parseForwardSpec } from '@tunex/core';
 import { consolePage } from '../console-query-owner/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import type { TransportProfileResolver } from './contracts.ts';
 
 import type { ProfileReferenceQuery, TransportReferenceReader, TransportQueryApi } from './query-contracts.ts';
@@ -12,10 +12,11 @@ export type { ProfileReferenceQuery, ProfileReference, TransportReferenceReader 
 export class TransportQueries<Tx> implements TransportQueryApi {
     private readonly db: TransactionBoundary<Tx>;
     private readonly identity: ScopeAuthorization<Tx>;
+    private readonly access: ResourceReadAccess<Tx>;
     private readonly read: TransportReferenceReader<Tx>;
     private readonly resolver: TransportProfileResolver<Tx>;
-    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, read: TransportReferenceReader<Tx>, resolver: TransportProfileResolver<Tx>) {
-        this.db = db; this.identity = identity; this.read = read; this.resolver = resolver;
+    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, read: TransportReferenceReader<Tx>, resolver: TransportProfileResolver<Tx>, access: ResourceReadAccess<Tx>) {
+        this.db = db; this.identity = identity; this.access = access; this.read = read; this.resolver = resolver;
     }
     async references(actor: string, scope: string, profile: string, input: ProfileReferenceQuery = {}) {
         if (![actor, scope, profile].every(isId) || !input || typeof input !== 'object' || Array.isArray(input) ||
@@ -27,13 +28,14 @@ export class TransportQueries<Tx> implements TransportQueryApi {
         const query = Object.freeze({ ...input }), paging = Object.freeze(consolePage(query.page, query.limit));
         return this.db.transaction(async tx => {
             await this.identity.scope(tx, actor, scope, query.targetRevision !== undefined);
+            const principal = await this.access.principal(tx, actor, scope);
             const metadata = await this.read.profile(tx, scope, profile);
             if (!metadata) notFound();
             if (!isCounter(metadata.currentRevision)) throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid current Profile revision');
             const target = query.targetRevision === undefined ? null : await this.resolver.resolve(tx, actor, scope, profile, query.targetRevision);
             if (target && (target.profileId !== profile || target.revision !== query.targetRevision))
                 throw new ControlError('INTEGRITY_FAILURE', 409, 'Profile resolution differs from requested immutable revision');
-            const result = await this.read.references(tx, scope, profile, paging, query.revision);
+            const result = await this.read.references(tx, scope, principal, profile, paging, query.revision);
             if (!Number.isSafeInteger(result.total) || result.total < 0 || result.items.length > paging.limit ||
                 new Set(result.items.map(item => item.forwardId)).size !== result.items.length)
                 throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid Profile reference page');

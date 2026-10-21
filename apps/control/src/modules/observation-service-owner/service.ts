@@ -2,7 +2,7 @@ import { deepFreeze, isCounter, isId } from '@tunex/core';
 import { nativeModuleId as randomUUID, nativeValueDigest as digest, nativeCommandRequest as requestIdentity, nativeWallClockSource,
     nativeMonotonicNow, jsonUtf8Bytes } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { IdempotentRequests, ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary } from '../../framework/public.ts';
 import { OBSERVATION_SERVICE_LIMITS } from './contracts.ts';
 import type { ObservationServiceConfig, ObservationServiceHead, ObservationServiceReceipt, ObservationServiceStore } from './contracts.ts';
 import type { ObservationServicesApi } from './api.ts';
@@ -25,13 +25,13 @@ export class ObservationServices<Tx> implements ObservationServicesApi {
     private requestsActive = 0;
     private readonly actors = new Map<string, { active: boolean; until: number }>();
     private readonly db: TransactionBoundary<Tx>;
-    private readonly auth: ScopeAuthorization<Tx>;
+    private readonly auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>;
     private readonly requests: IdempotentRequests<Tx>;
     private readonly store: ObservationServiceStore<Tx>;
     private readonly clock: () => number;
     readonly measurementAvailable: boolean;
     readonly echoAvailable:boolean;
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, requests: IdempotentRequests<Tx>,
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>, requests: IdempotentRequests<Tx>,
         store: ObservationServiceStore<Tx>, clock: () => number = nativeWallClockSource(), measurementAvailable = false,echoAvailable=false) {
         this.db = db; this.auth = auth; this.requests = requests; this.store = store; this.clock = clock;
         this.measurementAvailable = measurementAvailable;
@@ -68,7 +68,7 @@ export class ObservationServices<Tx> implements ObservationServicesApi {
     async list(actor: string, scope: string) {
         identity(actor, scope);
         return this.admitted(actor, () => this.db.transaction(async tx => {
-            await this.auth.scope(tx, actor, scope, true);
+            await this.auth.owner(tx, actor, scope);
             const raw = await this.store.list(tx, scope);
             if (!Array.isArray(raw) || raw.length > OBSERVATION_SERVICE_LIMITS.servicesPerScope) corrupt();
             const items = raw.map(value => stored(() => parseObservationServiceHead(value)));
@@ -81,7 +81,7 @@ export class ObservationServices<Tx> implements ObservationServicesApi {
         if (configRevision !== undefined && (!isCounter(configRevision) || configRevision > OBSERVATION_SERVICE_LIMITS.revisionsPerService))
             invalid('One exact observation configuration revision required');
         return this.admitted(actor, () => this.db.transaction(async tx => {
-            await this.auth.scope(tx, actor, scope, true);
+            await this.auth.owner(tx, actor, scope);
             const raw = await this.store.head(tx, scope, id); if (!raw) notFound();
             const head = stored(() => parseObservationServiceHead(raw)); if (head.serviceId !== id) corrupt();
             const number = configRevision ?? head.configRevision;
@@ -119,7 +119,7 @@ export class ObservationServices<Tx> implements ObservationServicesApi {
         const request = requestIdentity(actor, scope, key, config ? 'PUT' : 'DELETE', `/api/v1/scopes/${scope}/observation-services/${id}`,
             { expectedRevision, ...(config ? { config } : {}) });
         return this.admitted(actor, () => this.db.transaction(async tx => {
-            await this.auth.scope(tx, actor, scope, true);
+            await this.auth.owner(tx, actor, scope);
             const replay = await this.requests.claim<ObservationServiceReceipt>(tx, request);
             if (replay) return this.bounded(stored(() => parseObservationServiceReceipt(replay, id)));
             await this.store.lockScope(tx, scope);

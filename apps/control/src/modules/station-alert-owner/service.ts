@@ -4,7 +4,7 @@ import { ControlError, invalid, notFound } from '../../framework/public.ts';
 import { nativeCommandRequest as requestIdentity } from '../../compatibility/public.ts';
 import type { StationEventHandoff } from './handoff.ts';
 import type { StationAlertsApi } from './api.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { IdempotentRequests, ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary } from '../../framework/public.ts';
 import type { StationAlertCommandResponse, StationAlertEvent, StationAlertFacts, StationAlertLosses, StationAlertPolicy,
     StationAlertPolicyAudit, StationAlertRule, StationAlertStore, StationEventQuery } from './contracts.ts';
 import { STATION_ALERT_LIMITS } from './policy.ts';
@@ -66,7 +66,7 @@ function position(input: string | undefined, queryDigest: string, from: number, 
 export class StationAlerts<Tx> implements StationAlertsApi {
     readonly enabled: boolean;
     private readonly db: TransactionBoundary<Tx>;
-    private readonly auth: ScopeAuthorization<Tx>;
+    private readonly auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>;
     private readonly requests: IdempotentRequests<Tx>;
     private readonly store: StationAlertStore<Tx>;
     private readonly facts: StationAlertFacts<Tx>;
@@ -77,7 +77,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
     private active = 0;
     private ticking = false;
     private readonly actors = new Map<string,{active:boolean;until:number}>();
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, requests: IdempotentRequests<Tx>,
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>, requests: IdempotentRequests<Tx>,
         store: StationAlertStore<Tx>, facts: StationAlertFacts<Tx>, enabled = false, clock: () => number = nativeWallClockSource(), clockSkewMs = 1000, handoff?: StationEventHandoff<Tx>) {
         if (!isCounter(clockSkewMs,true) || clockSkewMs > 300000) throw new Error('Bounded station alert clock skew required');
         this.db = db; this.auth = auth; this.requests = requests; this.store = store; this.facts = facts;
@@ -108,7 +108,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
     async listPolicies(actor: string, scope: string) {
         identities(actor,scope);
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);
+            await this.auth.owner(tx,actor,scope);
             const found = await this.store.policies(tx,scope);
             if (!Array.isArray(found) || found.length > STATION_ALERT_LIMITS.policiesPerScope) corrupt();
             const values = found.map(policy);
@@ -123,7 +123,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
     async getPolicy(actor: string, scope: string, id: string) {
         identities(actor,scope,id);
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);
+            await this.auth.owner(tx,actor,scope);
             const found = await this.store.policy(tx,scope,id); if (!found) notFound();
             const value = policy(found); if (value.policyId !== id) corrupt();
             const audit = await this.store.audits(tx,scope,id);
@@ -138,7 +138,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
         if (!isCounter(expectedRevision,true)) invalid('Valid station policy CAS required');
         const config = parseStationAlertConfig(input), request = requestIdentity(actor,scope,key,'PUT',`/api/v1/scopes/${scope}/alert-policies/${id}`,{expectedRevision,config});
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);
+            await this.auth.owner(tx,actor,scope);
             const replay = await this.requests.claim<StationAlertCommandResponse>(tx,request); if (replay) return this.bounded(accepted(replay,'policyId',id));
             await this.store.lockScope(tx,scope);
             const found = await this.store.policy(tx,scope,id,true), old = found ? policy(found) : null;
@@ -179,7 +179,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
         if (!isCounter(expectedRevision) || until!==null && !time(until)) invalid('Valid silence CAS and UTC deadline required');
         const request = requestIdentity(actor,scope,key,'POST',`/api/v1/scopes/${scope}/alert-policies/${id}/silence`,{expectedRevision,until});
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);
+            await this.auth.owner(tx,actor,scope);
             const replay = await this.requests.claim<StationAlertCommandResponse>(tx,request); if (replay) return this.bounded(accepted(replay,'policyId',id));
             const now = this.now();
             // Check a new deadline after replay: an already accepted identical request remains replayable.
@@ -201,7 +201,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
         if (!isCounter(expectedRevision)) invalid('Valid event CAS required');
         const request = requestIdentity(actor,scope,key,'POST',`/api/v1/scopes/${scope}/station-events/${id}/acknowledge`,{expectedRevision});
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope,true);
+            await this.auth.owner(tx,actor,scope);
             const replay = await this.requests.claim<StationAlertCommandResponse>(tx,request); if (replay) return this.bounded(accepted(replay,'eventId',id));
             await this.store.lockScope(tx,scope);
             const found = await this.store.event(tx,scope,id,true); if (!found) notFound();
@@ -220,7 +220,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
     async getEvent(actor: string, scope: string, id: string) {
         identities(actor,scope,id);
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope);
+            await this.auth.owner(tx,actor,scope);
             const found = await this.store.event(tx,scope,id); if (!found) notFound();
             const value = event(found); if (value.id!==id) corrupt();
             return this.bounded({...this.envelope(scope),event:value});
@@ -256,7 +256,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
         const frozen = deepFreeze(filters), queryDigest = digest({scope,from,to,limit,filters:frozen});
         const query = deepFreeze({from,to,limit,before:position(input.cursor,queryDigest,from,to),...frozen});
         return this.admitted(actor,()=>this.db.transaction(async tx=>{
-            await this.auth.scope(tx,actor,scope);
+            await this.auth.owner(tx,actor,scope);
             const rows = await this.store.events(tx,scope,query);
             if (!Array.isArray(rows) || rows.length>limit+1) corrupt();
             const values = rows.map(event); let previous = query.before;
@@ -285,7 +285,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
                 if (isCounter(found.revision)) attempted={...due,revision:found.revision,cutoff:now};
                 const candidate=policy(found); if (candidate.policyId!==due.policyId) corrupt();
                 let authorized=true;
-                try { await this.auth.scope(tx,candidate.managedBy,due.scopeId,true); }
+                try { await this.auth.owner(tx,candidate.managedBy,due.scopeId); }
                 catch (error) { if (error instanceof ControlError&&[403,404].includes(error.status)) authorized=false; else throw error; }
                 // Management and worker paths share Scope-then-policy lock order; due selection itself is unlocked.
                 await this.store.lockScope(tx,due.scopeId);

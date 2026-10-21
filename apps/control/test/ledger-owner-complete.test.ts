@@ -12,7 +12,9 @@ import { nativeLedgerCompiler, runtimeCodec } from '../src/compatibility/public.
 import type { NativeRuntimeFamily } from '../src/compatibility/public.ts';
 import { Forwarding } from '../src/modules/forwarding.ts';
 import { MySqlRuntimeLedgerStore } from '../src/infrastructure/mysql-runtime-ledger.ts';
-import { createMySqlRuntimeResources } from '../src/infrastructure/mysql-runtime-resources.ts';
+import { NodePortLimitPolicy } from '../src/modules/node-owner/public.ts';
+import { MySqlNodeAuthorityStore } from '../src/infrastructure/mysql-node-authority.ts';
+import { MySqlRuntimeResourceStore, createMySqlRuntimeResources } from '../src/infrastructure/mysql-runtime-resources.ts';
 import { MySqlUnitOfWork, rows, write, json } from '../src/infrastructure/mysql.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
 
@@ -211,6 +213,8 @@ test('10 Runtime worker locks Node before operation and rejects every original s
             async snapshot(){return undefined;},async awaitingClaim(){return 0;},async operation(tx:typeof f.tx){assert.equal(this,store);assert.equal(tx,f.tx);trace.push('reread-operation');return f.op;},
             async saveSnapshot(){assert.fail('stale worker must not save Snapshot');}};
         const host=new RuntimeHost({db,store,ledger,forwards:{async record(tx:typeof f.tx){assert.equal(tx,f.tx);trace.push('forward-read');return f.forward;}},
+            // Explicit unlimited fixture keeps stale-claim acceptance independent of payload policy.
+            payloadPolicy:{async limits(tx:typeof f.tx){assert.equal(tx,f.tx);return {excludedAssignmentIds:[]};}},
             nodes:{async state(){trace.push('node-state');return {facts:f.facts,credentialUntil:60000,revoked:false};}},
             now:()=>f.data.now,codec:{...runtimeCodec,formatTime:String,parseTime:Number,compileSnapshot(input:Record<string,unknown>){trace.push('compile');mutate();return {...input,complete:true,snapshotDigest:'snapshot'};}},
             authority:{async issue(){assert.fail('stale worker must not advance protected authority');}}} as unknown as RuntimeHostOptions<typeof f.tx>);
@@ -240,7 +244,7 @@ async function insertOperation(tx:Transaction,f:ReturnType<typeof fixture>,id:st
 }
 function nativeLedger(now:()=>number=()=>100,newID:()=>string=()=>randomUUID()){
     return new RuntimeLedgerHost({policy:DEFAULT_POLICY,store:new MySqlRuntimeLedgerStore(),authorization:undefined,
-        assignments:{merge:async(_tx,_context,current)=>[...current]},resources:createMySqlRuntimeResources(DEFAULT_POLICY.maxAssignmentsPerNode),
+        assignments:{merge:async(_tx,_context,current)=>[...current]},resources:createMySqlRuntimeResources(new NodePortLimitPolicy(new MySqlNodeAuthorityStore(),new MySqlRuntimeResourceStore()),DEFAULT_POLICY.maxAssignmentsPerNode),
         compiler:nativeLedgerCompiler,now,newID} as RuntimeLedgerOptions<Transaction,NativeRuntimeFamily>);
 }
 function traceTransaction(tx:Transaction,execute:(sql:string,args:unknown[],run:()=>Promise<unknown>)=>Promise<unknown>):Transaction{

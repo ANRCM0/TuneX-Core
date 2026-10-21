@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DEFAULT_POLICY } from '@tunex/contracts/shared';
 import { RuntimeLedgerHost, RuntimeRelayHost, NodeAuthorityHost } from '../src/framework/public.ts';
-import { NodeService } from '../src/modules/node-owner/public.ts';
+import { NodeService, NodePortLimitPolicy } from '../src/modules/node-owner/public.ts';
+import type { NodeAuthorityStore, RuntimePortUsageStore } from '../src/framework/public.ts';
 import { nativeLedgerCompiler, nativeRelayCompiler, nativeNodeCodec, nativeParseTime, nativeIsoTime } from '../src/compatibility/public.ts';
 
 const internal=(value:unknown)=>value as Record<string,any>;
@@ -97,23 +98,25 @@ test('122 Relay observed parses only after runtime report and original snapshot 
 
 function node(){
     const tx={},events:string[]=[],effects:string[]=[],failure=new Error('original Node formatter'),state={now:1000,formatFail:0,formats:0,active:0,until:0 as number|null,revoked:0,replay:undefined as any};
-    const current={id:'node',scope_id:'scope',credential_fingerprint:'old',credential_until:100000,revoked:0,facts:{original:true}},signed={certificate:'certificate',ca:'ca',fingerprint:'new',until:90000};
-    const writeNames=['create','insertCredential','retireCredential','setCurrentCredential','saveRotation','retireRelayCredentials','insertRelayCredential','saveRelayRequest','securityEvent'];
+    const current={id:'node',scope_id:'scope',resource_source:'private' as const,owner_actor_id:'actor',resource_revision:1,credential_fingerprint:'old',credential_until:100000,revoked:0,facts:{original:true}},signed={certificate:'certificate',ca:'ca',fingerprint:'new',until:90000};
+    const writeNames=['create','insertGrant','insertCredential','retireCredential','setCurrentCredential','saveRotation','retireRelayCredentials','insertRelayCredential','saveRelayRequest','securityEvent'];
     const answers:Record<string,()=>unknown>={currentForUpdate:()=>current,credential:()=>({valid_until:100000,retire_after:null}),rotationReplay:()=>state.replay,relayReplay:()=>state.replay,activeRelayCredentials:()=>Array.from({length:state.active},()=>({fingerprint:'active',valid_until:100000})),scopedNode:()=>({...current,revoked:state.revoked}),credentials:()=>[{fingerprint:'zero',valid_until:0,retire_after:0,revoked:0},{fingerprint:'one',valid_until:1,retire_after:2,revoked:1}]};
-    const store=new Proxy({},{get(_target,key){return async function(this:unknown,t:unknown,..._args:unknown[]){assert.equal(this,store);assert.equal(t,tx);const name=String(key);events.push(name);if(writeNames.includes(name))effects.push(name);return answers[name]?.();};}});
+    const store=new Proxy({} as NodeAuthorityStore<typeof tx>,{get(_target,key){return async function(this:unknown,t:unknown,..._args:unknown[]){assert.equal(this,store);assert.equal(t,tx);const name=String(key);events.push(name);if(writeNames.includes(name))effects.push(name);return answers[name]?.();};}});
+    const usage:RuntimePortUsageStore<typeof tx>={async forwardPortOwner(){assert.fail('credential/formatting fixture cannot read a Forward owner');},async actorPortSlots(){assert.fail('credential/formatting fixture cannot read Runtime slot usage');}};
+    const portLimits=new NodePortLimitPolicy(store,usage);
     const codec={...nativeNodeCodec,formatTime(this:unknown,at:number){assert.equal(this,codec);events.push(`format:${at}`);if(++state.formats===state.formatFail)throw failure;return `time:${at}`;},readValue<T>(this:unknown,value:unknown){assert.equal(this,codec);events.push('read');return value as T;},validateNetworkPolicy(){events.push('validate');}};
     const db={async transaction<T>(run:(tx:unknown)=>Promise<T>){events.push('begin');const before=[...effects];try{const out=await run(tx);events.push('commit');return out;}catch(error){effects.splice(0,effects.length,...before);events.push('rollback');throw error;}}};
-    const identity={async scope(t:unknown){assert.equal(t,tx);events.push('scope');}};
+    const identity={async scope(t:unknown){assert.equal(t,tx);events.push('scope');},async owner(){assert.fail('private owner formatting does not require governance');},async executing(){assert.fail('formatting does not authorize execution');},async audit(){assert.fail('formatting does not edit grants');}};
     const resources={async initializeNode(t:unknown){assert.equal(t,tx);events.push('initialize');effects.push('initialize');},async lockNode(t:unknown){assert.equal(t,tx);events.push('lock');},async maximumAuthorization(t:unknown){assert.equal(t,tx);events.push('maximum');return state.until;}};
     const signer={async sign(){events.push('sign');return signed;}};
     const secrets={newID(){return 'id';},newToken(){return 'token';},tokenHash(){return 'hash';}};
-    const host=new NodeService({db,identity,store,resources,signer,secrets,codec,machine:{},overlapSeconds:1,relayCredentialSeconds:60,now(){events.push('now');return state.now;}} as never);
+    const host=new NodeService({db,identity,store,portLimits,resources,signer,secrets,codec,machine:{async machine(){return undefined;}},overlapSeconds:1,relayCredentialSeconds:60,now(){events.push('now');return state.now;}});
     return {host,tx,events,effects,failure,state,current,signed,codec};
 }
 
 test('122 Node provision formatting occurs after commit preserving writes on formatter failure',async()=>{
     const f=node();f.state.formatFail=1;await assert.rejects(f.host.provision('actor','scope',{} as never),e=>e===f.failure);
-    assert.deepEqual(f.events,['validate','now','begin','scope','create','initialize','commit','format:601000']);assert.deepEqual(f.effects,['create','initialize']);assert.equal(f.events.includes('rollback'),false);
+    assert.deepEqual(f.events,['validate','now','begin','scope','create','insertGrant','initialize','commit','format:601000']);assert.deepEqual(f.effects,['create','insertGrant','initialize']);assert.equal(f.events.includes('rollback'),false);
 });
 
 test('122 machine and Relay credential formatting after writes before replay/audit rolls original Tx back at every formatter',async()=>{
@@ -130,6 +133,7 @@ test('122 machine and Relay credential formatting after writes before replay/aud
 
 test('122 Node view truthy authorization and retirement preserve pending sample then formatter/map order inside Tx',async()=>{
     for(const until of [0,null,1000]){const f=node();f.state.until=until;f.state.revoked=1;const result=await f.host.view('actor','scope','node');
+        assert.equal(result.detail,'full');if(result.detail!=='full')assert.fail('Private owner must receive full Node view');
         assert.equal(result.latestAuthorizationUntil,until?'time:6000':null);assert.equal(result.pendingRevocation,Boolean(until));assert.deepEqual(result.credentials,[{fingerprint:'zero',validUntil:'time:0',retireAfter:null,revoked:false},{fingerprint:'one',validUntil:'time:1',retireAfter:'time:2',revoked:true}]);
         assert.deepEqual(f.events,['begin','scope','scopedNode','maximum','credentials','read',...(until?['now','format:6000']:[]),'format:0','format:1','format:2','commit']);
     }

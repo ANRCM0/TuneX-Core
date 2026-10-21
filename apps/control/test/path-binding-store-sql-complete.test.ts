@@ -14,9 +14,10 @@ import { MySqlUnitOfWork, rows, write } from '../src/infrastructure/mysql.ts';
 import { Identity } from '../src/modules/identity.ts';
 import { parsePathTemplate } from '../src/modules/path-owner/public.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
-import type { PathBindingStoredRecord } from '../src/framework/public.ts';
+import type { PathBindingStoredRecord, ReadPrincipal } from '../src/framework/public.ts';
 
 type Statement=readonly [string,readonly unknown[]];
+const principal:ReadPrincipal=Object.freeze({actorId:'actor',governance:true});
 const hash='sha256:'+'a'.repeat(64),at=1800000000000;
 const join=' FROM current_path_bindings c JOIN forward_path_bindings b ON b.forward_id=c.forward_id AND b.sequence=c.sequence JOIN forwards f ON f.id=c.forward_id';
 const filter=' WHERE f.scope_id=? AND b.scope_id=? AND b.template_id=? AND f.deleting=FALSE';
@@ -37,7 +38,7 @@ const cases:Case[]=[
     {name:'at',run:(s,t)=>s.at(t,'scope','forward',7),statements:[[atSQL,['scope','scope','forward',7]]],result:projected},
     {name:'current',run:(s,t)=>s.current(t,'scope','forward'),statements:[[currentSQL,['scope','scope','forward']]],result:projected},
     {name:'history',run:(s,t)=>s.history(t,'scope','forward'),statements:[[historySQL,['scope','scope','forward']]],result:[projected]},
-    ...[undefined,0,3].map(revision=>({name:'references '+revision,run:(s:Store,t:Transaction)=>s.references(t,'scope','template',{page:2,limit:3,offset:3},revision),
+    ...[undefined,0,3].map(revision=>({name:'references '+revision,run:(s:Store,t:Transaction)=>s.references(t,'scope',principal,'template',{page:2,limit:3,offset:3},revision),
         statements:[['SELECT COUNT(*) n'+join+filter+(revision===undefined?'':' AND b.template_revision=?'),['scope','scope','template',...(revision===undefined?[]:[revision])]],
             ['SELECT b.*,f.id,f.revision,f.spec,f.recovery_suspended'+join+filter+(revision===undefined?'':' AND b.template_revision=?')+' ORDER BY f.id LIMIT 3 OFFSET 3',['scope','scope','template',...(revision===undefined?[]:[revision])]]] as Statement[],
         result:{total:'63',items:[{forward:{id:'forward',scopeId:'scope',revision:0,spec:opaque},recoverySuspended:true,binding:projected}]}})),
@@ -55,6 +56,17 @@ for(const entry of cases)test('56 PathBinding lower and legacy '+entry.name+' ex
     }
 });
 
+test('N ordinary PathBinding references bind owner visibility in both SELECTs before revision and pagination',async()=>{
+    const ordinary:ReadPrincipal=Object.freeze({actorId:'reader',governance:false});
+    for(const store of [new MySqlPathBindingStore(),new MySqlPathBindings()]){
+        const calls:Statement[]=[];
+        const tx={async execute(sql:string,args:unknown[]=[]){calls.push([sql,[...args]]);return [[native],[]];}} as unknown as Transaction;
+        await store.references(tx,'scope',ordinary,'template',{page:2,limit:3,offset:3},3);
+        const where=filter+' AND f.owner_actor_id=? AND b.template_revision=?',args=['scope','scope','template','reader',3];
+        assert.deepEqual(calls,[['SELECT COUNT(*) n'+join+where,args],['SELECT b.*,f.id,f.revision,f.spec,f.recovery_suspended'+join+where+' ORDER BY f.id LIMIT 3 OFFSET 3',args]]);
+    }
+});
+
 test('56 original nullable JSON Boolean count-before-page and zeroarg async wrapper semantics remain unchanged',async()=>{
     for(const store of [new MySqlPathBindingStore(),new MySqlPathBindings()]){
         let response:unknown[]=[];const calls:Statement[]=[];
@@ -63,12 +75,12 @@ test('56 original nullable JSON Boolean count-before-page and zeroarg async wrap
         for(const value of [opaque,null,7,'{"opaque":true}','null','7']){response=[{...native,expanded_spec:value}];assert.deepEqual((await store.current(tx,'scope','forward'))!.expandedSpec,typeof value==='string'?JSON.parse(value):value);}
         response=[{...native,expanded_spec:'bad JSON'}];await assert.rejects(store.history(tx,'scope','forward'),SyntaxError);
         for(const paging of [{page:0,limit:1,offset:0},{page:10001,limit:1,offset:10000},{page:1,limit:101,offset:0},{page:1,limit:1,offset:1}]){
-            response=[{n:0}];calls.length=0;await assert.rejects(store.references(tx,'scope','template',paging),{code:'INVALID_CONFIG'});
+            response=[{n:0}];calls.length=0;await assert.rejects(store.references(tx,'scope',principal,'template',paging),{code:'INVALID_CONFIG'});
             assert.deepEqual(calls,[['SELECT COUNT(*) n'+join+filter,['scope','scope','template']]]);
         }
-        response=[];await assert.rejects(store.references(tx,'scope','template',{page:1,limit:1,offset:0}),TypeError);
+        response=[];await assert.rejects(store.references(tx,'scope',principal,'template',{page:1,limit:1,offset:0}),TypeError);
         for(const recovery_suspended of [0,1,2,null,'0']){
-            response=[{...native,recovery_suspended}];assert.equal((await store.references(tx,'scope','template',{page:1,limit:1,offset:0})).items[0]!.recoverySuspended,Boolean(recovery_suspended));
+            response=[{...native,recovery_suspended}];assert.equal((await store.references(tx,'scope',principal,'template',{page:1,limit:1,offset:0})).items[0]!.recoverySuspended,Boolean(recovery_suspended));
         }
     }
     const source=readFileSync(new URL('../src/infrastructure/mysql-path-bindings.ts',import.meta.url),'utf8');
@@ -77,7 +89,7 @@ test('56 original nullable JSON Boolean count-before-page and zeroarg async wrap
     const javascript=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2023}}).outputText;
     new vm.Script(javascript).runInNewContext({exports,require(name:string){assert.equal(name,'./mysql-path-binding-store.ts');return {MySqlPathBindingStore:Lower};}});
     assert.equal(constructions,1);const legacy=new exports.MySqlPathBindings();assert.equal(constructions,1);assert.deepEqual(Object.keys(legacy),[]);
-    const args:Record<string,unknown[]>={at:[{},'scope','forward',3],current:[{},'scope','forward'],history:[{},'scope','forward'],references:[{},'scope','template',{page:1,limit:1,offset:0}],append:[{},'scope','forward',record],detach:[{},'scope','forward']};
+    const args:Record<string,unknown[]>={at:[{},'scope','forward',3],current:[{},'scope','forward'],history:[{},'scope','forward'],references:[{},'scope',principal,'template',{page:1,limit:1,offset:0}],append:[{},'scope','forward',record],detach:[{},'scope','forward']};
     for(const [method,input] of Object.entries(args)){
         const expected={method},failure=new Error(method),descriptor=Object.getOwnPropertyDescriptor(exports.MySqlPathBindings.prototype,method)!;
         assert.equal(descriptor.enumerable,false);assert.equal(descriptor.configurable,true);assert.equal(descriptor.writable,true);assert.equal(descriptor.value.constructor.name,'AsyncFunction');
@@ -135,7 +147,7 @@ test('56 real MySQL original Forward lock append and detach retain every immutab
         }
         const append=()=>db.transaction(async tx=>{await rows(tx,'SELECT id FROM forwards WHERE scope_id=? AND id=? FOR UPDATE',['scope','forward']);return store.append(tx,'scope','forward',valid);});
         assert.equal((await append()).sequence,1);const concurrent=await Promise.all([append(),append()]);assert.deepEqual(concurrent.map(value=>value.sequence).sort(),[2,3]);
-        let changed=false;const page=await db.transaction(tx=>store.references(new Proxy(tx,{get(target,key){if(key==='execute')return async(sql:string,args:unknown[]=[])=>(await Reflect.apply(target.execute,target,[sql,args]).then(async(result:unknown)=>{if(sql.startsWith('SELECT COUNT')&&!changed){changed=true;await db.transaction(other=>write(other,'UPDATE forwards SET deleting=TRUE WHERE id=?',['forward']));}return result;}));return Reflect.get(target,key);}}),'scope','template',{page:1,limit:100,offset:0}));
+        let changed=false;const page=await db.transaction(tx=>store.references(new Proxy(tx,{get(target,key){if(key==='execute')return async(sql:string,args:unknown[]=[])=>(await Reflect.apply(target.execute,target,[sql,args]).then(async(result:unknown)=>{if(sql.startsWith('SELECT COUNT')&&!changed){changed=true;await db.transaction(other=>write(other,'UPDATE forwards SET deleting=TRUE WHERE id=?',['forward']));}return result;}));return Reflect.get(target,key);}}),'scope',principal,'template',{page:1,limit:100,offset:0}));
         assert.equal(changed,true);assert.equal(page.total,1);assert.deepEqual(page.items,[]);await db.transaction(tx=>write(tx,'UPDATE forwards SET deleting=FALSE WHERE id=?',['forward']));
         const saved=await snapshot(db);await assert.rejects(db.transaction(async tx=>{await rows(tx,'SELECT id FROM forwards WHERE scope_id=? AND id=? FOR UPDATE',['scope','forward']);await store.detach(tx,'scope','forward');throw failure;}),error=>error===failure);assert.deepEqual(await snapshot(db),saved);
         await db.transaction(tx=>store.detach(tx,'other-scope','forward'));assert.deepEqual(await snapshot(db),saved);

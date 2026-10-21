@@ -85,13 +85,13 @@ test('162 real MySQL Path and Ingress recovery append creator-attributed next-re
             'ingress_groups','ingress_group_revisions','ingress_group_events','forwards','forward_revisions','forward_path_bindings','current_path_bindings',
             'forward_path_group_bindings','current_forward_path_group_bindings'];
         await db.transaction(async tx=>{
-            await insert(tx,'forwards',{id:'forward',scope_id:'scope',revision:1,spec:'{"preserved":"intent"}'});
+            await insert(tx,'forwards',{id:'forward',scope_id:'scope',owner_actor_id:'actor',revision:1,spec:'{"preserved":"intent"}'});
             await insert(tx,'forward_revisions',{forward_id:'forward',revision:1,spec:'{"preserved":"history"}'});
-            await insert(tx,'path_templates',{scope_id:'scope',template_id:'template',current_revision:2,archived:true});
+            await insert(tx,'path_templates',{scope_id:'scope',template_id:'template',owner_actor_id:'actor',current_revision:2,archived:true});
             for(const revision of [1,2])await insert(tx,'path_template_revisions',{scope_id:'scope',template_id:'template',revision,config:'{"preserved":"template"}',profile_digest:hash,config_digest:hash,created_by:'actor',created_at:revision});
             await insert(tx,'path_template_events',{id:'template-audit',scope_id:'scope',template_id:'template',revision:2,kind:'publish',actor_id:'actor',created_at:2});
             for(const name of ['path','ingress']){
-                await insert(tx,`${name}_groups`,{scope_id:'scope',group_id:'group',current_revision:2,archived:true});
+                await insert(tx,`${name}_groups`,{scope_id:'scope',group_id:'group',owner_actor_id:name==='path'?'actor':null,current_revision:2,archived:true});
                 for(const revision of [1,2])await insert(tx,`${name}_group_revisions`,{scope_id:'scope',group_id:'group',revision,
                     config:name==='path'?'{"candidates":[{"preserved":"path"}]}':'{"members":[{"preserved":"ingress"}]}',config_digest:hash,created_by:'actor',created_at:revision});
                 await insert(tx,`${name}_group_events`,{id:name+'-audit',scope_id:'scope',group_id:'group',revision:2,kind:'archive',actor_id:'actor',created_at:3});

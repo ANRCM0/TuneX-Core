@@ -4,7 +4,7 @@ import { explainNodePreflight, summarizePreflight } from '../forward-preflight.j
 
 const now = Date.parse('2026-10-20T01:00:00.000Z');
 const node = (overrides = {}) => ({
-  id: 'node-1', revoked: false, credentialUntil: '2026-10-21T00:00:00.000Z',
+  id: 'node-1', canUse:true, allowedRoles:null, readDetail:'full', resourceSource:'private', revoked: false, credentialUntil: '2026-10-21T00:00:00.000Z',
   lastReportAt: '2026-10-20T00:59:30.000Z',
   policy: { capabilities: ['adp.3', 'native.direct.v1', 'tcp', 'udp'], allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [8080] },
   ...overrides,
@@ -16,7 +16,7 @@ test('declared capabilities plus fresh report are selectable but still advisory'
   assert.equal(result.tone, 'good');
   assert.deepEqual(result.reasons, []);
   assert.equal(result.dimensions.platform, 'unknown');
-  assert.equal(result.dimensions.roles, 'unknown');
+  assert.equal(result.dimensions.roles, '全部用途');
   assert.equal(result.facts.status, 'fresh');
 });
 
@@ -58,4 +58,14 @@ test('summary counts remain separate', () => {
     explainNodePreflight(node({ id: 'node-3', lastReportAt: null }), { protocol: 'tcp', now }),
   ];
   assert.deepEqual(summarizePreflight(rows), { total: 3, supported: 1, unsupported: 1, unknown: 1 });
+});
+
+test('shared reports stay hidden and purpose denial is independent of declared capabilities',()=>{
+  const shared=node({resourceSource:'admin-shared',readDetail:'shared',lastReportAt:null,allowedRoles:['egress']});
+  const result=explainNodePreflight(shared,{protocol:'tcp',role:'egress',now});
+  assert.equal(result.status,'supported');
+  assert.deepEqual(result.facts,{status:'hidden',reportAgeMs:null,lastReportAt:null});
+  assert.equal(result.reasons.some(reason=>reason.code==='REPORT_MISSING'),false);
+  assert.ok(explainNodePreflight(shared,{protocol:'tcp',role:'ingress',now}).reasons.some(reason=>reason.code==='ROLE_NOT_AUTHORIZED'));
+  assert.ok(explainNodePreflight({...shared,canUse:false},{protocol:'tcp',role:'egress',now}).reasons.some(reason=>reason.code==='NODE_NOT_AUTHORIZED'));
 });

@@ -1,4 +1,4 @@
-export const OBSERVATION_SERVICE_MODULE_INTERFACE_VERSION=1 as const;
+export const OBSERVATION_SERVICE_MODULE_INTERFACE_VERSION=2 as const;
 export { observationObject, observationServerName, observationAddress, observationServiceId, observationTime, observationHash,
     observationServiceIdentity, observationTrust, parseObservationServiceConfig, parseObservationServiceHead,
     parseObservationServiceRevision, parseObservationServiceAudit, parseObservationServiceReceipt } from './values.ts';

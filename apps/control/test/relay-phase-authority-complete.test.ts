@@ -10,11 +10,11 @@ import { multihopFixture } from './fixtures/multihop.ts';
 type Event={name:string;args:unknown[]};
 function fixture(){
     const tx={},input=multihopFixture(),plan=nativeRelayCompiler.multihopPlan(input),events:Event[]=[],failure=new Error('original Relay phase provider');
-    const state={now:Date.parse(input.issuedAt)+1000,fail:'',currentPins:true,issuedPins:true,missingSnapshot:'',missingSession:'',pending:1,occupied:new Set<number>(),requested:[] as unknown[][]};
+    const state={now:Date.parse(input.issuedAt)+1000,fail:'',currentPins:true,issuedPins:true,missingSnapshot:'',missingSession:'',pending:1,occupied:new Set<number>(),deniedPorts:new Set<number>(),requested:[] as unknown[][]};
     const record:RuntimeRelayDeployment={forward_id:input.forward.id,generation:9,target_revision:1,ingress_node_id:plan.nodes[0]!.nodeId,egress_node_id:plan.nodes.at(-1)!.nodeId,body:JSON.stringify(plan),stage:'preparing',prepared_count:0,activated_count:0};
     const forward={...input.forward,deleting:false,recoverySuspended:false},op={id:'operation',scope_id:forward.scopeId,forward_id:forward.id,target_revision:1,status:'running',kind:'create',execution_deadline:state.now+600000,recovery_invalidated:0,requested_by:'actor',cleanup_pending:1};
     function call(self:unknown,owner:unknown,name:string,args:unknown[]){assert.equal(self,owner);assert.equal(args[0],tx);events.push({name,args});if(state.fail===name)throw failure;}
-    const nodes={async authorizedRelayNode(this:unknown,...args:unknown[]){call(this,nodes,`grant:${args[3]}`,args);return input.nodes.find(n=>n.facts.nodeId===args[3])!.facts;},async facts(this:unknown,...args:unknown[]){call(this,nodes,`facts:${args[1]}`,args);const n=input.nodes.find(n=>n.facts.nodeId===args[1])!;return {facts:n.facts,credentialUntil:n.credentialUntil};},async relayCredentialFacts(this:unknown,...args:unknown[]){call(this,nodes,`peers:${args[1]}:${args[2]===true?'current':'issued'}`,args);const n=input.nodes.find(n=>n.facts.nodeId===args[1])!;
+    const nodes={async reservationPorts(this:unknown,current:unknown,actor:string,scope:string,nodeId:string,ports:readonly number[]){assert.equal(this,nodes);assert.equal(current,tx);assert.equal(actor,'actor');assert.equal(scope,forward.scopeId);const allowed=input.endpoints.find(endpoint=>endpoint.nodeId===nodeId)!.config.allowedTcpPorts;return ports.filter(port=>allowed.includes(port)&&!state.deniedPorts.has(port));},async authorizedRelayNode(this:unknown,...args:unknown[]){call(this,nodes,`grant:${args[3]}`,args);return input.nodes.find(n=>n.facts.nodeId===args[3])!.facts;},async facts(this:unknown,...args:unknown[]){call(this,nodes,`facts:${args[1]}`,args);const n=input.nodes.find(n=>n.facts.nodeId===args[1])!;return {facts:n.facts,credentialUntil:n.credentialUntil};},async relayCredentialFacts(this:unknown,...args:unknown[]){call(this,nodes,`peers:${args[1]}:${args[2]===true?'current':'issued'}`,args);const n=input.nodes.find(n=>n.facts.nodeId===args[1])!;
         if(args[2]===true)return state.currentPins?n.peers:[{fingerprint:'sha256:'+'e'.repeat(64),validUntil:state.now+3600000}];
         return state.issuedPins?n.peers:[];}};
     const transport={async resolve(this:unknown,...args:unknown[]){call(this,transport,'profile',args);return input.profile;}};
@@ -118,4 +118,14 @@ test('11 every phase refuses replacement current pins while still-issued retirin
         assert.ok(f.events.filter(e=>e.name.startsWith('peers:')).every(e=>e.name.endsWith(':issued')));
         f.state.issuedPins=false;await assert.rejects(f.host.authorizationBound(f.tx,f.plan.nodes[0]!.assignments),{code:'AUTHORIZATION_DENIED'});
     }
+});
+
+
+test('port grant filtering skips a denied first candidate and preserves whole-path refusal',async()=>{
+    const f=fixture(),endpoint=f.input.endpoints[0]!;f.state.deniedPorts.add(endpoint.config.allowedTcpPorts[0]!);endpoint.config.allowedTcpPorts.push(34000);
+    const plan=await f.host.acceptPlan(f.tx,'actor',f.forward);
+    assert.ok(plan.nodes.find(node=>node.nodeId===endpoint.nodeId)!.assignments.every(assignment=>!f.state.deniedPorts.has(assignment.resource.port)));
+    const denied=fixture();for(const port of denied.input.endpoints[0]!.config.allowedTcpPorts)denied.state.deniedPorts.add(port);
+    await assert.rejects(denied.host.acceptPlan(denied.tx,'actor',denied.forward),{code:'PORT_RESERVED'});
+    assert.deepEqual(mutations(denied),[]);
 });

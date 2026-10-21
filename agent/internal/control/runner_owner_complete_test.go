@@ -62,7 +62,7 @@ func TestRunnerOwnerCompleteActualHelloBytesAndPartialStartupStop(t *testing.T) 
 	requests := 0
 	r.providers.Channel = &timeOwnerChannel{trace: trace, request: func(method, path string, body []byte, epoch bool, session uint64) ([]byte, error) {
 		requests++
-		want := `{"protocolVersion":3,"nodeId":"node","bootId":"boot","agentBuild":"vnext-adp3-direct","capabilities":["adp.3","native.direct.v1","tcp","udp"],"lastStoredSnapshotGeneration":42}`
+		want := `{"protocolVersion":3,"nodeId":"node","bootId":"boot","agentBuild":"vnext-adp3-direct","capabilities":["adp.3","native.direct.v1","tcp","udp","shared-resource-limits.v1"],"lastStoredSnapshotGeneration":42}`
 		if method != "POST" || path != "/agent/v3/hello" || epoch || session != 2 || string(body) != want {
 			t.Fatal("original Hello bytes and channel flags", method, path, epoch, session, string(body))
 		}

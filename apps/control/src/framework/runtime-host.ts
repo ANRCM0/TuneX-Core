@@ -20,6 +20,7 @@ export class RuntimeHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> imp
         if(typeof ports.codec.checkHelloProtocol!=='function'||typeof ports.codec.checkHelloCapabilities!=='function'||
             typeof ports.codec.helloResponse!=='function'||typeof ports.codec.reportAck!=='function')
             throw new Error('Runtime machine codec is required');
+        if(typeof ports.payloadPolicy?.limits!=='function')throw new Error('Runtime payload publication policy is required');
         this.now=now;
         this.policy={...ports.codec.validatePolicy(ports.policy??{...ports.codec.defaultPolicy},this.now())};
         if(this.policy.leaseSeconds>300||this.policy.maxClockSkewSeconds>5)
@@ -67,26 +68,34 @@ export class RuntimeHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> imp
         const previous=await this.ports.store.snapshot(tx,state.node_id,state.snapshot_generation),now=this.now();
         const awaitingClaim=await this.ports.store.awaitingClaim(tx,state.node_id);
         if(this.ports.relay)await this.ports.relay.advanceForNode(tx,state.node_id);
-        const assignments=(withdrawn?[]:await this.ports.ledger.assignments(tx,facts)).map(a=>({...a,drainTimeoutSeconds:this.policy.drainTimeoutSeconds}));
+        const collected=(withdrawn?[]:await this.ports.ledger.assignments(tx,facts)).map(a=>({...a,drainTimeoutSeconds:this.policy.drainTimeoutSeconds}));
+        const payload=await this.ports.payloadPolicy.limits(tx,state.node_id,facts.capabilities,collected,now,previous?.resourceLimits?.buckets);
+        const excluded=new Set(payload.excludedAssignmentIds);
+        if(excluded.size!==payload.excludedAssignmentIds.length||[...excluded].some(id=>!collected.some(assignment=>assignment.assignmentId===id)))
+            throw new ControlError('INTEGRITY_FAILURE',409,'Payload policy excluded an unknown or repeated assignment');
+        const assignments=collected.filter(assignment=>!excluded.has(assignment.assignmentId));
+        const payloadUnchanged=this.ports.codec.digest(previous?.resourceLimits??null)===this.ports.codec.digest(payload.resourceLimits??null)&&
+            !previous?.assignments.some(assignment=>excluded.has(assignment.assignmentId));
         const multihopPreserved=previous?.assignments.every(old=>!old.role.startsWith('multihop-')||assignments.some(a=>
             a.assignmentId===old.assignmentId&&a.deploymentGeneration===old.deploymentGeneration&&a.bindingFence===old.bindingFence&&
             a.phase===old.phase&&a.driver.configDigest===old.driver.configDigest))??false;
         const published=previous?{sessionEpoch:previous.sessionEpoch,validUntil:this.ports.codec.parseTime(previous.validUntil)}:undefined;
         // Queued work cannot defer renewal until the Agent's skew-adjusted cutoff.
         // Keep the original hold predicate and also honor ordinary renewal lead.
-        if(previous&&published&&published.validUntil-now>this.policy.renewalLeadSeconds*1000&&
+        if(previous&&published&&payloadUnchanged&&published.validUntil-now>this.policy.renewalLeadSeconds*1000&&
             holdPublishedSnapshot(published,{sessionEpoch:state.session_epoch,now,credentialUntil,withdrawn,awaitingClaim,multihopPreserved}))return previous;
         const relayUntil=this.ports.relay?await this.ports.relay.authorizationBound(tx,assignments):Number.MAX_SAFE_INTEGER;
         if(previous&&reusePublishedSnapshot(published,{sessionEpoch:state.session_epoch,now,credentialUntil,relayUntil,
             renewalLeadSeconds:this.policy.renewalLeadSeconds,assignmentsUnchanged:previous.sessionEpoch===state.session_epoch&&
-                this.ports.codec.digest(previous.assignments)===this.ports.codec.digest(assignments)}))return previous;
+                payloadUnchanged&&this.ports.codec.digest(previous.assignments)===this.ports.codec.digest(assignments)}))return previous;
         if(!state.session_epoch)throw new ControlError('SESSION_SUPERSEDED',409,'Hello required before snapshot');
         if(state.snapshot_generation>=MAX_COUNTER)throw new ControlError('RESOURCE_LIMIT',429,'Snapshot counter exhausted');
         await this.ports.ledger.retireChanged(tx,state.node_id,previous,assignments,state.snapshot_generation+1);
         const tombstones=await this.ports.ledger.tombstones(tx,state.node_id,state.snapshot_generation+1);
         const validUntil=publicationDeadline({now,leaseSeconds:this.policy.leaseSeconds,credentialUntil,relayUntil,withdrawn});
         const snapshot=this.ports.codec.compileSnapshot({nodeId:state.node_id,sessionEpoch:state.session_epoch,snapshotGeneration:state.snapshot_generation+1,
-            issuedAt:this.ports.codec.formatTime(now),validUntil:this.ports.codec.formatTime(validUntil),assignments,tombstones,policy:this.policy});
+            issuedAt:this.ports.codec.formatTime(now),validUntil:this.ports.codec.formatTime(validUntil),assignments,tombstones,policy:this.policy,
+            ...(payload.resourceLimits?{resourceLimits:payload.resourceLimits}:{})});
         await this.ports.ledger.verifyPublishable(tx,assignments);
         if(claim) {
             const current=await this.ports.store.operation(tx,claim.id);

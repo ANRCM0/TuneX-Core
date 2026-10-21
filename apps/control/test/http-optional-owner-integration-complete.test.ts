@@ -6,6 +6,8 @@ import ts from 'typescript';
 import * as core from '@tunex/core';
 import * as observability from '@tunex/contracts/observability';
 import * as framework from '../src/framework/public.ts';
+import type { ResourceReadAccess } from '../src/framework/public.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
 import * as mysql from '../src/infrastructure/mysql.ts';
 import { nativeValueDigest } from '../src/compatibility/public.ts';
 import { createApp, createControlApp } from '../src/api/public.ts';
@@ -44,10 +46,15 @@ function http(services: Any, positional = false) {
 function read(app: ReturnType<typeof http>, path: string, actor = 'reader') {
     return app.request('/api/v1/scopes/scope/' + path, { headers: { authorization: 'Bearer ' + actor } });
 }
-function fixture(db?: Any) {
+function fixture(db?: Any, policy?: ResourceReadAccess<any>) {
     const tx = {}, trace: string[] = [];
     const database = db ?? { async transaction(action: (tx: unknown) => Promise<unknown>) { return action(tx); } };
     const auth = { async scope(_tx: unknown, actor: string, scope: string) { assert.ok(actor); assert.equal(scope, 'scope'); trace.push('scope'); } };
+    const access: ResourceReadAccess<any> = policy ?? {
+        principal: async (_tx, actor) => Object.freeze({ actorId: actor, governance: actor === 'capacity-reader' }),
+        node: async () => 'full', forward: async () => undefined,
+        owned: async () => assert.fail('Observation history must not enter command ownership'),
+    };
     const current = { nodeId: 'node', scopeId: 'scope', revoked: false, credentialUntil: at + 60000, sessionEpoch: 1, bootId: 'boot' };
     const stores: Any = {};
     for (const name of ['telemetry', 'hostTelemetry', 'forwardTelemetry', 'probeTelemetry']) stores[name] = {
@@ -55,7 +62,7 @@ function fixture(db?: Any) {
         async forward() { return { scopeId: 'scope', forwardId: 'forward', revision: 1, deleting: false, recoverySuspended: false }; },
         async history() { trace.push(name + ':history'); return []; }, async latest() { trace.push(name + ':latest'); return []; },
     };
-    const make = (ctor: any, name: string, mapped = false) => new ctor(database, auth, { credential: noEffect }, stores[name],
+    const make = (ctor: any, name: string, mapped = false) => new ctor(database, auth, access, { credential: noEffect }, stores[name],
         ...(mapped ? [{ resolve: noEffect }] : []), false, clock);
     const rollupStore = {
         async history() { trace.push('telemetryRollups:history'); return []; },
@@ -64,9 +71,9 @@ function fixture(db?: Any) {
     };
     const services = { telemetry: make(NodeTelemetry, 'telemetry'), hostTelemetry: make(HostTelemetry, 'hostTelemetry'),
         forwardTelemetry: make(ForwardTelemetry, 'forwardTelemetry', true), probeTelemetry: make(ProbeTelemetry, 'probeTelemetry', true),
-        telemetryRollups: new TelemetryRollups(database as any, auth, rollupStore as any,
+        telemetryRollups: new TelemetryRollups(database as any, auth, access, rollupStore as any,
             { node: async () => current, forward: noEffect }, false, clock) };
-    return { services, stores, trace, database, auth };
+    return { services, stores, trace, database, auth, access };
 }
 
 test('30 actual five disabled collection owners remain HTTP-readable through named and positional composition while absent services refuse', async () => {
@@ -114,15 +121,27 @@ test('30 actual disabled Node owner returns retained native history but all four
 test('31 actual disabled NotificationDeliveries and ProbePlans retain their HTTP read envelopes without worker effects', async () => {
     for (const positional of [false, true]) {
         const f = fixture(), trace: string[] = [];
-        const auth = { async scope(_tx: unknown, _actor: string, scope: string, manage?: boolean) {
-            assert.equal(scope, 'scope'); assert.equal(manage, true); trace.push('scope');
-        } };
+        const auth = {
+            async scope(_tx: unknown, _actor: string, scope: string, manage?: boolean) {
+                assert.equal(scope, 'scope'); assert.equal(manage, true); trace.push('scope');
+            },
+            async owner(_tx: unknown, actor: string, scope: string) {
+                assert.deepEqual([actor, scope], ['reader', 'scope']); trace.push('owner');
+            },
+        };
+        const access: ResourceReadAccess<any> = {
+            principal: async (_tx, actor, scope) => {
+                assert.deepEqual([actor, scope], ['reader', 'scope']); trace.push('principal');
+                return Object.freeze({ actorId: actor, governance: true });
+            },
+            node: noEffect, forward: noEffect, owned: noEffect,
+        };
         const store = (name: string, losses: Any) => ({ async history() { trace.push(name); return []; }, async losses() { return losses; } });
         const notificationDeliveries = new NotificationDeliveries({ db: f.database, auth,
             store: store('deliveries', { queueRejected: 0, routingRejected: 0, silenceSuppressed: 0, disabledSuppressed: 0, rowsExpired: 0, rowsEvicted: 0, attemptsEvicted: 0 }),
             endpoints: new Proxy({}, { get: noEffect }), policies: new Proxy({}, { get: noEffect }), secrets: undefined,
             sender: { send: noEffect, idle: noEffect, close: noEffect }, authorityBinding: noEffect, enabled: false, clock } as any);
-        const probePlans = new ProbePlans({ db: f.database, auth,
+        const probePlans = new ProbePlans({ db: f.database, auth, access,
             store: store('plans', { rowsExpired: 0, rowsEvicted: 0, decisionsEvicted: 0 }),
             requests: new Proxy({}, { get: noEffect }), issuer: new Proxy({}, { get: noEffect }), executionEnabled: false, scheduleEnabled: false, clock } as any);
         const app = http({ notificationDeliveries, probePlans }, positional);
@@ -140,7 +159,28 @@ test('31 actual disabled NotificationDeliveries and ProbePlans retain their HTTP
             if (path === 'probe-plans') assert.equal(body.scheduleEnabled, false);
             const absent = await read(http({}, positional), path); assert.equal(absent.status, 503); assert.equal((await absent.json()).code, code);
         }
-        assert.deepEqual(trace, ['scope', 'deliveries', 'scope', 'plans']);
+        assert.deepEqual(trace, ['owner', 'deliveries', 'scope', 'principal', 'plans']);
+    }
+});
+
+test('30 actual product policy hides foreign private history and shared whole-host detail through HTTP', async () => {
+    for (const source of ['private', 'admin-shared'] as const) {
+        for (const [, path] of families) {
+            const reads: string[] = [];
+            const access = new ResourceAccess({ scope: async () => undefined }, {
+                scopeOwner: async () => ({ ownerActorId: 'administrator' }),
+                ownership: async () => ({ ownerActorId: 'another-user' }),
+                node: async () => ({ source, ownerActorId: source === 'private' ? 'another-user' : null, granted: source === 'admin-shared' }),
+            });
+            const f = fixture(undefined, access);
+            for (const store of Object.values(f.stores) as Any[]) {
+                store.history = async () => { reads.push('history'); return []; };
+                store.latest = async () => { reads.push('latest'); return []; };
+            }
+            const response = await read(http(f.services), path);
+            assert.equal(response.status, 404); assert.equal((await response.json()).code, 'NOT_FOUND');
+            assert.deepEqual(reads, []); assert.ok(!f.trace.some(event => event.endsWith(':history')));
+        }
     }
 });
 

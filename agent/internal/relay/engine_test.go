@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/tunex/vnext/agent/internal/adp3relay"
 	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/executionhost"
 	"io"
 	"net"
 	"strings"
@@ -32,6 +33,9 @@ func freePort(t *testing.T, protocol string) uint64 {
 	return uint64(s.Addr().(*net.TCPAddr).Port)
 }
 func makePair(t *testing.T, protocol string, targetPort uint64, maximum int, allow func() error) (*Engine, *Engine) {
+	return makeMeteredPair(t, protocol, targetPort, maximum, allow, nil, nil)
+}
+func makeMeteredPair(t *testing.T, protocol string, targetPort uint64, maximum int, allow func() error, ingressGate, egressGate executionhost.PayloadGate) (*Engine, *Engine) {
 	t.Helper()
 	ca := createCA(t)
 	usage := []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
@@ -51,7 +55,7 @@ func makePair(t *testing.T, protocol string, targetPort uint64, maximum int, all
 		t.Fatal(err)
 	}
 	egressAssignment := adp3relay.Assignment{ProtocolVersion: 3, NodeId: "node-b", SessionEpoch: 3, AssignmentId: "assignment-b", ForwardId: "forward-a", ForwardRevision: 1, DeploymentGeneration: 1, BindingFence: 5, Role: "relay-egress", Protocol: protocol, Phase: "prepared", Resource: adp3relay.Resource{Address: "127.0.0.1", Port: peerPort, Protocol: "tcp"}, Driver: adp3relay.RelayDriver{Id: "native.relay.v1", SchemaVersion: 1, ConfigDigest: hash, Config: config}, DrainTimeoutSeconds: 1}
-	egress, err := Prepare(egressAssignment, Identity{server, ca.roots}, maximum, allow)
+	egress, err := PrepareMetered(egressAssignment, Identity{server, ca.roots}, maximum, allow, egressGate)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +76,7 @@ func makePair(t *testing.T, protocol string, targetPort uint64, maximum int, all
 	ingressAssignment.Role = "relay-ingress"
 	ingressAssignment.Resource = adp3relay.Resource{Address: "127.0.0.1", Port: clientPort, Protocol: protocol}
 	ingressAssignment.Driver = adp3relay.RelayDriver{Id: "native.relay.v1", SchemaVersion: 1, ConfigDigest: hash, Config: config}
-	ingress, err := Prepare(ingressAssignment, Identity{client, ca.roots}, maximum, allow)
+	ingress, err := PrepareMetered(ingressAssignment, Identity{client, ca.roots}, maximum, allow, ingressGate)
 	if err != nil {
 		t.Fatal(err)
 	}

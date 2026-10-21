@@ -55,7 +55,7 @@ function fixture() {
         clearOperationCleanup: async supplied => { trace(supplied, 'clear-cleanup'); },
         getOperation: unexpected, expireOperations: unexpected, claimableOperation: unexpected, claimOperation: unexpected,
     };
-    const resources: RuntimeResourceAccess<typeof tx> = { initializeNode: unexpected, lockNode: unexpected, maximumAuthorization: unexpected, reserve: unexpected,
+    const resources: RuntimeResourceAccess<typeof tx> = { initializeNode: unexpected, lockNode: unexpected, lockOwnership: unexpected, maximumAuthorization: unexpected, reserve: unexpected,
         reserveRelay: unexpected, transition: unexpected, releaseForwardSlots: async supplied => { trace(supplied, 'release-all'); },
         releaseObsoleteSlots: async supplied => { trace(supplied, 'release-obsolete'); }, retainSlots: unexpected };
     const forwarding: RuntimeLedgerForwards<typeof tx> = {
@@ -178,4 +178,15 @@ test('Ledger completion retains cleanup and resources at the exact five-second b
         await f.host().complete(f.tx, 'node', f.forwarding, f.report, f.snapshot);
         assert.equal(f.events.some(value => value.startsWith('release-') || value.startsWith('complete:')), false, mode);
     }
+});
+
+
+test('Ledger forwards the original ownership lock and creating actor without acquiring its own authority',async()=>{
+    const f=fixture(),host=f.host(),seen:unknown[][]=[];
+    f.options.resources.lockOwnership=async(tx,intent)=>{assert.equal(tx,f.tx);assert.equal(intent,f.forward);seen.push(['ownership',tx,intent]);};
+    f.options.resources.reserve=async(tx,intent,actor)=>{assert.equal(tx,f.tx);assert.equal(intent,f.forward);assert.equal(actor,'creating-actor');seen.push(['reserve',tx,intent,actor]);return [];};
+    await host.lockOwnership(f.tx,f.forward);await host.reserve(f.tx,f.forward,'creating-actor');
+    assert.deepEqual(seen,[['ownership',f.tx,f.forward],['reserve',f.tx,f.forward,'creating-actor']]);
+    const failure=new Error('original ownership lock failed');f.options.resources.lockOwnership=async()=>{throw failure;};
+    await assert.rejects(host.lockOwnership(f.tx,f.forward),error=>error===failure);
 });

@@ -29,7 +29,7 @@ func TestJournalInspectionDoesNotWriteOrMigrate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result.Version != 1 || result.ProtocolVersion != 3 || result.NodeID != "node-a" || result.Generation != 0 ||
+			if result.Version != 2 || result.ResourceBudgetVersion != 0 || result.ResourceBudgetBuckets != 0 || result.PrechargedBytes != "0" || result.ProtocolVersion != 3 || result.NodeID != "node-a" || result.Generation != 0 ||
 				(result.ExecutionExtension == 1) != extended || !strings.HasPrefix(result.FileDigest, "sha256:") {
 				t.Fatal("unexpected summary", result)
 			}

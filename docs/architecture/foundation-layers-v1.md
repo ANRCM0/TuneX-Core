@@ -1,9 +1,20 @@
 # Foundation Layers v1
 
-Date: 2026-10-18 (Asia/Shanghai).
-Status: declared source boundary and first live extraction; not accepted stable foundation.
+Original source handoff: 2026-10-18 (Asia/Shanghai), declared boundary and first
+live extraction; then not accepted. Documentation status clarified: 2026-10-21.
 See [ADR-0048](../decisions/0048-foundation-layer-boundaries.md) and
 [readiness](../development/foundation-readiness.md).
+
+B subsequently accepted the bounded frozen public contract/consumer/compatibility/
+example scope at source `e208a3abf17129b0c2898ba2022c69f60f45445a`, actually tested
+as `c3ce8a67b901f61234b4116190409854818cb6c7`. See the
+[candidate index](foundation-candidate-index-v1.md) and
+[verification record](../development/foundation-verification-2026-10-19.md).
+Dated source-phase/unexecuted statements below preserve their original scope and
+are superseded by that decision for its exact revision. They neither negate B
+acceptance nor certify subsequent changes. Future module work needs its own task,
+accepted contracts or a verified successor, tests and integration instructions;
+physical-host, load/long-run, independent Responder and release gates stay separate.
 
 Later current source disposition, 2026-10-19: manual A5 ownership/type/private/
 default/consumer/asset classification is closed in
@@ -13,6 +24,41 @@ Control cancellation. Earlier paragraphs preserve extraction history; actual
 configured boundary/contract/example checks passed on the saved PR #111 candidate.
 See [verification](../development/foundation-verification-2026-10-19.md).
 Full readiness acceptance and independent physical/release gates remain separate.
+
+## N Product Source Successor (2026-10-21)
+
+FR-0028–0032 extend current source under the explicitly authorized
+[N stage](../development/product-development-stage-n-2026-10-21.md). L1 gains
+owner-independent ResourceReadAccess/claim and Runtime port-policy contracts;
+L3 ResourceAccess, Node, Forward, Path and query owners supply product ownership,
+purposes, personal visibility and shared-Node port decisions. L2 original MySQL
+stores persist explicit claims, caller-filtered projections and original slot
+aggregates in the supplied transaction. Original Runtime hosts invoke injected
+policy without importing product owners or creating another ledger.
+
+The original NodeService supplies policy at construction; legacy Nodes and Runtime
+constructors assemble the required providers. Raw store create no longer grants
+Node use. The product owner inserts a private creator grant explicitly; shared
+resources require an administrative grant. Legacy unclassified resources fail
+closed until audited CAS classification; no owner is inferred from old grants.
+
+L2 browser account-context, line-builder, template-reference and admin-resource
+representation leaves follow the original asset adapter. Role-specific selection
+can enter either original immutable template publication or a disabled Relay
+draft. Core, Agent authority/Journal and protected execution history stay with
+their existing owners. The boundary inventory declares these source changes;
+it has not been executed as acceptance. The [candidate index](foundation-candidate-index-v1.md)
+lists successor counters separately from the frozen B evidence.
+
+FR-0032 adds L1 RuntimePayloadPolicy/OfflinePayloadPolicy, SharedResourceLimitStore,
+payloadbudget decisions and injected payload/precharge contracts. L3
+resource-limit-owner supplies immutable Forward-owner/user/Node policy; L2 original
+MySQL, ADP/3 and native state encode/persist it. RuntimeHost calls the policy in
+its original transaction; Runner uses the original authenticated Journal for
+save-before-write debit. Agent engines consume an injected gate and keep original
+authorization. They create no second ledger or authority. The payload console is
+an L2 representation leaf and the new example consumes public owner/framework
+entries. These are declared source dependencies, not passing boundary evidence.
 
 ## 1. Meaning Of The Four Layers
 

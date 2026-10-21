@@ -11,6 +11,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/adp3relay"
 	"github.com/tunex/vnext/agent/internal/egress"
+	"github.com/tunex/vnext/agent/internal/executionhost"
 	"github.com/tunex/vnext/agent/internal/forward"
 	"github.com/tunex/vnext/agent/internal/payloadstats"
 	"github.com/tunex/vnext/agent/internal/relaycontracts"
@@ -30,6 +31,7 @@ type Identity struct {
 }
 type Engine struct {
 	payload         *payloadstats.Counters
+	payloadGate     executionhost.PayloadGate
 	multihop        *adp3.HopConfig
 	assignment      adp3relay.Assignment
 	identity        Identity
@@ -95,7 +97,16 @@ func acquireNode(maximum int, protocol string) (func(), error) {
 func Prepare(assignment adp3relay.Assignment, identity Identity, maximum int, allow func() error) (*Engine, error) {
 	return prepare(assignment, identity, maximum, allow, nil)
 }
+
+// PrepareMetered installs the machine's payload gate before any peer listener.
+// TLS, Open/Accept/Probe and frame control never consume payload credit.
+func PrepareMetered(assignment adp3relay.Assignment, identity Identity, maximum int, allow func() error, gate executionhost.PayloadGate) (*Engine, error) {
+	return prepareWithPayload(assignment, identity, maximum, allow, nil, gate)
+}
 func prepare(assignment adp3relay.Assignment, identity Identity, maximum int, allow func() error, hop *adp3.HopConfig) (*Engine, error) {
+	return prepareWithPayload(assignment, identity, maximum, allow, hop, nil)
+}
+func prepareWithPayload(assignment adp3relay.Assignment, identity Identity, maximum int, allow func() error, hop *adp3.HopConfig, gate executionhost.PayloadGate) (*Engine, error) {
 	raw, err := json.Marshal(assignment)
 	if err != nil {
 		return nil, err
@@ -133,7 +144,7 @@ func prepare(assignment adp3relay.Assignment, identity Identity, maximum int, al
 	}
 	identity.Roots = identity.Roots.Clone()
 	ctx, cancel := context.WithCancel(context.Background())
-	engine := &Engine{multihop: hop, assignment: checked, identity: identity, credentialUntil: leaf.NotAfter, peers: map[*tls.Conn]time.Time{}, ctx: ctx, cancel: cancel, allow: allow, maximum: maximum, connections: map[net.Conn]net.Conn{}, sessions: map[netip.AddrPort]*association{}, guardDone: make(chan struct{})}
+	engine := &Engine{payloadGate: gate, multihop: hop, assignment: checked, identity: identity, credentialUntil: leaf.NotAfter, peers: map[*tls.Conn]time.Time{}, ctx: ctx, cancel: cancel, allow: allow, maximum: maximum, connections: map[net.Conn]net.Conn{}, sessions: map[netip.AddrPort]*association{}, guardDone: make(chan struct{})}
 	if checked.Role == "relay-ingress" {
 		engine.payload = payloadstats.New()
 	}
@@ -156,7 +167,8 @@ func prepare(assignment adp3relay.Assignment, identity Identity, maximum int, al
 	return engine, nil
 }
 
-// Only the client ingress owns payload usage; transit and egress are not additive.
+// Operational payload telemetry remains ingress-only. The independent durable
+// payload gate applies to every metered machine, including transit and egress.
 func (e *Engine) PayloadCounters() (payloadstats.Snapshot, bool) {
 	return e.payload.Snapshot()
 }
@@ -655,6 +667,10 @@ func (w gateWriter) Write(buffer []byte) (int, error) {
 	return w.out.Write(buffer)
 }
 func (e *Engine) bridgeTCP(local net.Conn, tunnel *framedTCP) {
+	ctx, cancel := context.WithCancel(e.ctx)
+	defer cancel()
+	tunnel.payloadContext = ctx
+	tunnel.payloadGate = e.payloadGate
 	tunnel.payloadWritten = e.payload.Sent
 	finished := make(chan struct{})
 	go func() {
@@ -663,15 +679,17 @@ func (e *Engine) bridgeTCP(local net.Conn, tunnel *framedTCP) {
 		if err == nil {
 			tunnel.CloseWrite()
 		} else {
+			cancel()
 			local.Close()
 			tunnel.Close()
 		}
 	}()
-	_, err := io.Copy(payloadWriter{gateWriter{local, e.check}, e.payload.Received}, gateReader{tunnel, e.check})
+	_, err := io.Copy(payloadWriter{quotaWriter{out: local, ctx: ctx, gate: e.payloadGate, check: func() error { return e.peerCheck(tunnel.Conn) }}, e.payload.Received}, gateReader{tunnel, e.check})
 	if tcp, ok := local.(*net.TCPConn); ok {
 		tcp.CloseWrite()
 	}
 	if err != nil {
+		cancel()
 		local.Close()
 		tunnel.Close()
 	}

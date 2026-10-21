@@ -1,5 +1,6 @@
 import { IdentityAccessHost, ControlError, invalid } from '../../framework/public.ts';
-import type { IdentityModuleOptions, IdentityOwner, IdentityMemberView, IdentityMemberChange, RecoveryIdentity } from './contracts.ts';
+import type { IdentityModuleOptions, IdentityOwner, IdentityMemberView, IdentityMemberChange, RecoveryIdentity,
+    IdentityContextQuery, IdentityContextView, IdentityScopeView } from './contracts.ts';
 
 /** The original identity owner, with storage/native effects supplied by composition. */
 export class IdentityService<Tx> extends IdentityAccessHost<Tx> implements IdentityOwner<Tx> {
@@ -50,6 +51,40 @@ export class IdentityService<Tx> extends IdentityAccessHost<Tx> implements Ident
             await this.owner(tx,actor,scopeId);
             const members=await this.store.listMembers(tx,scopeId);
             return {members:members.map(m=>({actorId:m.actorId,revision:m.revision,active:Boolean(m.active),role:m.actorId===m.ownerId?'owner':!m.active?'removed':m.canManage?'manager':'viewer'}))};
+        });
+    }
+    async context(actor:string,input:IdentityContextQuery={}):Promise<IdentityContextView> {
+        if(!this.codec.isId(actor)||!input||typeof input!=='object'||Array.isArray(input)||
+            ![Object.prototype,null].includes(Object.getPrototypeOf(input))||
+            Object.keys(input).some(key=>!['limit','after'].includes(key))||
+            input.limit!==undefined&&typeof input.limit!=='string'||
+            input.after!==undefined&&!this.codec.isId(input.after))
+            invalid('Bounded current-account context query required');
+        const limit=input.limit===undefined?25:/^[1-9][0-9]{0,2}$/.test(input.limit)&&! /\s/.test(input.limit)?Number(input.limit):NaN;
+        if(!Number.isSafeInteger(limit)||limit<1||limit>100)invalid('Context page limit must be between 1 and 100');
+        const after=input.after??null;
+        return this.db.transaction(async tx=>{
+            const records=await this.store.scopeContext(tx,actor,{after,limit});
+            const corrupt=():never=>{throw new ControlError('INTEGRITY_FAILURE',409,'Invalid current-account Scope context');};
+            if(!Array.isArray(records)||records.length>limit+1)corrupt();
+            let previous=after;
+            const values=records.map(record=>{
+                if(!record||!this.codec.isId(record.scopeId)||!this.codec.isId(record.ownerId)||
+                    previous!==null&&record.scopeId<=previous)corrupt();
+                previous=record.scopeId;
+                const member=record.membership;
+                if(member!==null&&(!member||member.actorId!==actor||!this.codec.isCounter(member.revision)||
+                    ![0,1].includes(member.active)||![0,1].includes(member.canManage)))corrupt();
+                const owner=record.ownerId===actor,active=member!==null&&member.active===1;
+                if(!owner&&!active)corrupt();
+                const canManage=active&&member!.canManage===1;
+                const view:IdentityScopeView={scopeId:record.scopeId,role:owner?'owner':canManage?'manager':'viewer',
+                    membership:member===null?'absent':active?'active':'inactive',membershipRevision:member?.revision??null,
+                    canEnter:active,canManage};
+                return view;
+            });
+            const scopes=values.slice(0,limit),truncated=values.length>limit;
+            return {actorId:actor,limit,scopes,truncated,nextAfter:truncated?scopes.at(-1)!.scopeId:null};
         });
     }
 }

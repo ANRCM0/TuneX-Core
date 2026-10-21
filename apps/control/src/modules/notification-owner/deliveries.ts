@@ -1,7 +1,7 @@
 import { deepFreeze, isCounter, isId } from '@tunex/core';
 import { nativeValueDigest as digest, nativeParseJson as parseJson, nativeParseTime, nativeIsoTime, nativeMonotonicNow, nativeWallClockSource, jsonUtf8Bytes, nativeJsonBase64Url, nativeBase64UrlText, nativeHexBytes } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary } from '../../framework/public.ts';
 import type { NotificationEndpoint, NotificationEndpointStore, NotificationSecretLease, NotificationSecrets, NotificationSender } from './endpoint-contracts.ts';
 import type { NotificationDelivery, NotificationDeliveryAttempt, NotificationDeliveryCode, NotificationDeliveryHeader, NotificationDeliveryQuery,
     NotificationDeliveryStore, StationEventHandoff } from './delivery-contracts.ts';
@@ -14,7 +14,7 @@ import { NOTIFICATION_DELIVERY_STATUSES, notificationAttemptId, notificationDeli
     notificationWireBody, parseNotificationDelivery, parseNotificationDeliveryAttempt, parseNotificationDeliveryLosses, publicNotificationDelivery } from './delivery-values.ts';
 
 interface Options<Tx> {
-    db: TransactionBoundary<Tx>; auth: ScopeAuthorization<Tx>; store: NotificationDeliveryStore<Tx>; endpoints: NotificationEndpointStore<Tx>;
+    db: TransactionBoundary<Tx>; auth: ScopeAuthorization<Tx> & ScopeOwnerAuthorization<Tx>; store: NotificationDeliveryStore<Tx>; endpoints: NotificationEndpointStore<Tx>;
     policies: Pick<StationAlertStore<Tx>,'policy'|'lockScope'>; secrets: NotificationSecrets | undefined; sender: NotificationSender;
     authorityBinding: ()=>Promise<string>; enabled: boolean; clock?: ()=>number; clockSkewMs?: number;
 }
@@ -93,7 +93,7 @@ export class NotificationDeliveries<Tx> implements StationEventHandoff<Tx>, Noti
     }
     private async authorized(tx:Tx,scope:string,row:NotificationDelivery):Promise<boolean> {
         for(const actor of [...new Set([row.policyManagedBy,row.endpointManagedBy])].sort()) {
-            try {await this.options.auth.scope(tx,actor,scope,true);}
+            try {await this.options.auth.owner(tx,actor,scope);}
             catch(error) {if(error instanceof ControlError&&[403,404].includes(error.status))return false;throw error;}
         }
         return true;
@@ -222,7 +222,7 @@ export class NotificationDeliveries<Tx> implements StationEventHandoff<Tx>, Noti
     async get(actor:string,scope:string,id:string) {
         identities(actor,scope,id);
         return this.admitted(actor,()=>this.options.db.transaction(async tx=>{
-            await this.options.auth.scope(tx,actor,scope,true);
+            await this.options.auth.owner(tx,actor,scope);
             // Freeze this module's head while reading its attempt tail; no Runtime/resource locks or writes.
             const raw=await this.options.store.get(tx,scope,id,'share');if(!raw)notFound();const value=this.row(raw,scope);
             const rawAttempts=await this.options.store.attempts(tx,scope,id);if(!Array.isArray(rawAttempts)||rawAttempts.length>17)corrupt();
@@ -254,7 +254,7 @@ export class NotificationDeliveries<Tx> implements StationEventHandoff<Tx>, Noti
         const query:NotificationDeliveryQuery={from,to,limit,before,...(filters.endpointId===null?{}:{endpointId:filters.endpointId}),
             ...(filters.eventId===null?{}:{eventId:filters.eventId}),...(filters.status===null?{}:{status:filters.status as NotificationDelivery['status']})};
         return this.admitted(actor,()=>this.options.db.transaction(async tx=>{
-            await this.options.auth.scope(tx,actor,scope,true);
+            await this.options.auth.owner(tx,actor,scope);
             const raw=await this.options.store.history(tx,scope,query);if(!Array.isArray(raw)||raw.length>limit+1)corrupt();const values=raw.map(v=>this.row(v,scope));
             if(new Set(values.map(v=>v.id)).size!==values.length||values.some((v,i)=>v.createdAt<from||v.createdAt>=to||
                 filters.endpointId!==null&&v.endpointId!==filters.endpointId||filters.eventId!==null&&v.eventId!==filters.eventId||filters.status!==null&&v.status!==filters.status||

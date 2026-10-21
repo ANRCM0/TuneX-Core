@@ -37,7 +37,8 @@ test('all twenty-two documented browser leaves retain exact old exports real con
       assert.deepEqual(sourceReferences(path, source), ['./rule-command-owner/public.js', './browser-native/public.js']);
     } else {
       assert.equal(classification.layer, 'L2', path); assert.equal(classification.scope, path, 'classification must name this native leaf');
-      assert.deepEqual(sourceReferences(path, source), [], path + ' original native body has no reverse product import');
+      const representationImports={ 'path-groups.js':['./template-reference.js'],'ingress-groups.js':['./template-reference.js'] };
+      assert.deepEqual(sourceReferences(path, source), representationImports[file]??[], path + ' declared representation dependencies');
     }
   }
   for (const path of ['apps/web/rule-command-owner/public.js', 'apps/web/rule-command-owner/service.js'])

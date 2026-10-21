@@ -8,6 +8,8 @@ import { MySqlUnitOfWork } from '../src/infrastructure/mysql.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
 import { Identity, tokenHash } from '../src/modules/identity.ts';
 import { Nodes } from '../src/modules/nodes.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { MySqlResourceAccessStore } from '../src/infrastructure/mysql-resource-access.ts';
 import type { NodeCertificateAuthority } from '../src/infrastructure/pki.ts';
 import { ControlError } from '../src/framework/public.ts';
 import { IngressDeployments, IngressMigrations, ingressDeploymentStorageValues, ingressMigrationStorageValues } from '../src/modules/ingress-owner/public.ts';
@@ -41,13 +43,13 @@ test('60/61 original MySQL owners and Forward path admission retain same-Tx ever
             const secondIngress={...shortConfig,nodes:['ingress-b','egress']};
             for(const id of ['ingress','ingress-b','middle','egress']){
                 const facts={nodeId:id,scopeId:'scope',capabilities:pathRequirements(parsePathTemplate(config)),allowedPorts:[32001,32002,32003,32004,32005,32006,32007],allowedListenerAddresses:['127.0.0.1'],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false};
-                await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',[id,'scope',createHash('sha256').update(id).digest('hex'),now,now+3600000,JSON.stringify(facts)]);
+                await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,\'admin-shared\',NULL,1)',[id,'scope',createHash('sha256').update(id).digest('hex'),now,now+3600000,JSON.stringify(facts)]);
                 // Real path acceptance requires an established session and a current bounded Relay pin even for disabled intent.
                 await connection.execute('INSERT INTO runtime_nodes(node_id,session_epoch,boot_id) VALUES(?,1,?)',[id,'boot-'+id]);
                 await connection.execute('INSERT INTO node_boots(node_id,boot_id,session_epoch) VALUES(?,?,1)',[id,'boot-'+id]);
                 await connection.execute('INSERT INTO node_relay_credentials(fingerprint,node_id,issued_at,valid_until,certificate) VALUES(?,?,?,?,?)',
                     [createHash('sha256').update('relay:'+id).digest('hex'),id,now,now+3600000,'synthetic persisted Relay credential for SQL acceptance only']);
-                for(const actor of ['owner','manager'])await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[id,actor]);
+                for(const actor of ['owner','manager'])await connection.execute('INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)',[id,actor,JSON.stringify([id.startsWith('ingress')?'ingress':id==='middle'?'transit':'egress']),JSON.stringify({allowedPorts:id.startsWith('ingress')?facts.allowedPorts:[32101,32102,32103,32104],maxBindings:16})]);
                 // Keep a second exclusive TCP/UDP pair for the later independent replacement add; the original Forward retains its slots.
                 if(id==='middle'||id==='egress')await connection.execute('INSERT INTO node_relay_endpoints(node_id,revision,config,created_by,updated_at) VALUES(?,1,?,?,?)',[id,JSON.stringify({listenAddress:'127.0.0.1',advertisedHost:'127.0.0.1',allowedTcpPorts:[32101,32102,32103,32104]}),'owner',now]);
             }
@@ -68,8 +70,8 @@ test('60/61 original MySQL owners and Forward path admission retain same-Tx ever
                 const tx=new Proxy(raw,{get(target,key){if(key==='execute')return async(...args:any[])=>{const result=await (target.execute as (...args:any[])=>Promise<any>).apply(target,args);const sql=String(args[0]);if(/^(INSERT|UPDATE|DELETE)\b/i.test(sql)){writes.push(sql);if(knownRefusalSql&&sql.startsWith(knownRefusalSql))throw new ControlError('PORT_RESERVED',409,'known refusal after actual Forward mutation');if(failWrite===writes.length)throw injected;}return result;};const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;}});
                 const result=await run(tx);if(rollbackProbe)throw probeComplete;return result;
             });}};
-            const deployments=new IngressDeployments(traced,identity,control.idempotency,new MySqlIngressDeploymentStore<IngressPlan,IngressAttempt['outcome'],PathPublicationFailure>(ingressDeploymentStorageValues),control.ingressGroups,control.forwards);
-            const migrations=new IngressMigrations(traced,identity,control.idempotency,new MySqlIngressMigrationStore<IngressMigrationPlan,IngressMigrationAttempt['outcome'],PathPublicationFailure>(ingressMigrationStorageValues),control.ingressGroups,{resolveIn:(tx,actor,scope,ref)=>ref.kind==='deployment'?control.ingressDeployments.originIn(tx,actor,scope,ref):control.ingressMigrations.originIn(tx,actor,scope,ref)},control.forwards);
+            const deployments=new IngressDeployments(traced,identity,new ResourceAccess(identity,new MySqlResourceAccessStore()),control.idempotency,new MySqlIngressDeploymentStore<IngressPlan,IngressAttempt['outcome'],PathPublicationFailure>(ingressDeploymentStorageValues),control.ingressGroups,control.forwards);
+            const migrations=new IngressMigrations(traced,identity,new ResourceAccess(identity,new MySqlResourceAccessStore()),control.idempotency,new MySqlIngressMigrationStore<IngressMigrationPlan,IngressMigrationAttempt['outcome'],PathPublicationFailure>(ingressMigrationStorageValues),control.ingressGroups,{resolveIn:(tx,actor,scope,ref)=>ref.kind==='deployment'?control.ingressDeployments.originIn(tx,actor,scope,ref):control.ingressMigrations.originIn(tx,actor,scope,ref)},control.forwards);
             async function everyWrite(label:string,run:()=>Promise<unknown>,required:string[]){
                 const before=await inventory(connection!);writes=[];rollbackProbe=true;
                 try{await assert.rejects(run(),error=>error===probeComplete,label+' successful probe must reach the original response');}finally{rollbackProbe=false;}
@@ -81,7 +83,7 @@ test('60/61 original MySQL owners and Forward path admission retain same-Tx ever
             await everyWrite('deployment create',()=>deployments.create('manager','scope','probe-deployment-create',input,preview.previewDigest),['INSERT INTO ingress_deployments','INSERT INTO ingress_deployment_events','UPDATE idempotency SET http_status']);
             await connection.execute('DELETE FROM node_grants WHERE node_id=? AND actor_id=?',['middle','manager']);const beforeRevoked=await inventory(connection);
             await assert.rejects(deployments.create('manager','scope','revoked-admission',input,preview.previewDigest),{code:'NOT_FOUND'});assert.equal(await inventory(connection),beforeRevoked);
-            await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',['middle','manager']);
+            await connection.execute('INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)',['middle','manager',JSON.stringify(['transit']),JSON.stringify({allowedPorts:[32101,32102,32103,32104],maxBindings:16})]);
             const createdBatch=await deployments.create('manager','scope','deployment-create',input,preview.previewDigest),batchId=createdBatch.body.batchId;
             await everyWrite('deployment accepted Forward create',()=>deployments.act('manager','scope',batchId,'probe-deployment-act',1,'create',1),['INSERT INTO forwards','INSERT INTO forward_revisions','INSERT INTO operations','INSERT INTO forward_path_bindings','INSERT INTO ingress_deployment_attempts','INSERT INTO ingress_deployment_events','UPDATE idempotency SET http_status']);
             const firstAccepted=await deployments.act('manager','scope',batchId,'deployment-act-one',1,'create',1);assert.equal(firstAccepted.body.attempt.outcome.accepted,true);

@@ -2,7 +2,7 @@ import type { ProbeServiceSelection } from '../../compatibility/public.ts';
 import type { ForwardProbePlan } from './plan-contracts.ts';
 import type { ProbePermitInspection, ProbePermitRevocation } from './owner-contracts.ts';
 
-export const FORWARD_PROBE_API_INTERFACE_VERSION=1 as const;
+export const FORWARD_PROBE_API_INTERFACE_VERSION=2 as const;
 
 export interface ProbeAcceptance {
     status: 202;
