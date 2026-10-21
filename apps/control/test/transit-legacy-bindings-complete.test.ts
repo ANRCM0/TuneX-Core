@@ -57,15 +57,21 @@ test('203/205 negotiation constructs original machine reader per hello and retai
     const failure=new Error('negotiation failure');t.mock.method(TransitNegotiationService.prototype,'hello',async()=>{throw failure;});await assert.rejects(negotiator.hello('n','f',1,request as never),error=>error===failure);
 });
 
-test('203/205 compatibility reservations require the caller policy and retain exact reservation arguments with late default capacity',async t=>{
+test('203/205 compatibility reservations retain explicit or native default policy and exact reservation arguments with late default capacity',async t=>{
     const tx={},forward={},resources:unknown[]=[],result:unknown[]=[],owners:unknown[]=[];
     const portPolicy={async assertReservation(){assert.fail('construction must not reserve');}};
-    assert.equal(reserveTransitResources.length,5);assert.equal(validateTransitReservationSet,canonicalValidation);
+    assert.equal(reserveTransitResources.length,4);assert.equal(validateTransitReservationSet,canonicalValidation);
     t.mock.method(TransitReservations.prototype,'reserve',async function(this:unknown,...args:unknown[]){owners.push(this);assert.deepEqual(args,[tx,forward,resources,7]);return result as never;});
     assert.equal(await reserveTransitResources(tx as never,forward as never,resources as never,7,portPolicy),result);
     assert.equal(await reserveTransitResources(tx as never,forward as never,resources as never,7,portPolicy),result);
     assert.notEqual(owners[0],owners[1]);
     for(const owner of owners){const access=bindings(owner).resources;assert.ok(access instanceof RuntimeExclusiveReservations);assert.ok(bindings(access).store instanceof MySqlRuntimeResourceStore);assert.equal(bindings(access).portPolicy,portPolicy);assert.equal(bindings(access).capacity(),DEFAULT_POLICY.maxAssignmentsPerNode);}
+    assert.equal(await reserveTransitResources(tx as never,forward as never,resources as never,7),result);
+    const defaultAccess=bindings(owners[2]).resources,defaultPolicy=bindings(defaultAccess).portPolicy;
+    assert.notEqual(owners[2],owners[0]);assert.ok(defaultAccess instanceof RuntimeExclusiveReservations);
+    assert.ok(bindings(defaultAccess).store instanceof MySqlRuntimeResourceStore);assert.ok(defaultPolicy instanceof NodePortLimitPolicy);
+    assert.ok(bindings(defaultPolicy).nodes instanceof MySqlNodeAuthorityStore);assert.ok(bindings(defaultPolicy).usage instanceof MySqlRuntimeResourceStore);
+    assert.equal(bindings(defaultAccess).capacity(),DEFAULT_POLICY.maxAssignmentsPerNode);
     assert.ok(Object.isFrozen(DEFAULT_POLICY));
     const failure=new Error('reservation failure');t.mock.method(TransitReservations.prototype,'reserve',async()=>{throw failure;});
     await assert.rejects(reserveTransitResources(tx as never,forward as never,resources as never,7,portPolicy),error=>error===failure);
@@ -83,7 +89,7 @@ test('203/205 staging holds service original native resource/release/store and a
     const payloadOptions=bindings(options.payloadPolicy).options;
     assert.ok(payloadOptions.nodes instanceof MySqlNodeAuthorityStore);assert.ok(payloadOptions.owners instanceof MySqlRuntimeResourceStore);
     assert.ok(payloadOptions.store instanceof MySqlSharedResourceLimitStore);assert.equal(typeof payloadOptions.codec.formatTime,'function');
-    const cases:[string,string,unknown[]][]=[['nodes','authorizedRelayNode',[tx,'a','s','n']],['nodes','reservationPorts',[tx,'a','s','n',[32001,32002]]],['nodes','facts',[tx,'n']],['nodes','relayCredentialFacts',[tx,'n',true]],['nodes','relayCredentialFacts',[tx,'n',false]],['forwarding','currentForUpdate',[tx,'s','f']],['forwarding','authorizer',[tx,forward]],['transport','resolve',[tx,'a','s','p',4]],['endpoints','resolve',[tx,'n']]];
+    const cases:[string,string,unknown[]][]=[['nodes','authorizedRelayNode',[tx,'a','s','n','transit',forward]],['nodes','reservationPorts',[tx,'a','s','n',[32001,32002]]],['nodes','facts',[tx,'n']],['nodes','relayCredentialFacts',[tx,'n',true]],['nodes','relayCredentialFacts',[tx,'n',false]],['forwarding','currentForUpdate',[tx,'s','f']],['forwarding','authorizer',[tx,forward]],['transport','resolve',[tx,'a','s','p',4]],['endpoints','resolve',[tx,'n']]];
     for(const [owner,name,args] of cases){assert.equal(options[owner][name](...args),result);assert.deepEqual(calls.pop(),[owner,name,...args]);}
     assert.equal(await options.db.transaction((actual:unknown)=>{assert.equal(actual,tx);return result;}),result);assert.deepEqual(f.seen,[tx]);
     for(const [name,args] of [['stage',['a','s','f',4]],['abort',['a','s','f',7]]] as [string,unknown[]][]){t.mock.method(bindings(TransitStagingService.prototype),name,async function(this:unknown,...actual:unknown[]){assert.equal(this,held);assert.deepEqual(actual,args);return result;});assert.equal(await bindings(staging)[name](...args),result);}

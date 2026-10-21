@@ -143,7 +143,7 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         await fixture.slots(copy.forwardId, true); await fixture.closed(fixture.copyPort);
 
         const middle = path[1]!;
-        await page.locator('[data-view="nodes"]').click();
+        await page.locator('[data-view="available"]').click();
         await page.locator('[data-action="node-tunnel"][data-id="' + middle + '"]').click();
         await page.waitForFunction(() => document.getElementById('tunnel-references-meta')?.textContent?.includes('total 2.'));
         assert.match((await page.locator('#tunnel-reference-rows').textContent())!, /transit.*previous:.*next:/);

@@ -34,11 +34,11 @@ function stubControl(allow: boolean) {
         facts: JSON.stringify({ allowedListenerAddresses:['127.0.0.1'],allowedPorts:[25565],capabilities:[] }),
         session_epoch:1, snapshot_generation:2, received_at:null
       }], []];
-      if (sql.includes('FROM forwards f')) return [[{
+      if (sql.startsWith('SELECT f.id,f.revision,f.spec,')) return [[{
         id:'forward-a', revision:3, spec:JSON.stringify({enabled:false}),
         recovery_suspended:1, operation_id:'op-1', operation_kind:'disable', operation_status:'succeeded'
       }], []];
-      if (sql.includes('FROM operations o WHERE o.scope_id=')) return [[{
+      if (sql.startsWith('SELECT o.id,o.forward_id,')) return [[{
         id:'op-1',forward_id:'forward-a',kind:'disable',status:'succeeded',target_revision:3,
         created_at:1000,updated_at:2000,last_error:null,recovery_invalidated:0,cleanup_pending:0
       }], []];
@@ -74,6 +74,9 @@ test('page queries are scope bound, return no enrollment secret and separate ope
   assert.deepEqual(forwards.items[0]?.lastOperation,{id:'op-1',kind:'disable',status:'succeeded'});
   assert.equal(forwards.items[0]?.recoverySuspended,true);
   assert.equal(operations.items[0]?.status,'succeeded');
+  assert.equal(operations.items[0]?.forwardId,'forward-a');
+  assert.equal(operations.items[0]?.createdAt,'1970-01-01T00:00:01.000Z');
+  assert.equal(operations.items[0]?.updatedAt,'1970-01-01T00:00:02.000Z');
   assert.ok(fixture.queries.every(q=>q.sql.includes('scope_id=?')&&q.params.includes('scope-a')&&q.params.includes('viewer')));
   const lists = fixture.queries.filter(q=>q.sql.includes('LIMIT 25 OFFSET 0'));
   assert.equal(lists.length,3);

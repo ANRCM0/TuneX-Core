@@ -30,10 +30,12 @@ test('Transit real MySQL: atomic rollback, concurrent exclusivity and monotonic 
       await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',[account,'a'.repeat(48)+suffix]);
       await write(tx,'INSERT INTO scopes(id,owner_id) VALUES(?,?)',[scope,account]);
       for(let i=0;i<nodes.length;i++){
-        await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,facts) VALUES(?,?,?,?,?)',
-          [nodes[i],scope,String(i).repeat(48)+suffix,9999999999,JSON.stringify({})]);
+        await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,?,?)',
+          [nodes[i],scope,String(i).repeat(48)+suffix,9999999999,JSON.stringify({}),'private',account,1]);
         await write(tx,'INSERT INTO runtime_nodes(node_id,session_epoch) VALUES(?,?)',[nodes[i],1]);
       }
+      await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor,owner_actor_id) VALUES(?,?,?,?,?,?)',
+        [forwardId,scope,forward.revision,JSON.stringify(forward.spec),account,account]);
     });
     // A thrown transaction must not leave a port owner or a bumped fence.
     await assert.rejects(db.transaction(async tx=>{
@@ -73,6 +75,7 @@ test('Transit real MySQL: atomic rollback, concurrent exclusivity and monotonic 
       await db.transaction(async tx=>{
         await write(tx,'DELETE FROM port_slots WHERE node_id IN (?,?,?)',nodes);
         await write(tx,'DELETE FROM runtime_nodes WHERE node_id IN (?,?,?)',nodes);
+        await write(tx,'DELETE FROM forwards WHERE id=?',[forwardId]);
         await write(tx,'DELETE FROM nodes WHERE id IN (?,?,?)',nodes);
         await write(tx,'DELETE FROM scopes WHERE id=?',[scope]);
         await write(tx,'DELETE FROM accounts WHERE id=?',[account]);

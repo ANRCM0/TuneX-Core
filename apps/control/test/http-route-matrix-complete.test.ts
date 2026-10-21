@@ -159,9 +159,16 @@ test('137 item position grammar is checked after body read but before owner; clo
         }
         const f=fixture({...route,path:route.path.replace('/items/1/','/items/'+maximum+'/')});assert.equal((await f.call()).status,202);assert.equal(f.calls[0]?.at(-1),maximum);
     }
-    for(const route of routes.filter(r=>r.owner!=='probePlans.command'&&typeof r.body==='object'&&r.body!==null&&'expectedRevision' in r.body)){
+    for(const route of routes.filter(r=>!['probePlans.command','resourceLimits.set'].includes(r.owner)&&typeof r.body==='object'&&r.body!==null&&'expectedRevision' in r.body)){
         const f=fixture(route),result=await f.call(JSON.stringify({...route.body as Record<string,unknown>,unknown:true}));assert.equal(result.status,422);assert.equal(f.calls.length,0);
     }
+});
+
+test('payload-limit JSON retains unknown fields for the public owner to reject and maps its refusal',async()=>{
+    const route=routes.find(r=>r.owner==='resourceLimits.set')!,input={...route.body as Record<string,unknown>,unknown:true};
+    const f=fixture(route);f.fault.stage='owner';const response=await f.call(JSON.stringify(input));
+    assert.equal(response.status,409);assert.equal((await response.json()).code,'TEST_OWNER');assert.equal(f.calls.length,1);
+    assert.deepEqual(f.calls[0],[actor,'scope-a','node-a','subject-a',key,wireRecord(input)]);
 });
 
 test('137 global request lifecycle surrounds authority and complete response while health bypasses allow only',async()=>{

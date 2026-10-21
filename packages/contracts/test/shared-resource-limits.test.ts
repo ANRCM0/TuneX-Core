@@ -24,13 +24,29 @@ function encoded(value: RuntimeSnapshot): string {
     return JSON.stringify({ ...body, snapshotDigest: digest(body) });
 }
 
+function assertParsedWire(actual: unknown, expected: unknown): void {
+    // Wire values and safe parser object shapes are separate contracts.
+    assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
+    const checkPrototype = (value: unknown): void => {
+        if (value === null || typeof value !== 'object') return;
+        if (Array.isArray(value)) {
+            assert.equal(Object.getPrototypeOf(value), Array.prototype);
+            for (const item of value) checkPrototype(item);
+        } else {
+            assert.equal(Object.getPrototypeOf(value), null);
+            for (const item of Object.values(value)) checkPrototype(item);
+        }
+    };
+    checkPrototype(actual);
+}
+
 for (const extension of [false, true]) {
     const schema = extension ? 'execution' : 'runtime';
     test(`FR0032 ${schema} absent extension retains old wire and present bucket is digest covered`, () => {
         const old = snapshot(extension); delete old.resourceLimits;
         assert.equal(parseRuntimeMessage('Snapshot', encoded(old)).resourceLimits, undefined);
         const current = snapshot(extension), raw = encoded(current);
-        assert.deepEqual(parseRuntimeMessage('Snapshot', raw).resourceLimits, current.resourceLimits);
+        assertParsedWire(parseRuntimeMessage('Snapshot', raw).resourceLimits, current.resourceLimits);
         const altered = JSON.parse(raw) as RuntimeSnapshot; altered.resourceLimits!.buckets[0]!.byteLimit = 101;
         assert.throws(() => parseRuntimeMessage('Snapshot', JSON.stringify(altered)), /Snapshot digest differs/);
     });
@@ -75,7 +91,7 @@ for (const extension of [false, true]) {
         value.assignments = []; value.resourceLimits!.buckets[0]!.assignmentIds = [];
         const parsed = parseRuntimeMessage('Snapshot', encoded(value));
         assert.deepEqual(parsed.assignments, []); assert.deepEqual(parsed.resourceLimits!.buckets[0]!.assignmentIds, []);
-        assert.deepEqual(parsed.tombstones, value.tombstones);
+        assertParsedWire(parsed.tombstones, value.tombstones);
     });
 
     test(`FR0032 ${schema} bucket times are canonical milliseconds and legacy issuedAt fractions compare exactly`, () => {

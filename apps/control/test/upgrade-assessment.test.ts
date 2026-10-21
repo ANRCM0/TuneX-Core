@@ -94,7 +94,15 @@ test('Journal v2 is a closed bounded decimal debit inspection while Journal v1 r
     base.journals=[{...v2,resourceBudgetVersion:0,resourceBudgetBuckets:0,prechargedBytes:'0'}];
     assert.equal(assessUpgrade(parseUpgradePlan(JSON.stringify(base)),fixture().inspection).decision,'compatible');
     const legacy=fixture().plan;
-    assert.deepEqual(parseUpgradePlan(JSON.stringify(legacy)),legacy);
+    const parsedLegacy=parseUpgradePlan(JSON.stringify(legacy));
+    assert.deepEqual(JSON.parse(JSON.stringify(parsedLegacy)),legacy);
+    assert.equal(Object.getPrototypeOf(parsedLegacy),Object.prototype);
+    for(const release of [parsedLegacy.source,parsedLegacy.target]){
+        assert.equal(Object.getPrototypeOf(release),Object.prototype);
+        for(const build of [release.control,release.agent])assert.equal(Object.getPrototypeOf(build),null);
+    }
+    assert.equal(Object.getPrototypeOf(parsedLegacy.journals),Array.prototype);
+    for(const journal of parsedLegacy.journals)assert.equal(Object.getPrototypeOf(journal),null);
     legacy.journals[0]!.resourceBudgetVersion=0;
     assert.throws(()=>parseUpgradePlan(JSON.stringify(legacy)));
 });

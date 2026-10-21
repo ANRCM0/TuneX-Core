@@ -305,7 +305,8 @@ func TestRelayEmptyDatagramsAndControlDoNotMintPayloadDebits(t *testing.T) {
 	}
 	gate.mutex.Lock()
 	defer gate.mutex.Unlock()
-	if gate.bytes != 0 || !reflect.DeepEqual(gate.atomic, []bool(nil)) {
-		t.Fatal("empty datagram requested a debit", gate.bytes, gate.atomic)
+	// Acquire(0, true) checks the durable policy without consuming payload.
+	if gate.bytes != 0 || !reflect.DeepEqual(gate.atomic, []bool{true}) {
+		t.Fatal("empty datagram skipped policy or consumed payload", gate.bytes, gate.atomic)
 	}
 }

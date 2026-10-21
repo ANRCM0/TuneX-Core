@@ -86,7 +86,8 @@ try{
   const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:5,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:128};
   assert.equal((await call('PUT','transport-profiles/multihop-profile',{expectedRevision:0,config:profile})).status,202);
   for(let i=0;i<count;i++){
-    const node=await call('POST','nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:i===0&&copyPort!==undefined?[listenPort,copyPort,batchPort!]:[listenPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
+    const node=await call('POST','shared-nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:i===0&&copyPort!==undefined?[listenPort,copyPort,batchPort!]:[listenPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
+    const useGrant=await call('PUT',`nodes/${node.body.nodeId}/grants/${owner}`,{expectedRevision:1,allowed:true,allowedRoles:['ingress','transit','egress']});assert.equal(useGrant.status,202);assert.equal(useGrant.body.revision,2);
     const root=nativeRoot+'/node-'+i;const args:string[]=['--control',controlURL,'--node',node.body.nodeId,'--ca',linuxPath(caCert),'--state',root+'/state','--journal-key',root+'/secrets/journal.key','--relay','--multihop','--diagnostics'];
     try{const enroll=[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll'];if(lab)await lab.run(lab.namespaces[i]!,'/usr/bin/env',enroll);else await linux('env',enroll);}catch{throw Error('Multi-hop enrollment failed; token redacted');}
     const process=lab?lab.spawn(lab.namespaces[i]!,binary,args):spawnLinux(binary,args);const entry:typeof agents[number]={nodeId:node.body.nodeId,root,args,process,errors:''};observeAgent(entry);agents.push(entry);
@@ -153,9 +154,9 @@ try{
   const afterReplay=(await call('GET',resource+'/deployment')).body.deployment;assert.equal(afterReplay.stage,'preparing');assert.equal(afterReplay.preparedCount,beforeReplay.preparedCount);assert.equal(afterReplay.activatedCount,0);
   releaseReady!();releaseReady=undefined;control.runtime.report=reportHandler;await converge();assert.equal((await probe(listenPort)).tcp,true);
   pass('Authentic prior-generation Report replay receives duplicate ACK without advancing the held successor');
-  const grantPath=`nodes/${agents[1]!.nodeId}/grants/${owner}`,withdrawn=await call('PUT',grantPath,{expectedRevision:1,allowed:false});assert.equal(withdrawn.status,202);
+  const grantPath=`nodes/${agents[1]!.nodeId}/grants/${owner}`,withdrawn=await call('PUT',grantPath,{expectedRevision:2,allowed:false});assert.equal(withdrawn.status,202);
   await until(async()=>(await call('GET','operations/'+withdrawn.body.operationIds[0])).body.status==='succeeded','middle authority withdrawal');await assert.rejects(()=>probe(listenPort));
-  const restored=await call('PUT',grantPath,{expectedRevision:2,allowed:true});assert.equal(restored.status,202);await converge();assert.equal((await probe(listenPort)).tcp,true);
+  const restored=await call('PUT',grantPath,{expectedRevision:3,allowed:true,allowedRoles:['ingress','transit','egress']});assert.equal(restored.status,202);await converge();assert.equal((await probe(listenPort)).tcp,true);
   pass('Intermediate grant withdrawal revokes the whole path and restoration requires fresh execution authority');
   if(browserConsole){
     const current=await call('GET',resource);assert.equal(current.status,200);assert.equal(current.body.desired.revision,desiredRevision);

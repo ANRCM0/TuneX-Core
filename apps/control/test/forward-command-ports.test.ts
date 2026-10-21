@@ -246,7 +246,7 @@ test('deletion retains separate Direct/Relay locks, CAS, exhaustion, capacity ve
 
 test('retry locks the current Forward before the source Operation, reauthorizes and preserves source identity without changing intent', async () => {
     const f = fixture(true), result = await f.retry();
-    assert.deepEqual(f.events.slice(4, 9), ['read-operation', 'current', 'lock', 'get-operation', 'relay-authorize:node-a']);
+    assert.deepEqual(f.events.slice(4, 9), ['read-operation', 'current', 'lock', 'get-operation', 'relay-allowed']);
     assert.equal(f.events.filter(e => e === 'lock').length, 2);
     assert.equal(f.state().operations[0]!.source, 'source-a');
     assert.deepEqual(f.state().operations[0]!.previous, f.state().source.previous_spec);
@@ -267,7 +267,9 @@ test('retry rejects recovered, stale and nonfailed sources before effects and ch
         assert.ok(!f.events.includes('authorize')); assert.equal(f.state().responses.size, 0);
     }
     const denied = fixture(true); denied.options.relayAllowed = false;
-    await assert.rejects(denied.retry(), /Full path denied/); assert.equal(denied.state().authorizer, 'old-author');
+    await assert.rejects(denied.retry(), { code: 'AUTHORIZATION_DENIED', status: 403, message: 'Whole Relay path execution is not authorized' });
+    assert.equal(denied.state().authorizer, 'old-author');
+    assert.ok(denied.events.includes('relay-allowed')); assert.ok(!denied.events.includes('retry-transition') && !denied.events.includes('authorizer'));
 });
 
 test('all command failures roll back owner writes, resources, plans, operations and replay and permit a same-key retry', async () => {

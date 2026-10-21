@@ -160,7 +160,7 @@ test('Node Grant withdrawal includes intermediate and historical nodes without t
     assert.ok(!f.events.some(e => e.startsWith('transition:') || e.startsWith('capacity:')));
     assert.ok(f.state().operations.every(o => o.kind === 'revoke'));
     assert.equal(f.state().operations[0]!.request.digest, digest({ method: 'PUT',
-        path: '/api/v1/scopes/scope-a/nodes/node-middle/grants/member-a', input: { expectedRevision: 1, allowed: false } }));
+        path: '/api/v1/scopes/scope-a/nodes/node-middle/grants/member-a', input: { expectedRevision: 1, allowed: false, allowedRoles: null } }));
 });
 
 test('Node Grant restoration preserves host transition failures and never transitions disabled or unrelated intents', async () => {

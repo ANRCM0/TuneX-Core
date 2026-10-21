@@ -56,7 +56,7 @@ test('115 public canonical and legacy registry/factory/executor are the same con
     assert.equal(ForwardCommandExecutor,oldExecutor);assert.equal(ForwardCommandExecutor,canonicalExecutor);
     assert.equal(EXECUTION_HOST_VERSION,1);assert.equal(ForwardExecutionRegistry.length,1);assert.equal(nativeForwardAdapters.length,4);assert.equal(ForwardCommandExecutor.length,4);
     assert.deepEqual(Object.getOwnPropertyNames(ForwardExecutionRegistry.prototype),['constructor','descriptor','select']);
-    assert.deepEqual(Object.getOwnPropertyNames(ForwardCommandExecutor.prototype),['constructor','prepareCreate','planCreate','prepareUpdate','planUpdate','lock','lockRemoval','prepareRetry','assertCapacity']);
+    assert.deepEqual(Object.getOwnPropertyNames(ForwardCommandExecutor.prototype),['constructor','prepareCreate','planCreate','prepareUpdate','planUpdate','lock','lockOwnership','lockRemoval','prepareRetry','assertCapacity']);
 });
 
 test('115 registry rejects incomplete declaration before getters and preserves descriptor version duplicate then six-method refusal order',()=>{
@@ -143,7 +143,8 @@ test('115 both Path adapters keep sorted authorize-lock order plan creation whil
         f.clear();await path.planCreate(f.tx,'actor',disabled);assert.deepEqual(f.args,[['acceptPlan',f.tx,'actor',disabled]]);
         f.clear();await path.prepareUpdate(f.tx,'actor',intent,disabled);await path.planUpdate(f.tx,'actor',disabled);assert.deepEqual(f.args,[['lockNodes',f.tx,disabled]]);
         f.clear();await path.prepareUpdate(f.tx,'actor',disabled,intent);await path.planUpdate(f.tx,'actor',intent);assert.deepEqual(f.args,[['lockNodes',f.tx,intent],['canExecute',f.tx,'actor',intent],['acceptPlan',f.tx,'actor',intent]]);
-        f.clear();await path.lockRemoval(f.tx,intent);await path.authorizeRetry(f.tx,'actor',intent);assert.deepEqual(f.args,[['lockNodes',f.tx,intent],[`authorizedRelayNode:node-z`,f.tx,'actor','scope-a','node-z']]);
+        f.clear();await path.lockRemoval(f.tx,intent);await path.authorizeRetry(f.tx,'actor',intent);assert.deepEqual(f.args,[['lockNodes',f.tx,intent],['canExecute',f.tx,'actor',intent]]);
+        f.clear();f.options.denied=true;await assert.rejects(path.authorizeRetry(f.tx,'actor',intent),{code:'AUTHORIZATION_DENIED',status:403,message:'Whole Relay path execution is not authorized'});assert.deepEqual(f.events,['canExecute']);
         f.clear();f.options.denied=true;await assert.rejects(path.prepareUpdate(f.tx,'actor',disabled,intent),{code:'AUTHORIZATION_DENIED',status:403,message:'Relay execution is not authorized'});assert.deepEqual(f.events,['lockNodes','canExecute']);
         for(const invalid of [forward(),{...intent,spec:{...intent.spec,transport:undefined}}]){f.clear();await assert.rejects(path.prepareCreate(f.tx,'actor',invalid as never),{code:'UNSUPPORTED_CAPABILITY',status:422,message:'Relay path and Transport Profile are both required'});assert.deepEqual(f.events,[]);}
     }
@@ -153,7 +154,7 @@ test('115 Path adapters propagate each owner failure at its original call and sk
     for(let count=1;count<=2;count++){
         const intent=forward(count),nodes=[intent.spec.ingress.nodeId,...intent.spec.path!.via].sort(),create=nodes.flatMap(id=>[`authorizedRelayNode:${id}`,`lockNode:${id}`]);
         for(const stage of create){const f=fixture();f.options.fail=stage;await assert.rejects(f.adapters[count]!.prepareCreate(f.tx,'actor',intent),error=>error===f.failure);assert.deepEqual(f.events,create.slice(0,create.indexOf(stage)+1));}
-        for(const [name,args,events]of [['prepareUpdate',['actor',intent,intent],['lockNodes','canExecute']],['planCreate',['actor',intent],['acceptPlan']],['planUpdate',['actor',intent],['acceptPlan']],['lockRemoval',[intent],['lockNodes']],['authorizeRetry',['actor',intent],['authorizedRelayNode:node-z']]]as [string,unknown[],string[]][]){
+        for(const [name,args,events]of [['prepareUpdate',['actor',intent,intent],['lockNodes','canExecute']],['planCreate',['actor',intent],['acceptPlan']],['planUpdate',['actor',intent],['acceptPlan']],['lockRemoval',[intent],['lockNodes']],['authorizeRetry',['actor',intent],['canExecute']]]as [string,unknown[],string[]][]){
             for(const stage of events){const f=fixture();f.options.fail=stage;await assert.rejects(bindings(f.adapters[count])[name](f.tx,...args),error=>error===f.failure);assert.deepEqual(f.events,events.slice(0,events.indexOf(stage)+1));}
         }
     }
@@ -167,4 +168,11 @@ test('115 executor preserves moved-Node state first recovery/revoked refusal sor
     await custom.prepareUpdate(f.tx,'actor',current,next,true);assert.deepEqual(f.args,[['state',f.tx,'node-z'],['lockNode:node-a',f.tx,'node-a'],['lockNode:node-z',f.tx,'node-z']]);assert.deepEqual(customEvents,['prepareUpdate']);
     for(const enabled of [false,true]){const retry=fixture(),intent=forward(0,enabled);await retry.executor.prepareRetry(retry.tx,'actor',intent);assert.deepEqual(retry.args,[['authorized',retry.tx,'actor',intent],['lock',retry.tx,intent],...(enabled?[['executionTransition',retry.tx,'actor',intent]]:[])]);retry.clear();await retry.executor.assertCapacity(retry.tx,intent);await retry.executor.lock(retry.tx,intent);assert.deepEqual(retry.args,[['assertCapacity',retry.tx,intent],['lock',retry.tx,intent]]);}
     for(const stage of ['authorized','lock','executionTransition']){const failed=fixture();failed.options.fail=stage;await assert.rejects(failed.executor.prepareRetry(failed.tx,'actor',current),error=>error===failed.failure);assert.deepEqual(failed.events,['authorized','lock','executionTransition'].slice(0,['authorized','lock','executionTransition'].indexOf(stage)+1));}
+});
+
+test('executor ownership locking delegates the exact transaction and Forward and preserves resource refusal identity',async()=>{
+    const f=fixture(),intent=forward();await f.executor.lockOwnership(f.tx,intent);
+    assert.deepEqual(f.args,[['lockOwnership',f.tx,intent]]);
+    f.clear();f.options.fail='lockOwnership';await assert.rejects(f.executor.lockOwnership(f.tx,intent),error=>error===f.failure);
+    assert.deepEqual(f.events,['lockOwnership']);assert.deepEqual(f.args,[['lockOwnership',f.tx,intent]]);
 });

@@ -28,7 +28,7 @@ function transaction(results: unknown[], after: (call: Call, index: number) => v
 const forward = (): Forward => ({ id: 'forward-a', scopeId: 'scope-a', revision: 1,
   spec: { enabled: true, protocols: ['tcp'], ingress: { nodeId: 'node-a', listen: { address: '127.0.0.1', port: 32001 } }, target: { host: '127.0.0.1', port: 80 } } });
 const request = (): RequestIdentity => ({ scopeId: 'scope-a', actorId: 'actor-a', key: 'original-key', digest: 'digest-a' });
-const row = (spec: unknown = JSON.stringify(forward().spec)) => ({ id: 'forward-a', scope_id: 'scope-a', revision: 1, spec, deleting: 0, recovery_suspended: 1 });
+const row = (spec: unknown = JSON.stringify(forward().spec)) => ({ id: 'forward-a', scope_id: 'scope-a', revision: 1, spec, owner_actor_id: 'actor-a', deleting: 0, recovery_suspended: 1 });
 const affected = { affectedRows: 1 };
 
 test('zero-argument legacy bindings retain subclass identity and construct without sampling a clock', t => {
@@ -42,9 +42,9 @@ test('zero-argument legacy bindings retain subclass identity and construct witho
 test('legacy Forward reads bind actual native SQL on the supplied transaction and decode only projected values', async () => {
   const owner = new Forwarding();
   const cases = [
-    { action: (tx: Transaction) => owner.get(tx, 'scope-a', 'forward-a'), sql: 'SELECT * FROM forwards WHERE id=? AND scope_id=? AND deleting=FALSE', args: ['forward-a','scope-a'], result: forward() },
+    { action: (tx: Transaction) => owner.get(tx, 'scope-a', 'forward-a'), sql: 'SELECT * FROM forwards WHERE id=? AND scope_id=? AND deleting=FALSE', args: ['forward-a','scope-a'], result: { ...forward(), ownerActorId: 'actor-a' } },
     { action: (tx: Transaction) => owner.currentForUpdate(tx, 'scope-a', 'forward-a'), sql: 'SELECT * FROM forwards WHERE id=? AND scope_id=? AND deleting=FALSE FOR UPDATE', args: ['forward-a','scope-a'], result: forward() },
-    { action: (tx: Transaction) => owner.record(tx, 'scope-a', 'forward-a'), sql: 'SELECT * FROM forwards WHERE id=? AND scope_id=?', args: ['forward-a','scope-a'], result: { ...forward(), deleting: false, recoverySuspended: true } },
+    { action: (tx: Transaction) => owner.record(tx, 'scope-a', 'forward-a'), sql: 'SELECT * FROM forwards WHERE id=? AND scope_id=?', args: ['forward-a','scope-a'], result: { ...forward(), ownerActorId: 'actor-a', deleting: false, recoverySuspended: true } },
     { action: (tx: Transaction) => owner.forNode(tx, 'node-a'), sql: "SELECT * FROM forwards WHERE deleting=FALSE AND recovery_suspended=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? ORDER BY id", args: ['node-a'], result: [forward()] },
     { action: (tx: Transaction) => owner.forReferencedNode(tx, 'node-a'), sql: "SELECT * FROM forwards WHERE deleting=FALSE AND recovery_suspended=FALSE AND (JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? OR JSON_CONTAINS(JSON_EXTRACT(spec,'$.path.via'),JSON_QUOTE(?))) ORDER BY id", args: ['node-a','node-a'], result: [forward()] },
     { action: (tx: Transaction) => owner.forProfileActor(tx, 'profile-a', 'actor-a'), sql: "SELECT * FROM forwards WHERE authorization_actor=? AND deleting=FALSE AND recovery_suspended=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.transport.profileId'))=? ORDER BY id", args: ['actor-a','profile-a'], result: [forward()] },
@@ -101,7 +101,7 @@ test('legacy Forward writes bind native JSON at each await and preserve CAS and 
     assert.equal(f.calls.length, 2); assert.match(f.calls[1]!.sql, /^INSERT INTO forward_revisions/);
     assert.equal(JSON.parse(f.calls[1]!.args[2] as string).target.port, 81);
     if (operation === 'insert') {
-      assert.deepEqual(f.calls[0]!.args, ['forward-a','scope-a',1,JSON.stringify(forward().spec),'actor-a']);
+      assert.deepEqual(f.calls[0]!.args, ['forward-a','scope-a',1,JSON.stringify(forward().spec),'actor-a','actor-a']);
       assert.deepEqual(f.calls[1]!.args.slice(0, 2), ['forward-a',1]);
     } else {
       assert.deepEqual(f.calls[0]!.args.slice(-2), ['forward-a',1]);

@@ -259,7 +259,7 @@ executionhost/driver HostVersion 1
 executionhost/prepared PreparedInstanceVersion 1
 executionidentity/provider InterfaceVersion 2
 executiontime/clock InterfaceVersion 2
-executionstate/types InterfaceVersion 3
+executionstate/types InterfaceVersion 4
 nativeexecution/direct InterfaceVersion 2
 nativeexecution/offline_transit OfflineTransitAdapterVersion 1
 platformruntime/native InterfaceVersion 2
@@ -271,6 +271,7 @@ runtimeobservation/ports InterfaceVersion 2
 observationtrust/trust InterfaceVersion 1
 runtimeplatform/ports InterfaceVersion 2
 platformclock/clock InterfaceVersion 2
+payloadbudget/history InterfaceVersion 1
 `.trim().split('\n').map(line => { const [path, name, value] = line.split(' '); return { path: `agent/internal/${path}.go`, name: name!, value: value! }; });
     const actual: string[] = [];
     for (const path of leaves('agent/internal').filter(path => path.endsWith('.go') && !path.endsWith('_test.go'))) {

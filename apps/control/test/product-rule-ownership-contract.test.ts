@@ -123,16 +123,16 @@ function sqlTransaction() {
 
 test('Path list and reference count/page queries apply identical ownership predicates before pagination', async () => {
     const principal = { actorId: 'actor', governance: false }, page = { page: 2, limit: 10, offset: 10 };
-    const actions = [
-        (tx: Transaction) => new MySqlPathTemplateStore().list(tx, 'scope', principal, page, 'prefix'),
-        (tx: Transaction) => new MySqlPathGroupStore().list(tx, 'scope', principal, page, 'prefix'),
-        (tx: Transaction) => new MySqlPathBindingStore().references(tx, 'scope', principal, 'template', page, 1),
-        (tx: Transaction) => new MySqlPathGroupBindingStore().references(tx, 'scope', principal, 'group', page, 1),
-        (tx: Transaction) => new MySqlPathPublicationStore(pathPublicationStorageValues).list(tx, 'scope', principal, page),
+    const actions: [(tx: Transaction) => Promise<unknown>, RegExp][] = [
+        [tx => new MySqlPathTemplateStore().list(tx, 'scope', principal, page, 'prefix'), /owner_actor_id=\?/],
+        [tx => new MySqlPathGroupStore().list(tx, 'scope', principal, page, 'prefix'), /owner_actor_id=\?/],
+        [tx => new MySqlPathBindingStore().references(tx, 'scope', principal, 'template', page, 1), /owner_actor_id=\?/],
+        [tx => new MySqlPathGroupBindingStore().references(tx, 'scope', principal, 'group', page, 1), /owner_actor_id=\?/],
+        [tx => new MySqlPathPublicationStore(pathPublicationStorageValues).list(tx, 'scope', principal, page), /created_by=\?/],
     ];
-    for (const action of actions) {
+    for (const [action, ownership] of actions) {
         const { tx, calls } = sqlTransaction(); await action(tx); assert.equal(calls.length, 2);
-        assert.match(calls[0]!.sql, /owner_actor_id=\?/); assert.match(calls[1]!.sql, /owner_actor_id=\?/);
+        assert.match(calls[0]!.sql, ownership); assert.match(calls[1]!.sql, ownership);
         assert.deepEqual(calls[0]!.args, calls[1]!.args); assert.ok(calls[0]!.args.includes('actor'));
         assert.match(calls[1]!.sql, /ORDER BY .* LIMIT 10 OFFSET 10$/);
     }

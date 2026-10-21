@@ -23,7 +23,10 @@ class Element {
     this.classList = { toggle: (...args) => { this.toggled = args; } };
   }
   append(...children) { this.children.push(...children); }
-  replaceChildren(...children) { this.children = [...children]; }
+  replaceChildren(...children) {
+    this.children = [...children];
+    if (this.id === 'scope' && !children.some(child => child.value === this.value)) this.value = children[0]?.value ?? '';
+  }
   addEventListener(name, callback) {
     assert.equal(this.listeners.has(name), false, this.id + ':' + name); this.listeners.set(name, callback);
   }

@@ -18,7 +18,7 @@ for (const count of [3, 4, 8]) test(`${count}-Node coordinator extracts domain i
       if (sql === 'SELECT * FROM forwards WHERE id=? AND scope_id=?') {
         assert.deepEqual(args, [input.forward.id, input.forward.scopeId]);
         return [[{
-          id: input.forward.id, scope_id: input.forward.scopeId, revision: input.forward.revision,
+          id: input.forward.id, scope_id: input.forward.scopeId, owner_actor_id: 'owner', revision: input.forward.revision,
           spec: JSON.stringify(input.forward.spec), deleting: 0, recovery_suspended: 0,
         }], []];
       }
@@ -56,6 +56,7 @@ for (const count of [3, 4, 8]) test(`${count}-Node coordinator extracts domain i
   const coordinator = new RelayCoordinator(nodes, forwarding, transport, endpoints, ledger, undefined, true);
   const stored = await forwarding.record(tx, input.forward.scopeId, input.forward.id), storedBefore = JSON.stringify(stored);
   assert.equal(stored.deleting, false);
+  assert.equal(stored.ownerActorId, 'owner');
   assert.equal(stored.recoverySuspended, false);
   assert.throws(() => compileMultihopResources({ ...input, forward: stored }), /INVALID_CONFIG: Locked multi-hop Forward required/);
   assert.equal(await coordinator.canExecute(tx, 'owner', stored), true);

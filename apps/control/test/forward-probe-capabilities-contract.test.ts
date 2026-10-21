@@ -81,9 +81,9 @@ test('scope and ownership refusals propagate before intent or capability disclos
     assert.deepEqual(f.calls, []);
 });
 
-test('Relay, multihop and configured transport profiles refuse active execution without local-connect substitution', async () => {
+test('Relay and multihop refuse active execution while profile-only intent retains its integrity refusal', async () => {
     for (const via of [['node-b'], ['node-b', 'node-c']]) {
-        const f = fixture(); f.state.forward = { ...f.state.forward, spec: { ...f.state.forward.spec, path: { via } } };
+        const f = fixture(); f.state.forward = { ...f.state.forward, spec: { ...f.state.forward.spec, path: { via }, transport: { profileId: 'profile-a', configRevision: 1 } } };
         const view = await f.get(); assert.equal(view.mode, via.length === 1 ? 'relay' : 'multihop');
         assert.ok(view.items.every(item => item.transportSupport === 'unsupported' && item.preflight.state === 'unsupported'));
         assert.deepEqual(f.calls, ['transaction', 'scope', 'owned', 'intent']);
@@ -91,7 +91,8 @@ test('Relay, multihop and configured transport profiles refuse active execution 
     }
     const f = fixture(); f.state.forward = { ...f.state.forward, spec: { ...f.state.forward.spec,
         transport: { profileId: 'profile-a', configRevision: 1 } } };
-    assert.ok((await f.get()).items.every(item => item.transportSupport === 'unsupported'));
+    await assert.rejects(f.get(), { code: 'INTEGRITY_FAILURE', status: 409, message: 'Stored Forward cannot be classified' });
+    assert.deepEqual(f.calls, ['transaction', 'scope', 'owned', 'intent']);
 });
 
 test('issuance switches, controlled-service requirements and echo command support are independent', async () => {

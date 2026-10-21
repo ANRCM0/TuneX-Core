@@ -60,7 +60,7 @@ function fixture() {
   const authority = { async initialize(...args: unknown[]) { callbackCalls.push(['authority-initialize', ...args]); invoke('authority-initialize'); },
     async read() { invoke('authority-read'); return { database: 'bound-database', trustDigest: 'bound-trust', recoveryId: 'recovery', maintenance: fault.maintenance }; }, allow: delegate('allow') };
   const identity = { authenticateIn: delegate('authenticate') };
-  const control = { idempotency, forwarding, ledger, relay, probes: { servicesEnabled: false, ingressEnabled: false, issueIn: delegate('issue') },
+  const control = { idempotency, forwarding, ledger, relay, readAccess: {}, resourceLimits: {}, probes: { servicesEnabled: false, ingressEnabled: false, issueIn: delegate('issue') },
     probePlans: { authorize: delegate('authorize') } };
   const runtime = { tick: async () => { invoke('runtime-tick'); } };
   let declarations: any[], effects: unknown, appPorts: any, tlsOptions: any, listener: unknown, listenError: ((error: unknown) => void) | undefined;
@@ -157,10 +157,12 @@ test('159 server startup reads exact pool SQL, binds original resources and defe
   const args = (name: string) => f.argumentsByName.get(name)![0]!;
   assert.deepEqual(args('Nodes'), [f.db, f.identity, f.instances.get('NodeCertificateAuthority'), 120, 86400, f.resources,f.instances.get('NodePortLimitPolicy')]);
   assert.deepEqual(args('ControlApplication'), [f.db, f.identity, f.instances.get('Nodes'), undefined, false, false, false, false, f.resources]);
-  assert.deepEqual(args('RuntimeController'), [f.db, f.instances.get('Nodes'), f.control.forwarding, f.control.ledger, undefined, f.authority, f.control.relay]);
-  assert.equal(args('NodeTelemetry')[5], Date.now); assert.equal(args('ForwardTelemetry')[6], Date.now);
-  assert.equal(args('HostTelemetry')[5], Date.now); assert.equal(args('ProbeTelemetry')[6], Date.now);
-  for (const [name, index] of [['NodeTelemetry', 6], ['ForwardTelemetry', 7], ['HostTelemetry', 6], ['ProbeTelemetry', 7]] as const) assert.equal(args(name)[index], f.instances.get('MySqlTelemetryRollupStorage'));
+  assert.deepEqual(args('RuntimeController'), [f.db, f.instances.get('Nodes'), f.control.forwarding, f.control.ledger, undefined, f.authority, f.control.relay, f.control.resourceLimits]);
+  assert.equal(args('NodeTelemetry')[6], Date.now); assert.equal(args('ForwardTelemetry')[7], Date.now);
+  assert.equal(args('HostTelemetry')[6], Date.now); assert.equal(args('ProbeTelemetry')[7], Date.now);
+  for (const [name, index] of [['NodeTelemetry', 7], ['ForwardTelemetry', 8], ['HostTelemetry', 7], ['ProbeTelemetry', 8]] as const) assert.equal(args(name)[index], f.instances.get('MySqlTelemetryRollupStorage'));
+  for (const name of ['NodeTelemetry','ForwardTelemetry','HostTelemetry','ProbeTelemetry','TelemetryRollups','ForwardDiagnostics','ProbeRuns']) assert.equal(args(name)[2], f.control.readAccess);
+  assert.equal((args('ProbePlans')[0] as any).access, f.control.readAccess);
   assert.deepEqual(Object.keys(f.app().services), ['telemetry', 'forwardTelemetry', 'authenticateObservation', 'hostTelemetry', 'probeTelemetry',
     'telemetryRollups', 'diagnostics', 'audit', 'stationAlerts', 'notificationEndpoints', 'notificationDeliveries', 'probeRuns', 'probePlans', 'observationServices']);
   assert.equal(f.app().requests, f.requests); assert.equal(f.effects(), f.bindings.nativeBackgroundTaskEffects);
@@ -173,7 +175,7 @@ test('159 server startup reads exact pool SQL, binds original resources and defe
   assert.deepEqual(f.events.slice(-2), ['tasks-start', 'server-address']);
   await f.app().services.authenticateObservation('Bearer token');
   assert.deepEqual(f.callbackCalls.at(-1), ['authenticate', f.identity, f.tx, 'Bearer token']);
-  const sources = args('TelemetryRollups')[3] as any;
+  const sources = args('TelemetryRollups')[4] as any;
   sources.node(f.tx, 'node'); sources.forward(f.tx, 'scope', 'forward');
   assert.deepEqual(f.callbackCalls.slice(-2), [['node-source', f.instances.get('MySqlTelemetryStore'), f.tx, 'node'], ['forward-source', f.instances.get('MySqlForwardTelemetryStore'), f.tx, 'scope', 'forward']]);
   const issuer = (args('ProbePlans')[0] as any).issuer;
@@ -313,9 +315,9 @@ test('159 all original option reads remain lazy repeated and ordered across asse
   const active = await enabled.start(), args = (name: string) => enabled.argumentsByName.get(name)![0]!;
   assert.deepEqual(args('Nodes').slice(3), [0, 3600, enabled.resources,enabled.instances.get('NodePortLimitPolicy')]);
   assert.deepEqual(args('ControlApplication').slice(3), [enabled.options.policy, true, true, true, true, enabled.resources]);
-  assert.equal(args('NodeTelemetry')[4], true); assert.equal(args('ForwardTelemetry')[5], true);
-  assert.equal(args('HostTelemetry')[4], true); assert.equal(args('ProbeTelemetry')[5], true);
-  assert.equal(args('TelemetryRollups')[4], true); assert.equal(args('StationAlerts')[5], true);
+  assert.equal(args('NodeTelemetry')[5], true); assert.equal(args('ForwardTelemetry')[6], true);
+  assert.equal(args('HostTelemetry')[5], true); assert.equal(args('ProbeTelemetry')[6], true);
+  assert.equal(args('TelemetryRollups')[5], true); assert.equal(args('StationAlerts')[5], true);
   const plans = args('ProbePlans')[0] as any;
   assert.deepEqual([plans.executionEnabled, plans.scheduleEnabled, plans.ingressExecutionEnabled, plans.servicesExecutionEnabled, plans.clockSkewMs], [true, true, true, true, 1000]);
   const delivery = args('NotificationDeliveries')[0] as any;

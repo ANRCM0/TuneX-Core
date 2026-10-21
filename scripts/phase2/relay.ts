@@ -50,7 +50,8 @@ try{
  const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:2,idleTimeoutSeconds:2,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:32};
  assert.equal((await call('PUT',`/api/v1/scopes/${scope}/transport-profiles/secure-relay`,{expectedRevision:0,config:profile})).status,202);
  for(const role of ['ingress','egress']){
-  const node=await call('POST',`/api/v1/scopes/${scope}/nodes`,{allowedListenerAddresses:['127.0.0.1'],allowedPorts:[listenPort,movedPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false});assert.equal(node.status,201);
+  const node=await call('POST',`/api/v1/scopes/${scope}/shared-nodes`,{allowedListenerAddresses:['127.0.0.1'],allowedPorts:[listenPort,movedPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false});assert.equal(node.status,201);
+  const useGrant=await call('PUT',`/api/v1/scopes/${scope}/nodes/${node.body.nodeId}/grants/${owner}`,{expectedRevision:1,allowed:true,allowedRoles:[role]});assert.equal(useGrant.status,202);assert.equal(useGrant.body.revision,2);
   const root=`${nativeRoot}/${role}`,args=['--control',`https://${host}:${control.port}`,'--node',node.body.nodeId,'--ca',linuxPath(caCert),'--state',`${root}/state`,'--journal-key',`${root}/secrets/journal.key`,'--relay'];
   try{await linux('env',[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll']);}catch{throw new Error('Relay enrollment failed; token redacted');}
   const process=spawnLinux(binary,args),entry={nodeId:node.body.nodeId,root,args,process,errors:''};process.stderr!.on('data',chunk=>{entry.errors=(entry.errors+chunk.toString()).slice(-32768);});agents.push(entry);
@@ -119,10 +120,10 @@ try{
  assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort),'--tag',tag])).stdout).tcp,true);
  pass('Profile execution authority: withdrawal persists a two-Node cleanup Operation and restoration requires fresh deployment/fences');
  const nodeGrantPath=`/api/v1/scopes/${scope}/nodes/${egress!.nodeId}/grants/${owner}`;
- const nodeWithdrawn=await call('PUT',nodeGrantPath,{expectedRevision:1,allowed:false});assert.equal(nodeWithdrawn.status,202);assert.equal(nodeWithdrawn.body.operationIds.length,1);
+ const nodeWithdrawn=await call('PUT',nodeGrantPath,{expectedRevision:2,allowed:false});assert.equal(nodeWithdrawn.status,202);assert.equal(nodeWithdrawn.body.operationIds.length,1);
  const [historicalBounds]=await control.db.pool.query<any[]>('SELECT MAX(valid_until) maximum FROM execution_leases WHERE forward_id=?',[created.body.forwardId]);assert.ok(Date.parse(nodeWithdrawn.body.latestAuthorizationUntil)>=historicalBounds[0].maximum+5000);
  await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/operations/${nodeWithdrawn.body.operationIds[0]}`)).body.status==='succeeded','egress grant withdrawal');
- const nodeRestored=await call('PUT',nodeGrantPath,{expectedRevision:2,allowed:true});assert.equal(nodeRestored.status,202);assert.equal(nodeRestored.body.operationIds.length,1);
+ const nodeRestored=await call('PUT',nodeGrantPath,{expectedRevision:3,allowed:true,allowedRoles:['egress']});assert.equal(nodeRestored.status,202);assert.equal(nodeRestored.body.operationIds.length,1);
  await until(async()=>(await call('GET',`/api/v1/scopes/${scope}/operations/${nodeRestored.body.operationIds[0]}`)).body.status==='succeeded','egress grant restoration');
  assert.equal(JSON.parse((await linux(fixture,['--mode','probe','--port',String(movedPort),'--tag',tag])).stdout).udp,true);
  pass('Egress Node authority: downstream use-grant withdrawal stops the whole Relay and explicit restoration recompiles both roles');

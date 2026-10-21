@@ -363,27 +363,28 @@ async function seedMachineCredentials(db:MySqlUnitOfWork,nodeId:string):Promise<
   return fingerprints;
 }
 
-test('Node policy accepts a scope manager but recompiles with the original Forward authorizer and user revision',{skip:!url},async()=>{
+test('shared Node policy requires the scope owner and recompiles with the original Forward authorizer and user revision',{skip:!url},async()=>{
   await withRuntime(async f=>{
     const manager='node-manager',nodeId=f.plan.nodes[1]!.nodeId,key=randomUUID();
     await f.app.changeMember(f.owner,f.scope,manager,randomUUID(),{expectedRevision:0,role:'manager',token:newToken()});
     assert.equal(await f.db.transaction(tx=>f.nodes.hasGrant(tx,nodeId,manager)),false);
     const policy=await managementPolicy(f,nodeId,2),command={kind:'policy' as const,expectedRevision:1,policy};
     const leases=await rows(f.db.pool,'SELECT * FROM execution_leases WHERE forward_id=? ORDER BY node_id,assignment_id',[f.forwardId]);
-    const result=await f.app.changeNode(manager,f.scope,nodeId,key,command);
+    await assert.rejects(f.app.changeNode(manager,f.scope,nodeId,randomUUID(),command),{code:'AUTHORIZATION_DENIED'});
+    const result=await f.app.changeNode(f.owner,f.scope,nodeId,key,command);
     assert.equal(result.status,202);assert.equal(result.body.policyRevision,2);assert.equal(result.body.operationIds.length,1);
-    assert.equal(await f.db.transaction(tx=>f.app.forwarding.authorizer(tx,f.forwardId)),f.owner);
+    assert.equal(await f.db.transaction(tx=>f.app.forwarding.authorizer(tx,f.forwardId)),'forward-manager');
     const operation=await f.db.transaction(tx=>f.app.ledger.latest(tx,f.forwardId));
-    assert.equal(operation?.kind,'policy');assert.equal(operation?.requested_by,manager);assert.equal(operation?.target_revision,1);
+    assert.equal(operation?.kind,'policy');assert.equal(operation?.requested_by,f.owner);assert.equal(operation?.target_revision,1);
     assert.deepEqual(await rows(f.db.pool,'SELECT generation,target_revision FROM relay_deployments WHERE forward_id=? ORDER BY generation',[f.forwardId]),
       [{generation:1,target_revision:1},{generation:2,target_revision:1}]);
     assert.deepEqual(await rows(f.db.pool,'SELECT * FROM execution_leases WHERE forward_id=? ORDER BY node_id,assignment_id',[f.forwardId]),leases);
-    assert.deepEqual(await f.app.changeNode(manager,f.scope,nodeId,key,command),result);
+    assert.deepEqual(await f.app.changeNode(f.owner,f.scope,nodeId,key,command),result);
     assert.equal((await rows<{n:number}>(f.db.pool,"SELECT COUNT(*) n FROM node_security_events WHERE node_id=? AND kind='policy_update'",[nodeId]))[0]!.n,1);
-    await assert.rejects(f.app.changeNode(manager,f.scope,nodeId,randomUUID(),command),{code:'REVISION_CONFLICT'});
+    await assert.rejects(f.app.changeNode(f.owner,f.scope,nodeId,randomUUID(),command),{code:'REVISION_CONFLICT'});
     await write(f.db.pool,'UPDATE scope_members SET can_manage=FALSE WHERE scope_id=? AND actor_id=?',[f.scope,manager]);
     await assert.rejects(f.app.changeNode(manager,f.scope,nodeId,key,command),{code:'AUTHORIZATION_DENIED'});
-  });
+  },'forward-manager');
 });
 
 test('denied Node policy records failed cleanup intent and restores only through a fresh deployment generation',{skip:!url},async()=>{

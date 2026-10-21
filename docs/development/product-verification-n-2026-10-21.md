@@ -8,16 +8,16 @@ generated parity, formatting and compilation/vet. Functional, MySQL, network,
 container and browser evidence belongs in GitHub Actions. Failure repairs are
 part of this verification task; commit/push, merge and release remain separate.
 
-The working checkout is `D:/my-project/TuneX-Core`, on
-`verify/c1-d2-20261020`. Its unchanged Git baseline is
-`01b264509a0aa50a261b8cb2cf0b866c282f9818`. The N candidate includes dirty and
-untracked source files and is not represented by that baseline SHA. There is
-not yet an accepted N source revision. Historical B/C/D passes are not reused
-for N. The human subsequently approved saving and pushing this candidate to
+The working checkout is `D:/my-project/TuneX-Core`. The source handoff started
+from `01b264509a0aa50a261b8cb2cf0b866c282f9818`; that historical baseline is not
+N acceptance. The human subsequently approved saving and pushing the candidate to
 `verify/n-product-20261021`, creating a draft PR and executing Actions, with
 necessary failure repairs. Merge, image publication and release remain outside
 this authorization. Candidate and actual tested revisions will be recorded
-separately as the runs complete.
+separately as the runs complete. The first saved N candidate is
+`6bf8e3cf03fd4c0eff7139bac37538ff08ddbd2f`, pushed on that testing branch and
+attached to draft PR #114. There is not yet an accepted N source revision.
+Historical B/C/D passes are not reused for N.
 
 ## Local Checks
 
@@ -70,6 +70,41 @@ no schema or generated source changed after the successful parity check. The
 subsequent edits only record these results. This is local static evidence, not a
 functional acceptance decision or an exact-source Actions result.
 
+## First Actions Candidate
+
+The pull-request baseline run `39537586934` reports head
+`6bf8e3cf03fd4c0eff7139bac37538ff08ddbd2f` and concluded failure. The separate
+container packaging run `39537586882` on that candidate passed. Deployment
+tooling and unsupported-platform jobs passed. Contracts, Windows Agent,
+phase1/MySQL, Probe workflow, multihop (3/4/8) and Relay isolation failed.
+These results do not accept N; later repairs require a new saved source/run.
+
+The first failure analysis identified:
+
+- Forward state projection included `ownerActorId` in domain-only readers.
+  The closed Core parser correctly rejected it during Direct capacity checks,
+  updates, retry/removal and Transit staging. Restore pure Forward values for
+  writer/runtime/reference ports and retain ownership on public `get`/`record`
+  reads. Keep Core validation and original success/rollback assertions.
+- Exact SQL, public interface/version, Node ownership, purpose and limit policy
+  consumers still described the pre-N contracts. Migrate those consumers with
+  explicit ownership and authorization fixtures, preserving transaction receivers,
+  argument order, original error identity, rejection and rollback checks.
+- Go dispatch assertions still targeted unmetered native engines and omitted the
+  new payload gate/Journal host members. Check the actual metered calls and gate
+  identity; an empty datagram still checks policy with a zero-byte debit.
+- Browser login still filled the former scope input. Authenticate first, discover
+  the account's legal workspaces, then select the requested workspace. Shared
+  Node withdrawal fixtures must explicitly provision shared Nodes and grant use;
+  private ownership is not a grant-compatible shortcut.
+
+The first repair set is integrated on the testing branch. Full TypeScript
+typecheck, Windows amd64 Go vet, the 984-file boundary check, 44 production Web
+script syntax checks and `git diff --check` passed after integration. Generated
+sources and schemas did not change in this repair set. No functional pass is
+claimed before the next saved-source Actions run. Functional/MySQL/network/browser
+tests remain Actions only.
+
 ## Actions Preparation And Pending Evidence
 
 The existing baseline workflow now imports the public shared resource provider
@@ -92,6 +127,7 @@ Pending on a saved and pushed N source revision:
   actual installation, image publication and release remain separate gates.
 
 No local functional/MySQL/network/browser/container tests, merge, image
-publication or release has occurred in this task. The next step is the now
-authorized saved candidate and push for the configured Actions workflow. The
-local checkout baseline cannot stand in for the source actually executed there.
+publication or release has occurred in this task. The next step is to save and
+push the repaired candidate for the configured Actions workflow. Container
+packaging is build evidence, not image publication or release. The local checkout
+baseline cannot stand in for the source actually executed there.

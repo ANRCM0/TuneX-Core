@@ -64,7 +64,7 @@ function harness(){
     state.endpoint=endpoint;state.row=row;
     const check=(label:string)=>{state.calls.push(label);if(state.fail===label)throw new Error('original '+label+' failure');};
     const db={async transaction(action:(tx:object)=>Promise<unknown>){check('transaction');const tx={};state.tx=tx;try{return await action(tx);}finally{state.tx=null;}}};
-    const auth={async scope(){check('auth');}};
+    const auth={async owner(this:unknown,tx:unknown,actor:string,actualScope:string,...extra:unknown[]){assert.equal(this,auth);assert.equal(tx,state.tx);assert.equal(typeof actor,'string');assert.equal(actualScope,'scope');assert.deepEqual(extra,[]);check('auth');}};
     const requests={async claim(){check('claim');return state.replay;},async respond(){check('respond');}};
     const endpoints={async lockScope(){check('endpoint-lock');},async list(){check('list');return [state.endpoint];},async get(){check('endpoint-get');return state.endpoint;},async count(){check('count');return 0;},async put(_tx:unknown,_scope:string,value:unknown){check('endpoint-put');state.endpoint=value;},async audit(){check('audit');},async audits(){check('audits');return [];},async auditLosses(){check('audit-losses');return 0;}};
     const store={async get(){check('delivery-get');return state.row;},async attempts(){check('attempts');return [];},async history(){check('history');return [];},async losses(){check('losses');return loss;}};

@@ -326,9 +326,9 @@ test('shared resource rows hide host reports and management actions while retain
   assert.match(text(rows),/报告不可见/);
   assert.match(text(rows),/共享用途授权不包含主机报告/);
   const actions=rows.querySelectorAll('button').map(button=>button.dataset.action);
-  assert.deepEqual(actions,['node-port-usage']);
+  assert.deepEqual(actions,['node-port-usage','node-payload-limits']);
   for(const action of ['node-detail','node-diagnostics','node-host-telemetry','node-telemetry-aggregate'])assert.equal(actions.includes(action),false);
-  assert.equal(h.calls.some(call=>/host-telemetry|diagnostics|port-usage/.test(call.resource)),false,'rendering never performs a hidden host or usage read');
+  assert.equal(h.calls.some(call=>/host-telemetry|diagnostics|port-usage|payload-limits/.test(call.resource)),false,'rendering never performs a hidden host or personal usage read');
 });
 
 test('Direct candidate form rejects missing explicit use permission even when native capabilities are present',async()=>{

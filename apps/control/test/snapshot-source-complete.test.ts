@@ -32,7 +32,7 @@ function source(id:string,values:RuntimeAssignment[]=[],role:Exclude<RuntimeAssi
 test('118 original public legacy classes constructor prototypes readonly source contracts and native clone remain exact aliases',async()=>{
     assert.equal(SnapshotAssignmentRegistry,canonicalRegistry);assert.equal(SnapshotAssignmentRegistry,oldRegistry);
     assert.equal(RelayAssignmentSource,canonicalRelay);assert.equal(RelayAssignmentSource,oldRelay);assert.equal(nativeCloneSnapshotAssignments,canonicalClone);
-    assert.equal(FORWARD_STATE_INTERFACE_VERSION,1);assert.equal(SnapshotAssignmentRegistry.length,1);assert.equal(RelayAssignmentSource.length,1);
+    assert.equal(FORWARD_STATE_INTERFACE_VERSION,2);assert.equal(SnapshotAssignmentRegistry.length,1);assert.equal(RelayAssignmentSource.length,1);
     assert.deepEqual(Object.getOwnPropertyNames(SnapshotAssignmentRegistry.prototype),['constructor','merge']);assert.deepEqual(Object.getOwnPropertyNames(RelayAssignmentSource.prototype),['constructor','collect']);
     const roles=NATIVE_DRIVER_CATALOG.drivers.filter(value=>value.id!=='native.direct.v1').map(value=>[value.id,value.roles]);
     assert.deepEqual(roles,[['native.relay.v1',['relay-ingress','relay-egress']],['native.multihop.v1',['multihop-ingress','multihop-transit','multihop-egress']]]);

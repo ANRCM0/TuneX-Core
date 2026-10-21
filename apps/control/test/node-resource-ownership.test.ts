@@ -44,7 +44,7 @@ function fixture(source:NodeResourceClaim['resource_source']='private'){
         async credentials(current:Tx){check(current);calls.push('credentials');return [];},
     } as unknown as NodeAuthorityStore<Tx>;
     const portLimits=new NodePortLimitPolicy(store,{
-        async forwardPortOwner(current:Tx){check(current);return {scopeId:'scope-a',ownerActorId:record.owner_actor_id??'alice'};},
+        async forwardPortOwner(current:Tx,id:string){check(current);return {scopeId:'scope-a',ownerActorId:id==='forward-bob'?'bob':record.owner_actor_id??'alice'};},
         async actorPortSlots(current:Tx){check(current);return [];},
     });
     const host=new NodeService({db:{async transaction<T>(action:(current:Tx)=>Promise<T>){return action(tx);}},store,portLimits,
@@ -111,7 +111,8 @@ test('shared legacy grants survive only an explicit retain choice and classifica
         await assert.rejects(f.host.applyManagement(tx,'admin','scope-a','node-a',{kind:'classify',expectedRevision:2,source:'admin-shared',ownerActorId:null,legacyGrants}),error=>error instanceof ControlError&&error.code==='REVISION_CONFLICT');
         assert.equal(f.record.resource_source,'legacy-unclassified');
         await f.host.applyManagement(tx,'admin','scope-a','node-a',{kind:'classify',expectedRevision:1,source:'admin-shared',ownerActorId:null,legacyGrants});
-        assert.equal(await f.host.canExecute(tx,'bob',forward),legacyGrants==='retain');
+        assert.equal(await f.host.canExecute(tx,'bob',{...forward,id:'forward-bob'}),legacyGrants==='retain');
+        assert.equal(await f.host.canExecute(tx,'bob',forward),false);
         assert.equal(f.grants.size,legacyGrants==='retain'?3:0);
     }
 });

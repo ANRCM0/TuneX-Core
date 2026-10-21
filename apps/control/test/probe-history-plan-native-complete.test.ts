@@ -145,7 +145,7 @@ test('74 actual MySQL finite owner create run cancel savepoint durable refusal r
 async function insertRows(tx:Transaction,table:string,values:Any[]){if(!values.length)return;const keys=Object.keys(values[0]!);await write(tx,`INSERT INTO ${table}(${keys.join(',')}) VALUES ${values.map(()=>`(${keys.map(()=>'?').join(',')})`).join(',')}`,values.flatMap(value=>keys.map(key=>value[key])));}
 
 const integerMigration='0038-probe-plan-json-integers.sql';
-const successorMigrations=['0039-product-resource-access.sql','0040-shared-node-port-limits.sql'];
+const successorMigrations=['0039-product-resource-access.sql','0040-shared-node-port-limits.sql','0041-shared-resource-payload-limits.sql'];
 async function expiryChecks(db:MySqlUnitOfWork){return rows<{name:string;clause:string}>(db.pool,"SELECT CONSTRAINT_NAME name,CHECK_CLAUSE clause FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND (CONSTRAINT_NAME LIKE 'probe_plans_chk_%' OR CONSTRAINT_NAME='probe_plan_expiry_json_integer') ORDER BY CONSTRAINT_NAME");}
 async function expiryRefusals(db:MySqlUnitOfWork,id:string){
  const [row]=await rows<{config:string;expiresAt:number;createdAt:number}>(db.pool,'SELECT CAST(config AS CHAR) config,expires_at expiresAt,created_at createdAt FROM probe_plans WHERE scope_id=? AND plan_id=?',['scope-a',id]);assert.ok(row);
