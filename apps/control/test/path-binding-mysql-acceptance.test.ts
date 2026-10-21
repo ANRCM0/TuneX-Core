@@ -164,7 +164,8 @@ test('path binding uses real original owner transactions: immutable expanded pro
             assert.equal((await read('forwards/main/path-binding')).history.length, 2);
             const page = await read('path-templates/saved/references?page=1&limit=1'); assert.equal(page.items.length, 1); assert.equal(page.total, 2);
             const next = await read('path-templates/saved/references?page=2&limit=1'); assert.notEqual(page.items[0].forwardId, next.items[0].forwardId);
-            await read('path-templates/saved/references?targetRevision=1', 404, 'viewer'); await read('path-templates/saved/references?revision=01', 422);
+            await read('path-templates/saved/references?targetRevision=1', 403, 'viewer');
+            await read('path-templates/saved/references', 404, 'viewer'); await read('path-templates/saved/references?revision=01', 422);
             await read('path-templates/saved/references?limit=1&limit=2', 422); await read('forwards/main/path-binding?revision=1', 422);
             await read('forwards/main/path-binding', 404, 'outsider'); await read('path-templates/Saved/references', 404);
             assert.equal(await inventory(connection), before);

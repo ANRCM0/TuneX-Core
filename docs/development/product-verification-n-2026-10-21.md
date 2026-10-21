@@ -142,6 +142,53 @@ typecheck, the 984-file boundary check and diff checks passed after these repair
 The repaired source still requires the next Actions revision. No N acceptance
 is declared while these failures or their retests remain unresolved.
 
+## Third Actions Candidate
+
+Source `3168f87a2f120bb2623f8b5a7813d3b19370c810` was pushed for baseline run
+`39542864180`, whose checkout is PR merge
+`0ec319c667d66c0f3764ecc8107076470970bec4` against the same
+`bc8507b765a84ef6a9607df8c2ea8531a71a71c9` base. Container packaging run
+`39542864333` passed. The contracts job passed: 2,256 TypeScript tests, 2,109
+passed, zero failed and 147 conditional database skips; all 206 Web tests and
+Linux Go/race checks also passed. The added offline-edit adapter regression and
+the coordinator consumer tests passed. These conclusions belong to this source.
+
+The run completed with eight jobs passed and two failed: MySQL phase1 and the
+8-Node Console job. All MySQL integration scripts, including capacity, security,
+faults, recovery and the real Relay paths, passed. Its test invocations totalled
+411: 410 passed, one failed and zero skipped. Matching all 147 skipped test names
+from contracts against MySQL's passed names accounts for 146; the remaining name
+is exactly the failed Path binding acceptance, not an accepted skip.
+
+Path binding reached its SELECT-only viewer assertion at line 167. The exact
+failure was 403 versus the expected 404: a `targetRevision` reference query first
+requires management permission. The successor fixture expects 403 for that
+query and separately asserts 404 for an ordinary reference read, preserving
+hidden-resource coverage, the SELECT-only inventory check and prior concurrent
+CAS, quota and rollback assertions.
+
+The 8-Node browser failed while enabling its second Forward after 120 seconds.
+The uploaded failure evidence contains a running Operation with no error and
+the same deployment generation advancing through ordered preparation and
+activation. In particular, egress prepared at 04:28:33Z, ingress prepared at
+04:29:35Z, egress active at 04:29:45Z, then three further Nodes became active
+through 04:30:11Z before the 04:30:21Z observation timeout. This is not evidence
+of a 120-second stall or a production safety defect. The isolated 8-Node step was
+skipped after the browser failure and cannot be counted as passing.
+
+The repair leaves production authorization, fresh-report and tail-to-head
+activation unchanged. Only the 8-Node browser Operation observation uses a
+four-minute total ceiling, capped by that Operation's original execution
+deadline, while retaining a 120-second no-topology-progress ceiling. Only higher
+prepared/activated counters on the same Operation, revision and deployment
+generation refresh that progress ceiling; renewed Snapshots do not. Other path
+sizes keep their two-minute observation limit. Terminal refusal, full readiness,
+actual TCP/UDP, reservation and cleanup assertions remain. Per-Operation elapsed
+times and cursor samples are retained in successful evidence; failure evidence
+now includes safe Operation/deployment timing and counters. This does not accept
+latency or replace the separate load baseline gate. The next saved-source run
+must verify both repairs and every configured job again.
+
 ## Actions Preparation And Pending Evidence
 
 The existing baseline workflow now imports the public shared resource provider

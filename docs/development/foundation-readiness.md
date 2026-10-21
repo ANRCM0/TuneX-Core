@@ -61,11 +61,12 @@ main worktree. All three named agents have handed off their scoped source files;
 this does not establish complete consumer closure or any executed acceptance.
 
 The human subsequently authorized the N testing branch, candidate commits/pushes,
-draft PR #114 and Actions repairs. Second candidate `7854ad7` is being checked by
-baseline run `39540041708` at PR merge `5ad65786cc0945f0717e2cbce81df84aba911992`.
-Several Agent, browser and network jobs passed, but contracts and MySQL reported
-failures. These are partial execution results, not successor acceptance; the
-verification record retains both failed candidates and their subsequent repairs.
+draft PR #114 and Actions repairs. Third candidate `3168f87` is being checked by
+baseline run `39542864180` at PR merge `0ec319c667d66c0f3764ecc8107076470970bec4`.
+Contracts, Agent, Probe browser and 3/4-Node multi-hop jobs passed, but MySQL Path
+binding and the 8-Node Console Operation timed out or failed. These are partial execution results, not
+successor acceptance; the verification record retains the failed candidates and
+their subsequent repairs.
 
 N5 consumer source follow-up includes the Path/Ingress publication/group storage,
 governance-only Audit/Station/Notification/Observation and remaining Probe,

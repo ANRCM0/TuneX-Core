@@ -22,8 +22,9 @@
 Windows Go 编译／vet 及 Linux、macOS 交叉编译已在修复后通过。
 实际结果与准确修订 Actions 的待执行项记录于
 [N 验证记录](product-verification-n-2026-10-21.md)。用户进一步授权后已提交并推送，
-第二轮候选为 `7854ad7`。Windows Agent、Probe 浏览器、Relay 隔离及 3／4 节点多跳
-等作业通过；contracts 和 MySQL 仍有失败，修复与后续准确修订重测进行中。
+第三轮候选为 `3168f87`，实际 PR 合并测试修订为 `0ec319c`。
+contracts、Windows Agent、Probe 浏览器、Relay 隔离及 3／4 节点多跳作业通过；
+MySQL Path binding 权限断言及 8 节点 Console Operation 超时失败，正在修复，尚无 N 接受结论。
 尚未合并、发布镜像或发行。
 下列 B／C 的历史接受仅对各自所列冻结修订有效，不能作为 N 后继契约的当前证据。
 

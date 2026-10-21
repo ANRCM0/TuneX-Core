@@ -163,6 +163,12 @@ try{
     consoleEvidence=await verifyMultihopConsole({url:`https://${host}:${control.port}`,scope,token,directory,sourceId:id,revision:desiredRevision,spec:current.body.desired.spec,profile:profile as import('@tunex/contracts').RelayProfileConfig,copyPort:copyPort!,batchPort:batchPort!,
       traffic:async listen=>{const actual=await probe(listen);assert.equal(actual.tcp,true);assert.equal(actual.udp,true);},
       closed:async listen=>{for(const flag of ['--tcp-only','--udp-only'])await assert.rejects(()=>linux(fixture,['--mode','probe','--port',String(listen),flag]),/connection refused|i\/o timeout/);},
+      operationProgress:async operationId=>{
+        const [rows]=await control!.db.pool.query<any[]>('SELECT o.forward_id,o.target_revision,o.execution_deadline,d.generation,d.stage,d.prepared_count,d.activated_count FROM operations o JOIN relay_deployments d ON d.forward_id=o.forward_id AND d.generation=(SELECT MAX(recent.generation) FROM relay_deployments recent WHERE recent.forward_id=o.forward_id) WHERE o.id=?',[operationId]);
+        assert.equal(rows.length,1);const row=rows[0];
+        return {forwardId:row.forward_id,revision:row.target_revision,executionDeadline:row.execution_deadline,
+          generation:row.generation,stage:row.stage,prepared:row.prepared_count,activated:row.activated_count};
+      },
       slots:async(owner,retained,businessPort=copyPort)=>{
         const [rows]=await control!.db.pool.query<any[]>('SELECT node_id,protocol,port,fence FROM port_slots WHERE owner_id=? ORDER BY node_id,protocol,port',[owner]);
         assert.equal(rows.length,retained?2*count:0);if(!retained)return;
@@ -188,7 +194,7 @@ try{
   console.log('Multi-hop acceptance evidence: '+directory);
 }catch(error){
   if(control){
-    const [operations]=await control.db.pool.query('SELECT id,forward_id,status,cleanup_pending,last_error FROM operations');
+    const [operations]=await control.db.pool.query('SELECT id,forward_id,target_revision,status,cleanup_pending,last_error,created_at,updated_at,execution_deadline,claim_until FROM operations');
     const [runtime]=await control.db.pool.query('SELECT node_id,session_epoch,snapshot_generation,last_report FROM runtime_nodes');
     // Keep only timing and instance identifiers, never wire bodies, credentials,
     // driver configuration or key material, in uploaded failure evidence.
@@ -197,8 +203,9 @@ try{
     const snapshots=storedSnapshots.map(row=>{const body=readBody(row.body);return {nodeId:row.node_id,generation:row.generation,sessionEpoch:row.session_epoch,
       issuedAt:body.issuedAt,validUntil:body.validUntil,assignments:body.assignments.map((assignment:any)=>({forwardId:assignment.forwardId,
         assignmentId:assignment.assignmentId,deploymentGeneration:assignment.deploymentGeneration,bindingFence:assignment.bindingFence,phase:assignment.phase,role:assignment.role,protocol:assignment.protocol}))};});
-    const [storedDeployments]=await control.db.pool.query<any[]>('SELECT forward_id,generation,stage,body FROM relay_deployments ORDER BY forward_id,generation');
+    const [storedDeployments]=await control.db.pool.query<any[]>('SELECT forward_id,generation,stage,prepared_count,activated_count,updated_at,body FROM relay_deployments ORDER BY forward_id,generation');
     const deployments=storedDeployments.map(row=>{const body=readBody(row.body);return {forwardId:row.forward_id,generation:row.generation,stage:row.stage,
+      preparedCount:row.prepared_count,activatedCount:row.activated_count,updatedAt:row.updated_at,
       authorizationUntil:body.authorizationUntil,nodes:body.nodes.map((node:any)=>({nodeId:node.nodeId,sessionEpoch:node.sessionEpoch}))};});
     const measurements=await diagnostics().catch(()=>undefined);
     await writeFile(join(directory,'failure.json'),JSON.stringify({passed:false,capturedAt:new Date().toISOString(),policy,
