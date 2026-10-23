@@ -28,6 +28,7 @@ const caKey = join(directory, 'ca.key'), caCert = join(directory, 'ca.pem'), ser
 const policy = { ...DEFAULT_POLICY, pollIntervalSeconds: 1, leaseSeconds: 30, renewalLeadSeconds: 12, observationFreshnessSeconds: 5, drainTimeoutSeconds: 2, udpIdleTimeoutSeconds: 2 };
 const database = `tunex_relay_capacity_${randomUUID().replaceAll('-', '')}`;
 let control: Awaited<ReturnType<typeof startControl>> | undefined, admin: Awaited<ReturnType<typeof createConnection>> | undefined, evidence: Record<string, unknown> | undefined;
+let releasePeerPoll: (()=>void)|undefined, restorePeerPoll: (()=>void)|undefined;
 let caBytes: Buffer, nativeProvisioned = false;
 function pass(message: string) { checks.push(message); console.log(`PASS ${message}`); }
 async function until(action: () => Promise<boolean>, label: string, timeout = 45000) { const started = Date.now(); while (Date.now() - started < timeout) { if (await action()) return; await new Promise(resolve => setTimeout(resolve, 150)); } throw new Error(`Relay capacity timed out: ${label}`); }
@@ -241,9 +242,19 @@ try {
   pass('Repeated renewal: a second automatic key change and stable new traffic cross original effective expiry without restarting either Agent or resetting any persistent counter');
   const [beforeOffline] = await control.db.pool.query<any[]>('SELECT node_id,session_epoch,snapshot_generation FROM runtime_nodes WHERE node_id=?',[ingress.nodeId]);
   const [offlineCredential] = await control.db.pool.query<any[]>('SELECT fingerprint,valid_until FROM node_relay_credentials WHERE node_id=? AND retire_after IS NULL',[ingress.nodeId]);
+  const publishSnapshot=control.runtime.snapshot.bind(control.runtime);
+  const peerPollGate=new Promise<void>(resolve=>{releasePeerPoll=resolve;});let peerPollHeld=false;
+  control.runtime.snapshot=async(...args:Parameters<typeof publishSnapshot>)=>{
+   if(args[0]===egress.nodeId){peerPollHeld=true;await peerPollGate;}
+   return publishSnapshot(...args);
+  };
+  restorePeerPoll=()=>{control!.runtime.snapshot=publishSnapshot;};
+  await until(async()=>peerPollHeld,'actual peer Snapshot response held',10000);
   await stop(ingress);
   console.log('Waiting for the stopped Agent peer credential to reach its actual configured expiry');
   await until(async()=>Date.now()>offlineCredential[0].valid_until+policy.maxClockSkewSeconds*1000,'real offline peer authority expiry',150000);
+  await until(async()=>egress.process.exitCode!==null,'peer independent guard exits after real lease expiry',45000);
+  releasePeerPoll!();releasePeerPoll=undefined;restorePeerPoll();restorePeerPoll=undefined;
   for(const args of [['-H','-ltn'],['-H','-lun']])assert.equal((await lab.run(ingressNS,lab.ss,[...args,`sport = :${listenPort}`])).stdout.trim(),'');
   const [beforePeerRecovery] = await control.db.pool.query<any[]>('SELECT session_epoch FROM runtime_nodes WHERE node_id=?',[egress.nodeId]);
   let peerRestarted = false;
@@ -262,7 +273,8 @@ try {
    return plan.stage==='active'&&resource.health.condition==='ready'&&resource.applied.length===4&&resource.applied.every((obs:any)=>obs.phase==='active'&&obs.deploymentGeneration===plan.generation&&obs.forwardRevision===revision);
   },'fresh sessions after actual peer expiry',65000);
   const [afterPeerRecovery] = await control.db.pool.query<any[]>('SELECT session_epoch FROM runtime_nodes WHERE node_id=?',[egress.nodeId]);
-  if(peerRestarted)assert.ok(afterPeerRecovery[0].session_epoch>beforePeerRecovery[0].session_epoch);
+  assert.equal(peerRestarted,true,'held peer response must exercise the fail-closed restart branch');
+  assert.ok(afterPeerRecovery[0].session_epoch>beforePeerRecovery[0].session_epoch);
   const [recoveredSession] = await control.db.pool.query<any[]>('SELECT node_id,session_epoch,snapshot_generation FROM runtime_nodes WHERE node_id=?',[ingress.nodeId]);
   const [recoveredPeer] = await control.db.pool.query<any[]>('SELECT fingerprint,valid_until FROM node_relay_credentials WHERE node_id=? AND retire_after IS NULL',[ingress.nodeId]);
   assert.ok(recoveredSession[0].session_epoch>beforeOffline[0].session_epoch); assert.ok(recoveredSession[0].snapshot_generation>beforeOffline[0].snapshot_generation);
@@ -338,6 +350,7 @@ try {
 })) }, null, 2)); }
  console.error(`Failure evidence: ${directory}`); throw error;
 } finally {
+ releasePeerPoll?.();restorePeerPoll?.();
  const errors: unknown[] = [];
  for (const entry of [...agents, ...processes].reverse()) await stop(entry).catch(error => errors.push(error));
  await control?.close().catch(error => errors.push(error));

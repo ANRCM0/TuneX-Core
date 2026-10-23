@@ -286,6 +286,19 @@ remains. This is an acceptance execution budget, not a relaxed production
 deadline or performance acceptance. It must be verified with the recovery fix
 on the next pushed candidate; no cancelled step is relabelled as successful.
 
+The first recovery-fix rerun at `a9f4b9d` passed Relay rotation, but its evidence
+recorded `peerRestarted:false`: egress remained alive that time. That positive
+case does not execute the new restart branch. The follow-up makes the same
+offline-expiry scenario deterministic by holding only egress's real Snapshot
+response before stopping ingress. The original 100ms guard must then expire
+the actual issued lease and exit; no clock, expiry, certificate or production
+authorization value is replaced. After genuine peer expiry, release the response
+gate and restore the original provider, then require the confirmed restart branch
+and a higher egress session. A finally block releases the gate on failure as
+well. The original two live rotation windows remain untouched. A new Actions
+artifact must show `peerRestarted:true` and real TCP/UDP recovery before claiming
+that the previously failing branch is exercised.
+
 ## Acceptance Scope And Remaining Gates
 
 The existing baseline workflow now imports the public shared resource provider
