@@ -16,7 +16,8 @@ necessary failure repairs. Merge, image publication and release remain outside
 this authorization. Candidate and actual tested revisions will be recorded
 separately as the runs complete. The first saved N candidate is
 `6bf8e3cf03fd4c0eff7139bac37538ff08ddbd2f`, pushed on that testing branch and
-attached to draft PR #114. There is not yet an accepted N source revision.
+attached to draft PR #114. The fourth candidate below passed the configured
+verification scope on October 21; its evidence was reconciled on October 23.
 Historical B/C/D passes are not reused for N.
 
 ## Local Checks
@@ -189,7 +190,54 @@ now includes safe Operation/deployment timing and counters. This does not accept
 latency or replace the separate load baseline gate. The next saved-source run
 must verify both repairs and every configured job again.
 
-## Actions Preparation And Pending Evidence
+## Fourth Candidate: Configured Verification Complete
+
+Evidence reconciliation date: 2026-10-23 (Asia/Shanghai). The runs completed on
+2026-10-21. No newer source is substituted for these tested revisions.
+
+| Identity | Verified value |
+| --- | --- |
+| Candidate branch | `verify/n-product-20261021`, draft PR #114 |
+| Saved source | `6c514989820beee0a3387c5368df81e9b4fc2410` |
+| Actual PR merge checkout | `b2a82e02ac072b71486e0e5d611f4fb0e69e6c3e` |
+| Base | `bc8507b765a84ef6a9607df8c2ea8531a71a71c9` |
+| Baseline run | `39545757485`, success, all 10 jobs passed |
+| Container packaging run | `39545757607`, success, no image publication |
+
+All job steps completed successfully without a skipped acceptance step:
+contracts, phase1, Windows Agent, unsupported-platform, deployment-tools,
+Probe workflow, Relay isolation and the 3/4/8-Node multi-hop jobs. The container
+packaging job also passed. Full logs confirm the same merge checkout in
+contracts, MySQL and the 8-Node job.
+
+- The full TypeScript suite reports 2,256 tests: 2,109 passed, zero failed and
+  147 conditional database skips. All 147 names were matched individually to
+  passing tests in this run's MySQL job; none remains unaccounted for.
+- MySQL test invocations total 411 passed, zero failed and zero skipped. The
+  original Path binding case now passes through its concurrent CAS, rollback,
+  quota, archive, permission ordering and SELECT-only assertions.
+- All 206 Web tests pass without skips. Public examples, complete configured
+  static/generated checks, Linux Go tests/vet/race and the Windows Agent checks
+  pass. Compilation on another target is not execution on that physical OS.
+- The phase1/phase2, security, faults, access, transport, native Relay, switching,
+  recovery and capacity integration scripts pass. The shared-limit MySQL case
+  runs explicitly with a disposable database, including CAS/replay/history and
+  post-write rollback. Payload gate, Journal and Runner cases run in the Go suite.
+- The 8-Node browser completes ordered copy, immutable Profile selection,
+  explicit enable/disable/delete, fresh preview, actual bidirectional TCP/UDP,
+  reservations and cleanup. Its following isolated-namespace step also passes:
+  interior partition/loss/delay, intermediate restarts, old Report replay,
+  grant withdrawal and offline-lease deletion. These use one Linux runner.
+
+Decision: the repaired N candidate is verified within the existing configured
+Actions scope at the saved source and merge checkout above. This closes the
+authorized candidate verification task, not every deployment or performance
+claim in the product roadmap. The previous three failed runs remain historical
+failure evidence. This documentation follow-up changes no production, contract,
+test or workflow source; it records the tested candidate rather than relabelling
+the documentation commit as that candidate.
+
+## Acceptance Scope And Remaining Gates
 
 The existing baseline workflow now imports the public shared resource provider
 example and explicitly executes
@@ -198,7 +246,7 @@ disposable MySQL phase1 job. It must run with `TUNEX_TEST_DATABASE_URL`; a skip
 without a database is not SQL evidence. Existing TypeScript/Web/Go globs include
 the new N consumers and payload cases.
 
-Pending on a saved and pushed N source revision:
+The fourth candidate supplies configured evidence for:
 
 - Complete owner/contract, Web, Go, race, unsupported-platform and public example
   tests, with exact job/step conclusions and conditional skips reconciled.
@@ -211,7 +259,9 @@ Pending on a saved and pushed N source revision:
   actual installation, image publication and release remain separate gates.
 
 No local functional/MySQL/network/browser/container tests, merge, image
-publication or release has occurred in this task. Continue collecting the current
-run and save/push its necessary repairs for the next configured Actions run. Container
-packaging is build evidence, not image publication or release. The local checkout
-baseline cannot stand in for the source actually executed there.
+publication or release has occurred in this task. Independent physical hosts,
+long-run/load, actual installation and operational deployment remain unverified.
+Online payload consumption/remaining balance remains unavailable as declared;
+manual enrollment guidance is not an installer acceptance. Container packaging
+is build evidence, not image publication or release. No protected Journal,
+authority history or Runtime ledger was reset to obtain a pass.

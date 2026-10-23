@@ -52,21 +52,24 @@ The human subsequently authorized N verification on 2026-10-21. Local type,
 boundary, generated parity, Web syntax and Go build/vet checks passed after
 failure repairs, as did Linux/macOS cross-compilation.
 [N verification](product-verification-n-2026-10-21.md) records their actual scope.
-No exact-source Actions acceptance exists yet. Reported constructor/store fakes
-and interface/DTO assertions have been migrated and the complete TypeScript
-check passed; this does not establish their runtime compatibility.
+The exact-source fourth-candidate Actions record below supersedes the earlier
+source-only status for its configured scope. Reported constructor/store fakes
+and interface/DTO assertions have been migrated and exercised there.
 Named Node/Runtime/Forward/Path/Ingress/Probe, Console/Identity/HTTP,
 Telemetry/Transport/Tunnel and Web consumers now have authored migrations in the
 main worktree. All three named agents have handed off their scoped source files;
-this does not establish complete consumer closure or any executed acceptance.
+the fourth-candidate record bounds the executed consumer evidence.
 
 The human subsequently authorized the N testing branch, candidate commits/pushes,
-draft PR #114 and Actions repairs. Third candidate `3168f87` is being checked by
-baseline run `39542864180` at PR merge `0ec319c667d66c0f3764ecc8107076470970bec4`.
-Contracts, Agent, Probe browser and 3/4-Node multi-hop jobs passed, but MySQL Path
-binding and the 8-Node Console Operation timed out or failed. These are partial execution results, not
-successor acceptance; the verification record retains the failed candidates and
-their subsequent repairs.
+draft PR #114 and Actions repairs. Fourth candidate
+`6c514989820beee0a3387c5368df81e9b4fc2410` passed baseline run `39545757485`
+(all 10 jobs) at PR merge `b2a82e02ac072b71486e0e5d611f4fb0e69e6c3e`;
+container packaging `39545757607` also passed. Reconciled on 2026-10-23,
+the 2026-10-21 evidence includes all 147 database skips matched to MySQL passes,
+411 MySQL and 206 Web passes, Go/race and 3/4/8-Node browser/namespace checks.
+This verifies the repaired candidate within configured Actions scope. Independent
+hosts, load, installation and release retain separate gates. The verification
+record preserves prior failures and exact source identities; no merge is authorized.
 
 N5 consumer source follow-up includes the Path/Ingress publication/group storage,
 governance-only Audit/Station/Notification/Observation and remaining Probe,
