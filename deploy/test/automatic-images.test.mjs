@@ -25,6 +25,14 @@ test('publication requires prior exact-commit successful push checks',()=>{
  assert.doesNotMatch(container,/push:\n    branches: \[main\]\n    paths:/);
 });
 
+test('full multi-hop CI has an independent wait budget before the publishing runner starts',()=>{
+ const waiting=publishing.slice(publishing.indexOf('  prerequisites:'),publishing.indexOf('  publish:'));
+ assert.match(waiting,/timeout-minutes: 65/);
+ assert.match(waiting,/deadline=\$\(\(SECONDS \+ 3600\)\)/);
+ assert.doesNotMatch(waiting,/packages: write|docker push/);
+ assert.match(publishing,/publish:\n    needs: prerequisites\n    runs-on: ubuntu-latest\n    timeout-minutes: 30/);
+});
+
 test('GHCR publication never occurs before scanning both actual built images',()=>{
  assert.match(publishing,/packages: write/);
  assert.match(publishing,/--password-stdin/);
@@ -34,7 +42,7 @@ test('GHCR publication never occurs before scanning both actual built images',()
  assert.match(publishing,/Refusing to overwrite existing immutable-source image tag/);
 });
 
-test('development images retain per-commit tags; stable release tags do not move aliases',()=>{
+test('development images retain per-commit tags and only current main can move dev',()=>{
  assert.match(publishing,/image_tag="dev-\$GITHUB_SHA"/);
  assert.match(publishing,/latest_main=.*gh api/);
  assert.match(publishing,/if: env\.TUNEX_CHANNEL == 'dev'/);
@@ -42,6 +50,16 @@ test('development images retain per-commit tags; stable release tags do not move
  assert.match(publishing,/\$TUNEX_AGENT_BASE:dev/);
  assert.match(publishing,/docker buildx imagetools inspect "\$ref"/);
  assert.match(publishing,/sha256:\[a-f0-9\]\{64\}/);
+});
+
+test('stable releases alone can promote the newest numeric version to latest',()=>{
+ const promotion=publishing.slice(publishing.indexOf('      - name: Move latest aliases'));
+ assert.match(promotion,/if: env\.TUNEX_CHANNEL == 'release'/);
+ assert.match(promotion,/git fetch --tags origin/);
+ assert.match(promotion,/git tag --list 'v\*' \| node deploy\/image-tags\.mjs/);
+ assert.ok(promotion.indexOf('[ "$latest_tag" != "$TUNEX_IMAGE_TAG" ]')<promotion.indexOf('docker push'));
+ assert.match(promotion,/test "\$latest_digest" = "\$version_digest"/);
+ assert.match(publishing,/group: tunex-image-publish-.*'dev' \|\| 'release'/);
 });
 
 test('publication has source labels, SBOMs and no automatic deployment',()=>{
