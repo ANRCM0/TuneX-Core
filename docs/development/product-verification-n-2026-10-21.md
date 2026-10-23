@@ -20,6 +20,10 @@ attached to draft PR #114. The fourth candidate below passed the configured
 verification scope on October 21; its evidence was reconciled on October 23.
 Historical B/C/D passes are not reused for N.
 
+The October 23 documentation-head rerun exposed a Relay recovery fixture failure
+described below. Its repair requires its own saved-source Actions conclusion;
+the fourth candidate's earlier pass is retained with its original identity.
+
 ## Local Checks
 
 | Check | Actual result | Scope |
@@ -236,6 +240,34 @@ claim in the product roadmap. The previous three failed runs remain historical
 failure evidence. This documentation follow-up changes no production, contract,
 test or workflow source; it records the tested candidate rather than relabelling
 the documentation commit as that candidate.
+
+## October 23 Follow-up: Peer-expiry Recovery Fixture
+
+Documentation-only head `bdf3ed5d185a62589b0e662d535b309d6f64de69` triggered
+baseline run `39954482284` and container run `39954482511`. Container packaging
+and contracts passed; Relay rotation failed at `relay-capacity.ts:248` while
+restoring two-Node readiness after real ingress peer expiry. This subsequent
+failure is retained even though the same implementation passed the fourth run.
+
+The uploaded evidence shows that egress received poll HTTP 403, then logged
+`Agent authorization ended: LEASE_EXPIRED` and exited. Runtime Relay's original
+fixed-pin bound checks every path peer; an expired ingress pin can deny egress's
+next publication too. The original Runner retires its session on poll 401/403,
+then its independent ticket guard closes execution at expiry and exits. Existing
+contract tests explicitly require expired-pin refusal. The fixture restarted
+only ingress and assumed egress was still running, so waiting longer cannot
+restore the missing process.
+
+The repair preserves that fail-closed production contract. During the bounded
+recovery wait it restarts egress at most once, and only after a nonzero exit with
+the explicit `LEASE_EXPIRED` guard log. It first checks that the expired peer's
+Relay listeners are closed, reuses the exact original state/Journal/arguments,
+and requires a higher egress session after restart. Both original real expiry
+and fresh TCP/UDP assertions remain, as do the two prior live rotation windows
+without restarting either Agent. Evidence records whether the peer restarted and
+its before/after sessions. No certificate/time injection, expiry extension,
+history reset or permissive production behavior is introduced. This repair is
+pending its next exact-source Actions run.
 
 ## Acceptance Scope And Remaining Gates
 
