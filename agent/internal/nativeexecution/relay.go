@@ -18,7 +18,6 @@ func Relay() executiondriver.Driver {
 			Capabilities: []string{"native.relay.v1", "relay.wire.1", "shared-resource-limits.v1"}, RequiresRelay: true,
 		},
 		Start: StartRelay, Phase: RelayPhase, Classify: ClassifyRelay,
-		ProbeIngress: relayTCPProbeIngress, ProbeUDPIngress: relayUDPProbeIngress,
 	}
 }
 
@@ -31,13 +30,12 @@ func Multihop() executiondriver.Driver {
 			Capabilities: []string{"adp.execution.1", "native.multihop.v1", "multihop.wire.1", "shared-resource-limits.v1"}, RequiresRelay: true, RequiresMultihop: true,
 		},
 		Start: StartMultihop, Phase: RelayPhase, Classify: ClassifyRelay,
-		ProbeIngress: relayTCPProbeIngress, ProbeUDPIngress: relayUDPProbeIngress,
 	}
 }
 
-func relayTCPProbeIngress(instance executiondriver.Instance) (executiondriver.ProbeTarget, error) { return relayProbeIngress(instance,"tcp") }
-func relayUDPProbeIngress(instance executiondriver.Instance) (executiondriver.ProbeTarget, error) { return relayProbeIngress(instance,"udp") }
-func relayProbeIngress(instance executiondriver.Instance, protocol string) (executiondriver.ProbeTarget, error) {
+// PathProbeIngress reads an existing native Relay listener after host authorization.
+// Legacy Direct Probe hooks and capability declarations retain their original meaning.
+func PathProbeIngress(instance executiondriver.Instance, protocol string) (executiondriver.ProbeTarget, error) {
     engine, ok := instance.(*relay.Engine)
     if !ok { return executiondriver.ProbeTarget{}, fmt.Errorf("UNSUPPORTED_CAPABILITY: Native ingress required") }
     value, err := engine.ObserveIngress(protocol)

@@ -20,9 +20,16 @@ const selection=(value:{serviceContext?:ProbePermitView['serviceContext']})=>val
 
 /** Qualifies the same original slot; no generation allocation or expiry renewal. */
 export class ProbeEchoRegistry<Tx> implements ProbeEchoRegistryApi {
-    constructor(private readonly db:TransactionBoundary<Tx>,private readonly machines:ProbeMachineReader<Tx>,
-        private readonly instances:CurrentProbeInstances<Tx>,private readonly store:ProbeTypeQualifications<Tx>,
-        private readonly clock:()=>number=nativeWallClockSource()) {}
+    private readonly db:TransactionBoundary<Tx>;
+    private readonly machines:ProbeMachineReader<Tx>;
+    private readonly instances:CurrentProbeInstances<Tx>;
+    private readonly store:ProbeTypeQualifications<Tx>;
+    private readonly clock:()=>number;
+    constructor(db:TransactionBoundary<Tx>,machines:ProbeMachineReader<Tx>,
+        instances:CurrentProbeInstances<Tx>,store:ProbeTypeQualifications<Tx>,
+        clock:()=>number=nativeWallClockSource()) {
+        this.db=db;this.machines=machines;this.instances=instances;this.store=store;this.clock=clock;
+    }
     private now() {const value=this.clock();if(!Number.isSafeInteger(value)||value<0||value>253402300799999)
         throw new ControlError('CLOCK_UNCERTAIN',503,'Echo qualification clock requires review');return value;}
     async handle(node:string,fingerprint:string,epoch:number,input:unknown) {
@@ -72,8 +79,10 @@ export class ProbeEchoRegistry<Tx> implements ProbeEchoRegistryApi {
 
 /** Version-4 codec adapter; all budgets and transitions stay with ProbePermits. */
 export class ProbeEcho<Tx> implements ProbeEchoApi {
-    constructor(private readonly permits:Pick<ProbePermitOwner<Tx>,'offer'|'consume'|'check'|'receiveResult'>,
-        private readonly clock:()=>number=nativeWallClockSource()) {}
+    private readonly permits:Pick<ProbePermitOwner<Tx>,'offer'|'consume'|'check'|'receiveResult'>;
+    private readonly clock:()=>number;
+    constructor(permits:Pick<ProbePermitOwner<Tx>,'offer'|'consume'|'check'|'receiveResult'>,
+        clock:()=>number=nativeWallClockSource()) {this.permits=permits;this.clock=clock;}
     private now(observed:number) {const now=this.clock();if(!Number.isSafeInteger(now)||!Number.isSafeInteger(observed)||observed<0||
         now<observed||now-observed>250)unavailable();return now;}
     private matches(value:ProbePermitView,request:{service:unknown;challenge:unknown}) {

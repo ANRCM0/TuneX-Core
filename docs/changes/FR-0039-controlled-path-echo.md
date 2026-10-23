@@ -31,6 +31,12 @@ Agent capability default off. Consumers opting in must upgrade Control, Agent,
 closed DTO readers and SQL first. Partial deployment refuses path work; legacy
 Direct v1-v4 remains available. No new engine, ledger, scheduler or quota owner.
 
+Actions repair: path listener observation uses the explicit L2
+`nativeexecution.PathProbeIngress` adapter after the original host checks. It is
+not installed as the legacy Direct Probe hook on Relay/Multihop descriptors;
+their old registry port/capability agreement and five-measurement advertisement
+remain unchanged. The separate path opt-in advertises the new path capabilities.
+
 Planned acceptance: distinct TCP/UDP descriptors and signed frames; legacy five
 versus extended seven; disabled/missing capability; Direct/path mismatch; all
 node grants/sessions/credentials; prepared/draining/mismatched snapshots; route

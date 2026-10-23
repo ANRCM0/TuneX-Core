@@ -17,8 +17,14 @@ const corrupt=():never=>{throw new ControlError('INTEGRITY_FAILURE',409,'Invalid
 
 /** Recent historical outcome only; no issuance, network work or nested transaction. */
 export class ProbePathObservations<Tx> implements ProbePathObservationReader<Tx> {
-    constructor(private readonly auth:ScopeAuthorization<Tx>,private readonly access:ResourceReadAccess<Tx>,
-        private readonly store:ProbeRunStore<Tx>,private readonly plans:ProbePermitPlans<Tx>) {}
+    private readonly auth:ScopeAuthorization<Tx>;
+    private readonly access:ResourceReadAccess<Tx>;
+    private readonly store:ProbeRunStore<Tx>;
+    private readonly plans:ProbePermitPlans<Tx>;
+    constructor(auth:ScopeAuthorization<Tx>,access:ResourceReadAccess<Tx>,
+        store:ProbeRunStore<Tx>,plans:ProbePermitPlans<Tx>) {
+        this.auth=auth;this.access=access;this.store=store;this.plans=plans;
+    }
     async readIn(tx:Tx,actor:string,scope:string,forward:string,measurement:ProbePathObservation['measurement'],at:number,maxAgeSeconds:number) {
         if(![actor,scope,forward].every(isId)||!['tcp-path-echo-v1','udp-path-echo-v1'].includes(measurement)||
             !Number.isSafeInteger(at)||at<0||at>=253402300799999||!isCounter(maxAgeSeconds)||maxAgeSeconds<30||maxAgeSeconds>300)corrupt();

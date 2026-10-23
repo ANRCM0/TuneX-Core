@@ -5,8 +5,13 @@ import type { StationAlertFacts, StationAlertConfig, StationAlertFact } from './
 
 /** Combines public observations in the Station caller's transaction; writes nothing. */
 export class StationResourceFacts<Tx> implements StationAlertFacts<Tx> {
-    constructor(private readonly original:StationAlertFacts<Tx>,private readonly limits:ResourceLimitAlertReader<Tx>,
-        private readonly now:()=>number=nativeWallClockSource()) {}
+    private readonly original:StationAlertFacts<Tx>;
+    private readonly limits:ResourceLimitAlertReader<Tx>;
+    private readonly now:()=>number;
+    constructor(original:StationAlertFacts<Tx>,limits:ResourceLimitAlertReader<Tx>,
+        now:()=>number=nativeWallClockSource()) {
+        this.original=original;this.limits=limits;this.now=now;
+    }
     async read(tx:Tx,scope:string,config:StationAlertConfig,actor?:string):Promise<StationAlertFact|null> {
         const base=await this.original.read(tx,scope,config,actor);
         if(config.schemaVersion!==2||!base||base.kind!=='node')return base;

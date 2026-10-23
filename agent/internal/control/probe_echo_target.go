@@ -81,14 +81,17 @@ func (runner *Runner) probeEchoTargetLocked(binding probe.Binding, measurement s
 		if err != nil {
 			return probe.Target{}, probe.ErrDenied
 		}
-		observe := driver.probeIngress
-		if protocol == "udp" {
-			observe = driver.probeUDPIngress
+		var observed executionProbeTarget
+		if probeecho.IsPath(measurement) {
+			value, observeErr := nativeexecution.PathProbeIngress(current.stream, protocol)
+			err = observeErr
+			observed = executionProbeTarget{address: value.Address, port: value.Port, check: value.Check}
+		} else {
+			observe := driver.probeIngress
+			if protocol == "udp" { observe = driver.probeUDPIngress }
+			if observe == nil { return probe.Target{}, probe.ErrDenied }
+			observed, err = observe(current.stream)
 		}
-		if observe == nil {
-			return probe.Target{}, probe.ErrDenied
-		}
-		observed, err := observe(current.stream)
 		if err != nil || observed.check == nil || observed.check() != nil {
 			return probe.Target{}, probe.ErrDenied
 		}

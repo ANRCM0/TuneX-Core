@@ -32,7 +32,9 @@ test('fresh Control and Agent plans use the original distinct one-time owners', 
   assert.match(agent, /run --rm --no-deps -e TUNEX_ENROLLMENT_TOKEN agent --enroll --control/);
   assert.match(agent, /--journal-key \/run\/tunex-agent-secrets\/journal\.key/);
   assert.doesNotMatch(agent, /bootstrap\.ts|TUNEX_AUTHORITY_INITIALIZE=1/);
-  assert.doesNotMatch(control + agent, /rm -|chmod 777|--insecure|curl .*\|.*sh/);
+  const unsafeCommand = /(?:^|[\s;&|])rm\s+-|chmod 777|--insecure|curl .*\|.*sh/;
+  assert.match('rm -rf /protected-state', unsafeCommand);
+  assert.doesNotMatch(control + '\n' + agent, unsafeCommand);
 });
 
 test('failed or required-unchecked preflight blocks subsequent manual actions', () => {

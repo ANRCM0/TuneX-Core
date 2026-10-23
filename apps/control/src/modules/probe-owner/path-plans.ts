@@ -14,8 +14,15 @@ const unavailable=():never=>{throw new ControlError('PROBE_UNAVAILABLE',409,'Cur
 
 /** Reads the original Relay owner; no duplicate route compiler or authority issuer. */
 export class ForwardPathProbePlans<Tx> implements ProbePathPlans<Tx> {
-    constructor(private readonly nodes:PathNodes<Tx>,private readonly relay:ProbePathAssignments<Tx>,
-        private readonly published:PublishedProbeReader<Tx>,private readonly services:ProbeEchoServiceResolver<Tx>,private readonly skew:number) {}
+    private readonly nodes:PathNodes<Tx>;
+    private readonly relay:ProbePathAssignments<Tx>;
+    private readonly published:PublishedProbeReader<Tx>;
+    private readonly services:ProbeEchoServiceResolver<Tx>;
+    private readonly skew:number;
+    constructor(nodes:PathNodes<Tx>,relay:ProbePathAssignments<Tx>,
+        published:PublishedProbeReader<Tx>,services:ProbeEchoServiceResolver<Tx>,skew:number) {
+        this.nodes=nodes;this.relay=relay;this.published=published;this.services=services;this.skew=skew;
+    }
     async authorize(tx:Tx,actor:string,forward:ForwardValue,kind:'tcp-path-echo'|'udp-path-echo',timeoutMs:number,service:ProbeServiceReference) {
         const protocol=kind==='udp-path-echo'?'udp' as const:'tcp' as const;
         const route=[forward.spec.ingress.nodeId,...(forward.spec.path?.via??[])],now=nativeWallClockNow();

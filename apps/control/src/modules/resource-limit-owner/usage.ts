@@ -23,7 +23,9 @@ const rejected=():never=>{throw new ControlError('INTEGRITY_FAILURE',409,'Resour
 
 /** Observes the existing Journal. It cannot admit, refund or reset payload work. */
 export class ResourceUsage<Tx> implements ResourceUsageApi,ResourceUsageReader<Tx> {
-    constructor(private readonly options:Options<Tx>) {
+    private readonly options:Options<Tx>;
+    constructor(options:Options<Tx>) {
+        this.options=options;
         if(!positive(options.freshnessMs))invalid('Bounded usage freshness required');
     }
     private time(value:unknown):number {

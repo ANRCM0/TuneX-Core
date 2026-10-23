@@ -5,8 +5,13 @@ import type { StationAlertFacts, StationAlertConfig, StationAlertFact } from './
 
 /** A read of already accepted samples; evaluating a policy never issues Probe work. */
 export class StationPathFacts<Tx> implements StationAlertFacts<Tx> {
-    constructor(private readonly original:StationAlertFacts<Tx>,private readonly samples:ProbePathObservationReader<Tx>,
-        private readonly now:()=>number=nativeWallClockSource()) {}
+    private readonly original:StationAlertFacts<Tx>;
+    private readonly samples:ProbePathObservationReader<Tx>;
+    private readonly now:()=>number;
+    constructor(original:StationAlertFacts<Tx>,samples:ProbePathObservationReader<Tx>,
+        now:()=>number=nativeWallClockSource()) {
+        this.original=original;this.samples=samples;this.now=now;
+    }
     async read(tx:Tx,scope:string,config:StationAlertConfig,actor?:string):Promise<StationAlertFact|null> {
         const base=await this.original.read(tx,scope,config,actor);
         if(config.schemaVersion!==3||!base||base.kind!=='forward')return base;
