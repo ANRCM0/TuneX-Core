@@ -7,15 +7,19 @@ on:
 permissions:
   contents: read
   actions: read
-  packages: write
-# A superseded main push cannot race a later commit for the moving :dev tag.
+# Serialize moving aliases within each channel, including different release tags.
 concurrency:
-  group: tunex-image-publish-${{ github.ref_type == 'branch' && 'main' || github.ref }}
+  group: tunex-image-publish-${{ github.ref_type == 'branch' && 'dev' || 'release' }}
   cancel-in-progress: false
 jobs:
-  publish:
+  prerequisites:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 65
+    outputs:
+      channel: ${{ steps.source.outputs.channel }}
+      image_tag: ${{ steps.source.outputs.image_tag }}
+      control_base: ${{ steps.source.outputs.control_base }}
+      agent_base: ${{ steps.source.outputs.agent_base }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -28,6 +32,7 @@ jobs:
           node-version-file: .node-version
 
       - name: Verify exact source, channel and protected release tag
+        id: source
         shell: bash
         run: |
           set -euo pipefail
@@ -50,11 +55,11 @@ jobs:
           fi
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           {
-            echo "TUNEX_CHANNEL=$channel"
-            echo "TUNEX_IMAGE_TAG=$image_tag"
-            echo "TUNEX_CONTROL_BASE=ghcr.io/$owner/tunex-control"
-            echo "TUNEX_AGENT_BASE=ghcr.io/$owner/tunex-agent"
-          } >> "$GITHUB_ENV"
+            echo "channel=$channel"
+            echo "image_tag=$image_tag"
+            echo "control_base=ghcr.io/$owner/tunex-control"
+            echo "agent_base=ghcr.io/$owner/tunex-agent"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Wait for green Control, Relay and container CI for this exact main SHA
         shell: bash
@@ -62,7 +67,8 @@ jobs:
           set -euo pipefail
           # The container job always runs on main, even for docs-only pushes.
           # Tags reuse completed main-branch checks on their exact commit.
-          for attempt in $(seq 1 85); do
+          deadline=$((SECONDS + 3600))
+          while ((SECONDS < deadline)); do
             all_green=true
             for workflow in ci.yml container.yml; do
               state="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&event=push&head_sha=$GITHUB_SHA&per_page=100" \
@@ -84,6 +90,31 @@ jobs:
           done
           echo "Required same-SHA CI did not complete successfully in time" >&2
           exit 1
+
+  publish:
+    needs: prerequisites
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TUNEX_CHANNEL: ${{ needs.prerequisites.outputs.channel }}
+      TUNEX_IMAGE_TAG: ${{ needs.prerequisites.outputs.image_tag }}
+      TUNEX_CONTROL_BASE: ${{ needs.prerequisites.outputs.control_base }}
+      TUNEX_AGENT_BASE: ${{ needs.prerequisites.outputs.agent_base }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Confirm publishing checkout matches the verified source
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
       - name: Log in to GHCR
         env:
@@ -210,3 +241,24 @@ jobs:
           docker push "$TUNEX_CONTROL_BASE:dev"
           docker push "$TUNEX_AGENT_BASE:dev"
           echo "Moving :dev aliases now refer to $GITHUB_SHA (use the digest above for deployment)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Move latest aliases only for the newest stable version
+        if: env.TUNEX_CHANNEL == 'release'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          latest_tag="$(git tag --list 'v*' | node deploy/image-tags.mjs)"
+          if [ "$latest_tag" != "$TUNEX_IMAGE_TAG" ]; then
+            echo "Keeping immutable $TUNEX_IMAGE_TAG images; newer stable tag $latest_tag owns :latest"
+            exit 0
+          fi
+          for base in "$TUNEX_CONTROL_BASE" "$TUNEX_AGENT_BASE"; do
+            docker tag "$base:$TUNEX_IMAGE_TAG" "$base:latest"
+            docker push "$base:latest"
+            version_digest="$(docker buildx imagetools inspect "$base:$TUNEX_IMAGE_TAG" | awk '$1=="Digest:" {print $2;exit}')"
+            latest_digest="$(docker buildx imagetools inspect "$base:latest" | awk '$1=="Digest:" {print $2;exit}')"
+            [[ "$version_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            test "$latest_digest" = "$version_digest"
+            echo "- \`$base:latest\` = \`$base@$latest_digest\` ($TUNEX_IMAGE_TAG)" >> "$GITHUB_STEP_SUMMARY"
+          done
