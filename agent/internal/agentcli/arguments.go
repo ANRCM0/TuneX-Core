@@ -6,7 +6,7 @@ import "flag"
 type Options struct {
 	URL, NodeID, CA, Directory, JournalKey                                                  string
 	Enroll, Rotate, Relay, Multihop                                                         bool
-	ProbeRegistration, ProbeExecution, ProbeIngress, ProbeServices, ProbeEcho               bool
+	ProbeRegistration, ProbeExecution, ProbeIngress, ProbeServices, ProbeEcho, ProbePathEcho bool
 	ImportTransitJournal, TimeProof, TimeProofKey                                           string
 	Diagnostics, Telemetry, ForwardTelemetry, HostTelemetry, ProbeTelemetry, InspectJournal bool
 }
@@ -24,7 +24,8 @@ func ParseOptions() Options {
 	probeExecution := flag.Bool("probe-execution", false, "Opt in to bounded connect-only Probe tasks; requires --probe-registration")
 	probeIngress := flag.Bool("probe-ingress", false, "Opt in to local current Direct TCP ingress connect; requires --probe-registration and --probe-execution; may trigger the original listener's downstream dial")
 	probeServices := flag.Bool("probe-services", false, "Opt in to exact pinned observation TLS handshake through current Direct ingress; requires --probe-ingress, --probe-execution and --probe-registration; TLS records count as real Forward payload")
-	probeEcho := flag.Bool("probe-echo", false, "Opt in to controlled TCP/UDP nonce echo through current Direct ingress; requires services, ingress, execution and registration; real payload and original UDP association idle lifetime apply")
+	probePathEcho := flag.Bool("probe-path-echo", false, "Opt in to controlled full path Echo from local Relay or multihop ingress; requires echo and relay")
+    probeEcho := flag.Bool("probe-echo", false, "Opt in to controlled TCP/UDP nonce echo through current Direct ingress; requires services, ingress, execution and registration; real payload and original UDP association idle lifetime apply")
 	multihopEnabled := flag.Bool("multihop", false, "Opt in to execution extension 1 and upgrade the protected journal; requires --relay")
 	importTransit := flag.String("import-transit-journal", "", "Explicit legacy offline Transit journal to import as retired high-water; requires --multihop")
 	timeProof := flag.String("time-proof", "", "Optional supervisor OS synchronization proof")
@@ -39,7 +40,7 @@ func ParseOptions() Options {
 	return Options{URL: *url, NodeID: *node, CA: *ca, Directory: *directory, JournalKey: *journalKey,
 		Enroll: *enroll, Rotate: *rotate, Relay: *relayEnabled, Multihop: *multihopEnabled,
 		ProbeRegistration: *probeRegistration, ProbeExecution: *probeExecution, ProbeIngress: *probeIngress,
-		ProbeServices: *probeServices, ProbeEcho: *probeEcho, ImportTransitJournal: *importTransit,
+		ProbeServices: *probeServices, ProbeEcho: *probeEcho, ProbePathEcho: *probePathEcho, ImportTransitJournal: *importTransit,
 		TimeProof: *timeProof, TimeProofKey: *timeProofKey, Diagnostics: *diagnostics, Telemetry: *telemetry,
 		ForwardTelemetry: *forwardTelemetry, HostTelemetry: *hostTelemetry, ProbeTelemetry: *probeTelemetry,
 		InspectJournal: *inspectJournal}

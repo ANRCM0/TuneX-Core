@@ -10,7 +10,9 @@ export function parseProbeQualification(value:ProbeTypeQualification|null):Probe
     if(value===null)return null;
     const keys=['bootId','expiresAt','fingerprint','instanceGeneration','instanceId','nodeId','qualifiedAt','sessionEpoch','state'];
     if(Object.hasOwn(value,'servicesVersion'))keys.push('servicesVersion');
+    if(Object.hasOwn(value,'echoVersion'))keys.push('echoVersion');
     if(Object.keys(value).sort().join(',')!==keys.sort().join(',')||Object.hasOwn(value,'servicesVersion')&&value.servicesVersion!==1||
+        Object.hasOwn(value,'echoVersion')&&(value.echoVersion!==1||value.servicesVersion!==1)||
         ![value.nodeId,value.bootId].every(isId)||!isCounter(value.sessionEpoch)||!isCounter(value.instanceGeneration)||
         !/^[a-f0-9]{64}$(?![\s\S])/.test(value.fingerprint)||!/^[a-f0-9]{64}$(?![\s\S])/.test(value.instanceId)||
         !['qualified','revoked','quarantined'].includes(value.state)||!Number.isSafeInteger(value.qualifiedAt)||value.qualifiedAt<0||

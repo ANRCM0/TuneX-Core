@@ -18,6 +18,7 @@ func Relay() executiondriver.Driver {
 			Capabilities: []string{"native.relay.v1", "relay.wire.1", "shared-resource-limits.v1"}, RequiresRelay: true,
 		},
 		Start: StartRelay, Phase: RelayPhase, Classify: ClassifyRelay,
+		ProbeIngress: relayTCPProbeIngress, ProbeUDPIngress: relayUDPProbeIngress,
 	}
 }
 
@@ -30,7 +31,18 @@ func Multihop() executiondriver.Driver {
 			Capabilities: []string{"adp.execution.1", "native.multihop.v1", "multihop.wire.1", "shared-resource-limits.v1"}, RequiresRelay: true, RequiresMultihop: true,
 		},
 		Start: StartMultihop, Phase: RelayPhase, Classify: ClassifyRelay,
+		ProbeIngress: relayTCPProbeIngress, ProbeUDPIngress: relayUDPProbeIngress,
 	}
+}
+
+func relayTCPProbeIngress(instance executiondriver.Instance) (executiondriver.ProbeTarget, error) { return relayProbeIngress(instance,"tcp") }
+func relayUDPProbeIngress(instance executiondriver.Instance) (executiondriver.ProbeTarget, error) { return relayProbeIngress(instance,"udp") }
+func relayProbeIngress(instance executiondriver.Instance, protocol string) (executiondriver.ProbeTarget, error) {
+    engine, ok := instance.(*relay.Engine)
+    if !ok { return executiondriver.ProbeTarget{}, fmt.Errorf("UNSUPPORTED_CAPABILITY: Native ingress required") }
+    value, err := engine.ObserveIngress(protocol)
+    if err != nil { return executiondriver.ProbeTarget{}, err }
+    return executiondriver.ProbeTarget{Address:value.Address,Port:value.Port,Check:value.Check}, nil
 }
 
 func Maximum(host executiondriver.Host, assignment adp3.Assignment) int {

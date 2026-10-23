@@ -12,6 +12,35 @@ successful parity/import/package/runtime result is asserted.
 
 ## Scope And Layer Decision
 
+P source addition, 2026-10-24: `deploy/setup-plan.mjs` is a fixed, pure deployment
+plan/remediation projection of the original rolePreflight report. `deploy/setup.mjs`
+is its local read-only CLI composition over the original role-specific filesystem
+and certificate checker. `deploy/test/setup-plan.test.mjs` is an authored consumer;
+`docs/development/deployment-setup-v1.md` explains its manual operations and limits.
+These support leaves are not server/Agent execution providers and do not initialize,
+enroll, start services, contact remote systems or authorize deployment. Original
+`preflight.mjs`/`preflight-role.mjs` entrypoints and results remain unchanged.
+No P checker/test/build/runtime result is claimed by this source classification.
+
+P integrated source handoff additionally classifies fixed `member-console.js`,
+`account-credentials.js` and `task-workflow.js` as L2 native presentation leaves.
+The original native console consumes them; original Path/Ingress batch leaves
+consume only task-workflow's detached progress projection. Fixed assets remain
+served through the same native HTTP adapter with the established security headers.
+P browser export/import cases and the existing dynamic HTTP byte/header cases
+are authored consumers, not executed evidence. The historical 22-leaf map below
+retains its original scope; new leaves are explicitly classified individually.
+
+P wire/assets: the v4 Echo schema and embedded Agent schema add explicitly opted-in
+path descriptors/seven-measurement lists; legacy five-list and Direct points stay
+unchanged. TS/Go reader/proof cases are authored, embed/generated parity unexecuted.
+The optional resource-usage body is a separate report-ACK-bound observation; the
+original ReportRequest/Snapshot/Journal format stays with its original owner.
+Migrations 0042-0046 and Control profiles are recorded in the P/FR registry;
+Agent protected history/profile compatibility remains independent. The P6
+physical inventory example deliberately refuses execution until reviewed and
+filled with real source/image/host identities; it is not a physical-host result.
+
 1. Layers: preserve protected package Core L0; classify three common contract
    entries as L1, native contract/browser/deployment effects as L2, browser owners
    and the preview module as L3, and the actual compositions/support separately.

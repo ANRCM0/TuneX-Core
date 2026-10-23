@@ -3,7 +3,7 @@ import { ControlError, invalid } from '../../framework/public.ts';
 import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import { targetAllowed, nativeWallClockNow, nativeParseTime, nativeIsoTime } from '../../compatibility/public.ts';
 import type { DirectConfig } from '../../compatibility/public.ts';
-import type { ForwardProbePlan, ProbeIntents, ProbeNodes, PublishedProbeReader } from './plan-contracts.ts';
+import type { ForwardProbePlan, ProbeIntents, ProbeNodes, PublishedProbeReader, ProbePathPlans } from './plan-contracts.ts';
 import type { ProbeServiceResolver,ProbeEchoServiceResolver } from './service-contracts.ts';
 import { parseProbeServiceReference } from '../observation-service-owner/public.ts';
 import { probeEchoMeasurement } from './measurements.ts';
@@ -17,13 +17,13 @@ function request(actor: string, scopeId: string, id: string, input: unknown) {
         invalid('Closed probe-plan request required');
     const command = input as Record<string, unknown>, revision = command.expectedRevision;
     const timeoutMs = command.timeoutMs === undefined ? 1000 : command.timeoutMs;
-    if (command.version !== 1 || !['tcp-connect','tcp-ingress-connect','tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo'].includes(command.kind as string) || !isCounter(revision) ||
+    if (command.version !== 1 || !['tcp-connect','tcp-ingress-connect','tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo','tcp-path-echo','udp-path-echo'].includes(command.kind as string) || !isCounter(revision) ||
         typeof timeoutMs !== 'number' || !Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 2000)
         invalid('Supported probe kind/version, expectedRevision and bounded timeoutMs required');
-    const controlled=['tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo'].includes(command.kind as string);
+    const controlled=['tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo','tcp-path-echo','udp-path-echo'].includes(command.kind as string);
     const service=controlled?parseProbeServiceReference(command.service):undefined;
     if(!controlled&&Object.hasOwn(command,'service'))invalid('Only controlled Probe kinds accept a service reference');
-    return { revision, timeoutMs, kind:command.kind as 'tcp-connect'|'tcp-ingress-connect'|'tcp-ingress-tls'|'tcp-ingress-echo'|'udp-ingress-echo', ...(service?{service}:{}) };
+    return { revision, timeoutMs, kind:command.kind as 'tcp-connect'|'tcp-ingress-connect'|'tcp-ingress-tls'|'tcp-ingress-echo'|'udp-ingress-echo'|'tcp-path-echo'|'udp-path-echo', ...(service?{service}:{}) };
 }
 
 /** Read-only authorization preflight. Its output cannot authorize Agent network work. */
@@ -38,7 +38,7 @@ export class ForwardProbePlans<Tx> implements ForwardProbePlanApi {
     private readonly echoes:ProbeEchoServiceResolver<Tx>|undefined;
     private readonly access:ResourceReadAccess<Tx>;
     constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, access: ResourceReadAccess<Tx>, intents: ProbeIntents<Tx>,
-        nodes: ProbeNodes<Tx>, published: PublishedProbeReader<Tx>, clockSkewMs: number, services?: ProbeServiceResolver<Tx>,echoes?:ProbeEchoServiceResolver<Tx>) {
+        nodes: ProbeNodes<Tx>, published: PublishedProbeReader<Tx>, clockSkewMs: number, services?: ProbeServiceResolver<Tx>,echoes?:ProbeEchoServiceResolver<Tx>,private readonly paths?:ProbePathPlans<Tx>) {
         this.access=access;
 
         if (!Number.isSafeInteger(clockSkewMs) || clockSkewMs < 0) invalid('Invalid probe clock policy');
@@ -66,6 +66,10 @@ export class ForwardProbePlans<Tx> implements ForwardProbePlanApi {
             throw new ControlError('REVISION_CONFLICT', 409, 'Forward revision conflict');
         if (record.deleting || record.recoverySuspended || !forward.spec.enabled)
             throw new ControlError('PROBE_UNAVAILABLE', 409, 'An enabled, non-suspended Forward is required');
+        if(kind==='tcp-path-echo'||kind==='udp-path-echo'){
+            if(!this.paths||!service)throw new ControlError('UNSUPPORTED_CAPABILITY',409,'Path Echo planner unavailable');
+            return this.paths.authorize(tx,actor,forward,kind,timeoutMs,service);
+        }
         if (forward.spec.path || forward.spec.transport || !forward.spec.protocols.includes(protocol) ||
             !ipBytes(ingress?forward.spec.ingress.listen.address:forward.spec.target.host))
             throw new ControlError('UNSUPPORTED_CAPABILITY', 422, 'Probe requires its original Direct transport and numeric observation address');
@@ -113,7 +117,7 @@ export class ForwardProbePlans<Tx> implements ForwardProbePlanApi {
         if (!Number.isSafeInteger(expires) || expires <= now || !Number.isSafeInteger(issued) ||
             issued >= valid || issued > now + this.clockSkewMs)
             throw new ControlError('PROBE_UNAVAILABLE', 409, 'Snapshot or credential time window unavailable');
-        const classification=echo?{kind:kind as 'tcp-ingress-echo'|'udp-ingress-echo',
+        const classification=echo?{kind:kind as 'tcp-ingress-echo'|'udp-ingress-echo'|'tcp-path-echo'|'udp-path-echo',
             ...probeEchoMeasurement(protocol==='tcp'?'tcp-ingress-echo-v1':'udp-ingress-echo-v1'),serviceContext:echoContext!}:
             tls?{kind:'tcp-ingress-tls' as const,point:'agent-local-direct-ingress' as const,
             measurement:'tcp-ingress-tls-v1' as const,capability:'probe.tcp-ingress-tls.v1' as const,serviceContext:tlsContext!}:

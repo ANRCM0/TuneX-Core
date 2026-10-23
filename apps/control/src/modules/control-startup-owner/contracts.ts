@@ -1,10 +1,11 @@
-export const CONTROL_STARTUP_INTERFACE_VERSION=1 as const;
+export const CONTROL_STARTUP_INTERFACE_VERSION=3 as const;
 
 export interface ControlStartupOptions<Policy extends object> {
     databaseUrl:string;caCert:string;caKey:string;serverCert:string;serverKey:string;
     stateDirectory:string;openssl:string;relayCredentialSeconds:number;port:number;host:string;
     initializeAuthority:boolean;multihopEnabled:boolean;probeExecutionEnabled:boolean;
     probeScheduleEnabled:boolean;probeIngressEnabled:boolean;probeServicesEnabled:boolean;
+    probeEchoEnabled:boolean;probePathEchoEnabled?:boolean;
     telemetryEnabled:boolean;forwardTelemetryEnabled:boolean;hostTelemetryEnabled:boolean;
     probeTelemetryEnabled:boolean;telemetryRollupsEnabled:boolean;stationAlertsEnabled:boolean;
     webhookDeliveryEnabled:boolean;notificationSecretsDirectory?:string|undefined;

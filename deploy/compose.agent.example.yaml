@@ -25,6 +25,7 @@ services:
       # Requires all three original Probe options above; TLS records are actual Forward payload.
       - --probe-services=${TUNEX_PROBE_AGENT_SERVICES:-false}
       # Explicit bounded TCP/UDP nonce payload; requires services and all original Probe options.
+      - --probe-path-echo=${TUNEX_PROBE_AGENT_PATH_ECHO:-false}
       - --probe-echo=${TUNEX_PROBE_AGENT_ECHO:-false}
       - --telemetry=${TUNEX_TELEMETRY_AGENT:-false}
       - --forward-telemetry=${TUNEX_FORWARD_TELEMETRY_AGENT:-false}

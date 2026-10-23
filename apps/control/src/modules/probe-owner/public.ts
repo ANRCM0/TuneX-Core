@@ -1,18 +1,20 @@
-export const PROBE_MODULE_INTERFACE_VERSION=3 as const;
+export const PROBE_MODULE_INTERFACE_VERSION=5 as const;
+export { ProbeEcho, ProbeEchoRegistry } from './echo.ts';
+export type { ProbeEchoApi, ProbeEchoRegistryApi } from './echo-api.ts';
 export { ForwardProbeCapabilities } from './capabilities.ts';
 export { FORWARD_PROBE_CAPABILITY_API_INTERFACE_VERSION } from './capability-api.ts';
 export type { ForwardProbeCapabilitiesApi } from './capability-api.ts';
 export type { ForwardProbeCapabilityView, ForwardProbeCapabilityItem, ForwardProbeCapabilityReason,
     ForwardProbeIssuanceState } from './capability-contracts.ts';
 export { FORWARD_PROBE_API_INTERFACE_VERSION } from './command-api.ts';
-export type { ProbeAcceptance, IngressProbeAcceptance, ServiceProbeAcceptance, AnyProbeAcceptance,
+export type { ProbeAcceptance, IngressProbeAcceptance, ServiceProbeAcceptance, EchoProbeAcceptance, AnyProbeAcceptance,
     ForwardProbePlanApi, ForwardProbeApi } from './command-api.ts';
 export { requireProbeMachine } from './machine-policy.ts';
 export { parseProbeQualification, sameProbeQualificationInstance, probeQualificationUnavailable,
     requireProbeTypeQualification } from './qualification-policy.ts';
 export { validProbeBinding, sameProbeBinding, validProbePermit } from './permit-state.ts';
 export { PROBE_EGRESS_MEASUREMENT, PROBE_INGRESS_MEASUREMENT, PROBE_SERVICE_MEASUREMENT, PROBE_TCP_ECHO_MEASUREMENT, PROBE_UDP_ECHO_MEASUREMENT,
-    PROBE_TYPED_MEASUREMENTS, PROBE_SERVICE_MEASUREMENTS, PROBE_ECHO_MEASUREMENTS,
+    PROBE_TYPED_MEASUREMENTS, PROBE_SERVICE_MEASUREMENTS, PROBE_ECHO_MEASUREMENTS, PROBE_PATH_MEASUREMENTS,
     isEchoMeasurement, probeMeasurement, probeEchoMeasurement } from './measurements.ts';
 export { probeInstanceStorageValues } from './instance-storage-values.ts';
 export { probeQualificationStorageValues } from './qualification-storage-values.ts';
@@ -45,3 +47,6 @@ export type { ProbeMeasurement, ProbeMeasurementDescription, ProbeTypeQualificat
 export type { ProbePermitRecord, ProbePermitPlans, ProbePermitStore } from './permit-contracts.ts';
 export type { ProbeResultRecord, ProbeResultStore } from './result-contracts.ts';
 export type { ProbeServiceReference, ProbeServiceResolver, ProbeEchoServiceResolver } from './service-contracts.ts';
+
+export { ForwardPathProbePlans } from './path-plans.ts';
+export type { ProbePathAssignments } from './path-plans.ts';

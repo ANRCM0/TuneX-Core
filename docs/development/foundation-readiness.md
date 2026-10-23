@@ -31,6 +31,35 @@ rationale and obligations. Their planned/unexecuted wording is superseded for
 this accepted revision by the assertion map and execution record, and remains
 applicable to any later source change until separately verified.
 
+### P Product Readiness Source Stage (2026-10-24)
+
+The human requested a plan, persistent goal and implementation of the identified
+product gaps. The [P stage](product-readiness-stage-p-2026-10-24.md) records serial
+work on base `b729a5be8ef98164d3de515e37e424741ad83608` in its independent worktree.
+PP-01 through PP-16 are additional planned acceptance cases, not additions to or
+passes of the historical 220-item B assertion map. Concrete public changes need
+their own FR and consumer migration before source integration. The original
+Runtime ledger, owner transactions, Agent authority and protected Journal remain.
+No P verification, commit/push, merge or release is inferred from old N permission.
+Independent-host and load/long-run evidence is pending the actual environments.
+On 2026-10-24 the human confirmed those environments are unavailable and asked
+for source and acceptance preparation first. The P handoff records that bounded
+delivery; actual execution and acceptance remain pending, with no P verification,
+commit/push, merge or release authorization inferred from this decision.
+
+The P source candidate now includes P1-P5 implementations and P6 preparation,
+with FR-0033 through FR-0040, migrations0042-0046 and authored owner/wire/HTTP/
+SQL/Go/Web cases. New source interfaces are inventoried in the P ledger and
+foundation-boundaries currentSourceCandidate; Control schema ceiling is0046,
+UpgradeAssessment10, with original Agent Journal/profile compatibility unchanged.
+The new recent-path-sample rule describes a bounded historical controlled result,
+not an SLO or live health. Original Runtime/Node/Probe/Station transaction owners
+remain. All P checks, compilation, parity and execution are unexecuted. Source
+review readiness does not expand historical B's assertion count or accepted SHA.
+The source-only worktree is not an immutable saved candidate. The next permitted
+gate needs explicit P verification authorization; commit/Actions/merge/release
+and actual environment acceptance retain their separate requirements.
+
 ### N Product Successor (Configured Verification And Merge, 2026-10-23)
 
 N completed its configured final-candidate verification at `8738a97` and was

@@ -17,6 +17,8 @@ const InvocationDomain = "tunex.probe.echo.invocation.v1"
 const responseDomain = "tunex.echo.response.v1\x00"
 const MeasurementTCP = "tcp-ingress-echo-v1"
 const MeasurementUDP = "udp-ingress-echo-v1"
+const MeasurementPathTCP = "tcp-path-echo-v1"
+const MeasurementPathUDP = "udp-path-echo-v1"
 
 func rawBase64(value string, size int) ([]byte, error) {
 	raw, err := base64.StdEncoding.Strict().DecodeString(value)
@@ -71,7 +73,7 @@ func RequestFrame(input Invocation, challenge Challenge) ([]byte, error) {
 	copy(frame, []byte("TNXECHOQ"))
 	frame[8] = 1
 	frame[9] = 1
-	if input.Measurement == MeasurementUDP {
+	if IsUDP(input.Measurement) {
 		frame[9] = 2
 	}
 	binary.BigEndian.PutUint64(frame[16:24], uint64(timestamp(input.ExpiresAt).UnixMilli()))
@@ -94,7 +96,7 @@ func VerifyProof(context ServiceContext, input Invocation, challenge Challenge, 
 		return false
 	}
 	protocol := "tcp"
-	if input.Measurement == MeasurementUDP {
+	if IsUDP(input.Measurement) {
 		protocol = "udp"
 	}
 	if !supports(raw.Config, protocol) || timestamp(input.IssuedAt).UnixMilli() < int64(raw.Config.ValidFrom) || timestamp(input.ExpiresAt).UnixMilli() > int64(raw.Config.ValidUntil) {

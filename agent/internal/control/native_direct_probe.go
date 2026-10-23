@@ -206,14 +206,11 @@ func (runner *Runner) probeTargetLocked(binding probe.Binding) (probe.Target, er
 	return runner.probeBusinessTargetLocked(binding, "tcp")
 }
 
-func (runner *Runner) probeBusinessTargetLocked(binding probe.Binding, protocol string) (probe.Target, error) {
-	if protocol != "tcp" && protocol != "udp" {
-		return probe.Target{}, probe.ErrDenied
-	}
+func (runner *Runner) probeBoundInstanceLocked(binding probe.Binding) (running, error) {
 	if !binding.Valid() || binding.NodeID != runner.options.NodeID || binding.BootID != runner.options.BootID ||
 		binding.SessionEpoch != runner.hello.SessionEpoch || binding.SnapshotGeneration != runner.journal.Generation ||
 		runner.guard == nil || runner.ticket == nil || runner.guard.Check() != nil || runner.ticket.Allow() != nil {
-		return probe.Target{}, probe.ErrDenied
+		return running{}, probe.ErrDenied
 	}
 	// Runner indexes live instances by physical protocol/port, not assignment ID.
 	var instance running
@@ -229,8 +226,16 @@ func (runner *Runner) probeBusinessTargetLocked(binding probe.Binding, protocol 
 		a.AssignmentId != binding.AssignmentID || a.ForwardId != binding.ForwardID ||
 		a.ForwardRevision != binding.ForwardRevision || a.DeploymentGeneration != binding.DeploymentGeneration ||
 		a.BindingFence != binding.BindingFence || a.Driver.ConfigDigest != binding.ConfigDigest {
-		return probe.Target{}, probe.ErrDenied
+		return running{}, probe.ErrDenied
 	}
+	return instance, nil
+}
+
+func (runner *Runner) probeBusinessTargetLocked(binding probe.Binding, protocol string) (probe.Target, error) {
+	if protocol != "tcp" && protocol != "udp" { return probe.Target{}, probe.ErrDenied }
+	instance, err := runner.probeBoundInstanceLocked(binding)
+	if err != nil { return probe.Target{}, err }
+	a := instance.assignment
 	destination, err := nativeexecution.DirectProbeDestination(a, protocol, binding.ConfigDigest, binding.EgressPolicyRevision)
 	if err != nil {
 		return probe.Target{}, probe.ErrDenied

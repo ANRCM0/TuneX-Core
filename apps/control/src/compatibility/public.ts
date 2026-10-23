@@ -9,6 +9,7 @@ export { nativeRelayAssignmentPolicy, nativeMultihopAssignmentPolicy } from './n
 export { nativeBackgroundTaskEffects, BackgroundTasks as NativeBackgroundTasks } from './native-background-tasks.ts';
 export { nativeCloneSnapshotAssignments } from './native-runtime-catalog.ts';
 export type { RuntimeAssignment } from './native-runtime-catalog.ts';
+export { nativeProbePathPolicyRevision } from './native-probe-path-values.ts';
 export { nativeConsoleQuery, transportReferenceQuery, tunnelReferenceQuery, pathTemplateListQuery, pathTemplateRevisionQuery,
     pathReferenceQuery, pathGroupReferenceQuery, pathPublicationListQuery, ingressDeploymentListQuery,
     telemetryHistoryQuery, telemetryRollupQuery, auditQuery, stationEventQuery, notificationDeliveryQuery,
@@ -58,9 +59,13 @@ export { nativeRequestId, nativeJsonParse, decodeUtf8Chunks, parseNodeTelemetryS
     parseTransitDelivery, parseProbeNegotiation, parseProbeInstance, parseProbeClaim, parseProbeDelivery,
     parseProbeResult, parseProbeTypes, parseProbeServices } from './native-http-codecs.ts';
 export { probeEchoInvocationDigest, probeEchoRequestFrame } from './native-observability-codecs.ts';
+export { nativeProbeEchoNonce } from './native-probe-echo-values.ts';
 export { parseProbeEcho, probeEchoResultBody, probeEchoResultDigest, probeEchoServiceSelection,
     verifyProbeEchoProof } from './native-observability-codecs.ts';
 export type { ProbeEchoChallenge, ProbeEchoInvocation } from './native-observability-codecs.ts';
+export type { ProbeEchoQualificationRequest, ProbeEchoQualificationResponse, ProbeEchoPollRequest, ProbeEchoPollResponse,
+    ProbeEchoClaimRequest, ProbeEchoClaimResponse, ProbeEchoStatusRequest, ProbeEchoStatusResponse,
+    ProbeEchoResultResponse } from './native-observability-codecs.ts';
 export { jsonUtf8DefaultBytes, nativeParseTime, nativeIsoTime, nativeJsonEncode, nativeJsonBase64Url,
     nativeBase64UrlText, nativeBase64Fingerprint, nativeHexBytes, nativeParseJson, nativeCompareTimes } from './native-module-values.ts';
 export { parseNodeTelemetryAck, parseHostTelemetryAck,

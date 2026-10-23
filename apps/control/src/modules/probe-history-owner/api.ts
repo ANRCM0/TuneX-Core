@@ -2,7 +2,7 @@ import type { ProbeMeasurementDescription } from '../probe-owner/public.ts';
 import type { ProbeRunLosses, ProbeRunRecord } from './contracts.ts';
 import type { PROBE_RUN_LIMITS } from './policy.ts';
 
-export const PROBE_HISTORY_API_INTERFACE_VERSION=2 as const;
+export const PROBE_HISTORY_API_INTERFACE_VERSION=3 as const;
 
 export interface ProbeRunView extends ProbeRunRecord {
     kind:ProbeMeasurementDescription['taskKind'];businessProtocol:string;point:ProbeMeasurementDescription['point'];independentProbe:boolean;

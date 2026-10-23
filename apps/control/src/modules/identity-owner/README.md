@@ -1,11 +1,20 @@
 # Identity Owner
 
-Public module interface 2 successor candidate, source-only and unverified. Import public.ts, not
+Public module interface 3 P successor candidate, source-only and unverified. Import public.ts, not
 service.ts or the legacy Identity constructor as a module contract. IdentityQueries
 is the independent bearer/member-list surface used by HTTP. IdentityOwner<Tx> joins
 the existing Scope/owner/executing/member/audit contracts without deriving them
 from an implementation class. Member roles, command/recovery/view DTOs and policy
 remain here, not in generic L1 or a database adapter.
+
+P/FR-0034 adds IdentityCredentials over the original account row and an injected
+AccountCredentialStore. It authenticates the account itself, then repeats the
+current hash check under the original account lock, performs a hash CAS and own
+audit in one transaction. GET metadata is own-account/global, not Scope-governed.
+A same-current-token request is a no-op verification after an uncertain response;
+no fake Scope/idempotency ledger, secret response or Agent credential change is
+introduced. Self-service audit history excludes the existing operator recovery
+audit. Existing membership commands still refuse global credential replacement.
 
 IdentityService consumes L1 IdentityAccessHost, transaction/store/account-lookup,
 secret and value-codec ports. Composition binds MySqlIdentityStore, the explicitly

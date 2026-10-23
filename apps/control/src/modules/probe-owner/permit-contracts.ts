@@ -7,7 +7,7 @@ import type { ProbeEchoServiceContext, ProbeEchoChallenge } from '../../compatib
 
 export interface ProbePermitRecord {
     /** Absence is the unchanged legacy egress measurement. */
-    readonly measurement?: 'tcp-ingress-connect-v1' | 'tcp-ingress-tls-v1' | 'tcp-ingress-echo-v1' | 'udp-ingress-echo-v1';
+    readonly measurement?: 'tcp-ingress-connect-v1' | 'tcp-ingress-tls-v1' | 'tcp-ingress-echo-v1' | 'udp-ingress-echo-v1' | 'tcp-path-echo-v1' | 'udp-path-echo-v1';
     readonly serviceContext?: ProbeServiceContext | ProbeEchoServiceContext;
     readonly echoChallenge?: ProbeEchoChallenge;
     readonly id: string;

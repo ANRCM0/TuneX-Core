@@ -1,10 +1,11 @@
-import type { ProbeResultRequest, ProbeTypesResultRequest, ProbeServicesResultRequest, ProbeServiceSelection } from '../../compatibility/public.ts';
+import type { ProbeResultRequest, ProbeTypesResultRequest, ProbeServicesResultRequest, ProbeServiceSelection,
+    ProbeEchoResultRequest, ProbeEchoChallenge } from '../../compatibility/public.ts';
 import type { ProbePermitRecord } from './permit-contracts.ts';
 import type { ProbeResultRecord } from './result-contracts.ts';
 import type { ProbeBinding } from './plan-contracts.ts';
 import type { ProbeMeasurement, ProbeMeasurementDescription } from './measurement-contracts.ts';
 
-export const PROBE_OWNER_INTERFACE_VERSION=1 as const;
+export const PROBE_OWNER_INTERFACE_VERSION=3 as const;
 
 // Match the original shallow spread projections, not a deep-readonly wire/store view.
 type ShallowMutable<T>={-readonly [K in keyof T]:T[K]};
@@ -27,6 +28,7 @@ export type ProbePermitInspection=ProbePermitInspectionFields&Partial<ProbeMeasu
 export interface ProbePermitOfferFields {
     permitId:string;instanceId:string;instanceGeneration:number;binding:ShallowMutable<ProbeBinding>;
     timeoutMs:number;issuedAt:number;expiresAt:number;serviceContext?:Exclude<ProbePermitRecord['serviceContext'],undefined>|null;
+    echoChallenge?:ProbeEchoChallenge|null;
 }
 export interface ProbePermitOffer {
     observedAt:number;executionEnabled:false;offer:(ProbePermitOfferFields&Partial<ProbeMeasurementDescription>)|null;
@@ -39,8 +41,8 @@ export interface ProbePermitOwner<Tx> {
     issueCurrentIn(tx:Tx,actor:string,scope:string,forward:string,input:unknown,notAfter?:number):Promise<ProbePermitView>;
     inspect(actor:string,scope:string,id:string):Promise<ProbePermitInspection>;
     revoke(actor:string,scope:string,id:string):Promise<ProbePermitRevocation>;
-    consume(node:string,fingerprint:string,epoch:number,input:unknown,measurement?:ProbeMeasurement,typed?:boolean|'services',service?:ProbeServiceSelection|null):Promise<ProbePermitView>;
-    offer(node:string,fingerprint:string,epoch:number,input:unknown,typed?:boolean|'services'):Promise<ProbePermitOffer>;
-    check(node:string,fingerprint:string,epoch:number,input:unknown,measurement?:ProbeMeasurement,typed?:boolean|'services',service?:ProbeServiceSelection|null):Promise<ProbePermitView&{checkedAt:number}>;
-    receiveResult(node:string,fingerprint:string,epoch:number,input:ProbeResultRequest|ProbeTypesResultRequest|ProbeServicesResultRequest):Promise<ProbeResultAcceptance>;
+    consume(node:string,fingerprint:string,epoch:number,input:unknown,measurement?:ProbeMeasurement,typed?:boolean|'services'|'echo',service?:ProbeServiceSelection|null,challenge?:ProbeEchoChallenge|null):Promise<ProbePermitView>;
+    offer(node:string,fingerprint:string,epoch:number,input:unknown,typed?:boolean|'services'|'echo'):Promise<ProbePermitOffer>;
+    check(node:string,fingerprint:string,epoch:number,input:unknown,measurement?:ProbeMeasurement,typed?:boolean|'services'|'echo',service?:ProbeServiceSelection|null,challenge?:ProbeEchoChallenge|null):Promise<ProbePermitView&{checkedAt:number}>;
+    receiveResult(node:string,fingerprint:string,epoch:number,input:ProbeResultRequest|ProbeTypesResultRequest|ProbeServicesResultRequest|ProbeEchoResultRequest):Promise<ProbeResultAcceptance>;
 }

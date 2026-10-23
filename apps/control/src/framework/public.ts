@@ -160,3 +160,8 @@ export { RUNTIME_PORT_POLICY_INTERFACE_VERSION } from './runtime-port-policy-por
 export type { RuntimePortUsageStore, RuntimePortReservationPolicy } from './runtime-port-policy-ports.ts';
 export { RESOURCE_LIMIT_INTERFACE_VERSION } from './resource-limit-ports.ts';
 export type { RuntimePayloadPolicy, OfflinePayloadPolicy, SharedResourceLimitRecord, SharedResourceLimitReceipt, SharedResourceLimitStore } from './resource-limit-ports.ts';
+export { ACCOUNT_CREDENTIAL_STORE_INTERFACE_VERSION } from './identity-credential-ports.ts';
+export type { AccountCredentialRecord, AccountCredentialSummary, AccountCredentialStore } from './identity-credential-ports.ts';
+export { RESOURCE_USAGE_STORE_INTERFACE_VERSION } from './resource-usage-ports.ts';
+export type { ResourceUsageSample, ResourceUsageReportReference, ResourceUsageReceipt,
+    ResourceUsageStore, ResourceUsageReader, ResourceUsageConsumption } from './resource-usage-ports.ts';

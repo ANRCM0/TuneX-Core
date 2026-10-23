@@ -27,14 +27,14 @@ export function validProbePermit(value: unknown): value is ProbePermitRecord {
     const ingress='actorId,binding,closedAt,expiresAt,fingerprint,id,instanceGeneration,instanceId,issuedAt,measurement,scopeId,state,timeoutMs';
     const tls='actorId,binding,closedAt,expiresAt,fingerprint,id,instanceGeneration,instanceId,issuedAt,measurement,scopeId,serviceContext,state,timeoutMs';
     const echo='actorId,binding,closedAt,echoChallenge,expiresAt,fingerprint,id,instanceGeneration,instanceId,issuedAt,measurement,scopeId,serviceContext,state,timeoutMs';
-    const isEcho=value.measurement==='tcp-ingress-echo-v1'||value.measurement==='udp-ingress-echo-v1';
+    const isEcho=['tcp-ingress-echo-v1','udp-ingress-echo-v1','tcp-path-echo-v1','udp-path-echo-v1'].includes(value.measurement as string);
     if(keys!==legacy&&(keys!==ingress||value.measurement!=='tcp-ingress-connect-v1')&&
         (keys!==tls||value.measurement!=='tcp-ingress-tls-v1')&&(keys!==echo||!isEcho))return false;
     if(isEcho) {
         try {
             const context=parseProbeEchoServiceContext(value.serviceContext),challenge=parseProbeEchoChallenge(value.echoChallenge);
             if(context.scopeId!==value.scopeId||context.config.version!==2||
-                !context.config.endpoint.protocols.some(p=>p===(value.measurement==='udp-ingress-echo-v1'?'udp':'tcp'))||
+                !context.config.endpoint.protocols.some(p=>p===(value.measurement==='udp-ingress-echo-v1'||value.measurement==='udp-path-echo-v1'?'udp':'tcp'))||
                 typeof value.issuedAt!=='number'||typeof value.expiresAt!=='number'||context.config.validFrom>value.issuedAt||context.config.validUntil<value.expiresAt||
                 probeEchoInvocationDigest(nativeProbeEchoInvocation(value as unknown as NativeProbeEchoInvocationSource,
                     ()=>context,()=>challenge.nonce))!==challenge.invocationDigest)return false;

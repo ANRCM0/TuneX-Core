@@ -10,12 +10,14 @@ const maximumTime = 253402300799999;
 const reasons: readonly StationAlertReason[] = ['operation-failed','deployment-succeeded','deployment-succeeded-after-failure','operation-in-progress',
     'administrative-state','target-unavailable','recovery-suspended','evidence-unavailable','evidence-invalid','clock-regression',
     'clock-uncertain','report-stale','report-fresh','fresh-baseline-required','instance-changed','credential-expiring',
-    'credential-expired','credential-valid','credential-renewed','recovery-not-proven'];
+    'credential-expired','credential-valid','credential-renewed','recovery-not-proven','usage-high','usage-below-threshold',
+    'usage-unknown','period-ending','period-ended','period-valid','period-changed','path-sample-failed','path-sample-slow','path-sample-within-threshold','path-sample-stale','path-binding-changed'];
 export const STATION_ALERT_REASONS = Object.freeze(reasons);
 const time = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= maximumTime;
 const hash = (v: unknown): v is string => typeof v === 'string' && /^sha256:[a-f0-9]{64}$/.test(v) && v.length === 71;
 const bool = (v: unknown): v is boolean => typeof v === 'boolean';
 const nullableTime = (v: unknown) => v === null || time(v);
+const decimal = (v:unknown):v is string=>typeof v==='string'&&/^(0|[1-9][0-9]{0,15})$/.test(v)&&BigInt(v)<=9007199254740991n;
 function closed(input: unknown, keys: string[]): Record<string, unknown> {
     if (!input || typeof input !== 'object' || Array.isArray(input) ||
         ![Object.prototype,null].includes(Object.getPrototypeOf(input)) ||
@@ -27,6 +29,22 @@ export function emptyStationAlertState(): StationAlertState {
         opening: null, lastFiring: null, last: null, evaluatedAt: null });
 }
 export function parseStationAlertConfig(input: unknown): StationAlertConfig {
+    if(input&&typeof input==='object'&&(input as {schemaVersion?:unknown}).schemaVersion===3){
+        const v=closed(input,['schemaVersion','rule','target','enabled','thresholdSeconds','measurement','maxSampleAgeSeconds','maxElapsedMs']),target=closed(v.target,['kind','id']);
+        if(v.rule!=='recent-path-probe-degraded'||target.kind!=='forward'||!isId(target.id)||!bool(v.enabled)||v.thresholdSeconds!==0||
+            !['tcp-path-echo-v1','udp-path-echo-v1'].includes(v.measurement as string)||!isCounter(v.maxSampleAgeSeconds)||v.maxSampleAgeSeconds<30||v.maxSampleAgeSeconds>300||
+            !isCounter(v.maxElapsedMs)||v.maxElapsedMs>2000)invalid('Explicit path sample measurement and bounded historical thresholds required');
+        return deepFreeze({...v,target} as unknown as StationAlertConfig);
+    }
+    if(input&&typeof input==='object'&&(input as {schemaVersion?:unknown}).schemaVersion===2){
+        const v=closed(input,['schemaVersion','rule','target','enabled','thresholdSeconds','subjectActorId','thresholdPercent']);
+        const target=closed(v.target,['kind','id']);
+        if(target.kind!=='node'||!isId(target.id)||!isId(v.subjectActorId)||!bool(v.enabled)||!isCounter(v.thresholdSeconds,true)||
+            (v.rule==='shared-usage-high'?!isCounter(v.thresholdPercent)||v.thresholdPercent>100||v.thresholdSeconds!==0:
+                v.rule==='shared-period-ending'?v.thresholdPercent!==null||v.thresholdSeconds<60||v.thresholdSeconds>604800:true))
+            invalid('Explicit resource alert subject and bounded threshold required');
+        return deepFreeze({...v,target} as unknown as StationAlertConfig);
+    }
     const v = closed(input, ['schemaVersion','rule','target','enabled','thresholdSeconds']);
     const target = closed(v.target, ['kind','id']);
     if (v.schemaVersion !== 1 || !bool(v.enabled) || !isId(target.id) || !isCounter(v.thresholdSeconds,true))
@@ -46,6 +64,24 @@ export function parseStationAlertEvidence(input: unknown): StationAlertEvidence 
         const v = closed(input,['kind','targetId']);
         if (!isId(v.targetId)) invalid('Invalid station alert target');
         return deepFreeze({ kind, targetId: v.targetId });
+    }
+    if(kind==='path-probe'){
+        const v=closed(input,['kind','targetId','forwardRevision','bindingDigest','probeId','measurement','status','elapsedMs','measuredAt','acceptedAt','validUntil']);
+        if(!isId(v.targetId)||!isId(v.probeId)||!isCounter(v.forwardRevision)||!hash(v.bindingDigest)||
+            !['tcp-path-echo-v1','udp-path-echo-v1'].includes(v.measurement as string)||!['echoed','unverified','unreachable'].includes(v.status as string)||
+            v.measurement==='udp-path-echo-v1'&&v.status==='unreachable'||!isCounter(v.elapsedMs,true)||v.elapsedMs>2000||
+            !time(v.measuredAt)||!time(v.acceptedAt)||!time(v.validUntil)||v.acceptedAt<v.measuredAt||v.validUntil<=v.acceptedAt)
+            invalid('Invalid recent path sample evidence');
+        return deepFreeze({...v} as unknown as StationAlertEvidence);
+    }
+    if(kind==='resource-limit'){
+        const v=closed(input,['kind','targetId','actorId','bucketId','policyRevision','startsAt','endsAt','byteLimit','usedBytes','receivedAt','usageStatus']);
+        if(![v.targetId,v.actorId,v.bucketId].every(isId)||!isCounter(v.policyRevision)||!time(v.startsAt)||!time(v.endsAt)||v.endsAt<=v.startsAt||
+            v.byteLimit!==null&&!decimal(v.byteLimit)||v.usedBytes!==null&&!decimal(v.usedBytes)||!nullableTime(v.receivedAt)||
+            !['unknown','stale','policy-outdated','fresh'].includes(v.usageStatus as string)||
+            v.usageStatus==='fresh'&&(v.usedBytes===null||v.receivedAt===null)||
+            v.usageStatus==='unknown'&&(v.usedBytes!==null||v.receivedAt!==null))invalid('Invalid resource alert evidence');
+        return deepFreeze({...v} as unknown as StationAlertEvidence);
     }
     if (kind === 'node-credential') {
         const v = closed(input,['kind','targetId','credentialUntil']);
@@ -100,10 +136,14 @@ export function parseStationAlertState(input: unknown): StationAlertState {
         openedAt: v.openedAt, opening, lastFiring, last, evaluatedAt: v.evaluatedAt } as StationAlertState);
 }
 function boundEvidence(config: StationAlertConfig, evidence: StationAlertEvidence): void {
-    const expected = config.rule === 'forward-operation-failed' ? 'operation' :
+    const expected = config.schemaVersion===3?'path-probe':config.schemaVersion===2?'resource-limit':config.rule === 'forward-operation-failed' ? 'operation' :
         config.rule === 'node-report-stale' ? 'node-report' : 'node-credential';
     if (evidence.targetId !== config.target.id || evidence.kind !== 'unavailable' && evidence.kind !== expected)
         invalid('Station alert evidence differs from policy target or rule');
+    if(config.schemaVersion===2&&evidence.kind==='resource-limit'&&evidence.actorId!==config.subjectActorId)
+        invalid('Resource alert evidence differs from configured subject');
+    if(config.schemaVersion===3&&evidence.kind==='path-probe'&&evidence.measurement!==config.measurement)
+        invalid('Path sample evidence differs from configured measurement');
 }
 export function parseStationAlertPolicy(input: unknown): StationAlertPolicy {
     const v = closed(input,['policyId','revision','configRevision','config','configDigest','managedBy','createdAt','updatedAt',
@@ -158,6 +198,24 @@ export function evaluateStationAlert(configInput: StationAlertConfig, fact: Stat
     if (!config.enabled) return result('unknown','administrative-state');
     if (!fact) return result('unknown','target-unavailable');
     if (fact.id !== config.target.id || fact.kind !== config.target.kind) return result('unknown','evidence-invalid');
+    if(config.schemaVersion===3){
+        if(fact.kind!=='forward')return result('unknown','evidence-invalid');
+        if(fact.recoverySuspended)return result('unknown','recovery-suspended');
+        if(!fact.enabled||fact.deleting)return result('unknown','administrative-state');
+        let evidence:StationAlertEvidence;
+        try{evidence=parseStationAlertEvidence(fact.pathSample);}catch{return result('unknown','evidence-unavailable');}
+        if(evidence.kind!=='path-probe'||evidence.targetId!==fact.id||evidence.forwardRevision!==fact.revision||evidence.measurement!==config.measurement)
+            return result('unknown','evidence-invalid');
+        const instanceKey=evidence.bindingDigest;
+        if(evidence.measuredAt>now||evidence.acceptedAt>now)return result('unknown','clock-uncertain',evidence,instanceKey);
+        if(now-evidence.measuredAt>config.maxSampleAgeSeconds*1000)return result('unknown','path-sample-stale',evidence,instanceKey);
+        if(evidence.status!=='echoed')return result('firing','path-sample-failed',evidence,instanceKey);
+        if(evidence.elapsedMs>config.maxElapsedMs)return result('firing','path-sample-slow',evidence,instanceKey);
+        if(state.condition==='firing'&&state.lastFiring?.kind==='path-probe'&&state.instanceKey===instanceKey&&
+            (state.lastFiring.probeId===evidence.probeId||state.lastFiring.acceptedAt>=evidence.acceptedAt))
+            return result('unknown','recovery-not-proven',evidence,instanceKey);
+        return result('clear','path-sample-within-threshold',evidence,instanceKey);
+    }
     if (config.rule === 'forward-operation-failed') {
         if (fact.kind !== 'forward') return result('unknown','evidence-invalid');
         if (fact.recoverySuspended) return result('unknown','recovery-suspended');
@@ -182,6 +240,24 @@ export function evaluateStationAlert(configInput: StationAlertConfig, fact: Stat
     if (fact.kind !== 'node' || !bool(fact.revoked) || fact.credentialUntil !== null && !time(fact.credentialUntil))
         return result('unknown','evidence-invalid');
     if (fact.revoked) return result('unknown','administrative-state');
+    if(config.schemaVersion===2){
+        let evidence:StationAlertEvidence;
+        try {evidence=parseStationAlertEvidence(fact.resource);}catch{return result('unknown','evidence-unavailable');}
+        if(evidence.kind!=='resource-limit'||evidence.targetId!==fact.id||evidence.actorId!==config.subjectActorId)
+            return result('unknown','evidence-invalid');
+        const instanceKey=digest({target:config.target,actorId:evidence.actorId,bucketId:evidence.bucketId});
+        if(evidence.startsAt>now)return result('unknown','evidence-unavailable',evidence,instanceKey);
+        if(config.rule==='shared-period-ending'){
+            if(evidence.endsAt<=now)return result('firing','period-ended',evidence,instanceKey);
+            return evidence.endsAt-now<=config.thresholdSeconds*1000?result('firing','period-ending',evidence,instanceKey):
+                result('clear','period-valid',evidence,instanceKey);
+        }
+        if(evidence.usageStatus!=='fresh'||evidence.usedBytes===null||evidence.byteLimit===null||
+            evidence.receivedAt===null||evidence.receivedAt>now||evidence.endsAt<=now)
+            return result('unknown','usage-unknown',evidence,instanceKey);
+        return BigInt(evidence.usedBytes)*100n>=BigInt(evidence.byteLimit)*BigInt(config.thresholdPercent!)?
+            result('firing','usage-high',evidence,instanceKey):result('clear','usage-below-threshold',evidence,instanceKey);
+    }
     if (fact.credentialUntil === null) return result('unknown','evidence-unavailable');
     if (config.rule === 'node-credential-expiring') {
         const evidence = { kind: 'node-credential', targetId: fact.id, credentialUntil: fact.credentialUntil } as const;
@@ -219,6 +295,15 @@ export function advanceStationAlert(stateInput: StationAlertState, evaluationInp
         return deepFreeze({ state, event });
     }
     // A new process/session invalidates an old report incident; it does not prove recovery.
+    if((evaluation.evidence.kind==='resource-limit'||evaluation.evidence.kind==='path-probe')&&evaluation.instanceKey!==null&&old.instanceKey!==null&&evaluation.instanceKey!==old.instanceKey){
+        state={...emptyStationAlertState(),episode:old.episode,instanceKey:evaluation.instanceKey};
+        if(old.condition==='firing'){
+            const reason=evaluation.evidence.kind==='path-probe'?'path-binding-changed':'period-changed';
+            event={kind:'invalidated',reason,evidence:evaluation.evidence,opening:old.opening,episode:old.episode};
+            state.last={...evaluation,status:'unknown',reason};state.evaluatedAt=now;
+            return deepFreeze({state,event});
+        }
+    }
     if (evaluation.evidence.kind === 'node-report' && evaluation.instanceKey !== null &&
         old.instanceKey !== null && evaluation.instanceKey !== old.instanceKey) {
         if (old.condition === 'firing') event = { kind: 'invalidated', reason: 'instance-changed',

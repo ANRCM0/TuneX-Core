@@ -158,7 +158,7 @@ test('70 actual service constructor captures clock per instance has independent 
 });
 
 test('station governance refuses same-Scope managers before facts locks receipts and event detail',async()=>{
- assert.equal(station.STATION_ALERT_API_INTERFACE_VERSION,2);
+ assert.equal(station.STATION_ALERT_API_INTERFACE_VERSION,4);
  for(const operation of ['listPolicies','getPolicy','getEvent','history','publish','silence','acknowledge'] as const){
   const f=fixture(),before=copy({policy:f.state.policy,event:f.state.event,audits:f.state.audits,responses:f.state.responses,appended:f.state.appended,outbox:f.state.outbox}),service=f.create();
   const action=()=>operation==='listPolicies'?service.listPolicies('selfservice-manager','scope'):operation==='getPolicy'?service.getPolicy('selfservice-manager','scope','policy'):operation==='getEvent'?service.getEvent('selfservice-manager','scope','event'):operation==='history'?service.history('selfservice-manager','scope',{from:new Date(at-1).toISOString(),to:new Date(at+1).toISOString()}):operation==='publish'?service.publish('selfservice-manager','scope','policy','manager-key',1,forwardConfig):operation==='silence'?service.silence('selfservice-manager','scope','policy','manager-key',1,null):service.acknowledge('selfservice-manager','scope','event','manager-key',1);

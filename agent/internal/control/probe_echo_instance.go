@@ -129,7 +129,7 @@ func (runner *Runner) qualifyProbeEcho(ctx context.Context, session *registeredP
 		if err != nil {
 			return err
 		}
-		request, raw, err := nativeexecution.EncodeProbeEchoQualification(machine, action, probeecho.Measurements())
+		request, raw, err := nativeexecution.EncodeProbeEchoQualification(machine, action, runner.probeEchoMeasurements())
 		if err != nil {
 			return err
 		}
@@ -182,4 +182,9 @@ func (runner *Runner) qualifyProbeEcho(ctx context.Context, session *registeredP
 		runner.mutex.Unlock()
 	}
 	return nil
+}
+
+func (runner *Runner) probeEchoMeasurements() []string {
+    if runner.options.ProbePathEcho { return probeecho.PathMeasurements() }
+    return probeecho.Measurements()
 }

@@ -52,3 +52,14 @@ changes under the original Node lock, immutable bucket history, capacity refusal
 authenticated personal/governance HTTP isolation and Agent enforcement. Source
 composition, DDL/catalog and wire/Runner integration belong to their original
 owners; source closure is not acceptance.
+## P usage observation successor (unverified)
+
+`ResourceUsage` observes original Journal debits through its public API and injected
+`ResourceUsageStore`; it grants no execution or refund. Native Agent sends the
+optional version-1 extension after the original Report ACK. Its report/session,
+policy, monotonic sample and receipt checks share one SQL transaction. Reads reuse
+original SharedResourceLimits authorization, exposing fresh/stale/unknown and the
+active period independently of a configured future head. Original constructors
+without `usage` keep unavailable consumption; command receipt replay stays exact.
+See FR-0035 and docs/spec/resource-usage-observation-v1.md for migration and cases.
+

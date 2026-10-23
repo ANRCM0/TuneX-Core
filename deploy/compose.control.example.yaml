@@ -1,7 +1,8 @@
 # TuneX VNext Control host only. Use a private test database and retained CA.
 # First authority initialization must be a one-time explicit compose run -e
 # TUNEX_AUTHORITY_INITIALIZE=1. Never retain that flag in the steady service.
-# Current Control targets Schema 0037 / adp3-probe-echo-v1; Agent profiles are unchanged.
+# Baseline Control includes Schema 0041 / adp3-shared-resource-limits-v1.
+# Use the actual source/target profiles from upgrade assessment; do not infer a safe downgrade.
 # Probe scheduling is default-off and requires Probe execution plus verified clock skew of 1 second.
 # Groups/publications use manual original-owner commands, not another runtime flag or executor.
 name: tunex-vnext-control
@@ -27,6 +28,7 @@ services:
       # Controlled TLS requires ingress, original execution and the explicit 1-second clock policy.
       TUNEX_PROBE_SERVICES: ${TUNEX_PROBE_SERVICES:-0}
       # Echo also requires services, ingress, execution and the original 1-second clock policy.
+      TUNEX_PROBE_PATH_ECHO: ${TUNEX_PROBE_PATH_ECHO:-0}
       TUNEX_PROBE_ECHO: ${TUNEX_PROBE_ECHO:-0}
       TUNEX_PROBE_SCHEDULE: ${TUNEX_PROBE_SCHEDULE:-0}
       TUNEX_TELEMETRY: ${TUNEX_TELEMETRY:-0}

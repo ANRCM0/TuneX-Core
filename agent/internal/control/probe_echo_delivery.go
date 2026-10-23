@@ -26,7 +26,7 @@ func (runner *Runner) pollProbeEcho(ctx context.Context, session *registeredProb
 	if err != nil {
 		return nil, err
 	}
-	request, raw, err := nativeexecution.EncodeProbeEchoPoll(machine, probeecho.Measurements())
+	request, raw, err := nativeexecution.EncodeProbeEchoPoll(machine, runner.probeEchoMeasurements())
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,7 @@ import type { ForwardProbePlanApi } from './command-api.ts';
 import type { ForwardProbeCapabilitiesApi } from './capability-api.ts';
 import type { ForwardProbeCapabilityItem, ForwardProbeCapabilityView, ForwardProbeIssuanceState } from './capability-contracts.ts';
 import type { ProbeIntents } from './plan-contracts.ts';
-import { PROBE_ECHO_MEASUREMENTS, probeMeasurement } from './measurements.ts';
+import { PROBE_ECHO_MEASUREMENTS, PROBE_PATH_MEASUREMENTS, probeMeasurement } from './measurements.ts';
 
 type Preflight = ForwardProbeCapabilityItem['preflight'];
 
@@ -48,17 +48,18 @@ export class ForwardProbeCapabilities<Tx> implements ForwardProbeCapabilitiesApi
         const originalDirect = !forward.spec.path && !forward.spec.transport;
         const inactive = record.deleting || record.recoverySuspended || !forward.spec.enabled;
         const items: ForwardProbeCapabilityItem[] = [];
-        for (const measurement of PROBE_ECHO_MEASUREMENTS) {
+        for (const measurement of (originalDirect?PROBE_ECHO_MEASUREMENTS:PROBE_PATH_MEASUREMENTS)) {
             const description = probeMeasurement(measurement);
-            const echo = description.taskKind === 'tcp-ingress-echo' || description.taskKind === 'udp-ingress-echo';
-            const protocol = description.taskKind === 'udp-ingress-echo' ? 'udp' : 'tcp';
-            const enabled = description.taskKind === 'tcp-connect' ? this.issuance.enabled :
+            const path=measurement==='tcp-path-echo-v1'||measurement==='udp-path-echo-v1';
+            const echo=path||description.taskKind==='tcp-ingress-echo'||description.taskKind==='udp-ingress-echo';
+            const protocol = description.taskKind.startsWith('udp') ? 'udp' : 'tcp';
+            const enabled = path ? this.issuance.pathEchoEnabled===true : echo ? this.issuance.echoEnabled===true : description.taskKind === 'tcp-connect' ? this.issuance.enabled :
                 description.taskKind === 'tcp-ingress-connect' ? this.issuance.ingressEnabled : this.issuance.servicesEnabled;
-            const issuance = echo ? 'not-dispatchable' : enabled ? 'enabled' : 'disabled';
+            const issuance = enabled ? 'enabled' : 'disabled';
             let preflight: Preflight;
-            if (!originalDirect) preflight = {
+            if (path===originalDirect) preflight = {
                 state: 'unsupported', expiresAt: null, reason: { code: 'UNSUPPORTED_CAPABILITY',
-                    message: 'Active Probe execution supports the original Direct transport only. Relay, multihop and configured transport profiles have no controlled business-path Probe in this command.' },
+                    message: 'Active Probe execution supports the selected observation point only; use a distinct path Echo measurement for Relay or multihop.' },
             };
             else if (!forward.spec.protocols.includes(protocol)) preflight = {
                 state: 'unsupported', expiresAt: null, reason: { code: 'UNSUPPORTED_CAPABILITY', message: `This Forward does not enable ${protocol.toUpperCase()}.` },
@@ -73,13 +74,12 @@ export class ForwardProbeCapabilities<Tx> implements ForwardProbeCapabilitiesApi
                     message: 'An exact registered observation service is required. Submit its current reference to the original Probe planner for authorization; this query has not checked the service or current execution binding.' },
             };
             items.push({ ...description, protocol, endToEnd: false, health: 'unknown',
-                transportSupport: originalDirect ? 'supported' : 'unsupported', issuance,
-                issuanceReason: echo ? 'The original ForwardProbes command does not accept echo kinds; planner support does not enable dispatch.' :
-                    enabled ? 'The original command switch is enabled. Permit issuance, current authorization and Agent execution are still checked by their original owners.' :
+                transportSupport: path!==originalDirect ? 'supported' : 'unsupported', issuance,
+                issuanceReason: enabled ? 'The original command switch is enabled. Permit issuance, current authorization and Agent execution are still checked by their original owners.' :
                         'The original command switch is disabled. Read-only preflight does not enable issuance.',
                 preflight });
         }
-        return deepFreeze({ capabilityVersion: 1, scopeId: scope, forwardId: id, forwardRevision: forward.revision, mode,
+        return deepFreeze({ capabilityVersion: originalDirect?1 as const:2 as const, scopeId: scope, forwardId: id, forwardRevision: forward.revision, mode,
             readOnly: true, networkCheck: 'not-performed', executionAuthorized: false, endToEnd: false,
             health: 'unknown', consistency: 'read-committed-not-global-snapshot', items,
             diagnostics: { apiPath: `/api/v1/scopes/${encodeURIComponent(scope)}/forwards/${encodeURIComponent(id)}/diagnostics`,

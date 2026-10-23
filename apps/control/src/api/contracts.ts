@@ -1,4 +1,4 @@
-import type { IdentityQueries } from '../modules/identity-owner/public.ts';
+import type { IdentityQueries, AccountCredentialApi } from '../modules/identity-owner/public.ts';
 import type { NodeApi } from '../modules/node-owner/public.ts';
 import type { TransportApi } from '../modules/transport-owner/public.ts';
 import type { RelayEndpointApi } from '../modules/relay-endpoint-owner/public.ts';
@@ -32,7 +32,8 @@ import type { ProbeRunsApi } from '../modules/probe-history-owner/public.ts';
 import type { ProbePlansApi } from '../modules/probe-plan-owner/public.ts';
 import type { ObservationServicesApi } from '../modules/observation-service-owner/public.ts';
 import type { RequestLifecycle } from '../framework/public.ts';
-import type { SharedResourceLimitApi } from '../modules/resource-limit-owner/public.ts';
+import type { SharedResourceLimitApi, ResourceUsageApi } from '../modules/resource-limit-owner/public.ts';
+import type { ProbeEchoApi, ProbeEchoRegistryApi } from '../modules/probe-owner/public.ts';
 
 /** Business services are consumed through explicit owner contracts, not implementation class views. */
 export interface ControlApi extends ForwardCommandApi,RelayPlanApi {
@@ -40,8 +41,10 @@ export interface ControlApi extends ForwardCommandApi,RelayPlanApi {
     readonly changeNodeGrant:AccessCommandApi['changeNodeGrant'];
     readonly changeNode:NodeManagementApi['change'];
     readonly identity:IdentityQueries;
+    readonly accountCredentials:AccountCredentialApi;
     readonly nodes:NodeApi;
     readonly resourceLimits:SharedResourceLimitApi;
+    readonly resourceUsage:ResourceUsageApi;
     readonly transport:TransportApi;
     readonly relayEndpoints:RelayEndpointApi;
     readonly details:ControlDetailApi;
@@ -73,6 +76,8 @@ export interface ControlApi extends ForwardCommandApi,RelayPlanApi {
     readonly probeTypes:ProbeTypesApi;
     readonly probeServiceRegistry:ProbeServiceRegistryApi;
     readonly probeServices:ProbeServicesApi;
+    readonly probeEcho:ProbeEchoApi;
+    readonly probeEchoRegistry:ProbeEchoRegistryApi;
     readonly transitNegotiation:TransitNegotiationApi;
     readonly transitDelivery:TransitDeliveryApi;
 }

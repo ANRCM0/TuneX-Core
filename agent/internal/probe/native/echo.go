@@ -32,7 +32,7 @@ func ExchangeEcho(ctx context.Context, socket net.Conn, input probeecho.Executio
 	}
 	buffer := make([]byte, echoFrameBytes+1)
 	var received int
-	if input.Invocation.Measurement == probeecho.MeasurementUDP {
+	if probeecho.IsUDP(input.Invocation.Measurement) {
 		received, err = socket.Read(buffer)
 		if check() != nil || ctx.Err() != nil || !time.Now().Before(deadline) || err != nil {
 			return nil, 0, 0, ErrEchoDenied

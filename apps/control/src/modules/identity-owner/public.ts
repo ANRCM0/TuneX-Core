@@ -1,4 +1,7 @@
-export const IDENTITY_MODULE_INTERFACE_VERSION=2 as const;
+export const IDENTITY_MODULE_INTERFACE_VERSION=3 as const;
+export { IdentityCredentials } from './credentials.ts';
+export { ACCOUNT_CREDENTIAL_API_INTERFACE_VERSION, ACCOUNT_CREDENTIAL_EVENT_LIMIT } from './credential-contracts.ts';
+export type { AccountCredentialApi, AccountCredentialView, AccountCredentialRotation, AccountCredentialOptions } from './credential-contracts.ts';
 export { AccessChangeReconciler } from './access-reconciler.ts';
 export type { AccessExecution } from './execution-ports.ts';
 export { IdentityService } from './service.ts';

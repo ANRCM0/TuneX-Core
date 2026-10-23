@@ -151,7 +151,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
             }
             const disablingKnownTarget = !config.enabled && old?.config.target.kind===config.target.kind && old.config.target.id===config.target.id;
             if (!disablingKnownTarget) {
-                const fact = await this.facts.read(tx,scope,config);
+                const fact = await this.facts.read(tx,scope,config,actor);
                 if (!fact) notFound();
                 if (fact.id!==config.target.id || fact.kind!==config.target.kind) corrupt();
             }
@@ -242,7 +242,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
             const value = input[key]; if (!isId(value)) invalid('Exact station event identity filter required'); filters[key]=value;
         }
         if (input.rule!==undefined) {
-            if (!['forward-operation-failed','node-report-stale','node-credential-expiring'].includes(input.rule)) invalid('Known station alert rule required');
+            if (!['forward-operation-failed','node-report-stale','node-credential-expiring','shared-usage-high','shared-period-ending','recent-path-probe-degraded'].includes(input.rule)) invalid('Known station alert rule required');
             filters.rule=input.rule as StationAlertRule;
         }
         if (input.kind!==undefined) {
@@ -296,7 +296,7 @@ export class StationAlerts<Tx> implements StationAlertsApi {
                     await this.store.putPolicy(tx,due.scopeId,{...value,suspended:'actor-not-authorized',nextEvaluateAt:now+STATION_ALERT_LIMITS.evaluationIntervalMs});
                     return;
                 }
-                const fact=await this.facts.read(tx,due.scopeId,value.config);
+                const fact=await this.facts.read(tx,due.scopeId,value.config,value.managedBy);
                 const evaluation=evaluateStationAlert(value.config,fact,value.state,now,this.skewMs);
                 const advanced=advanceStationAlert(value.state,evaluation,now);
                 if (advanced.event) {

@@ -26,10 +26,10 @@ function fixture(extra: Record<string, string | undefined> = {}) {
     };
     return { env, events, signals, reads, policy, effects, options, failure, supplied: () => supplied };
 }
-const featureReads = ['TUNEX_CONTROL_PORT', 'TUNEX_PROBE_EXECUTION', 'TUNEX_PROBE_SCHEDULE', 'TUNEX_PROBE_INGRESS', 'TUNEX_PROBE_SERVICES'];
+const featureReads = ['TUNEX_CONTROL_PORT', 'TUNEX_PROBE_EXECUTION', 'TUNEX_PROBE_SCHEDULE', 'TUNEX_PROBE_INGRESS', 'TUNEX_PROBE_SERVICES','TUNEX_PROBE_ECHO','TUNEX_PROBE_PATH_ECHO'];
 
 test('156 structural/public/native bindings and default startup option values preserve identity and order', async () => {
-    assert.equal(runControlStartup, canonical); assert.equal(CONTROL_STARTUP_INTERFACE_VERSION, 1);
+    assert.equal(runControlStartup, canonical); assert.equal(CONTROL_STARTUP_INTERFACE_VERSION, 3);
     assert.equal(nativeControlStartupEffects.defaultPolicy, DEFAULT_POLICY); assert.equal(verifyMultihopRelease, originalRelease);
     const f = fixture(); await runControlStartup(f.effects);
     assert.deepEqual(f.events, [...featureReads, 'NODE_ENV', ...required, 'TUNEX_OPENSSL', 'TUNEX_RELAY_CREDENTIAL_SECONDS',
@@ -39,7 +39,7 @@ test('156 structural/public/native bindings and default startup option values pr
     assert.deepEqual(f.supplied(), { databaseUrl: 'DATABASE_URL', caCert: 'TUNEX_CA_CERT', caKey: 'TUNEX_CA_KEY', serverCert: 'TUNEX_SERVER_CERT',
         serverKey: 'TUNEX_SERVER_KEY', stateDirectory: 'TUNEX_CONTROL_STATE', openssl: 'openssl', relayCredentialSeconds: 86400,
         port: 41001, host: '127.0.0.1', initializeAuthority: false, multihopEnabled: false, probeExecutionEnabled: false,
-        probeScheduleEnabled: false, probeIngressEnabled: false, probeServicesEnabled: false, telemetryEnabled: false,
+        probeScheduleEnabled: false, probeIngressEnabled: false, probeServicesEnabled: false, probeEchoEnabled:false,probePathEchoEnabled:false,telemetryEnabled: false,
         forwardTelemetryEnabled: false, hostTelemetryEnabled: false, probeTelemetryEnabled: false, telemetryRollupsEnabled: false,
         stationAlertsEnabled: false, webhookDeliveryEnabled: false, policy: f.policy });
     assert.equal(f.supplied()!.policy, f.policy);

@@ -138,12 +138,35 @@ export class SharedResourceLimits<Tx> implements RuntimePayloadPolicy<Tx> {
                     await this.shared(tx,scope,node,subject,false);
                 }
             }
-            return this.view(scope,node,subject,await o.store.current(tx,node,subject));
+            const record=await o.store.current(tx,node,subject),view=this.view(scope,node,subject,record);
+            if(o.usage){
+                if(record)view.consumption=await o.usage.consumption(tx,record);
+                const history=await o.store.history(tx,node,subject);
+                validateHistory(history,record,scope,node,subject);
+                const at=o.now(),active=history.find(item=>item.startsAt<=at&&at<item.endsAt);
+                view.activePeriod=active?{revision:active.revision,policy:this.view(scope,node,subject,active).policy!,
+                    consumption:await o.usage.consumption(tx,active)}:null;
+            }
+            return view;
         });
     }
     async limits(tx:Tx,nodeId:string,capabilities:readonly string[],assignments:readonly RuntimeAssignmentValue[],at:number,
         previous:readonly RuntimeResourceLimitBucketValue[]=[]) {
         return new SharedResourceLimitPublicationPolicy(this.options).limits(tx,nodeId,capabilities,assignments,at,previous);
+    }
+    /** Original Station transaction; scope ownership cannot bypass a subject's grant. */
+    async forAlertIn(tx:Tx,actor:string,scope:string,node:string,subject:string,at:number) {
+        this.identifiers(actor,scope,node,subject);
+        if(!nonnegative(at))invalid('Valid resource alert observation time required');
+        const o=this.options;
+        await o.identity.owner(tx,actor,scope);
+        try {await o.identity.scope(tx,subject,scope);await this.shared(tx,scope,node,subject,true);}
+        catch(error){if(error instanceof ControlError&&(error.code==='AUTHORIZATION_DENIED'||error.code==='NOT_FOUND'))return null;throw error;}
+        const head=await o.store.current(tx,node,subject),history=await o.store.history(tx,node,subject);
+        validateHistory(history,head,scope,node,subject);
+        const policy=history.filter(record=>record.startsAt<=at).sort((a,b)=>b.startsAt-a.startsAt)[0];
+        if(!policy)return null;
+        return {policy:{...policy},consumption:o.usage?await o.usage.consumption(tx,policy):null};
     }
 }
 

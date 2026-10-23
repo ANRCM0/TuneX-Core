@@ -1,10 +1,11 @@
 import type { ForwardIntent, ForwardRuntimeStatus, RelayDeploymentStatus } from '../../framework/public.ts';
 
-export const CONTROL_DETAIL_INTERFACE_VERSION=2 as const;
+export const CONTROL_DETAIL_INTERFACE_VERSION=4 as const;
 
 export interface ExecutionCapabilities {
     multihopEnabled:boolean;maxPathNodes:8;executionExtension:1;probeIssuanceEnabled:boolean;
     probeIngressIssuanceEnabled:boolean;probeServicesIssuanceEnabled:boolean;
+    probeEchoIssuanceEnabled?:boolean;probePathEchoIssuanceEnabled?:boolean;
 }
 export interface ForwardDetailView extends ForwardRuntimeStatus {
     desired:{revision:number;spec:ForwardIntent;deleting:boolean;recoverySuspended:boolean};

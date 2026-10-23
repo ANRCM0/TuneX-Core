@@ -11,7 +11,7 @@ export interface NativeProbeHistoryEchoSource {
 
 /** Original retained selection/challenge projection; no live context resolution or admission. */
 export function nativeProbeHistoryEchoInvocation(value:NativeProbeHistoryEchoSource):ProbeEchoInvocation {
-    return {domain:'tunex.probe.echo.invocation.v1',probeVersion:4,measurement:value.measurement as 'tcp-ingress-echo-v1'|'udp-ingress-echo-v1',
+    return {domain:'tunex.probe.echo.invocation.v1',probeVersion:4,measurement:value.measurement as ProbeEchoInvocation['measurement'],
         permitId:value.probeId,binding:value.binding,instanceId:value.instanceId,instanceGeneration:value.instanceGeneration,
         timeoutMs:value.timeoutMs,issuedAt:nativeIsoTime(value.issuedAt),expiresAt:nativeIsoTime(value.expiresAt),
         service:value.service!,nonce:value.echoChallenge!.nonce};

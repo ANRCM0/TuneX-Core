@@ -19,7 +19,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/state"
 )
 
-const InterfaceVersion uint64 = 1
+const InterfaceVersion uint64 = 2
 
 type Paths struct{ Root, KeyPath, Certificate, PrivateKey, Journal string }
 

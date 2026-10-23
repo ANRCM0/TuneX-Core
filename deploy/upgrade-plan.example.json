@@ -5,24 +5,24 @@
     "control": {
       "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "imageDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "profile": "adp3-probe-permits-v1"
+      "profile": "adp3-shared-resource-limits-v1"
     },
     "agent": {
       "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "imageDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "profile": "adp3-multihop-v1"
+      "profile": "adp3-shared-resource-limits-v1"
     }
   },
   "target": {
     "control": {
       "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "imageDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "profile": "adp3-path-bindings-v1"
+      "profile": "adp3-path-sample-alert-v1"
     },
     "agent": {
       "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "imageDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "profile": "adp3-multihop-v1"
+      "profile": "adp3-shared-resource-limits-v1"
     }
   },
   "controlMultihop": false,

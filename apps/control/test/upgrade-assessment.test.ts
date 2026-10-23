@@ -226,8 +226,8 @@ test('plan parsing rejects duplicates, unknown fields, unsafe counters, legacy p
 });
 test('known migration footprints cover tables, multi-column DDL and superseded enums', async () => {
     const catalog = await upgradeSchemaCatalog();
-    assert.equal(catalog.files.length, 41);
-    assert.equal(catalog.files.at(-1)?.name, '0041-shared-resource-payload-limits.sql');
+    assert.equal(catalog.files.length, 46);
+    assert.equal(catalog.files.at(-1)?.name, '0046-recent-path-probe-alert.sql');
     assert.deepEqual(schemaMarkers('0038-probe-plan-json-integers.sql', catalog.files.find(file => file.name === '0038-probe-plan-json-integers.sql')!.sql), []);
     assert.ok(catalog.markers.some(m => m.migration === '0039-product-resource-access.sql' && m.table === 'nodes' && m.column === 'resource_source'));
     assert.ok(catalog.markers.some(m => m.migration === '0039-product-resource-access.sql' && m.table === 'forward_ownership_events' && m.column === undefined));

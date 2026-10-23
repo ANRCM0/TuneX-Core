@@ -57,6 +57,10 @@ TUNEX_AUTHORITY_INITIALIZE=1 npm run control
 浏览器和 Agent 均需信任配置的 CA；远程 Agent 应直接连接 Control 的 HTTPS 服务，
 或通过保留端到端 TLS 的四层转发连接。
 
+容器部署可使用[安装接入向导](docs/development/deployment-setup-v1.md)。在实际部署主机
+运行 `deploy/setup.mjs --role control|agent --phase initial|existing`，复用现有预检并
+读取下一步操作和失败处理建议；计划不执行命令，静态通过不代表服务或业务已验证。
+
 ### 接入 Agent
 
 在控制台“我的机器”中注册私有节点，或由工作空间所有者在“共享资源管理”中创建

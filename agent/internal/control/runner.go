@@ -31,7 +31,7 @@ type Options struct {
 	ProbeExecution                                                        bool
 	ProbeIngress                                                          bool
 	ProbeServices                                                         bool
-	ProbeEcho                                                             bool
+	ProbeEcho, ProbePathEcho                                              bool
 	ImportTransitJournal                                                  string
 	TimeProof, TimeProofKey                                               string
 	Diagnostics                                                           string
@@ -135,7 +135,8 @@ func newRunnerWithEffects(options Options, providers Providers, effects Effects)
 }
 
 func newRunnerWithLocalServices(options Options, providers Providers, effects Effects, local LocalServices) (*Runner, error) {
-	if options.ProbeEcho && (!options.ProbeServices || !options.ProbeIngress || !options.ProbeExecution || !options.ProbeRegistration) {
+	if options.ProbePathEcho && (!options.ProbeEcho || !options.Relay) { return nil, fmt.Errorf("INVALID_CONFIG: Path Echo requires explicit Echo and Relay") }
+    if options.ProbeEcho && (!options.ProbeServices || !options.ProbeIngress || !options.ProbeExecution || !options.ProbeRegistration) {
 		return nil, fmt.Errorf("INVALID_CONFIG: Echo Probe requires explicit services, ingress, execution and registration")
 	}
 	if options.ProbeServices && (!options.ProbeIngress || !options.ProbeExecution || !options.ProbeRegistration) {
@@ -760,5 +761,6 @@ func (runner *Runner) report(ctx context.Context) error {
 	}
 	runner.mutex.Unlock()
 	runner.pending = nil
+	runner.sendResourceUsage(ctx, sent)
 	return nil
 }

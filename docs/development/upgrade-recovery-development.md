@@ -7,9 +7,25 @@ boundaries and native bindings are documented in
 [recovery workflow](../architecture/recovery-owner-workflow-v1.md).
 This document describes developer invariants and acceptance, not host operations.
 
-## Current Compatibility Inputs
+## P Source Compatibility Inputs
 
-Control's current schema profile is `adp3-probe-echo-v1`, with migration ceiling
+The unverified P successor's complete Control schema profile is
+`adp3-path-sample-alert-v1`, ceiling0046, UpgradeAssessment10. Earlier new P
+profiles have ceilings0042 (account events),0043 (usage projection),0044 (quota
+Station rules),0045 (controlled path Echo); earlier profiles retain their exact
+reader ceilings. Agent runtime/multihop/shared-resource Journal profiles remain
+unchanged. Migrations never imply a safe old reader, and flag opt-out never erases
+new protected or schema state. The example upgrade plan contains placeholder
+identities and must be replaced with actual inspected source/target inputs.
+
+The original backup/restore/maintenance/authority/Journal owners still apply;
+P usage projections and recent sample alerts confer no execution authority. P's
+actual restore, partial-DDL and old-reader acceptance is unexecuted. The following
+paragraphs describe the historical pre-P schema slice, not P's final footprint.
+
+## Historical Compatibility Inputs
+
+The historical Echo-only schema profile is `adp3-probe-echo-v1`, with migration ceiling
 0037 and `0037-probe-echo.sql` as the final marker. The older profiles remain
 explicit refusal/compatibility inputs to tests. Agent Journal compatibility uses
 the existing runtime/multihop profiles; staged Probe Echo v4 is not a Journal

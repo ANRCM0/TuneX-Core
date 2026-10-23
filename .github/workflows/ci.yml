@@ -21,7 +21,7 @@ jobs:
       - name: Verify local certificate fixture tooling
         run: openssl version
       - name: Role-specific deployment preflight regression
-        run: node --test deploy/test/preflight*.test.mjs
+        run: node --test deploy/test/preflight*.test.mjs deploy/test/setup-plan.test.mjs
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -260,7 +260,7 @@ jobs:
         run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
       - name: Shared resource limits original transaction CAS replay history and rollback
         if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
-        run: node --test apps/control/test/shared-resource-limits-mysql-acceptance.test.ts
+        run: node --test apps/control/test/shared-resource-limits-mysql-acceptance.test.ts apps/control/test/account-credentials-mysql-acceptance.test.ts
       - name: Console scoped filters, independent candidates and full-scope overview with SELECT-only MySQL
         if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/console-mysql-acceptance.test.ts

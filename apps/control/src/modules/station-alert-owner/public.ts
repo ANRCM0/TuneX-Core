@@ -1,4 +1,5 @@
-export const STATION_ALERT_MODULE_INTERFACE_VERSION=1 as const;
+export const STATION_ALERT_MODULE_INTERFACE_VERSION=3 as const;
+export { StationResourceFacts } from './resource-facts.ts';
 export { STATION_ALERT_RECOVERY_INTERFACE_VERSION, StationAlertRecovery } from './recovery.ts';
 export { STATION_ALERT_API_INTERFACE_VERSION } from './api.ts';
 export type * from './api.ts';
@@ -10,3 +11,5 @@ export { STATION_ALERT_REASONS, emptyStationAlertState, parseStationAlertConfig,
     evaluateStationAlert, advanceStationAlert } from './values.ts';
 export { stationAlertStorageValues, stationAlertFactValues } from './storage-values.ts';
 export { StationAlerts } from './service.ts';
+
+export { StationPathFacts } from './path-facts.ts';

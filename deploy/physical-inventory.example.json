@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "physicalInventoryReviewed": false,
+  "sourceRevision": "REPLACE_WITH_FROZEN_SOURCE_SHA",
+  "controlURL": "https://control.example:41001/",
+  "ca": "/secure/tunex/control-ca.pem",
+  "tokenEnvironment": "TUNEX_ACCEPTANCE_TOKEN",
+  "scopeId": "reviewed-scope",
+  "forwardId": "reviewed-forward",
+  "images": {
+    "control": "ghcr.io/anrcm0/tunex-control@sha256:REPLACE_WITH_VERIFIED_DIGEST",
+    "agent": "ghcr.io/anrcm0/tunex-agent@sha256:REPLACE_WITH_VERIFIED_DIGEST"
+  },
+  "agentSHA256": "REPLACE_WITH_VERIFIED_AGENT_BINARY_DIGEST",
+  "fixtureSHA256": "REPLACE_WITH_VERIFIED_FIXTURE_DIGEST",
+  "fixture": "/opt/tunex/acceptance/traffic-fixture",
+  "hosts": [
+    {"nodeId":"ingress-node","sshAlias":"tunex-ingress","machineIdSHA256":"REPLACE_WITH_REVIEWED_HOST_ID_DIGEST","agentBinary":"/opt/tunex/tunex-agent","journal":"/var/lib/tunex-agent/journal.json","diagnostics":"/var/lib/tunex-agent/diagnostics.json"},
+    {"nodeId":"transit-node","sshAlias":"tunex-transit","machineIdSHA256":"REPLACE_WITH_REVIEWED_HOST_ID_DIGEST","agentBinary":"/opt/tunex/tunex-agent","journal":"/var/lib/tunex-agent/journal.json","diagnostics":"/var/lib/tunex-agent/diagnostics.json"},
+    {"nodeId":"egress-node","sshAlias":"tunex-egress","machineIdSHA256":"REPLACE_WITH_REVIEWED_HOST_ID_DIGEST","agentBinary":"/opt/tunex/tunex-agent","journal":"/var/lib/tunex-agent/journal.json","diagnostics":"/var/lib/tunex-agent/diagnostics.json"}
+  ]
+}

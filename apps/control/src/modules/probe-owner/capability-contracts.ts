@@ -5,6 +5,7 @@ export interface ForwardProbeIssuanceState {
     readonly enabled: boolean;
     readonly ingressEnabled: boolean;
     readonly servicesEnabled: boolean;
+    readonly echoEnabled?: boolean; readonly pathEchoEnabled?:boolean;
 }
 
 export interface ForwardProbeCapabilityReason {
@@ -28,7 +29,7 @@ export type ForwardProbeCapabilityItem = ProbeMeasurementDescription & {
 };
 
 export interface ForwardProbeCapabilityView {
-    readonly capabilityVersion: 1;
+    readonly capabilityVersion: 1|2;
     readonly scopeId: string;
     readonly forwardId: string;
     readonly forwardRevision: number;
