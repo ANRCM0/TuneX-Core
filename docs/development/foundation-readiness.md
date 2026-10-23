@@ -31,7 +31,20 @@ rationale and obligations. Their planned/unexecuted wording is superseded for
 this accepted revision by the assertion map and execution record, and remains
 applicable to any later source change until separately verified.
 
-### N Product Successor (Source Development, 2026-10-21)
+### N Product Successor (Configured Verification And Merge, 2026-10-23)
+
+N completed its configured final-candidate verification at `8738a97` and was
+merged through PR #114 as `9a5f719` on 2026-10-23. Their source trees are identical.
+The final-candidate baseline `39962890329` and container run `39962890327` passed.
+Merged-main baseline `39968900422` (all 10 jobs) and container run `39968900303`
+also passed. Their exact-source conclusions and skip-name reconciliation are in
+[N verification](product-verification-n-2026-10-21.md). This
+successor does not relabel B's 220 assertions or open independent-host, load,
+installation, image, release or production-readiness gates.
+
+The following source-development and fourth-candidate paragraphs preserve their
+dated snapshots. Their earlier source-only/no-merge wording does not override
+the later verification and separately authorized merge recorded above.
 
 The [product baseline](product-requirements-and-gap-analysis-2026-10-21.md)
 records the confirmed multi-user forwarding journeys, PR-01–14 source gaps,

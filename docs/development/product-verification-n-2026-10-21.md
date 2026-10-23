@@ -1,10 +1,88 @@
 # N Product Verification - 2026-10-21
 
-This document preserves the source-authoring and run-by-run evidence snapshots.
-Terminal outcomes after its latest documentation revision are recorded in draft
-PR #114's Verification section and the checks for that exact head. Pending wording
-in a dated repair section describes its authoring point; it is not a substitute
-for the later run's recorded source, merge checkout and job conclusions.
+This document records the final candidate and merged-main identities as well as
+the source-authoring and run-by-run evidence snapshots. PR #114 was merged on
+2026-10-23. Pending wording in a dated repair section describes its authoring
+point; the delivery section below records the later exact-source conclusions.
+
+## October 23 Delivery And Main Verification
+
+The human separately authorized submitting and merging PR #114, then requested
+closure of main CI and the status documents. PR #114 was squash-merged at
+2026-10-23 14:21:14 UTC (22:21:14 Asia/Shanghai). This documentation follow-up
+does not change production, contracts, schemas, migrations, tests or workflows.
+
+| Identity | Verified value |
+| --- | --- |
+| Final saved PR head | `8738a97c5df556b3929f8f49b969f1780ebf5edd` |
+| Actual PR test merge checkout | `c8e42bc4a819fd4308bc3bf320fb267cbc383117` |
+| PR base | `bc8507b765a84ef6a9607df8c2ea8531a71a71c9` |
+| Final PR baseline | `39962890329`, success, all 10 jobs and acceptance steps passed |
+| Final PR container packaging | `39962890327`, success |
+| Squash-merged main source | `9a5f7193554fb9f58b750358fc82fe0386ea6467` |
+| Identical PR-head, PR test merge and merged-main tree | `c2a83008a82e08d69121a3d13a4374b0fd647fb2` |
+| Main-push baseline | `39968900422`, success, all 10 jobs and every acceptance step passed |
+| Main-push container packaging | `39968900303`, success, all steps passed |
+| Automatically triggered main image publication | `39968900519`, cancelled; image-push and moving-alias steps skipped |
+
+The final PR candidate's TypeScript suite reported 2,256 tests with 2,109 passes, zero
+failures and 147 conditional database skips. All 147 skipped names were matched
+to passing tests in that same run's MySQL job; its MySQL invocations totalled
+411 passes, zero failures and zero skips. Web reported 206 passes without skips.
+Configured static/generated checks, public examples, Linux Go/build/vet/race,
+Windows Agent, unsupported-platform refusal, Probe browser, Relay and 3/4/8-Node
+browser/namespace acceptance also passed. These are final-candidate results,
+separate from the main-push run below.
+
+The merged-main Relay artifact independently records source `9a5f719`, a clean
+checkout, `peerRestarted:true`, egress session 1 -> 2, actual TCP/UDP recovery,
+and verified network/process cleanup. This exercises the formerly intermittent
+fail-closed recovery branch using real issued lease expiry, retaining the
+original state/Journal. The two preceding live renewal windows still execute
+without restarting either Agent. The fixture does not replace clocks,
+certificate fields, expiry values or production authorization behavior.
+
+Main contracts and phase1 logs independently identify checkout `9a5f719`.
+Main TypeScript reports 2,256 tests, 2,109 passes, zero failures and 147
+conditional database skips; Web reports 206 passes without skips. The main
+phase1 job's 32 test invocations total 411 passes, zero failures, cancellations
+or skips. All 147 skipped contract names match passing test names in that same
+main MySQL job; zero names remain unmatched.
+
+Main baseline completed successfully at 2026-10-23 14:55:19 UTC (22:55:19
+Asia/Shanghai). Every step in all ten jobs concluded success; no acceptance
+step was skipped. The jobs are contracts, phase1, Windows Agent,
+unsupported-platform, deployment-tools, Probe workflow, Relay isolation and
+multihop (3), (4), (8). The container job independently passed all its steps.
+The 8-Node job completed both its Chromium lifecycle and namespace scenarios:
+real bidirectional payload, renewal, Control restart, interior partition/loss/
+delay, restart of each intermediate, old Report replay, grant withdrawal and
+offline-lease deletion/resource cleanup. Its complete job duration was 34
+minutes, within the 45-minute execution budget; this is not load/latency
+acceptance. The job logs identify the same main checkout.
+
+Decision: N is verified at merged-main source `9a5f719` within the configured
+Actions scope. This closes the authorized main verification after PR #114,
+separately from the already completed final-candidate verification. The
+packaging pass does not publish an image; the automatic image workflow was
+cancelled while waiting for main CI, before its login/build/push steps. No image
+or release was published.
+
+This closeout changes only Markdown status/evidence documents. The existing
+984-file boundary/documentation-link checker and `git diff --check` passed for
+the follow-up. Its documentation commit intentionally uses `[skip ci]` to avoid
+duplicating functional jobs for unchanged executable/contracts/test/workflow
+source. That deliberate skip is not an acceptance result for the documentation
+SHA; functional evidence remains bound to the source identities above. Future
+implementation changes require their own accurate-source verification.
+
+Independent physical hosts, long-run/load, installation usability, standalone
+Responder delivery and production readiness retain separate gates. Same-runner
+namespaces do not satisfy independent-host acceptance. Online payload
+consumption/remaining balances stay unavailable; Relay/multi-hop business-path
+active probing and cross-Scope sharing are outside the implemented contract.
+No historical B/C result or documentation commit is substituted for a tested
+N source identity.
 
 ## Authorization And Source
 
@@ -27,8 +105,8 @@ verification scope on October 21; its evidence was reconciled on October 23.
 Historical B/C/D passes are not reused for N.
 
 The October 23 documentation-head rerun exposed a Relay recovery fixture failure
-described below. Its repair requires its own saved-source Actions conclusion;
-the fourth candidate's earlier pass is retained with its original identity.
+described below. Its repair was subsequently verified on the final candidate
+above; the fourth candidate's earlier pass retains its original identity.
 
 ## Local Checks
 
@@ -314,7 +392,7 @@ disposable MySQL phase1 job. It must run with `TUNEX_TEST_DATABASE_URL`; a skip
 without a database is not SQL evidence. Existing TypeScript/Web/Go globs include
 the new N consumers and payload cases.
 
-The fourth candidate supplies configured evidence for:
+The final candidate supplies configured evidence for:
 
 - Complete owner/contract, Web, Go, race, unsupported-platform and public example
   tests, with exact job/step conclusions and conditional skips reconciled.
@@ -326,8 +404,9 @@ The fourth candidate supplies configured evidence for:
   through their existing Actions jobs; independent physical hosts, long-run/load,
   actual installation, image publication and release remain separate gates.
 
-No local functional/MySQL/network/browser/container tests, merge, image
-publication or release has occurred in this task. Independent physical hosts,
+No local functional/MySQL/network/browser/container tests were run in this N
+verification task. PR #114 was later merged under the separate October 23
+authorization above; no image or release was published. Independent physical hosts,
 long-run/load, actual installation and operational deployment remain unverified.
 Online payload consumption/remaining balance remains unavailable as declared;
 manual enrollment guidance is not an installer acceptance. Container packaging

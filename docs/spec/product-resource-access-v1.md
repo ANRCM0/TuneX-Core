@@ -1,8 +1,11 @@
 # Product Resource Access v1
 
-Date: 2026-10-21. Status: source candidate, implemented-unverified.
-This describes FR-0028 through FR-0030 in the current N source stage, not the
-frozen B acceptance. All examples are documentation; no request was executed.
+Date: 2026-10-21; verification status updated 2026-10-23.
+FR-0028 through FR-0030 passed the configured N candidate Actions scope and were
+merged through PR #114 at `9a5f719`. Exact candidate/main identities, job results
+and remaining gates are recorded in [N verification](../development/product-verification-n-2026-10-21.md).
+This does not change the historical frozen B acceptance. Examples below are
+documentation, not evidence that these particular requests were executed.
 
 ## Ownership, Use And Governance
 
@@ -121,13 +124,15 @@ Control profiles do not change older ceilings or Agent profiles.
 The [N ledger](../development/product-development-stage-n-2026-10-21.md) maps
 PR-01 through PR-14 and PA-01 through PA-12. Public Node authority5, Runtime
 Relay7/resource2/exclusive2, Node module3/management2/usage1 and the caller-aware
-read successors have authored consumers only. Old constructors and aliases must
-bind explicit policy/access providers. Accurate-source Actions acceptance,
-interrupted MySQL migration, parallel grant/reservation, privacy, browser flows,
-independent hosts, release and operational readiness have not been established.
+read successors have migrated consumers exercised in the configured N Actions
+scope. Old constructors and aliases must bind explicit policy/access providers.
+The verification record binds interrupted MySQL migration, concurrent
+grant/reservation, privacy and browser-flow results to their exact tested source;
+independent hosts, release and operational readiness remain separate gates.
 Bandwidth/byte accounting was subsequently confirmed by the human. FR-0032 adds
 migration 0041 and explicit shared-resource Control/Agent profiles without
 changing older ceilings. Its [payload specification](shared-resource-payload-limits-v1.md)
 describes per-user/Node bidirectional payload, explicit periods, the original
-Journal's conservative precharge and unavailable online balances. It is an
-unverified source successor, not evidence that port or payload limits passed.
+Journal's conservative precharge and unavailable online balances. It is a
+N successor whose port/payload cases have configured Actions evidence in that
+record; this specification itself is not runtime evidence.
