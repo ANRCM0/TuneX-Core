@@ -1,5 +1,11 @@
 # N Product Verification - 2026-10-21
 
+This document preserves the source-authoring and run-by-run evidence snapshots.
+Terminal outcomes after its latest documentation revision are recorded in draft
+PR #114's Verification section and the checks for that exact head. Pending wording
+in a dated repair section describes its authoring point; it is not a substitute
+for the later run's recorded source, merge checkout and job conclusions.
+
 ## Authorization And Source
 
 The human authorized testing with "好，开始进行测试" after the N source handoff.
