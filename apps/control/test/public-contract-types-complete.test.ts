@@ -47,6 +47,7 @@ import type * as Notification from '../src/modules/notification-owner/public.ts'
 import type * as ProbeHistory from '../src/modules/probe-history-owner/public.ts';
 import type * as ProbePlans from '../src/modules/probe-plan-owner/public.ts';
 import type * as ObservationServices from '../src/modules/observation-service-owner/public.ts';
+import type * as ResourceLimits from '../src/modules/resource-limit-owner/public.ts';
 import { createApp, createControlApp } from '../src/api/public.ts';
 import { createApp as oldCreateApp, createControlApp as oldCreateControlApp } from '../src/api/app.ts';
 
@@ -66,16 +67,16 @@ type ExpectedFacts = {
     readonly egressPolicyRevision: number; readonly allowedDestinationCidrs: readonly string[]; readonly allowMetadataTargets: boolean;
 };
 type ExpectedNodePolicy = Omit<ExpectedFacts, 'nodeId' | 'scopeId' | 'capabilities'>;
-type ExpectedNodeCommand = { readonly kind: 'policy'; readonly expectedRevision: number; readonly policy: ExpectedNodePolicy } | { readonly kind: 'revoke' };
-type ExpectedNodeChange = { readonly nodeId: string; readonly kind: 'policy' | 'revoke'; readonly facts: ExpectedFacts };
+type ExpectedNodeCommand = { readonly kind: 'policy'; readonly expectedRevision: number; readonly policy: ExpectedNodePolicy } | { readonly kind: 'revoke' } | { readonly kind:'classify'; readonly expectedRevision:number; readonly source:'private'|'admin-shared'; readonly ownerActorId:string|null; readonly legacyGrants:'discard'|'retain' };
+type ExpectedNodeChange = { readonly nodeId: string; readonly kind: 'policy' | 'revoke' | 'classify'; readonly facts: ExpectedFacts; readonly resource?: Framework.NodeResourceClaim };
 type ExpectedNodeAudit = { policyRevision: number; operationIds: string[]; latestAuthorizationUntil: number | null };
-type ExpectedGrantState = { readonly nodeId: string; readonly actorId: string; readonly revision: number; readonly allowed: boolean; readonly changed: boolean };
+type ExpectedGrantState = { readonly nodeId: string; readonly actorId: string; readonly revision: number; readonly allowed: boolean; readonly changed: boolean; readonly allowedRoles:readonly Framework.NodeUseRole[]|null; readonly portLimits:Node.NodeGrantPortLimits|null };
 type ExpectedManagementWriter = {
     applyManagement(tx: Tx, actor: string, scopeId: string, nodeId: string, command: ExpectedNodeCommand): Promise<ExpectedNodeChange>;
     audit(tx: Tx, nodeId: string, actor: string, kind: 'policy_update' | 'node_revocation', details: ExpectedNodeAudit): Promise<void>;
 };
 type ExpectedGrantWriter = {
-    changeGrant(tx: Tx, owner: string, scopeId: string, nodeId: string, subject: string, expectedRevision: number, allowed: boolean): Promise<ExpectedGrantState>;
+    changeGrant(tx: Tx, owner: string, scopeId: string, nodeId: string, subject: string, expectedRevision: number, allowed: boolean, allowedRoles?:readonly Framework.NodeUseRole[]|null, portLimits?:Node.NodeGrantPortLimits|null): Promise<ExpectedGrantState>;
 };
 export type NodeManagementGrantCompleteTypes117 = [
     Same<Equal<Framework.AuthorizedNodeFacts, ExpectedFacts>>, Same<Equal<NodeLeaf.AuthorizedNodeFacts, ExpectedFacts>>,
@@ -94,7 +95,7 @@ export type NodeManagementGrantCompleteTypes117 = [
     Same<Equal<MutableKeys<Node.NodeGrantState>, never>>,
     Same<Equal<RequiredKeys<Node.NodeManagementAudit>, 'policyRevision' | 'operationIds' | 'latestAuthorizationUntil'>>,
     Same<Equal<Parameters<Node.NodeManagementWriter<Tx>['audit']>[3], 'policy_update' | 'node_revocation'>>,
-    Same<Equal<Node.NodeChangeResponse, { status: 202; body: { nodeId: string; policyRevision: number; operationIds: string[]; latestAuthorizationUntil: string | null } }>>,
+    Same<Equal<Node.NodeChangeResponse, { status: 202; body: { nodeId: string; policyRevision: number; resourceRevision?:number; operationIds: string[]; latestAuthorizationUntil: string | null } }>>,
     Same<Equal<Parameters<Node.NodeManagementApi['change']>, [actorId: string, scopeId: string, nodeId: string, key: string | undefined, input: ExpectedNodeCommand]>>,
     Same<Equal<ReturnType<Node.NodeManagementApi['change']>, Promise<Node.NodeChangeResponse>>>,
 ];
@@ -140,7 +141,7 @@ type ExpectedTombstone = {
 };
 type ExpectedSnapshot<Assignment = ExpectedAssignment> = {
     nodeId: string; sessionEpoch: number; snapshotGeneration: number; complete: true; issuedAt: string; validUntil: string;
-    snapshotDigest: string; assignments: Assignment[]; tombstones: ExpectedTombstone[];
+    snapshotDigest: string; assignments: Assignment[]; tombstones: ExpectedTombstone[]; resourceLimits?: Values.RuntimeResourceLimitsValue;
 };
 type ExpectedHello = { nodeId: string; bootId: string; agentBuild: string; capabilities: string[]; lastStoredSnapshotGeneration: number };
 type ExpectedHelloResponse = { nodeId: string; bootId: string; sessionEpoch: number; serverTime: string; policy: Framework.Policy };
@@ -174,7 +175,7 @@ export type ExecutionValuesCompleteTypes127 = [
     Same<Equal<MutableKeys<Values.RuntimeAssignmentValue>, keyof ExpectedAssignment>>,
     Same<Equal<RequiredKeys<Values.RuntimeAssignmentValue>, keyof ExpectedAssignment>>,
     Same<Equal<MutableKeys<Values.RuntimeSnapshotValue>, keyof ExpectedSnapshot>>,
-    Same<Equal<RequiredKeys<Values.RuntimeSnapshotValue>, keyof ExpectedSnapshot>>,
+    Same<Equal<RequiredKeys<Values.RuntimeSnapshotValue>, Exclude<keyof ExpectedSnapshot,'resourceLimits'>>>,
     Same<Equal<MutableKeys<Values.RuntimeAssignmentSourceDriverValue>, never>>,
     Same<Equal<Values.RuntimeAssignmentFor['driver'], ExpectedDriver>>,
     Same<Equal<Extract<keyof Values.RuntimeAssignmentFor['driver'], 'schemaVersion' | 'config'>, never>>,
@@ -186,7 +187,7 @@ export type ExecutionValuesCompleteTypes127 = [
     Same<Equal<Flat<Runtime.RuntimeAssignment>, ExpectedAssignment<ExpectedNativeDriver>>>,
     Same<Equal<Runtime.RuntimeTombstone, ExpectedTombstone>>,
     Same<Equal<Flat<Runtime.RuntimeSnapshot>, Flat<ExpectedSnapshot<Runtime.RuntimeAssignment> & { protocolVersion: 3; executionExtension?: 1 }>>>,
-    Same<Equal<OptionalKeys<Runtime.RuntimeSnapshot>, 'executionExtension'>>,
+    Same<Equal<OptionalKeys<Runtime.RuntimeSnapshot>, 'executionExtension' | 'resourceLimits'>>,
     Same<Equal<Runtime.RuntimeMessages['HelloRequest'], ExpectedHello & { protocolVersion: 3 }>>,
     Same<Equal<Runtime.RuntimeMessages['HelloResponse'], ExpectedHelloResponse & { protocolVersion: 3 }>>,
     Same<Equal<Runtime.RuntimeMessages['ReportRequest'], ExpectedReport & { protocolVersion: 3 }>>,
@@ -347,6 +348,7 @@ type ExpectedEnvironment = { Bindings: HttpBindings; Variables: { actor: string;
 type ExpectedControlApi = Forward.ForwardCommandApi & RelayPlan.RelayPlanApi & {
     readonly changeMember: Identity.AccessCommandApi['changeMember']; readonly changeNodeGrant: Identity.AccessCommandApi['changeNodeGrant'];
     readonly changeNode: Node.NodeManagementApi['change']; readonly identity: Identity.IdentityQueries; readonly nodes: Node.NodeApi;
+    readonly resourceLimits: ResourceLimits.SharedResourceLimitApi;
     readonly transport: Transport.TransportApi; readonly relayEndpoints: Endpoint.RelayEndpointApi;
     readonly details: ControlQueries.ControlDetailApi; readonly queries: ConsoleQueries.ConsoleQueryApi; readonly nativeDrivers: NativeDriver.NativeDriverApi;
     readonly transportQueries: Transport.TransportQueryApi; readonly tunnelQueries: TunnelQueries.TunnelQueryApi;
@@ -355,7 +357,7 @@ type ExpectedControlApi = Forward.ForwardCommandApi & RelayPlan.RelayPlanApi & {
     readonly pathGroups: Path.PathGroupApi; readonly pathPublications: Path.PathPublicationApi;
     readonly ingressGroups: Ingress.IngressGroupApi; readonly ingressDeployments: Ingress.IngressDeploymentApi; readonly ingressMigrations: Ingress.IngressMigrationApi;
     readonly observations: NodeObservations.NodeObservationApi; readonly profileGrants: Transport.TransportGrantApi;
-    readonly probePlans: Probe.ForwardProbePlanApi; readonly probes: Probe.ForwardProbeApi; readonly probeNegotiation: Probe.ProbeNegotiationApi;
+    readonly probeCapabilities: Probe.ForwardProbeCapabilitiesApi; readonly probePlans: Probe.ForwardProbePlanApi; readonly probes: Probe.ForwardProbeApi; readonly probeNegotiation: Probe.ProbeNegotiationApi;
     readonly probeRegistry: Probe.ProbeInstanceApi; readonly probeClaims: Probe.ProbeClaimApi; readonly probeDelivery: Probe.ProbeDeliveryApi;
     readonly probeResults: Probe.ProbeResultApi; readonly probeTypeRegistry: Probe.ProbeTypeRegistryApi; readonly probeTypes: Probe.ProbeTypesApi;
     readonly probeServiceRegistry: Probe.ProbeServiceRegistryApi; readonly probeServices: Probe.ProbeServicesApi;

@@ -6,7 +6,7 @@ import { pageWindow as consolePage } from '../../framework/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
 import type { IngressGroupResolver } from './contracts.ts';
 import type { IngressDeploymentApi, IngressDeploymentCreated as Created, IngressDeploymentActed as Acted, IngressDeploymentCancelled as Cancelled } from './deployment-api.ts';
-import type { IdempotentRequests, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { IdempotentRequests, ResourceReadAccess, ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
 import { INGRESS_LIMITS, parseIngressInput, parseIngressPlan } from './values.ts';
 import { parsePublicationState, PATH_PUBLICATION_REJECTIONS, publicationHash } from '../path-owner/public.ts';
 import type { IngressAttempt, IngressDeploymentHead, IngressDeploymentInput, IngressDeploymentRecord, IngressDeploymentStore, IngressForwardPort, IngressPlan, IngressRemovalResult } from './contracts.ts';
@@ -83,8 +83,11 @@ export class IngressDeployments<Tx> implements IngressDeploymentApi {
     private readonly forwards: IngressForwardPort<Tx>;
     private readonly clock: () => number;
     private readonly newId: () => string;
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, requests: IdempotentRequests<Tx>, store: IngressDeploymentStore<Tx>,
+    private readonly access:ResourceReadAccess<Tx>;
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, access: ResourceReadAccess<Tx>, requests: IdempotentRequests<Tx>, store: IngressDeploymentStore<Tx>,
         groups: Pick<IngressGroupResolver<Tx>,'resolveIn'>, forwards: IngressForwardPort<Tx>, clock: () => number = nativeWallClockSource(), newId: () => string = randomUUID) {
+        this.access=access;
+
         this.db = db; this.auth = auth; this.requests = requests; this.store = store; this.groups = groups; this.forwards = forwards; this.clock = clock; this.newId = newId;
     }
     private now() { const at = this.clock(); if (!time(at)) corrupt(); return at; }
@@ -133,7 +136,8 @@ export class IngressDeployments<Tx> implements IngressDeploymentApi {
         const paging = Object.freeze(consolePage(input.page, input.limit)), groupId = input.groupId;
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
-            const page = await this.store.list(tx, scope, paging, groupId);
+            const principal = await this.access.principal(tx, actor, scope);
+            const page = await this.store.list(tx, scope, principal, paging, groupId);
             if (!Number.isSafeInteger(page.total) || page.total < 0 || page.total > INGRESS_LIMITS.batchesPerScope || !Array.isArray(page.items) || page.items.length > paging.limit || new Set(page.items.map(item => item.batchId)).size !== page.items.length) corrupt();
             return deepFreeze({ ...paging, total: page.total, items: page.items.map(item => ({ ...checkedHead(item), createdAt: nativeIsoTime(item.createdAt) })), ...flags });
         });
@@ -146,6 +150,7 @@ export class IngressDeployments<Tx> implements IngressDeploymentApi {
         identity(actor, scope); const ref = parseIngressOriginRef(input);
         if (ref.kind !== 'deployment' || ref.phase !== 'apply') invalid('Accepted creation origin required');
         await this.auth.scope(tx, actor, scope);
+        await this.access.owned(tx, actor, scope, 'ingress-deployment', ref.batchId);
         const record = await this.read(tx, scope, ref.batchId);
         if (record.head.recoveryInvalidated) throw new ControlError('RECOVERY_REPLAY_REQUIRES_REVIEW', 409, 'Restored creation origin cannot authorize migration');
         const item = record.plan.items[ref.position - 1], created = record.attempts.find(attempt => attempt.position === ref.position && attempt.kind === 'create');
@@ -157,6 +162,7 @@ export class IngressDeployments<Tx> implements IngressDeploymentApi {
         identity(actor, scope, id);
         return this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scope);
+            await this.access.owned(tx, actor, scope, 'ingress-deployment', id, true);
             const record = await this.read(tx, scope, id), references = record.attempts.flatMap(item => item.outcome.accepted ? [item.outcome.result.accepted.body] : []);
             const ids = [...new Set(references.map(item => item.operationId!))], operations = ids.length ? await this.store.operations(tx, scope, ids) : [];
             if (operations.length > ids.length || new Set(operations.map(item => item.operationId)).size !== operations.length || operations.some(item =>

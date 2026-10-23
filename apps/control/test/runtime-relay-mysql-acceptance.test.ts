@@ -5,7 +5,7 @@ import { createConnection } from 'mysql2/promise';
 import { DEFAULT_POLICY } from '@tunex/contracts/shared';
 import type { RuntimeMessages } from '@tunex/contracts/runtime';
 import { RuntimeRelayHost } from '../src/framework/public.ts';
-import { NodeService } from '../src/modules/node-owner/public.ts';
+import { NodeService, NodePortLimitPolicy } from '../src/modules/node-owner/public.ts';
 import { Identity, newToken } from '../src/modules/identity.ts';
 import { Forwarding } from '../src/modules/forwarding.ts';
 import { Transport } from '../src/modules/transport.ts';
@@ -17,7 +17,7 @@ import { nativeNodeSecrets } from '../src/infrastructure/identity-secrets.ts';
 import { MySqlNodeAuthorityStore } from '../src/infrastructure/mysql-node-authority.ts';
 import { MySqlTransportProfileStore, MySqlRelayEndpointStore } from '../src/infrastructure/mysql-relay-configuration.ts';
 import { MySqlRelayDeploymentStore, MySqlRelayObservations } from '../src/infrastructure/mysql-runtime-relay.ts';
-import { createMySqlRuntimeResources } from '../src/infrastructure/mysql-runtime-resources.ts';
+import { createMySqlRuntimeResources, MySqlRuntimeResourceStore } from '../src/infrastructure/mysql-runtime-resources.ts';
 import { MySqlUnitOfWork, rows, write } from '../src/infrastructure/mysql.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
 import { multihopFixture } from './fixtures/multihop.ts';
@@ -39,19 +39,19 @@ async function fixture(db:MySqlUnitOfWork){
     const plan=nativeRelayCompiler.multihopPlan(input),identity=new Identity(db);await identity.bootstrap(input.forward.scopeId,actor,newToken());
     await db.transaction(async tx=>{
         for(const [index,n]of input.nodes.entries()){
-            await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',[n.facts.nodeId,input.forward.scopeId,String(index+1).repeat(64),state.now+3600000,n.credentialUntil,JSON.stringify(n.facts)]);
-            await write(tx,'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[n.facts.nodeId,actor]);
+            await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,?,?,?)',[n.facts.nodeId,input.forward.scopeId,String(index+1).repeat(64),state.now+3600000,n.credentialUntil,JSON.stringify(n.facts),'private',actor,1]);
+            await write(tx,'INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,NULL,NULL)',[n.facts.nodeId,actor]);
             await write(tx,'INSERT INTO runtime_nodes(node_id,session_epoch,boot_id) VALUES(?,?,?)',[n.facts.nodeId,n.sessionEpoch,'boot-'+n.sessionEpoch]);
             await write(tx,'INSERT INTO node_boots(node_id,boot_id,session_epoch) VALUES(?,?,?)',[n.facts.nodeId,'boot-'+n.sessionEpoch,n.sessionEpoch]);
             await write(tx,'INSERT INTO node_relay_credentials(fingerprint,node_id,issued_at,valid_until,certificate) VALUES(?,?,?,?,?)',[n.peers[0]!.fingerprint.slice(7),n.facts.nodeId,state.now,n.peers[0]!.validUntil,'original synthetic database certificate']);
         }
         const profileStore=new MySqlTransportProfileStore();await profileStore.ensureProfile(tx,input.profile.profileId,input.forward.scopeId);await profileStore.publishRevision(tx,input.profile.profileId,1,JSON.stringify(input.profile.config),input.profile.configDigest,actor,state.now);await profileStore.setCurrentRevision(tx,input.profile.profileId,1);await profileStore.insertGrant(tx,input.profile.profileId,actor);
         const endpointStore=new MySqlRelayEndpointStore();for(const e of input.endpoints)await endpointStore.save(tx,e.nodeId,e.revision,JSON.stringify(e.config),actor,state.now);
-        await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES(?,?,?,?,?)',[input.forward.id,input.forward.scopeId,1,JSON.stringify(input.forward.spec),actor]);
+        await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor,owner_actor_id) VALUES(?,?,?,?,?,?)',[input.forward.id,input.forward.scopeId,1,JSON.stringify(input.forward.spec),actor,actor]);
         await new MySqlRelayDeploymentStore().insertMultihop(tx,input.forward,9,plan,state.now,state.now);
     });
-    const resources=createMySqlRuntimeResources(),nodes=new NodeService({db,identity,store:new MySqlNodeAuthorityStore(),resources,codec:nativeNodeCodec,secrets:nativeNodeSecrets,signer:{},machine:{},overlapSeconds:120,relayCredentialSeconds:86400,now:()=>state.now} as never);
-    const forwarding=new Forwarding(),ledger=new RuntimeLedger(DEFAULT_POLICY,undefined,{merge:async(_tx,_context,direct)=>[...direct]}),transport=new Transport(db,identity,{} as never,forwarding),endpoints=new RelayEndpoints(db,identity,nodes,{} as never,forwarding);
+    const nodeStore=new MySqlNodeAuthorityStore(),portLimits=new NodePortLimitPolicy(nodeStore,new MySqlRuntimeResourceStore()),resources=createMySqlRuntimeResources(portLimits),nodes=new NodeService({db,identity,store:nodeStore,resources,portLimits,codec:nativeNodeCodec,secrets:nativeNodeSecrets,signer:{},machine:{},overlapSeconds:120,relayCredentialSeconds:86400,now:()=>state.now} as never);
+    const forwarding=new Forwarding(),ledger=new RuntimeLedger(DEFAULT_POLICY,undefined,{merge:async(_tx,_context,direct)=>[...direct]},resources),transport=new Transport(db,identity,{} as never,forwarding),endpoints=new RelayEndpoints(db,identity,nodes,{} as never,forwarding);
     const relay=new RuntimeRelayHost({nodes,forwards:forwarding,ledger,transport,endpoints,store:new MySqlRelayDeploymentStore(),observations:new MySqlRelayObservations(),compiler:nativeRelayCompiler,policy:DEFAULT_POLICY,multihopEnabled:true,now:()=>state.now} as never);
     // Pin only the existing test-instance clock bindings so exact SQL arguments
     // compare across rollback attempts; native default capture has separate tests.
@@ -65,7 +65,7 @@ async function inventory(db:MySqlUnitOfWork){const result:Record<string,unknown>
 
 test('4/11 real canonical MySQL transitive Runtime Hello locks every historical related Node before credential/facts and leaves unrelated Node independently lockable',{skip:!databaseURL},async()=>{
     await withDatabase(async f=>{
-        await f.db.transaction(async tx=>{const facts={...f.input.nodes[0]!.facts,nodeId:'unrelated'};await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',['unrelated',f.input.forward.scopeId,'f'.repeat(64),f.state.now+3600000,f.state.now+3600000,JSON.stringify(facts)]);await write(tx,'INSERT INTO runtime_nodes(node_id) VALUES(?)',['unrelated']);});
+        await f.db.transaction(async tx=>{const facts={...f.input.nodes[0]!.facts,nodeId:'unrelated'};await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,?,?,?)',['unrelated',f.input.forward.scopeId,'f'.repeat(64),f.state.now+3600000,f.state.now+3600000,JSON.stringify(facts),'private',f.actor,1]);await write(tx,'INSERT INTO runtime_nodes(node_id) VALUES(?)',['unrelated']);});
         let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;}),locked=new Promise<void>(resolve=>{entered=resolve;}),trace:Statement[]=[];
         const facade={pool:f.db.pool,transaction:<T>(run:(tx:Transaction)=>Promise<T>)=>f.db.transaction(tx=>run(traced(tx,async(sql,args)=>{trace.push({sql,args});if(sql==='SELECT * FROM runtime_nodes WHERE node_id=? FOR UPDATE'&&args[0]==='node-3'){entered();await gate;}})))} as unknown as MySqlUnitOfWork;
         const hello:RuntimeMessages['HelloRequest']={protocolVersion:3,nodeId:'node-2',bootId:'boot-2',agentBuild:'test',capabilities:[...f.input.nodes[1]!.facts.capabilities],lastStoredSnapshotGeneration:0};

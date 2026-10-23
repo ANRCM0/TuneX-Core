@@ -1,3 +1,4 @@
+import type { ReadPrincipal } from '../framework/public.ts';
 import { TransportReferenceReadModels } from '../application/management-read-models.ts';
 import { nativeReadProjectionValues } from '../compatibility/public.ts';
 import { MySqlProfileReferenceReadStore } from './mysql-management-read.ts';
@@ -10,5 +11,5 @@ const reader=new TransportReferenceReadModels(new MySqlProfileReferenceReadStore
 /** Stateless compatibility methods; no SQL, projection or private class state is copied. */
 export class MySqlTransportReader implements TransportReferenceReader<Transaction> {
     async profile(tx:Transaction,scope:string,profile:string) {return reader.profile(tx,scope,profile);}
-    async references(tx:Transaction,scope:string,profile:string,paging:ConsolePaging,revision?:number) {return reader.references(tx,scope,profile,paging,revision);}
+    async references(tx:Transaction,scope:string,principal:ReadPrincipal,profile:string,paging:ConsolePaging,revision?:number) {return reader.references(tx,scope,principal,profile,paging,revision);}
 }

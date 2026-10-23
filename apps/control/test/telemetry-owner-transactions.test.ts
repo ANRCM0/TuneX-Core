@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { ResourceReadAccess } from '../src/framework/public.ts';
 import { ControlError } from '../src/framework/public.ts';
 import { NodeTelemetry, HostTelemetry } from '../src/modules/telemetry-owner/public.ts';
 import type { TelemetryStore, HostTelemetryStore, TelemetryHead, TelemetryNode, TelemetryRollupRecorder, TelemetryObservation } from '../src/modules/telemetry-owner/public.ts';
@@ -24,7 +25,7 @@ function sample(family: Family): NodeTelemetrySample | HostTelemetrySample {
 
 function fixture(family: Family, enabled = true) {
     const tx = Object.freeze({ transaction: Symbol(family) }), trace: string[] = [];
-    const state = { now: at, deny: false, failRollup: false, rows: 0, observations: [] as TelemetryObservation[],
+    const state = { now: at, deny: false, readDenied: false, failRollup: false, rows: 0, observations: [] as TelemetryObservation[],
         current: { nodeId: 'node', scopeId: 'scope', revoked: false, credentialUntil: at + 3600000, sessionEpoch: 1, bootId: 'boot' } as TelemetryNode,
         head: { nodeId: 'node', scopeId: 'scope', sessionEpoch: 1, bootId: 'boot', sampleEpoch: 'a'.repeat(32), lastSequence: 0,
             lastUptimeMs: 0, lastDigest: null, lastReceivedAt: 0, lastCapturedAt: 0, droppedSamples: '0' } as TelemetryHead };
@@ -38,6 +39,15 @@ function fixture(family: Family, enabled = true) {
         check(actual, 'scope'); assert.deepEqual([actor, scope, manage], ['reader', 'scope', undefined]);
         if (state.deny) throw new ControlError('AUTHORIZATION_DENIED', 403, 'denied');
     } };
+    const readAccess: ResourceReadAccess<typeof tx> = {
+        node: async (actual, actor, scope, node, detail) => {
+            check(actual, 'read-access'); assert.deepEqual([actor, scope, node, detail], ['reader', 'scope', 'node', 'host']);
+            if (state.readDenied) throw new ControlError('NOT_FOUND', 404, 'not found'); return 'full';
+        },
+        principal: async () => assert.fail('Raw Node telemetry does not project a principal'),
+        forward: async () => assert.fail('Node telemetry must not read Forward ownership'),
+        owned: async () => assert.fail('Telemetry must not enter mutation ownership'),
+    };
     const machine = { async credential(actual: typeof tx, node: string, fingerprint: string) {
         check(actual, 'credential'); assert.equal(node, 'node'); assert.equal(fingerprint, 'b'.repeat(64));
         if (state.deny) throw new ControlError('AUTHORIZATION_DENIED', 403, 'denied'); return 1;
@@ -60,8 +70,8 @@ function fixture(family: Family, enabled = true) {
         state.observations.push(...observations); if (state.failRollup) throw new Error('rollup failed');
     } };
     const clock = () => { trace.push('clock'); return state.now; };
-    const service = family === 'process' ? new NodeTelemetry(db, auth, machine, store, enabled, clock, rollups)
-        : new HostTelemetry(db, auth, machine, store, enabled, clock, rollups);
+    const service = family === 'process' ? new NodeTelemetry(db, auth, readAccess, machine, store, enabled, clock, rollups)
+        : new HostTelemetry(db, auth, readAccess, machine, store, enabled, clock, rollups);
     return { service, state, trace, input: sample(family) };
 }
 
@@ -128,9 +138,16 @@ for (const family of ['process', 'host'] as const) {
         await assert.rejects(denied.service.history('reader', 'scope', 'node'), { code: 'AUTHORIZATION_DENIED' });
         assert.deepEqual(denied.trace, ['clock', 'begin', 'scope', 'rollback']);
         const f = fixture(family), result = await f.service.history('reader', 'scope', 'node');
-        assert.deepEqual(f.trace, ['clock', 'begin', 'scope', 'node', 'history', 'latest', 'clock', 'commit']);
+        assert.deepEqual(f.trace, ['clock', 'begin', 'scope', 'read-access', 'node', 'history', 'latest', 'clock', 'commit']);
         assert.equal(result.executionAuthorized, false); assert.equal(result.health, 'unknown'); assert.equal(result.latest, null);
         assert.ok(Object.isFrozen(result)); assert.equal(f.state.rows, 0);
+    });
+
+    test(`${family} telemetry denies shared host detail before persisted samples`, async () => {
+        const f = fixture(family); f.state.readDenied = true;
+        await assert.rejects(f.service.history('reader', 'scope', 'node'), { code: 'NOT_FOUND' });
+        assert.deepEqual(f.trace, ['clock', 'begin', 'scope', 'read-access', 'rollback']);
+        assert.equal(f.state.rows, 0);
     });
 
     test(`${family} telemetry request capacity drains and callback errors release capacity`, async () => {

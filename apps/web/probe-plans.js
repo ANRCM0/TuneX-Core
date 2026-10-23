@@ -80,7 +80,7 @@ const decisionShape = shape({ position:value => positive(value) && value <= 16, 
     shape({ accepted:one(false), error:shape({ code:one(...rejections), status:one(403,404,409,422,429) }) })(value) });
 const decisionValid = (value, config, scope) => decisionShape(value) && bytes(value) <= limits.maxDecisionBytes &&
   value.position <= config.maxRuns && value.source === config.mode && (!value.outcome.accepted || permitValid(value.outcome.receipt,config,value.decidedAt,scope));
-const losses = shape({ rowsExpired:uint, rowsEvicted:uint, decisionsEvicted:uint });
+const losses = nullable(shape({ rowsExpired:uint, rowsEvicted:uint, decisionsEvicted:uint }));
 const envelope = (fields, scope) => value => shape({ probePlansVersion:one(1), scopeId:one(scope), capturedAt:time,
   source:one('persisted-probe-plans'), readOnly:one(true), executionAuthorized:one(false), health:one('unknown'),
   networkCheck:one('not-performed-by-read'), consistency:one('read-committed-not-global-snapshot'), historyComplete:one(false),
@@ -258,7 +258,7 @@ export function initProbePlans({ request, notify, byId, getScope, document = glo
       '; ingressExecutionEnabled=' + value.ingressExecutionEnabled + '; servicesExecutionEnabled=' + value.servicesExecutionEnabled +
       '; scheduleEnabled=' + value.scheduleEnabled + '; workerState=' + value.workerState + '\nConfiguration is not worker liveness or network execution proof.\n' +
       value.source + '; read-committed-not-global-snapshot; historyComplete=false; health=unknown; executionAuthorized=false.';
-    if (value.losses) el('losses').textContent = 'Scope-wide cumulative loss counters, not this query or completeness proof:\n' + JSON.stringify(value.losses,null,2);
+    el('losses').textContent = !Object.hasOwn(value,'losses')?'':value.losses===null?'当前账号不可见工作空间累计淘汰统计；不表示零损失。':'Scope-wide cumulative loss counters, not this query or completeness proof:\n' + JSON.stringify(value.losses,null,2);
   }
   function listRows(data) {
     metadata(data); const token = epoch;

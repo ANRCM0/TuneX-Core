@@ -31,6 +31,130 @@ rationale and obligations. Their planned/unexecuted wording is superseded for
 this accepted revision by the assertion map and execution record, and remains
 applicable to any later source change until separately verified.
 
+### N Product Successor (Source Development, 2026-10-21)
+
+The [product baseline](product-requirements-and-gap-analysis-2026-10-21.md)
+records the confirmed multi-user forwarding journeys, PR-01–14 source gaps,
+PA-01–12 planned acceptance cases, and unresolved ownership/Scope migration,
+role grants, quota accounting and visibility semantics. The human subsequently
+authorized the whole N source stage, a persistent goal and three named parallel
+worktrees. [N stage](product-development-stage-n-2026-10-21.md) records the active
+source work. [FR-0028](../changes/FR-0028-product-resource-ownership-and-access.md),
+[FR-0029](../changes/FR-0029-current-account-scope-context.md),
+[FR-0030](../changes/FR-0030-shared-node-port-limits.md) and
+[FR-0031](../changes/FR-0031-forward-probe-capability-query.md) and
+[FR-0032](../changes/FR-0032-shared-resource-payload-limits.md) record ownership,
+account context, original-ledger port policies, read-only capabilities and shared
+payload/Journal successors.
+They are outside the
+accepted 1–220 assertion map and do not change its historical counts or evidence.
+The human subsequently authorized N verification on 2026-10-21. Local type,
+boundary, generated parity, Web syntax and Go build/vet checks passed after
+failure repairs, as did Linux/macOS cross-compilation.
+[N verification](product-verification-n-2026-10-21.md) records their actual scope.
+The exact-source fourth-candidate Actions record below supersedes the earlier
+source-only status for its configured scope. Reported constructor/store fakes
+and interface/DTO assertions have been migrated and exercised there.
+Named Node/Runtime/Forward/Path/Ingress/Probe, Console/Identity/HTTP,
+Telemetry/Transport/Tunnel and Web consumers now have authored migrations in the
+main worktree. All three named agents have handed off their scoped source files;
+the fourth-candidate record bounds the executed consumer evidence.
+
+The human subsequently authorized the N testing branch, candidate commits/pushes,
+draft PR #114 and Actions repairs. Fourth candidate
+`6c514989820beee0a3387c5368df81e9b4fc2410` passed baseline run `39545757485`
+(all 10 jobs) at PR merge `b2a82e02ac072b71486e0e5d611f4fb0e69e6c3e`;
+container packaging `39545757607` also passed. Reconciled on 2026-10-23,
+the 2026-10-21 evidence includes all 147 database skips matched to MySQL passes,
+411 MySQL and 206 Web passes, Go/race and 3/4/8-Node browser/namespace checks.
+This verifies the repaired candidate within configured Actions scope. Independent
+hosts, load, installation and release retain separate gates. The verification
+record preserves prior failures and exact source identities; no merge is authorized.
+
+N5 consumer source follow-up includes the Path/Ingress publication/group storage,
+governance-only Audit/Station/Notification/Observation and remaining Probe,
+Telemetry and NodeObservation callers in isolated named test files. The public
+import-preview example was read against its existing no-resource-read boundary;
+its unchanged contract needs no ResourceReadAccess provider and still does not
+authorize publication. The separate shared-payload provider example uses public
+interfaces and performs no top-level side effects. Upgrade consumers now describe
+the 41-file catalog and 30 Control profiles, preserve the dedicated 0038 CHECK-only
+case, and author 0039/0040/0041 unrecorded/incomplete DDL refusals with read-only
+database/file checks. JournalInspection2 and the new Agent budget profile have
+explicit old-reader refusal and downgrade cases.
+These are source migrations and planned cases; no execution or complete closure
+is recorded here.
+
+N1 source integrates private/admin-shared/legacy Node claims, purpose-aware
+execution through original Direct/Relay/Transit authorization, immutable
+Forward/template/group ownership, caller-aware list/count/detail/telemetry and
+reference projections, governance-only advanced Audit/Station/Notification
+surfaces and owner-filtered Probe history. Migration 0039 and the reviewed
+Control profile preserve older profile ceilings and protected execution history.
+Audited legacy classification must not publish a configuration revision, change
+an execution authorizer or reactivate a rule. N2 now includes authenticated Scope
+selection, private/available resources, role-aware line drafts, explicit immutable
+publication and administrator shared provision/grant/classification interfaces.
+N3 integrates original-slot per-user shared-Node port admission, role/limit narrowing
+and a caller-only retained-usage query. N4 adds the original planner support matrix
+for every Forward without creating tasks or claiming network evidence. Migration
+0040 and UpgradeAssessment4 append the reviewed nullable port-limit column without
+altering old profile ceilings. These are source candidates, not accepted contracts.
+Unsaved line composition now enters the original disabled Relay draft after fresh
+purpose/profile reads; it neither publishes a template nor reserves resources.
+Shared provision no longer creates an implicit creator grant; private provision
+inserts its owner grant explicitly in the same transaction. The human confirmed
+shared payload accounting on 2026-10-21; FR-0032 now integrates per-user/Node,
+explicit-period policy, original Runtime publication and native TCP/UDP gates with
+durable precharge in the original protected Journal. A newer Snapshot cannot
+overwrite concurrent consumption, and empty control buckets update old drains.
+The page supplies original-CLI trusted manual
+enrollment guidance; binary/CA/service deployment usability and new Relay/multihop
+business-path probes are not accepted or claimed complete.
+
+Planned successor acceptance: same-Scope multi-user private denial; shared role
+subsets at create/retry/renew/recovery and narrowing; complete-path revocation;
+classification membership/lock/CAS/replay/audit/rollback and no implicit owners;
+COUNT/SELECT/filter/cursor/reference isolation before pagination; shared Node,
+host and mixed Agent-report redaction; Forward exporter/aggregate/support privacy;
+Probe own history with withheld Scope losses; governance-only advanced APIs and
+workers; exact native/default/legacy constructor and DTO migration; migration
+footprints and profile ceilings including interrupted DDL. None is marked passed.
+
+Additional planned N2/N3/N4 acceptance: old IdentityStore/Queries/Node/Runtime/factory
+substitutes and examples must adopt each required contract explicitly; all five new
+console assets retain MIME/CSP/auth behavior. Exercise zero/unlimited/private port
+semantics, internal/TCP/UDP/draining slots, immutable owner versus execution actor,
+same-owner reuse versus Transit refusal, pre-insert ownership and classification
+serialization, concurrent reservation/limit narrowing and original cleanup. Check
+purpose-only grant updates preserve limits, explicit null clears and replay has
+the original command digest. Personal usage must remain caller-only even under
+governance, and remain readable with a grant when credential/execution checks fail.
+Check provision unknown-result locks, original CAS/replay/rollback, exact immutable
+references, account/Scope clear and late responses, keyboard/mobile flows, all-Forward
+matrix refusal/error distinction and no new polling/task/health claim. Authored cases
+exist alongside the owner slices; none has been executed or assigned a tested SHA.
+
+FR-0032 adds authored Runtime/Transit required-provider and native-binding cases,
+TS/Go closed wire/digest/reference/fraction cases, protected Journal concurrency/
+restart/revision/drain cases, every native forwarding role and protocol, upgrade
+old-reader guards, HTTP, audit and UI uncertain-result/account-clear cases. New
+real-MySQL source exercises original Identity/Runtime locks, same-request replay,
+CAS races, cross-Node key conflict, receipt failure rollback and selection of an
+older active period beneath a future head. All are unexecuted.
+
+Before accepting this successor, verify zero/partial TCP/atomic and empty UDP,
+bidirectional multi-rule aggregation, cancellation, clock/period endpoints,
+Snapshot save ordering, disk/save failure, crash after precharge, restart empty
+tokens, failed socket writes without refund, old-generation drains, policy
+withdrawal and capability/driver rejection. Include global Agent history and file
+capacity refusal, all four 0041 tables in backup/recovery, restored policy revision
+rollback, authenticated personal/governance isolation and no fabricated balances.
+The UI currently exports configured policy only; used/remaining bytes remain null.
+Already issued remote authority is limited by its original proof/lease/hard cutoff,
+not immediately canceled by a Control database write. These obligations neither
+alter the historical 220 counts nor claim independent-host, load or release proof.
+
 ## 1. DoD Evidence
 
 | Required criterion | Accepted evidence and limits |

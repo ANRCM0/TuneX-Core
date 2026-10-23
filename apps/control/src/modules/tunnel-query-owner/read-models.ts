@@ -1,4 +1,4 @@
-import type { TunnelMetadataReadStore, ReadProjectionValues, ForwardIntent } from '../../framework/public.ts';
+import type { ReadPrincipal, TunnelMetadataReadStore, ReadProjectionValues, ForwardIntent } from '../../framework/public.ts';
 import type { ConsolePaging } from '../console-query-owner/public.ts';
 import type { TunnelReadPort, TunnelReference } from './contracts.ts';
 
@@ -23,8 +23,8 @@ export class TunnelReadModels<Tx> implements TunnelReadPort<Tx> {
             })),
         }));
     }
-    async references(tx:Tx,scope:string,node:string,paging:ConsolePaging) {
-        return this.store.references(tx,scope,node,paging,({count,records})=>{
+    async references(tx:Tx,scope:string,principal:ReadPrincipal,node:string,paging:ConsolePaging) {
+        return this.store.references(tx,scope,principal,node,paging,({count,records})=>{
             const items: TunnelReference[] = records.map(record => ({ forwardId: record.id, revision: record.revision,
                 spec: this.values.read<ForwardIntent>(record.spec), recoverySuspended: Boolean(record.recovery_suspended) }));
             return { total: Number(count?.n ?? 0), items };

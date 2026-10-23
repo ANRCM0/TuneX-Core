@@ -24,6 +24,38 @@ const acceptanceKeys = ['probeId','forwardId','issuedAt','expiresAt','dispatch',
 const rawBase64=(value,length)=>{try{return typeof value==='string'&&atob(value).length===length&&btoa(atob(value))===value;}catch{return false;}};
 const challenge=value=>closed(value,['nonce','invocationDigest'])&&rawBase64(value.nonce,32)&&hash(value.invocationDigest);
 const echoEvidence=value=>closed(value,['algorithm','requestDigest','signature','verified'])&&value.algorithm==='Ed25519'&&hash(value.requestDigest)&&rawBase64(value.signature,64)&&value.verified===true;
+const supportKinds = ['tcp-connect','tcp-ingress-connect','tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo'];
+function supportView(value, forward, scope) {
+  const path = '/api/v1/scopes/' + encodeURIComponent(scope) + '/forwards/' + encodeURIComponent(forward) + '/diagnostics';
+  if (!closed(value, ['capabilityVersion','scopeId','forwardId','forwardRevision','mode','readOnly','networkCheck','executionAuthorized','endToEnd','health','consistency','items','diagnostics']) ||
+      value.capabilityVersion !== 1 || value.scopeId !== scope || value.forwardId !== forward || !positive(value.forwardRevision) ||
+      !['direct','relay','multihop'].includes(value.mode) || value.readOnly !== true || value.networkCheck !== 'not-performed' ||
+      value.executionAuthorized !== false || value.endToEnd !== false || value.health !== 'unknown' || value.consistency !== 'read-committed-not-global-snapshot' ||
+      !Array.isArray(value.items) || value.items.length !== supportKinds.length ||
+      !closed(value.diagnostics, ['apiPath','source','readOnly','networkCheck','health','description']) || value.diagnostics.apiPath !== path ||
+      value.diagnostics.source !== 'persisted-control-and-agent-state' || value.diagnostics.readOnly !== true ||
+      value.diagnostics.networkCheck !== 'not-performed' || value.diagnostics.health !== 'unknown' || typeof value.diagnostics.description !== 'string')
+    throw Error('Invalid read-only Probe support response.');
+  const seen = new Set();
+  for (const item of value.items) {
+    if (!supportKinds.includes(item?.taskKind) || seen.has(item.taskKind)) throw Error('Invalid Probe support measurement.');
+    seen.add(item.taskKind);
+    const { businessProtocol, ...expected } = descriptor(serviceKind(item.taskKind) ? item.taskKind : item.taskKind === 'tcp-ingress-connect');
+    const preflight = item.preflight;
+    if (!closed(item, [...Object.keys(expected),'protocol','endToEnd','health','transportSupport','issuance','issuanceReason','preflight']) ||
+        !Object.entries(expected).every(([key, entry]) => item[key] === entry) || item.protocol !== (item.taskKind === 'udp-ingress-echo' ? 'udp' : 'tcp') ||
+        item.endToEnd !== false || item.health !== 'unknown' || !['supported','unsupported'].includes(item.transportSupport) ||
+        !['enabled','disabled','not-dispatchable'].includes(item.issuance) || typeof item.issuanceReason !== 'string' ||
+        !closed(preflight, ['state','reason','expiresAt']) || !['available','unavailable','unsupported','requires-controlled-service'].includes(preflight.state) ||
+        !closed(preflight.reason, ['code','message']) || !['PREFLIGHT_AVAILABLE','PROBE_UNAVAILABLE','UNSUPPORTED_CAPABILITY','REVISION_CONFLICT','CONTROLLED_SERVICE_REQUIRED'].includes(preflight.reason.code) ||
+        typeof preflight.reason.message !== 'string' || (preflight.state === 'available' ? !validTime(preflight.expiresAt) : preflight.expiresAt !== null) ||
+        (preflight.state === 'available') !== (preflight.reason.code === 'PREFLIGHT_AVAILABLE') ||
+        (preflight.state === 'requires-controlled-service') !== (preflight.reason.code === 'CONTROLLED_SERVICE_REQUIRED') ||
+        item.transportSupport === 'unsupported' && preflight.state !== 'unsupported' ||
+        echoKind(item.taskKind) && item.issuance !== 'not-dispatchable') throw Error('Invalid Probe support classification.');
+  }
+  return value;
+}
 function validAcceptance(value, kind, forward, service, scope) {
   const tls = kind === 'tcp-ingress-tls', echo=echoKind(kind), ingress = kind !== 'tcp-connect', classification = serviceKind(kind) ? kind : ingress;
   return closed(value,[...acceptanceKeys,...(ingress ? ['probeVersion',...Object.keys(descriptor(classification))] : []),...(serviceKind(kind) ? ['service'] : []),...(echo?['challenge']:[])]) &&
@@ -148,8 +180,68 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   const el = name => byId('probe-' + name);
   const serviceInputs = ['service-id','service-revision','service-config-revision','service-digest'];
   let selected = null, attempt = null, receipt = null, enabled = false, ingressEnabled = false, servicesEnabled = false, busy = false;
+  let supportForward = null, supportVersion = 0;
+  const support = createSupportPanel();
   const issuanceEnabled = () => el('kind').value === 'tcp-ingress-tls' ? servicesEnabled : el('kind').value === 'tcp-ingress-connect' ? ingressEnabled : enabled;
   let epoch = 0, readVersion = 0, capVersion = 0, session = new AbortController(), watching = null;
+  function createSupportPanel() {
+    const anchor = el('capability'), doc = anchor.ownerDocument ?? globalThis.document;
+    if (!doc?.createElement || !anchor.insertAdjacentElement) return null;
+    const make = (tag, text, className) => { const node = doc.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; };
+    const panel = make('section'); panel.id = 'probe-support'; panel.setAttribute('aria-labelledby', 'probe-support-title');
+    const title = make('h4', 'Forward 探测支持矩阵'); title.id = 'probe-support-title';
+    const state = make('p', '', 'hint'); state.id = 'probe-support-state'; state.setAttribute('role', 'status'); state.setAttribute('aria-live', 'polite');
+    const help = make('p', '仅解释观测位置、原命令开关与只读预检。读取矩阵不会发起探测；本机连接不证明外部可达或端到端业务连通。', 'hint');
+    const controls = make('div', '', 'actions'), refresh = make('button', '刷新只读矩阵', 'secondary'), diagnostics = make('button', '查看已有分层诊断', 'secondary');
+    refresh.type = diagnostics.type = 'button'; refresh.id = 'probe-support-refresh'; diagnostics.id = 'probe-support-diagnostics';
+    diagnostics.dataset.action = 'forward-diagnostics';
+    refresh.addEventListener('click', readSupport);
+    controls.append(refresh, diagnostics);
+    const wrap = make('div', '', 'table-wrap inner-table'), table = make('table'), head = make('thead'), header = make('tr'), rows = make('tbody');
+    rows.id = 'probe-support-rows';
+    for (const label of ['测量 / 位置', '原命令开关', '当前只读预检', '本次查询的网络证据']) { const th = make('th', label); th.scope = 'col'; header.append(th); }
+    head.append(header); table.append(head, rows); wrap.append(table); panel.append(title, help, controls, state, wrap); anchor.insertAdjacentElement('afterend', panel);
+    return { state, refresh, diagnostics, rows, make };
+  }
+  function resetSupport(text = '从 Forward 列表选择规则后，读取其只读支持矩阵。') {
+    supportVersion++;
+    if (!support) return;
+    support.rows.replaceChildren(); support.state.textContent = text;
+    support.refresh.disabled = !supportForward; support.diagnostics.disabled = true;
+    delete support.diagnostics.dataset.id;
+  }
+  function renderSupport(value) {
+    const labels = { available: '原预检已接受', unavailable: '当前预检不可用', unsupported: '不支持此观测', 'requires-controlled-service': '需要精确受控服务' };
+    const switches = { enabled: '原命令开关已开启', disabled: '原命令开关已关闭', 'not-dispatchable': '现有命令不可派发' };
+    const modes = { direct: 'Direct', relay: 'Relay', multihop: '多跳' };
+    support.state.textContent = modes[value.mode] + ' · 当前读取 revision ' + value.forwardRevision + '；列表选择 revision ' + supportForward.revision + '。分次授权读取，不是同时刻执行证明。';
+    for (const kind of supportKinds) {
+      const item = value.items.find(entry => entry.taskKind === kind), row = support.make('tr');
+      const point = item.point === 'agent-direct-egress' ? 'Agent 到原目标' : 'Agent 本机 Direct 入口';
+      const name = support.make('td'); name.append(support.make('strong', item.measurement), support.make('p', point, 'hint'));
+      const issuance = support.make('td'); issuance.append(support.make('strong', switches[item.issuance]), support.make('p', item.issuanceReason, 'hint'));
+      const preflight = support.make('td'), expired = item.preflight.state === 'available' && Date.parse(item.preflight.expiresAt) <= Date.now();
+      preflight.append(support.make('strong', expired ? '已接受的预检窗口已过期' : labels[item.preflight.state]), support.make('p', item.preflight.reason.message, 'hint'));
+      if (item.preflight.expiresAt) preflight.append(support.make('p', '预检窗口截止 ' + item.preflight.expiresAt + '；不会自动刷新。', 'hint'));
+      const evidence = support.make('td', '未执行网络检查；本次读取没有采集业务链路观测。已有回执与被动诊断需另行读取。');
+      row.append(name, issuance, preflight, evidence); support.rows.append(row);
+    }
+    support.diagnostics.dataset.id = value.forwardId; support.diagnostics.disabled = false;
+  }
+  async function readSupport() {
+    if (!support || !supportForward) return;
+    const choice = supportForward, scope = getScope(), version = epoch, signal = session.signal;
+    resetSupport('正在读取只读支持矩阵；不会发起探测。'); const sequence = supportVersion;
+    support.refresh.disabled = true;
+    const current = () => version === epoch && sequence === supportVersion && choice === supportForward && scope === getScope() && !signal.aborted;
+    try {
+      const result = await request('GET', 'forwards/' + encodeURIComponent(choice.id) + '/probe-capabilities', undefined, undefined, { signal, timeoutMs: 3000 });
+      if (!current()) return;
+      renderSupport(supportView(result, choice.id, scope));
+    } catch (error) {
+      if (current()) { resetSupport('支持矩阵读取失败或无权读取；已清除旧结果。不能据此认定规则不支持或链路不通。'); notify(error.message, true); }
+    } finally { if (current()) support.refresh.disabled = false; }
+  }
   function message(text) { el('state').textContent = text; }
   function sync() {
     el('issue').disabled = busy || !selected || (!attempt && !issuanceEnabled()) || Boolean(attempt?.acceptance);
@@ -174,6 +266,7 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   function clear() {
     epoch++; capVersion++; readVersion++; session.abort(); session = new AbortController();
     stop(); selected = attempt = receipt = null; enabled = ingressEnabled = servicesEnabled = busy = false;
+    supportForward = null; resetSupport();
     el('selected').textContent = 'Select a Direct TCP Forward from the Forward list.';
     el('capability').textContent = 'Issuance policy: unknown / default off.';
     el('id').value = ''; el('kind').value = 'tcp-connect'; el('timeout').value = '500'; el('consent').checked = false;
@@ -186,6 +279,7 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   }
   async function capabilities() {
     const version = epoch, sequence = ++capVersion;
+    const supportRead = readSupport();
     enabled = ingressEnabled = servicesEnabled = false; sync();
     try {
       const result = await request('GET', 'execution-capabilities', undefined, undefined, { signal: session.signal, timeoutMs: 3000 });
@@ -197,14 +291,23 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
         '; controlled TLS issuance=' + servicesEnabled + '. Configuration is not Agent opt-in, trust, delivery or liveness proof. Receipt reads and revocation remain separate.';
     } catch (error) { if (version === epoch && sequence === capVersion) { el('capability').textContent = 'Issuance policy: unknown; new tasks disabled.'; notify(error.message, true); } }
     if (version === epoch && sequence === capVersion) sync();
+    await supportRead;
   }
   async function open(forward) {
     if (busy || !abandon()) return;
     if (!validId(forward?.id) || !Number.isSafeInteger(forward.revision) || forward.revision < 1 ||
         forward.spec?.path || !forward.spec?.protocols?.includes('tcp')) throw Error('Select a Direct TCP Forward.');
-    clear(); selected = Object.freeze({ id: forward.id, revision: forward.revision });
+    clear(); selected = Object.freeze({ id: forward.id, revision: forward.revision }); supportForward = selected;
     el('selected').textContent = 'Forward ' + selected.id + ' / selected revision ' + selected.revision + ' (server rechecks current authority).';
     display('probes'); await capabilities();
+  }
+  async function openCapabilities(forward) {
+    if (busy || !abandon()) return;
+    if (!validId(forward?.id) || !positive(forward.revision)) throw Error('Select a valid Forward for its read-only Probe matrix.');
+    clear(); supportForward = Object.freeze({ id: forward.id, revision: forward.revision });
+    el('selected').textContent = '只读支持矩阵 · Forward ' + forward.id + ' / 列表 revision ' + forward.revision + '。未选择执行命令。';
+    el('capability').textContent = '只读查询不启用原 Probe 发行开关，也不创建探测任务。';
+    display('probes'); await readSupport();
   }
   async function prepare() {
     if (busy || !selected || !abandon()) return;
@@ -317,5 +420,5 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   el('revoke').addEventListener('click', revoke);
   el('id').addEventListener('input', () => { ++readVersion; stop(); receipt = null; el('receipt').textContent = ''; sync(); });
   clear();
-  return { open, clear, capabilities, issue, query, revoke, wait, prepare, stop };
+  return { open, openCapabilities, clear, capabilities, issue, query, revoke, wait, prepare, stop };
 }

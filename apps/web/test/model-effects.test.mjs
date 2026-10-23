@@ -11,7 +11,7 @@ test('model aliases preserve function identity and factory initialization does n
   const calls = [];
   const model = owner.createConsoleModel({ credentialActive: read => { calls.push(read()); return true; }, listResource: (...args) => { calls.push(args); return 'query'; } });
   assert.deepEqual(calls, []);
-  const node = { id: 'n', policy: { capabilities: ['adp.3', 'native.direct.v1'], allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [80] } };
+  const node = { id: 'n', canUse:true, allowedRoles:null, readDetail:'full', resourceSource:'private', policy: { capabilities: ['adp.3', 'native.direct.v1'], allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [80] } };
   assert.equal(model.directCapable({ ...node, revoked: true }), false);
   assert.equal(model.directCapable(node), true); assert.deepEqual(calls, []);
   assert.equal(model.directCapable({ ...node, credentialUntil: 'expiry' }), true);
@@ -26,7 +26,7 @@ test('native model credential evaluation preserves getter and parser lookup orde
   const order = [];
   t.mock.method(Date, 'parse', value => { order.push(['parse', value]); return NaN; });
   t.mock.method(Date, 'now', () => { order.push(['now']); return 100; });
-  const node = { policy: { capabilities: ['adp.3', 'native.direct.v1'], allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [80] },
+  const node = { canUse:true, allowedRoles:null, readDetail:'full', resourceSource:'private', policy: { capabilities: ['adp.3', 'native.direct.v1'], allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [80] },
     get credentialUntil() { order.push(['get']); return 'invalid'; } };
   assert.equal(owner.createConsoleModel(browserConsoleModelEffects).directCapable(node), false);
   assert.deepEqual(order, [['get'], ['get'], ['parse', 'invalid'], ['now']]);

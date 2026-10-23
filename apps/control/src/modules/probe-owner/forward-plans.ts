@@ -1,6 +1,6 @@
 import { deepFreeze, isCounter, isId, ipBytes, parseForward } from '@tunex/core';
 import { ControlError, invalid } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import { targetAllowed, nativeWallClockNow, nativeParseTime, nativeIsoTime } from '../../compatibility/public.ts';
 import type { DirectConfig } from '../../compatibility/public.ts';
 import type { ForwardProbePlan, ProbeIntents, ProbeNodes, PublishedProbeReader } from './plan-contracts.ts';
@@ -36,8 +36,11 @@ export class ForwardProbePlans<Tx> implements ForwardProbePlanApi {
     private readonly clockSkewMs: number;
     private readonly services: ProbeServiceResolver<Tx> | undefined;
     private readonly echoes:ProbeEchoServiceResolver<Tx>|undefined;
-    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, intents: ProbeIntents<Tx>,
+    private readonly access:ResourceReadAccess<Tx>;
+    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, access: ResourceReadAccess<Tx>, intents: ProbeIntents<Tx>,
         nodes: ProbeNodes<Tx>, published: PublishedProbeReader<Tx>, clockSkewMs: number, services?: ProbeServiceResolver<Tx>,echoes?:ProbeEchoServiceResolver<Tx>) {
+        this.access=access;
+
         if (!Number.isSafeInteger(clockSkewMs) || clockSkewMs < 0) invalid('Invalid probe clock policy');
         this.db = db; this.identity = identity; this.intents = intents; this.nodes = nodes;
         this.published = published; this.clockSkewMs = clockSkewMs; this.services = services;
@@ -53,6 +56,7 @@ export class ForwardProbePlans<Tx> implements ForwardProbePlanApi {
         const { revision, timeoutMs, kind, service } = request(actor, scopeId, id, input),ingress=kind!=='tcp-connect',tls=kind==='tcp-ingress-tls';
         const echo=kind==='tcp-ingress-echo'||kind==='udp-ingress-echo',protocol=kind==='udp-ingress-echo'?'udp':'tcp';
         await this.identity.scope(tx, actor, scopeId, true);
+        await this.access.owned(tx, actor, scopeId, 'forward', id);
         const record = await this.intents.record(tx, scopeId, id);
         const parsed = parseForward({ id: record.id, scopeId: record.scopeId, revision: record.revision, spec: record.spec });
         if (!parsed.ok || parsed.value.id !== id || parsed.value.scopeId !== scopeId)

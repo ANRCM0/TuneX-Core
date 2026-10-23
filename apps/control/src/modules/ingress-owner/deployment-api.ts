@@ -4,7 +4,7 @@ import type { IngressAttempt, IngressDeploymentHead, IngressPlan } from './contr
 import type { PublicationOperation } from '../path-owner/public.ts';
 import type { INGRESS_LIMITS } from './limits.ts';
 
-export const INGRESS_DEPLOYMENT_API_INTERFACE_VERSION=1 as const;
+export const INGRESS_DEPLOYMENT_API_INTERFACE_VERSION=2 as const;
 
 export interface IngressBatchQuery {page?:string|undefined;limit?:string|undefined;groupId?:string|undefined}
 export interface IngressBatchEvidence extends PathPublicationEvidence {physicalConnectionSharing:false}

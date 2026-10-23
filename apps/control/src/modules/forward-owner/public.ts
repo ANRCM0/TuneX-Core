@@ -1,4 +1,4 @@
-export const FORWARD_STATE_INTERFACE_VERSION=1 as const;
+export const FORWARD_STATE_INTERFACE_VERSION=2 as const;
 export { SnapshotAssignmentRegistry } from './snapshot-assignments.ts';
 export { RelayAssignmentSource } from './relay-assignment-source.ts';
 export { ForwardCommandExecutor } from './execution.ts';

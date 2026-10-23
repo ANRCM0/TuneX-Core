@@ -19,6 +19,8 @@ import { MySqlProbePermitIntents } from '../src/infrastructure/mysql-probe-permi
 import { MySqlProbeReader } from '../src/infrastructure/mysql-probe-read.ts';
 import { Identity } from '../src/modules/identity.ts';
 import { Nodes } from '../src/modules/nodes.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { MySqlResourceAccessStore } from '../src/infrastructure/mysql-resource-access.ts';
 import type { NodeCertificateAuthority } from '../src/infrastructure/pki.ts';
 import { compileDirect, compileSnapshot } from '../src/modules/runtime/planner.ts';
 import type { AuthorizedNodeFacts } from '../src/modules/node-management-ports.ts';
@@ -64,10 +66,10 @@ async function fixture() {
             allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [22001], egressPolicyRevision: 1,
             allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false };
         const now = Date.now();
-        await writer.execute(`INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts)
-            VALUES('node-a','scope-a',?,0,?,?)`, [randomBytes(32).toString('hex'), now + 120000, JSON.stringify(facts)]);
-        await writer.execute("INSERT INTO node_grants(node_id,actor_id) VALUES('node-a','owner')");
-        await writer.execute("INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES('forward-a','scope-a',1,?,'owner')",
+        await writer.execute(`INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision)
+            VALUES('node-a','scope-a',?,0,?,?,'admin-shared',NULL,1)`, [randomBytes(32).toString('hex'), now + 120000, JSON.stringify(facts)]);
+        await writer.execute("INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES('node-a','owner','[\"ingress\"]','{\"allowedPorts\":[22001],\"maxBindings\":1}')");
+        await writer.execute("INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor,owner_actor_id) VALUES('forward-a','scope-a',1,?,'owner','owner')",
             [JSON.stringify(forward.spec)]);
         await writer.execute("INSERT INTO runtime_nodes(node_id,session_epoch,boot_id,snapshot_generation) VALUES('node-a',2,'boot-a',3)");
         const snapshot = compileSnapshot({ nodeId: 'node-a', sessionEpoch: 2, snapshotGeneration: 3,
@@ -100,7 +102,7 @@ async function fixture() {
         const internal = (store: MySqlProbePermits,
             history:ProbeRunRecorder<Transaction>=new ProbeRunHistoryRecorder(new MySqlProbeHistoryStore(probeRunStorageValues))) => {
             const identity = new Identity(db!);
-            return new ProbePermits(db!, identity, new ForwardProbePlans(db!, identity, new MySqlProbePermitIntents(),
+            return new ProbePermits(db!, identity, new ResourceAccess(identity,new MySqlResourceAccessStore()), new ForwardProbePlans(db!, identity, new ResourceAccess(identity,new MySqlResourceAccessStore()), new MySqlProbePermitIntents(),
                 new Nodes(db!, identity, {} as NodeCertificateAuthority), new MySqlProbeReader(true), 5000),
             new MySqlProbeMachineReader(), new MySqlProbeInstances(), store, undefined, history);
         };
@@ -272,7 +274,7 @@ test('real MySQL bounded offers and consumed checks are current read-only projec
             await f.writer.query("DELETE FROM node_grants WHERE node_id='node-a'");
             const withdrawnGrant = await digest(f.writer);
             await assert.rejects(f.status(permit.id)); assert.equal(await digest(f.writer), withdrawnGrant);
-            await f.writer.query("INSERT INTO node_grants(node_id,actor_id) VALUES('node-a','owner')");
+            await f.writer.query("INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES('node-a','owner','[\"ingress\"]','{\"allowedPorts\":[22001],\"maxBindings\":1}')");
             assert.equal(await digest(f.writer, true), protectedBefore);
         } finally { await f.close(); }
     });
@@ -300,7 +302,7 @@ test('real MySQL consumed withdrawal is sticky, scoped, atomic and preserves the
             const sticky = await digest(f.writer);
             assert.deepEqual(await f.other.revoke('owner', 'scope-a', permit.id), revoked);
             assert.equal(await digest(f.writer), sticky);
-            await f.writer.query("INSERT INTO node_grants(node_id,actor_id) VALUES('node-a','owner')");
+            await f.writer.query("INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES('node-a','owner','[\"ingress\"]','{\"allowedPorts\":[22001],\"maxBindings\":1}')");
             await assert.rejects(f.other.check('node-a', fingerprint, 2, claim(permit.id)), { code: 'PROBE_PERMIT_UNAVAILABLE' });
             await assert.rejects(f.issue(), { code: 'PROBE_PERMIT_LIMIT' });
             const [rows] = await f.writer.query<RowDataPacket[]>('SELECT state,closed_at FROM probe_permits WHERE id=?', [permit.id]);

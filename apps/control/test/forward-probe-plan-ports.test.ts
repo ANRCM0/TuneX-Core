@@ -9,6 +9,22 @@ import type { PublishedProbeSnapshot } from '../src/modules/probe-ports.ts';
 import { MySqlProbeReader } from '../src/infrastructure/mysql-probe-read.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
 
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { ControlError as ResourceAccessError } from '../src/framework/public.ts';
+import type { OwnedResourceKind } from '../src/framework/public.ts';
+
+function ownerAccess<Tx>(tx:Tx,scopeId:string,members:ReadonlyMap<string,boolean>,
+    claim:(kind:OwnedResourceKind,id:string)=>string|null|undefined,scopeOwner='scope-owner') {
+    const same=(actual:Tx,scope:string)=>{assert.equal(actual,tx);assert.equal(scope,scopeId);};
+    return new ResourceAccess<Tx>({async scope(actual,actor,scope,manage=false){
+        same(actual,scope);
+        if(!members.has(actor)||manage&&!members.get(actor))throw new ResourceAccessError('AUTHORIZATION_DENIED',403,'Fixture scope permission denied');
+    }},{async scopeOwner(actual,scope){same(actual,scope);return {ownerActorId:scopeOwner};},
+        async ownership(actual,scope,kind,id){same(actual,scope);const ownerActorId=claim(kind,id);return ownerActorId===undefined?undefined:{ownerActorId};},
+        async node(){throw Error('Node access is outside this owner fixture');}});
+}
+
+
 const command = { version: 1, kind: 'tcp-connect', expectedRevision: 1 };
 function fixture() {
     const tx = Object.freeze({ marker: Symbol('tx') }), calls: string[] = [];
@@ -27,7 +43,8 @@ function fixture() {
             assignments: compileDirect({ id: forward.id, scopeId: forward.scopeId, revision: forward.revision, spec: forward.spec }, facts,
                 [{ nodeId: 'node-a', forwardId: 'forward-a', protocol: 'tcp',
                 port: 22001, bindingFence: 4, deploymentGeneration: 5 }]) }) };
-    const state = { forward, facts, current: structuredClone(current) as PublishedProbeSnapshot | undefined, denyNode: false, denyScope: false };
+    const state = { forward, facts, current: structuredClone(current) as PublishedProbeSnapshot | undefined, denyNode: false, denyScope: false, forwardOwner: 'actor-a' as string|null, visibleForward: true };
+    const access=ownerAccess(tx,'scope-a',new Map([['actor-a',true]]),(kind,id)=>kind==='forward'&&id==='forward-a'&&state.visibleForward?state.forwardOwner:undefined);
     const host = new ForwardProbePlans({
         transaction: async action => { calls.push('begin'); const result = await action(tx); calls.push('commit'); return result; },
     }, {
@@ -35,7 +52,7 @@ function fixture() {
             assert.equal(actual, tx); assert.equal(actor, 'actor-a'); assert.equal(scope, 'scope-a'); assert.equal(manage, true);
             calls.push('scope'); if (state.denyScope) throw new ControlError('AUTHORIZATION_DENIED', 403, 'denied');
         },
-    }, {
+    }, access, {
         record: async (actual, scope, id) => {
             assert.equal(actual, tx); assert.equal(scope, 'scope-a'); assert.equal(id, 'forward-a');
             calls.push('intent'); return state.forward;
@@ -90,6 +107,11 @@ test('manager and explicit Node Grant checks occur before reading any published 
     const grant = fixture(); grant.state.denyNode = true;
     await assert.rejects(grant.run(), { code: 'AUTHORIZATION_DENIED' });
     assert.deepEqual(grant.calls, ['begin', 'scope', 'intent', 'grant']);
+});
+
+test('preflight refuses another owner, unclassified ownership and absent claims before intent or published evidence',async()=>{
+    for(const owner of ['other-owner',null]){const f=fixture();f.state.forwardOwner=owner;await assert.rejects(f.run(),{code:'NOT_FOUND'});assert.deepEqual(f.calls,['begin','scope']);}
+    const f=fixture();f.state.visibleForward=false;await assert.rejects(f.run(),{code:'NOT_FOUND'});assert.deepEqual(f.calls,['begin','scope']);
 });
 
 test('trusted authorization port joins the supplied transaction without starting a nested one or granting execution', async () => {

@@ -61,9 +61,10 @@ export class AccessChangeReconciler<Tx> implements AccessChangeEffects<Tx> {
                 if (forward.spec.ingress.nodeId !== grant.nodeId && !forward.spec.path?.via.includes(grant.nodeId)) continue;
                 await this.execution.lock(tx, forward);
                 if (forward.spec.path) for (const id of await this.execution.nodeIDs(tx, forward)) affectedNodes.add(id);
-                if (grant.allowed && forward.spec.enabled) await this.execution.transition(tx, grant.actorId, forward);
-                operationIds.push(await this.execution.accept(tx, forward, request, grant.allowed ? 'policy' : 'revoke'));
-                if (grant.allowed && forward.spec.enabled) await this.execution.assertCapacity(tx, forward);
+                const allowed=grant.allowed&&await this.execution.allowed(tx,grant.actorId,forward);
+                if (allowed && forward.spec.enabled) await this.execution.transition(tx, grant.actorId, forward);
+                operationIds.push(await this.execution.accept(tx, forward, request, allowed ? 'policy' : 'revoke'));
+                if (allowed && forward.spec.enabled) await this.execution.assertCapacity(tx, forward);
             }
         }
         await this.execution.validateNode(tx, grant.nodeId, request.scopeId, grant.allowed);

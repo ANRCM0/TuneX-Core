@@ -8,6 +8,8 @@ import { createApp } from '../src/api/app.ts';
 import { NativeDrivers } from '../src/application/native-drivers.ts';
 import { TransportQueries } from '../src/application/transport-queries.ts';
 import type { ControlApplication } from '../src/application/control.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { MySqlResourceAccessStore } from '../src/infrastructure/mysql-resource-access.ts';
 import { MySqlTransportReader } from '../src/infrastructure/mysql-transport-read.ts';
 import { MySqlUnitOfWork } from '../src/infrastructure/mysql.ts';
 import type { AuthorityStore } from '../src/infrastructure/authority.ts';
@@ -50,12 +52,12 @@ test('native catalog and Profile references/impact use real prepared MySQL, scop
                     [profile, revision, JSON.stringify(config), digest(config), 'owner', Date.now()]);
             }
             await connection.execute('INSERT INTO transport_profile_grants(profile_id,actor_id) VALUES(?,?)', ['profile-a', 'manager']);
-            for (let i = 0; i < 31; i++) {
+            for (let i = 0; i < 33; i++) {
                 const scope = i === 30 ? 'scope-b' : 'scope-a';
                 const spec = { enabled: i !== 0, protocols: ['tcp'], ingress: { nodeId: 'node-a', listen: { address: '127.0.0.1', port: 32001 } },
                     target: { host: '127.0.0.1', port: 80 }, path: { via: ['node-b'] }, transport: { profileId: 'profile-a', configRevision: i % 2 + 1 } };
-                await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,deleting,recovery_suspended) VALUES(?,?,7,?,?,?)',
-                    ['forward-' + String(i).padStart(2, '0'), scope, JSON.stringify(spec), i === 29, i === 1]);
+                await connection.execute('INSERT INTO forwards(id,scope_id,owner_actor_id,revision,spec,deleting,recovery_suspended) VALUES(?,?,?,7,?,?,?)',
+                    ['forward-' + String(i).padStart(2, '0'), scope, i === 30 ? 'outsider' : i === 31 ? 'viewer' : i === 32 ? null : 'manager', JSON.stringify(spec), i === 29, i === 1]);
             }
             await admin.query("CREATE USER ?@'%' IDENTIFIED BY ?", [user, password]); userCreated = true;
             await admin.query(`GRANT SELECT ON \`${name}\`.* TO ?@'%'`, [user]);
@@ -63,7 +65,7 @@ test('native catalog and Profile references/impact use real prepared MySQL, scop
             reader = new MySqlUnitOfWork(readUrl.toString());
             const readIdentity = new Identity(reader), transport = new Transport(reader, readIdentity, new Idempotency(), { hasLiveRelay: async () => { throw Error('No mutations allowed'); } });
             const control = { identity: readIdentity, db: reader, nativeDrivers: new NativeDrivers(reader, readIdentity),
-                transportQueries: new TransportQueries(reader, readIdentity, new MySqlTransportReader(), transport) } as unknown as ControlApplication;
+                transportQueries: new TransportQueries(reader, readIdentity, new MySqlTransportReader(), transport, new ResourceAccess(readIdentity, new MySqlResourceAccessStore())) } as unknown as ControlApplication;
             const app = createApp(control, {} as RuntimeController, { allow: async () => undefined } as unknown as AuthorityStore);
             async function get(path: string, actor = 'manager', status = 200, scope = 'scope-a') {
                 const response = await app.request('/api/v1/scopes/' + scope + '/' + path, { headers: { Authorization: 'Bearer ' + tokens[actor] } });
@@ -75,7 +77,12 @@ test('native catalog and Profile references/impact use real prepared MySQL, scop
             await assert.rejects(reader.pool.query('UPDATE forwards SET deleting=TRUE'));
             const catalog = await get('native-drivers', 'viewer');
             assert.equal(catalog.drivers.length, 3); assert.equal(catalog.authorized, false); assert.equal(catalog.drivers[2].controlEnabled, false);
-            const references = await get('transport-profiles/profile-a/references', 'viewer');
+            const personal = await get('transport-profiles/profile-a/references', 'viewer');
+            assert.equal(personal.total, 1); assert.deepEqual(personal.items.map((item: any) => item.forwardId), ['forward-31']);
+            assert.equal((await get('transport-profiles/profile-a/references?page=2&limit=1', 'viewer')).items.length, 0);
+            const governed = await get('transport-profiles/profile-a/references', 'owner');
+            assert.equal(governed.total, 31);
+            const references = await get('transport-profiles/profile-a/references', 'manager');
             assert.equal(references.total, 29); assert.equal(references.items.length, 25); assert.equal(references.target, null);
             assert.equal(references.items[0].spec.enabled, false); assert.equal(references.items[1].recoverySuspended, true);
             const second = await get('transport-profiles/profile-a/references?page=2&targetRevision=2');

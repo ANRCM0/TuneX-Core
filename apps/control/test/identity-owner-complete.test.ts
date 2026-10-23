@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { IdentityAccessHost } from '../src/framework/public.ts';
-import type { IdentityAccessStore, IdentityMembershipRecord, IdentityListedMember, IdentityValueCodec } from '../src/framework/public.ts';
+import type { IdentityAccessStore, IdentityMembershipRecord, IdentityListedMember, IdentityScopeContextRecord, IdentityValueCodec } from '../src/framework/public.ts';
 import { IdentityService } from '../src/modules/identity-owner/public.ts';
 import { Identity, newToken, tokenHash, validBearerToken } from '../src/modules/identity.ts';
 import { nativeIdentityCodec } from '../src/compatibility/public.ts';
@@ -14,9 +14,9 @@ function fixture(){
  const state={fail:'',error:new Error('provider failure'),account:{id:'actor'} as {id:string}|undefined,membership:{canManage:1} as {canManage:number}|undefined,
   owner:{ownerId:'owner'} as {ownerId:string}|undefined,current:{revision:1,active:1,canManage:0} as IdentityMembershipRecord|undefined,
   subject:{tokenHash:tokenHash(token)} as {tokenHash:string}|undefined,count:1,writes:[] as unknown[],serial:0,now:123,
-  accounts:[{id:'a-owner',owner:1},{id:'b-member',owner:0},{id:'z-owner',owner:1}],listed:[] as IdentityListedMember[]};
+  accounts:[{id:'a-owner',owner:1},{id:'b-member',owner:0},{id:'z-owner',owner:1}],listed:[] as IdentityListedMember[],contexts:[] as IdentityScopeContextRecord[]};
  const record=(name:string,args:unknown[]=[])=>{events.push(name);calls.push({name,args});if(state.fail===name)throw state.error;};
- const answers:Record<string,()=>unknown>={accountByToken:()=>state.account,activeMembership:()=>state.membership,ownerForShare:()=>state.owner,ownerForUpdate:()=>state.owner,memberForUpdate:()=>state.current,accountForShare:()=>state.subject,executionMembershipCount:()=>state.count,recoveryAccounts:()=>state.accounts,listMembers:()=>state.listed};
+ const answers:Record<string,()=>unknown>={accountByToken:()=>state.account,activeMembership:()=>state.membership,ownerForShare:()=>state.owner,ownerForUpdate:()=>state.owner,memberForUpdate:()=>state.current,accountForShare:()=>state.subject,executionMembershipCount:()=>state.count,recoveryAccounts:()=>state.accounts,listMembers:()=>state.listed,scopeContext:()=>state.contexts};
  const store=new Proxy({} as IdentityAccessStore<Tx>,{get(_target,key){return async function(this:unknown,current:Tx,...args:unknown[]){assert.equal(this,store);assert.equal(current,tx);const name=String(key);record(name,args);if(answers[name])return answers[name]!();state.writes.push([name,...args]);};}});
  const accounts={async byToken(hash:string){assert.equal(this,accounts);record('byToken',[hash]);return state.account;}};
  const secrets={newID(){assert.equal(this,secrets);record('newID');return 'event';},newToken(){assert.equal(this,secrets);record('newToken');return 'T'.repeat(31)+(++state.serial);},tokenHash(value:string){assert.equal(this,secrets);record('tokenHash',[value]);return tokenHash(value);}};
@@ -97,3 +97,7 @@ test('20 recovery rotates every account token in supplied sorted order before an
 test('20 legacy Identity keeps native helpers explicit providers and dynamically reads original clock',()=>{
  const original=Date.now;try{const owner=new Identity({pool:{}} as never);Date.now=()=>9876;assert.equal(Reflect.get(owner,'now')(),9876);assert.ok(owner instanceof IdentityService);assert.ok(owner instanceof IdentityAccessHost);assert.equal(Reflect.get(owner,'secrets'),nativeNodeSecrets);assert.equal(Reflect.get(owner,'codec'),nativeIdentityCodec);assert.equal(newToken,nativeNodeSecrets.newToken);assert.equal(tokenHash,nativeNodeSecrets.tokenHash);assert.equal(validBearerToken,nativeIdentityCodec.validBearer);}finally{Date.now=original;}
 });
+
+test('current account context keeps bounded ordered membership facts in the original read transaction',async()=>{const f=fixture();f.state.contexts=[{scopeId:'a',ownerId:'actor',membership:null},{scopeId:'b',ownerId:'other',membership:{actorId:'actor',revision:2,active:1,canManage:1}},{scopeId:'c',ownerId:'other',membership:{actorId:'actor',revision:3,active:1,canManage:0}}];const view=await f.host.context('actor',{limit:'2'});assert.deepEqual(view,{actorId:'actor',limit:2,truncated:true,nextAfter:'b',scopes:[{scopeId:'a',role:'owner',membership:'absent',membershipRevision:null,canEnter:false,canManage:false},{scopeId:'b',role:'manager',membership:'active',membershipRevision:2,canEnter:true,canManage:true}]});assert.deepEqual(f.calls.find(c=>c.name==='scopeContext')!.args,['actor',{after:null,limit:2}]);assert.equal(f.state.writes.length,0);assert.equal(f.events.at(-1),'commit');f.state.fail='scopeContext';await assert.rejects(f.host.context('actor'),e=>e===f.state.error);assert.equal(f.events.at(-1),'rollback');});
+
+test('current account context rejects foreign memberships and inactive nonowners without turning Scope management into ownership',async()=>{for(const membership of [{actorId:'other',revision:1,active:1,canManage:1},{actorId:'actor',revision:1,active:0,canManage:1}]){const f=fixture();f.state.contexts=[{scopeId:'scope',ownerId:'owner',membership}];await assert.rejects(f.host.context('actor'),{code:'INTEGRITY_FAILURE'});assert.equal(f.events.at(-1),'rollback');assert.deepEqual(f.state.writes,[]);}});

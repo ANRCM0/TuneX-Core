@@ -20,7 +20,7 @@ import type { PathBindingApi } from '../modules/path-owner/public.ts';
 import type { NativeTunnelApi } from '../modules/native-tunnel-owner/public.ts';
 import type { PathGroupApi, PathPublicationApi } from '../modules/path-owner/public.ts';
 import type { IngressGroupApi, IngressDeploymentApi, IngressMigrationApi } from '../modules/ingress-owner/public.ts';
-import type { ForwardProbePlanApi, ForwardProbeApi } from '../modules/probe-owner/public.ts';
+import type { ForwardProbePlanApi, ForwardProbeApi, ForwardProbeCapabilitiesApi } from '../modules/probe-owner/public.ts';
 import type { ProbeNegotiationApi, ProbeInstanceApi, ProbeClaimApi, ProbeDeliveryApi, ProbeResultApi,
     ProbeTypeRegistryApi, ProbeServiceRegistryApi, ProbeTypesApi, ProbeServicesApi } from '../modules/probe-owner/public.ts';
 import type { NodeTelemetryApi, ForwardTelemetryApi, HostTelemetryApi, ProbeTelemetryApi, TelemetryRollupApi } from '../modules/telemetry-owner/public.ts';
@@ -32,6 +32,7 @@ import type { ProbeRunsApi } from '../modules/probe-history-owner/public.ts';
 import type { ProbePlansApi } from '../modules/probe-plan-owner/public.ts';
 import type { ObservationServicesApi } from '../modules/observation-service-owner/public.ts';
 import type { RequestLifecycle } from '../framework/public.ts';
+import type { SharedResourceLimitApi } from '../modules/resource-limit-owner/public.ts';
 
 /** Business services are consumed through explicit owner contracts, not implementation class views. */
 export interface ControlApi extends ForwardCommandApi,RelayPlanApi {
@@ -40,6 +41,7 @@ export interface ControlApi extends ForwardCommandApi,RelayPlanApi {
     readonly changeNode:NodeManagementApi['change'];
     readonly identity:IdentityQueries;
     readonly nodes:NodeApi;
+    readonly resourceLimits:SharedResourceLimitApi;
     readonly transport:TransportApi;
     readonly relayEndpoints:RelayEndpointApi;
     readonly details:ControlDetailApi;
@@ -60,6 +62,7 @@ export interface ControlApi extends ForwardCommandApi,RelayPlanApi {
     readonly observations:NodeObservationApi;
     readonly profileGrants:TransportGrantApi;
     readonly probePlans:ForwardProbePlanApi;
+    readonly probeCapabilities:ForwardProbeCapabilitiesApi;
     readonly probes:ForwardProbeApi;
     readonly probeNegotiation:ProbeNegotiationApi;
     readonly probeRegistry:ProbeInstanceApi;

@@ -1,9 +1,12 @@
 package relay
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"sync"
+
+	"github.com/tunex/vnext/agent/internal/executionhost"
 )
 
 // framedTCP keeps application FIN independent of the TLS connection's reverse direction.
@@ -16,6 +19,8 @@ type framedTCP struct {
 	readEnded      bool
 	writeEnded     bool
 	payloadWritten func(int)
+	payloadContext context.Context
+	payloadGate    executionhost.PayloadGate
 }
 
 func (c *framedTCP) Read(buffer []byte) (int, error) {
@@ -58,6 +63,11 @@ func (c *framedTCP) Write(buffer []byte) (int, error) {
 			return written, err
 		}
 		n := min(len(buffer), c.maximum)
+		permitted, err := reservePayload(c.payloadContext, c.payloadGate, c.allow, n, false)
+		if err != nil {
+			return written, err
+		}
+		n = permitted
 		if err := WriteFrame(c.Conn, FrameTCP, buffer[:n], "tcp", c.maximum); err != nil {
 			return written, err
 		}

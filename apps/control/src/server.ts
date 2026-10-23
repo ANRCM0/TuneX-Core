@@ -5,7 +5,9 @@ import { createServer } from 'node:https';
 import { readFile } from 'node:fs/promises';
 import { getRequestListener } from '@hono/node-server';
 import { MySqlUnitOfWork } from './infrastructure/mysql.ts';
-import { createMySqlRuntimeResources } from './infrastructure/mysql-runtime-resources.ts';
+import { createMySqlRuntimeResources, MySqlRuntimeResourceStore } from './infrastructure/mysql-runtime-resources.ts';
+import { MySqlNodeAuthorityStore } from './infrastructure/mysql-node-authority.ts';
+import { NodePortLimitPolicy } from './modules/node-owner/public.ts';
 import { NodeCertificateAuthority } from './infrastructure/pki.ts';
 import { Identity } from './modules/identity.ts';
 import { Nodes } from './modules/nodes.ts';
@@ -68,23 +70,24 @@ export async function startControl(options:ServerOptions):Promise<{ port:number;
   const records=await bootstrap.authorityIdentity();const authority=new AuthorityStore(options.stateDirectory);
   try{await authority.initialize(records[0]!.name,trustDigest(await readFile(options.caCert)),options.initializeAuthority===true&&records[0]!.nodes===0);}catch(error){await db.close();throw error;}db.guard=()=>authority.allow();
   const identity=new Identity(db), ca=new NodeCertificateAuthority(options.openssl,options.caCert,options.caKey,options.stateDirectory);
-  const resources=createMySqlRuntimeResources(policy.maxAssignmentsPerNode);
-  const nodes=new Nodes(db,identity,ca,options.credentialOverlapSeconds??120,options.relayCredentialSeconds??86400,resources), control=new ControlApplication(db,identity,nodes,options.policy,options.multihopEnabled===true,options.probeExecutionEnabled===true,options.probeIngressEnabled===true,options.probeServicesEnabled===true,resources);
+  const portLimits=new NodePortLimitPolicy(new MySqlNodeAuthorityStore(),new MySqlRuntimeResourceStore());
+  const resources=createMySqlRuntimeResources(portLimits,policy.maxAssignmentsPerNode);
+  const nodes=new Nodes(db,identity,ca,options.credentialOverlapSeconds??120,options.relayCredentialSeconds??86400,resources,portLimits), control=new ControlApplication(db,identity,nodes,options.policy,options.multihopEnabled===true,options.probeExecutionEnabled===true,options.probeIngressEnabled===true,options.probeServicesEnabled===true,resources);
   const telemetryDb=new MySqlTelemetryDatabase(options.databaseUrl);telemetryDb.guard=()=>authority.allow();
   const rollupStore=new MySqlTelemetryRollupStorage(telemetryRollupStorageValues),recorder=options.telemetryRollupsEnabled===true?rollupStore:undefined;
   const nodeTelemetryStore=new MySqlTelemetryStore(),forwardTelemetryStore=new MySqlForwardTelemetryStore();
-  const telemetry=new NodeTelemetry(telemetryDb,identity,nodes,nodeTelemetryStore,options.telemetryEnabled===true,Date.now,recorder);
-  const forwardTelemetry=new ForwardTelemetry(telemetryDb,identity,nodes,forwardTelemetryStore,new MySqlForwardTelemetryMapping(),options.forwardTelemetryEnabled===true,Date.now,recorder);
-  const hostTelemetry=new HostTelemetry(telemetryDb,identity,nodes,new MySqlHostTelemetryStore(),options.hostTelemetryEnabled===true,Date.now,recorder);
-  const probeTelemetry=new ProbeTelemetry(telemetryDb,identity,nodes,new MySqlProbeTelemetryStore(),new MySqlProbeTelemetryMapping(),options.probeTelemetryEnabled===true,Date.now,recorder);
-  const telemetryRollups=new TelemetryRollups(telemetryDb,identity,rollupStore,
+  const telemetry=new NodeTelemetry(telemetryDb,identity,control.readAccess,nodes,nodeTelemetryStore,options.telemetryEnabled===true,Date.now,recorder);
+  const forwardTelemetry=new ForwardTelemetry(telemetryDb,identity,control.readAccess,nodes,forwardTelemetryStore,new MySqlForwardTelemetryMapping(),options.forwardTelemetryEnabled===true,Date.now,recorder);
+  const hostTelemetry=new HostTelemetry(telemetryDb,identity,control.readAccess,nodes,new MySqlHostTelemetryStore(),options.hostTelemetryEnabled===true,Date.now,recorder);
+  const probeTelemetry=new ProbeTelemetry(telemetryDb,identity,control.readAccess,nodes,new MySqlProbeTelemetryStore(),new MySqlProbeTelemetryMapping(),options.probeTelemetryEnabled===true,Date.now,recorder);
+  const telemetryRollups=new TelemetryRollups(telemetryDb,identity,control.readAccess,rollupStore,
     {node:(tx,id)=>nodeTelemetryStore.node(tx,id),forward:(tx,scope,id)=>forwardTelemetryStore.forward(tx,scope,id)},options.telemetryRollupsEnabled===true);
-  const diagnostics=new ForwardDiagnostics(telemetryDb,identity,new MySqlForwardDiagnosticReadStore(),
+  const diagnostics=new ForwardDiagnostics(telemetryDb,identity,control.readAccess,new MySqlForwardDiagnosticReadStore(),
     {freshnessMs:policy.observationFreshnessSeconds*1000,clockSkewMs:policy.maxClockSkewSeconds*1000});
   const audit=new AuditEvents(telemetryDb,identity,new AuditReadModels(new MySqlAuditReadStore(auditStoragePolicy)));
   const observationServices=new ObservationServices(telemetryDb,identity,control.idempotency,new MySqlObservationServiceStore(observationServiceStorageValues),Date.now,control.probes.servicesEnabled);
-  const probeRuns=new ProbeRuns(telemetryDb,identity,new MySqlProbeHistoryStore(probeRunStorageValues),Date.now,policy.maxClockSkewSeconds*1000);
-  const probePlans=new ProbePlans({db:telemetryDb,auth:identity,requests:control.idempotency,store:new MySqlProbePlanStore(probePlanStorageValues),
+  const probeRuns=new ProbeRuns(telemetryDb,identity,control.readAccess,new MySqlProbeHistoryStore(probeRunStorageValues),Date.now,policy.maxClockSkewSeconds*1000);
+  const probePlans=new ProbePlans({db:telemetryDb,auth:identity,access:control.readAccess,requests:control.idempotency,store:new MySqlProbePlanStore(probePlanStorageValues),
     issuer:{previewIn:(tx,actor,scope,config)=>control.probePlans.authorize(tx,actor,scope,config.forwardId,
       {version:1,kind:config.kind,expectedRevision:config.expectedForwardRevision,timeoutMs:config.timeoutMs,...(config.service?{service:config.service}:{})}),
     issueIn:(tx,actor,scope,config)=>control.probes.issueIn(tx,actor,scope,config.forwardId,
@@ -108,7 +111,7 @@ export async function startControl(options:ServerOptions):Promise<{ port:number;
   const notificationEndpoints=new NotificationEndpoints(telemetryDb,identity,control.idempotency,notificationStore,stationStore,
     notificationSecrets,notificationBinding,Date.now,notificationDeliveries.enabled);
   const requests=new RequestLifecycle();
-  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy,authority,control.relay), app=createControlApp({control,runtime,authority,requests,
+  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy,authority,control.relay,control.resourceLimits), app=createControlApp({control,runtime,authority,requests,
     services:{telemetry,forwardTelemetry,authenticateObservation:header=>telemetryDb.transaction(tx=>identity.authenticateIn(tx,header)),
       hostTelemetry,probeTelemetry,telemetryRollups,diagnostics,audit,stationAlerts,notificationEndpoints,notificationDeliveries,probeRuns,probePlans,observationServices}});
   const workers=options.worker!==false,backoff={initialMs:30000,maxMs:300000};

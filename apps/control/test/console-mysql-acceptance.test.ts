@@ -10,6 +10,8 @@ import { MySqlUnitOfWork } from '../src/infrastructure/mysql.ts';
 import { Identity, tokenHash } from '../src/modules/identity.ts';
 import type { RuntimeController } from '../src/modules/runtime/controller.ts';
 import { ConsoleQueries } from '../src/application/console-queries.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { MySqlResourceAccessStore } from '../src/infrastructure/mysql-resource-access.ts';
 import { MySqlConsoleReadModels } from '../src/infrastructure/mysql-console-read.ts';
 
 const databaseUrl = process.env.TUNEX_TEST_DATABASE_URL;
@@ -56,16 +58,16 @@ test('console queries preserve bounded pages, independent candidates, full-scope
                     i === 6 ? !['udp', 'native.multihop.v1'].includes(c) : i === 9 ? c !== 'adp.3' : i === 10 ? c !== 'native.direct.v1' : true);
                 const facts = { allowedListenerAddresses: i === 8 ? [] : ['127.0.0.1'], allowedPorts: i === 7 ? [] : [25565], capabilities: caps,
                     allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false, egressPolicyRevision: 1 };
-                await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,revoked,facts,enrollment_response) VALUES(?,?,?,0,?,?,?,?)',
-                    [id, scope, createHash('sha256').update(id).digest('hex'), i === 2 ? null : i === 1 ? now - 1 : now + 3600000, i === 0, JSON.stringify(facts), JSON.stringify({ secret: 'MUST_NOT_LEAK' })]);
+                await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,revoked,facts,enrollment_response,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,0,?,?,?,?,?,?,1)',
+                    [id, scope, createHash('sha256').update(id).digest('hex'), i === 2 ? null : i === 1 ? now - 1 : now + 3600000, i === 0, JSON.stringify(facts), JSON.stringify({ secret: 'MUST_NOT_LEAK' }), 'private', scope==='scope-a'?'manager':'outsider']);
                 if (i !== 3) await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)', [id, 'manager']);
             }
             for (let i = 0; i < 41; i++) {
                 const id = 'forward-' + String(i).padStart(2, '0'), scope = i === 40 ? 'scope-b' : 'scope-a';
                 const spec = { enabled: i % 2 === 0, protocols: i % 2 === 0 ? ['tcp', 'udp'] : ['tcp'],
                     ingress: { nodeId: 'node-20', listen: { address: '127.0.0.1', port: 25565 } }, target: { host: '127.0.0.1', port: 80 } };
-                await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,deleting,recovery_suspended) VALUES(?,?,1,?,?,?)',
-                    [id, scope, JSON.stringify(spec), i === 39, i === 38]);
+                await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,deleting,recovery_suspended,owner_actor_id) VALUES(?,?,1,?,?,?,?)',
+                    [id, scope, JSON.stringify(spec), i === 39, i === 38, scope==='scope-a'?'manager':'outsider']);
             }
             for (let i = 0; i < 46; i++) {
                 const id = 'op-' + String(i).padStart(2, '0'), scope = i === 45 ? 'scope-b' : 'scope-a';
@@ -80,7 +82,7 @@ test('console queries preserve bounded pages, independent candidates, full-scope
             reader = new MySqlUnitOfWork(readUrl.toString());
             await assert.rejects(reader.pool.query("UPDATE nodes SET revoked=TRUE"));
             const readIdentity = new Identity(reader);
-            const control = { db: reader, identity: readIdentity, queries: new ConsoleQueries(reader, readIdentity, new MySqlConsoleReadModels()) } as unknown as ControlApplication;
+            const control = { db: reader, identity: readIdentity, queries: new ConsoleQueries(reader, readIdentity, new MySqlConsoleReadModels(), new ResourceAccess(readIdentity,new MySqlResourceAccessStore())) } as unknown as ControlApplication;
             const authority = { allow: async () => undefined } as unknown as AuthorityStore;
             const app = createApp(control, {} as RuntimeController, authority);
             async function get<T>(resource: string, actor = 'manager', expected = 200, scope = 'scope-a'): Promise<T> {
@@ -127,8 +129,10 @@ test('console queries preserve bounded pages, independent candidates, full-scope
             const operations2 = await get<Page>('operations?page=2');
             assert.ok(operations.items.every(o => !operations2.items.some(other => o.id === other.id)));
             assert.deepEqual((await get<Page>('operations?status=failed&kind=update&forwardId=forward-00')).items.map(o => o.id), ['op-00']);
+            for(const resource of ['nodes','forwards','operations']){const personal=await get<Page>(resource,'viewer');assert.equal(personal.total,0);assert.deepEqual(personal.items,[]);}
+            const governed=await get<Overview>('overview','owner');assert.deepEqual([governed.nodes,governed.forwards,governed.activeOperations,governed.failedOperations],[40,39,2,2]);
             const overview = await get<Overview>('overview', 'viewer');
-            assert.deepEqual([overview.nodes, overview.forwards, overview.activeOperations, overview.failedOperations], [40, 39, 2, 2]);
+            assert.deepEqual([overview.nodes, overview.forwards, overview.activeOperations, overview.failedOperations], [0, 0, 0, 0]);
             assert.equal(overview.independentProbe, false);
             await get('operations?page=2&status=failed');
             const afterPage = await get<Overview>('overview');

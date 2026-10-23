@@ -203,3 +203,10 @@ test('cancel, input edits, clear and Scope changes discard late history without 
     assert.equal(h.el('next').disabled, true);
   }
 });
+
+test('personal history withholds Scope loss totals and never displays synthetic zeroes',async t=>{
+  const h=harness(t,async(_method,resource)=>page([run()],new URLSearchParams(resource.split('?')[1]),{losses:null}));
+  await h.click('list');assert.equal(h.notices.length,0);assert.equal(h.el('rows').children.length,1);
+  assert.match(h.el('losses').textContent,/不可见/);assert.match(h.el('losses').textContent,/不表示零损失/);
+  assert.doesNotMatch(h.el('losses').textContent,/rowsExpired|rowsEvicted|updatesWithoutHead/);
+});

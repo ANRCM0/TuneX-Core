@@ -27,7 +27,7 @@ async function withRuntime(action:(f:{
   owner:string;scope:string;forwardId:string;operationId:string;plan:RelayPreparedPlan;
   snapshots:RuntimeSnapshot[];report:(index:number,retryable?:boolean)=>RuntimeMessages['ReportRequest'];
   authority:AuthorityStore;
-})=>Promise<void>){
+})=>Promise<void>,forwardOwner='multihop-owner'){
   const admin=await createConnection(url!),database='tunex_mh_runtime_'+randomUUID().replaceAll('-','');
   const connectionURL=new URL(url!);connectionURL.pathname='/'+database;
   const db=new MySqlUnitOfWork(connectionURL.toString()),directory=await mkdtemp(join(tmpdir(),'tunex-mh-runtime-'));
@@ -42,12 +42,13 @@ async function withRuntime(action:(f:{
     await authority.initialize(database,'sha256:'+'a'.repeat(64),true);
     const runtime=new RuntimeController(db,nodes,app.forwarding,app.ledger,DEFAULT_POLICY,authority,app.relay);
     await identity.bootstrap(scope,owner,newToken());
+    if(forwardOwner!==owner)await app.changeMember(owner,scope,forwardOwner,randomUUID(),{expectedRevision:0,role:'manager',token:newToken()});
     await db.transaction(async tx=>{
       for(const [index,node] of input.nodes.entries()){
         const id=node.facts.nodeId,facts={...node.facts,allowedPorts:[32001,32003]};
-        await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',
-          [id,scope,createHash('sha256').update(id).digest('hex'),until,until,JSON.stringify(facts)]);
-        await write(tx,'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[id,owner]);
+        await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,?,?,?)',
+          [id,scope,createHash('sha256').update(id).digest('hex'),until,until,JSON.stringify(facts),'admin-shared',null,1]);
+        for(const actor of new Set([owner,forwardOwner]))await write(tx,'INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)',[id,actor,JSON.stringify([index===0?'ingress':index===input.nodes.length-1?'egress':'transit']),JSON.stringify({allowedPorts:index===0?[32001,32003]:input.endpoints.find(endpoint=>endpoint.nodeId===id)!.config.allowedTcpPorts,maxBindings:16})]);
         await write(tx,'INSERT INTO runtime_nodes(node_id,session_epoch,boot_id) VALUES(?,?,?)',[id,node.sessionEpoch,'boot-'+index]);
         await write(tx,'INSERT INTO node_relay_credentials(fingerprint,node_id,issued_at,valid_until,certificate) VALUES(?,?,?,?,?)',
           [node.peers[0]!.fingerprint.slice(7),id,now,until,'Synthetic DB fixture; never used for TLS']);
@@ -57,7 +58,8 @@ async function withRuntime(action:(f:{
           [endpoint.nodeId,1,JSON.stringify(endpoint.config),owner,now]);
     });
     await app.transport.publish(owner,scope,input.profile.profileId,randomUUID(),0,input.profile.config);
-    const accepted=await app.create(owner,scope,randomUUID(),input.forward.spec);
+    if(forwardOwner!==owner)await app.profileGrants.change(owner,scope,input.profile.profileId,forwardOwner,randomUUID(),1,true);
+    const accepted=await app.create(forwardOwner,scope,randomUUID(),input.forward.spec);
     const forwardId=accepted.body.forwardId,operationId=accepted.body.operationId!;
     const record=(await rows<{body:unknown}>(db.pool,'SELECT body FROM relay_deployments WHERE forward_id=?',[forwardId]))[0]!;
     const plan=json<RelayPreparedPlan>(record.body);
@@ -240,20 +242,9 @@ test('Profile restore capacity failure rolls back every new deployment, Fence, o
   });
 });
 
-async function memberAuthorizer(f:{app:ControlApplication;db:MySqlUnitOfWork;owner:string;scope:string;forwardId:string;plan:RelayPreparedPlan}):Promise<string>{
-  const subject='runtime-member';
-  await f.app.changeMember(f.owner,f.scope,subject,randomUUID(),{expectedRevision:0,role:'manager',token:newToken()});
-  await f.db.transaction(async tx=>{
-    for(const node of f.plan.nodes)await write(tx,'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[node.nodeId,subject]);
-    await write(tx,'INSERT INTO transport_profile_grants(profile_id,actor_id) VALUES(?,?)',[multihopFixture().profile.profileId,subject]);
-    await f.app.forwarding.setAuthorizer(tx,f.forwardId,subject);
-  });
-  return subject;
-}
-
 test('member demotion and restoration preserve shared leases, slots, replay and user revision on real MySQL',{skip:!url},async()=>{
   await withRuntime(async f=>{
-    const subject=await memberAuthorizer(f),key=randomUUID();
+    const subject='runtime-member',key=randomUUID();
     const leases=await rows<{valid_until:number}>(f.db.pool,'SELECT * FROM execution_leases WHERE forward_id=? ORDER BY node_id,assignment_id',[f.forwardId]);
     const slots=await rows(f.db.pool,'SELECT * FROM port_slots WHERE owner_id=? ORDER BY node_id,protocol,port',[f.forwardId]);
     const assertRetained=async()=>{
@@ -285,7 +276,7 @@ test('member demotion and restoration preserve shared leases, slots, replay and 
     assert.deepEqual(await rows(f.db.pool,'SELECT generation,target_revision FROM relay_deployments WHERE forward_id=? ORDER BY generation',[f.forwardId]),
       [{generation:1,target_revision:1},{generation:2,target_revision:1}]);
     assert.deepEqual(await rows(f.db.pool,'SELECT * FROM execution_leases WHERE forward_id=? ORDER BY node_id,assignment_id',[f.forwardId]),leases);
-  });
+  },'runtime-member');
 });
 
 test('intermediate Node Grant withdrawal and no-op retain cutoff and resources without a capacity veto',{skip:!url},async()=>{
@@ -307,7 +298,7 @@ test('intermediate Node Grant withdrawal and no-op retain cutoff and resources w
     const noOp=await f.app.changeNodeGrant(f.owner,f.scope,nodeId,f.owner,randomUUID(),2,false);
     assert.equal(noOp.status,200);assert.deepEqual(noOp.body.operationIds,[]);
     assert.equal(noOp.body.latestAuthorizationUntil,withdrawn.body.latestAuthorizationUntil);
-    const restored=await f.app.changeNodeGrant(f.owner,f.scope,nodeId,f.owner,randomUUID(),2,true);
+    const restored=await f.app.changeNodeGrant(f.owner,f.scope,nodeId,f.owner,randomUUID(),2,true,['transit'],{allowedPorts:multihopFixture().endpoints[0]!.config.allowedTcpPorts,maxBindings:16});
     assert.equal(restored.status,202);assert.equal(restored.body.operationIds.length,1);
     assert.equal((await f.db.transaction(tx=>f.app.forwarding.get(tx,f.scope,f.forwardId))).revision,1);
     assert.deepEqual(await rows(f.db.pool,'SELECT generation,target_revision FROM relay_deployments WHERE forward_id=? ORDER BY generation',[f.forwardId]),
@@ -318,7 +309,7 @@ test('intermediate Node Grant withdrawal and no-op retain cutoff and resources w
 
 test('member response failure rolls back membership, audit, operations and persisted replay together',{skip:!url},async()=>{
   await withRuntime(async f=>{
-    const subject=await memberAuthorizer(f),before=await grantState(f.db),key=randomUUID(),original=f.app.idempotency.respond;
+    const subject='runtime-member',before=await grantState(f.db),key=randomUUID(),original=f.app.idempotency.respond;
     let reached=false;
     f.app.idempotency.respond=async(tx,request,response)=>{
       assert.equal(request.key,key);
@@ -331,7 +322,7 @@ test('member response failure rolls back membership, audit, operations and persi
     finally{f.app.idempotency.respond=original;}
     assert.equal(reached,true);assert.deepEqual(await grantState(f.db),before);
     assert.equal((await f.app.changeMember(f.owner,f.scope,subject,key,{expectedRevision:1,role:'viewer'})).status,202);
-  });
+  },'runtime-member');
 });
 
 test('Node Grant restoration capacity failure rolls back grant audit, deployment, Fence and operation',{skip:!url},async()=>{
@@ -348,10 +339,10 @@ test('Node Grant restoration capacity failure rolls back grant audit, deployment
       }
       return original.apply(f.app.ledger,args);
     };
-    try{await assert.rejects(f.app.changeNodeGrant(f.owner,f.scope,nodeId,f.owner,key,2,true),/Injected Node grant path capacity/);}
+    try{await assert.rejects(f.app.changeNodeGrant(f.owner,f.scope,nodeId,f.owner,key,2,true,['transit'],{allowedPorts:multihopFixture().endpoints[0]!.config.allowedTcpPorts,maxBindings:16}),/Injected Node grant path capacity/);}
     finally{f.app.ledger.assertCapacity=original;}
     assert.equal(checks,2);assert.deepEqual(await grantState(f.db),before);
-    assert.equal((await f.app.changeNodeGrant(f.owner,f.scope,nodeId,f.owner,key,2,true)).status,202);
+    assert.equal((await f.app.changeNodeGrant(f.owner,f.scope,nodeId,f.owner,key,2,true,['transit'],{allowedPorts:multihopFixture().endpoints[0]!.config.allowedTcpPorts,maxBindings:16})).status,202);
   });
 });
 
@@ -372,27 +363,28 @@ async function seedMachineCredentials(db:MySqlUnitOfWork,nodeId:string):Promise<
   return fingerprints;
 }
 
-test('Node policy accepts a scope manager but recompiles with the original Forward authorizer and user revision',{skip:!url},async()=>{
+test('shared Node policy requires the scope owner and recompiles with the original Forward authorizer and user revision',{skip:!url},async()=>{
   await withRuntime(async f=>{
     const manager='node-manager',nodeId=f.plan.nodes[1]!.nodeId,key=randomUUID();
     await f.app.changeMember(f.owner,f.scope,manager,randomUUID(),{expectedRevision:0,role:'manager',token:newToken()});
     assert.equal(await f.db.transaction(tx=>f.nodes.hasGrant(tx,nodeId,manager)),false);
     const policy=await managementPolicy(f,nodeId,2),command={kind:'policy' as const,expectedRevision:1,policy};
     const leases=await rows(f.db.pool,'SELECT * FROM execution_leases WHERE forward_id=? ORDER BY node_id,assignment_id',[f.forwardId]);
-    const result=await f.app.changeNode(manager,f.scope,nodeId,key,command);
+    await assert.rejects(f.app.changeNode(manager,f.scope,nodeId,randomUUID(),command),{code:'AUTHORIZATION_DENIED'});
+    const result=await f.app.changeNode(f.owner,f.scope,nodeId,key,command);
     assert.equal(result.status,202);assert.equal(result.body.policyRevision,2);assert.equal(result.body.operationIds.length,1);
-    assert.equal(await f.db.transaction(tx=>f.app.forwarding.authorizer(tx,f.forwardId)),f.owner);
+    assert.equal(await f.db.transaction(tx=>f.app.forwarding.authorizer(tx,f.forwardId)),'forward-manager');
     const operation=await f.db.transaction(tx=>f.app.ledger.latest(tx,f.forwardId));
-    assert.equal(operation?.kind,'policy');assert.equal(operation?.requested_by,manager);assert.equal(operation?.target_revision,1);
+    assert.equal(operation?.kind,'policy');assert.equal(operation?.requested_by,f.owner);assert.equal(operation?.target_revision,1);
     assert.deepEqual(await rows(f.db.pool,'SELECT generation,target_revision FROM relay_deployments WHERE forward_id=? ORDER BY generation',[f.forwardId]),
       [{generation:1,target_revision:1},{generation:2,target_revision:1}]);
     assert.deepEqual(await rows(f.db.pool,'SELECT * FROM execution_leases WHERE forward_id=? ORDER BY node_id,assignment_id',[f.forwardId]),leases);
-    assert.deepEqual(await f.app.changeNode(manager,f.scope,nodeId,key,command),result);
+    assert.deepEqual(await f.app.changeNode(f.owner,f.scope,nodeId,key,command),result);
     assert.equal((await rows<{n:number}>(f.db.pool,"SELECT COUNT(*) n FROM node_security_events WHERE node_id=? AND kind='policy_update'",[nodeId]))[0]!.n,1);
-    await assert.rejects(f.app.changeNode(manager,f.scope,nodeId,randomUUID(),command),{code:'REVISION_CONFLICT'});
+    await assert.rejects(f.app.changeNode(f.owner,f.scope,nodeId,randomUUID(),command),{code:'REVISION_CONFLICT'});
     await write(f.db.pool,'UPDATE scope_members SET can_manage=FALSE WHERE scope_id=? AND actor_id=?',[f.scope,manager]);
     await assert.rejects(f.app.changeNode(manager,f.scope,nodeId,key,command),{code:'AUTHORIZATION_DENIED'});
-  });
+  },'forward-manager');
 });
 
 test('denied Node policy records failed cleanup intent and restores only through a fresh deployment generation',{skip:!url},async()=>{
@@ -525,7 +517,7 @@ test('Forward Direct command acceptance preserves CAS, no-op authorization, retr
     assert.equal((await rows<{n:number}>(f.db.pool,'SELECT COUNT(*) n FROM operations WHERE forward_id=?',[id]))[0]!.n,1);
     await write(f.db.pool,'DELETE FROM node_grants WHERE node_id=? AND actor_id=?',[nodeId,f.owner]);
     await assert.rejects(f.app.update(f.owner,f.scope,id,randomUUID(),1,spec),{code:'NOT_FOUND'});
-    await write(f.db.pool,'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[nodeId,f.owner]);
+    await write(f.db.pool,'INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)',[nodeId,f.owner,JSON.stringify(['ingress']),JSON.stringify({allowedPorts:[32001,32003],maxBindings:16})]);
     const disabled=await f.app.update(f.owner,f.scope,id,randomUUID(),1,{...spec,enabled:false});
     assert.equal(disabled.body.revision,2);
     const enabled=await f.app.update(f.owner,f.scope,id,randomUUID(),2,spec);

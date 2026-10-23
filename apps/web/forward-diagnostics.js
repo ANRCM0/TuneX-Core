@@ -255,8 +255,8 @@ export function initForwardDiagnostics({ request, byId, notify, getScope, summar
       data.operations.items.map(row => ({ targetRevision: row.targetRevision, createdAt: stamp(row.createdAt), updatedAt: stamp(row.updatedAt), deadline: stamp(row.executionDeadline) }))]],
     (i.mode === 'direct' ? 'Direct 无 Relay 部署记录是预期情形。' : '部署阶段或接受回执不是端到端验收。') + ' Operation 最多 8 条，truncated=' + data.operations.truncated + '；历史修订不混作当前部署。nextStep 仅是固定排查建议，不是执行授权，不会自动重试。');
     section('3 · 节点与报告', ['位置 / Node / 角色','会话与报告证据','新鲜度 / 时间'], data.nodes.map((row, index) => [row.position + ' / ' + row.nodeId + ' / ' + row.role,
-      b.nodes[index].evidence, row.evidence === null ? null : { observation: row.evidence.observation, receivedAt: stamp(row.evidence.receivedAt), snapshot: row.evidence.snapshot, report: row.evidence.report }]),
-    '最多八节点；fresh 仅表示这份 Agent 报告满足时间与身份条件，不代表网络、应用健康或执行授权。');
+      b.nodes[index].evidence===null?'主机证据不可见或无记录':b.nodes[index].evidence, row.evidence === null ? '主机证据不可见或无记录；不推断离线' : { observation: row.evidence.observation, receivedAt: stamp(row.evidence.receivedAt), snapshot: row.evidence.snapshot, report: row.evidence.report }]),
+    '最多八节点；共享用途授权不包含整机证据，空白不推断离线。本人规则的监听报告独立保留。fresh 仅表示这份 Agent 报告满足时间与身份条件，不代表网络、应用健康或执行授权。');
     section('4 · 物理监听 / 发布元组', ['Node / Assignment / 代际 / Fence','业务协议 / 实际监听 / Driver','报告 / drain / reservation'], data.listeners.items.map(row => [
       { node: row.nodeId, assignment: row.assignmentId, generation: row.deploymentGeneration, fence: row.bindingFence, revision: row.forwardRevision, relation: row.relation },
       { role: row.role, protocol: row.protocol, resource: row.resource, driver: row.driverId, phase: row.phase },

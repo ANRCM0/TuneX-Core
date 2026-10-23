@@ -34,9 +34,9 @@ for(const c of configurations){
         assert.equal(c.values,pathPublicationStorageValues);assert.equal(ingressDeploymentStorageValues,ingressMigrationStorageValues);
         await store.lockScope(h.tx,'scope');assert.deepEqual(h.calls,[{sql:'SELECT id FROM scopes WHERE id=? FOR UPDATE',args:['scope']}]);
         h.reset();h.answers.push([{n:7}]);assert.equal(await store.count(h.tx,'scope'),7);assert.deepEqual(h.calls,[{sql:`SELECT COUNT(*) n FROM ${c.table} WHERE scope_id=?`,args:['scope']}]);
-        for(const groupId of [undefined,'group']){
+        for(const governance of [false,true])for(const groupId of [undefined,'group']){
             h.reset();store.count=async()=>assert.fail('filtered list must execute its own original COUNT');h.answers.push([{n:1}],[stored]);
-            const result=await store.list(h.tx,'scope',{page:2,limit:5,offset:5},groupId),filter='scope_id=?'+(groupId===undefined?'':' AND group_id=?'),args=groupId===undefined?['scope']:['scope','group'];
+            const result=await store.list(h.tx,'scope',{actorId:'actor',governance},{page:2,limit:5,offset:5},groupId),filter='scope_id=?'+(governance?'':' AND created_by=?')+(groupId===undefined?'':' AND group_id=?'),args=['scope',...(governance?[]:['actor']),...(groupId===undefined?[]:['group'])];
             assert.deepEqual(h.calls,[{sql:`SELECT COUNT(*) n FROM ${c.table} WHERE ${filter}`,args},{sql:`SELECT batch_id,revision,created_by,created_at,plan_digest,cancelled,recovery_invalidated FROM ${c.table} WHERE ${filter} ORDER BY batch_id LIMIT 5 OFFSET 5`,args}]);
             assert.deepEqual(result,{total:1,items:[{...head,cancelled:false,recoveryInvalidated:true}]});
         }

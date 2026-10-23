@@ -8,6 +8,27 @@ do not accept A5, the foundation, runtime execution, upgrade permission or relea
 
 ## Public owner and full source chains
 
+N successor, 2026-10-21 (source candidate, unverified): FR-0028/0030/0032 advance the
+public assessment counter to 5 and the catalog to 41 files ending in
+0041-shared-resource-payload-limits.sql. The 30 Control profiles include
+adp3-product-resource-access-v1 (ceiling 0039) and
+adp3-shared-node-port-limits-v1 (ceiling 0040) and adp3-shared-resource-limits-v1
+(ceiling 0041). Older profile ceilings, the original Agent profiles,
+plan/report version 1 and the original read-only owner
+chain remain. The 0038 CHECK-only review still identifies that exact file; it is
+not applied to the catalog's last entry. The N catalog/profile/footprint and real
+MySQL read-only consumers have authored migrations, including unrecorded 0039/0040/0041
+DDL refusal. None of these successor cases has been executed. This paragraph
+supersedes only the current counter/catalog facts in the dated descriptions below.
+
+FR-0032 explicitly allows the shared-resource Agent profile and JournalInspection2
+budget version/count/precise decimal precharge total. Original v1 exports remain
+accepted as old-format evidence; a new source using one requires review. Limited
+Snapshot counts require a supporting target Agent, and retained budget history
+blocks downgrade to older readers. Native inspection performs only original
+read-only SQL/file operations; malformed resource envelopes add to unsupported
+Snapshot evidence. No reset, history deletion or acceptance is implied.
+
 Current B amendment, 2026-10-20: [FR-0027](../changes/FR-0027-probe-plan-json-integers.md)
 advances UPGRADE_ASSESSMENT_INTERFACE_VERSION to 2 and the reviewed catalog to
 38 files ending in 0038-probe-plan-json-integers.sql. The 27th Control profile,

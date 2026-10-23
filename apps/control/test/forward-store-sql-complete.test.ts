@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { parseForward } from '@tunex/core';
 import { MySqlForwardIntentStore, MySqlIdempotencyStore } from '../src/infrastructure/mysql-intent-store.ts';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
 import { ForwardStateService } from '../src/modules/forward-owner/public.ts';
 
 function fixture(){
-    const calls:unknown[][]=[],raw=[{id:'forward',scope_id:'scope',revision:2,spec:{unvalidated:true},authorization_actor:null,deleting:1,recovery_suspended:0}];
+    const calls:unknown[][]=[],raw=[{id:'forward',scope_id:'scope',revision:2,spec:{unvalidated:true},owner_actor_id:'owner-a',authorization_actor:null,deleting:1,recovery_suspended:0}];
     let answer:unknown[]=raw,failure:unknown,affected=0;
     const tx={async execute(sql:string,args:unknown[]){assert.equal(this,tx);calls.push([sql,args]);if(failure)throw failure;return [sql.startsWith('SELECT')?answer:{affectedRows:affected},[]];}} as unknown as Transaction;
     return {calls,raw,tx,store:new MySqlForwardIntentStore(),idem:new MySqlIdempotencyStore(),set(value:unknown[]){answer=value;},fail(value:unknown){failure=value;},affected(value:number){affected=value;}};
@@ -21,7 +22,7 @@ test('22 Forward native store retains all seventeen literal SQL predicates lock 
         [()=>s.forNode(t,'node'),"SELECT * FROM forwards WHERE deleting=FALSE AND recovery_suspended=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? ORDER BY id",['node']],
         [()=>s.forReferencedNode(t,'node'),"SELECT * FROM forwards WHERE deleting=FALSE AND recovery_suspended=FALSE AND (JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? OR JSON_CONTAINS(JSON_EXTRACT(spec,'$.path.via'),JSON_QUOTE(?))) ORDER BY id",['node','node']],
         [()=>s.forProfileActor(t,'actor','profile'),"SELECT * FROM forwards WHERE authorization_actor=? AND deleting=FALSE AND recovery_suspended=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.transport.profileId'))=? ORDER BY id",['actor','profile']],
-        [()=>s.insertCurrent(t,'forward','scope',2,'encoded','actor'),'INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES(?,?,?,?,?)',['forward','scope',2,'encoded','actor']],
+        [()=>s.insertCurrent(t,'forward','scope',2,'encoded','actor'),'INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor,owner_actor_id) VALUES(?,?,?,?,?,?)',['forward','scope',2,'encoded','actor','actor']],
         [()=>s.insertRevision(t,'forward',2,'encoded'),'INSERT INTO forward_revisions(forward_id,revision,spec) VALUES(?,?,?)',['forward',2,'encoded']],
         [()=>s.authorizer(t,'forward'),'SELECT authorization_actor FROM forwards WHERE id=?',['forward']],
         [()=>s.setAuthorizer(t,'actor','forward'),'UPDATE forwards SET authorization_actor=? WHERE id=?',['actor','forward']],
@@ -70,4 +71,25 @@ test('22 Forward service preserves lazy raw revisions projection flags missing r
     assert.deepEqual(events,[]);assert.equal(await service.authorizer(f.tx,'forward'),null);
     assert.equal(await service.hasLiveRelay(f.tx,'profile','node'),false);assert.deepEqual(f.calls.at(-1)![1],['profile']);
     const length=f.calls.length;await assert.rejects(service.hasLiveRelay(f.tx),{message:'Explicit Relay reference required'});assert.equal(f.calls.length,length);
+});
+
+test('Forward domain consumers receive exactly the Core value while product reads retain persisted ownership',async()=>{
+    const f=fixture(),spec={enabled:true,protocols:['tcp'],ingress:{nodeId:'node-a',listen:{address:'127.0.0.1',port:32001}},target:{host:'127.0.0.1',port:80}};
+    const row={...f.raw[0]!,spec,owner_actor_id:'owner-a'};f.set([row]);
+    const service=new ForwardStateService({store:f.store,values:{read<T>(value:unknown):T{return value as T;},encode(){return assert.fail('read path encoding');}}});
+    const domain=async(value:unknown)=>{assert.deepEqual(Object.keys(value as object),['id','scopeId','revision','spec']);const parsed=parseForward(value);assert.equal(parsed.ok,true);if(parsed.ok)assert.deepEqual(parsed.value,value);};
+    await domain(await service.currentForUpdate(f.tx,'scope','forward'));
+    await domain(await service.ownershipForUpdate(f.tx,'scope','forward'));
+    assert.deepEqual(f.calls.at(-1),['SELECT * FROM forwards WHERE id=? AND scope_id=? FOR UPDATE',['forward','scope']]);
+    for(const action of [()=>service.forNode(f.tx,'node-a'),()=>service.forReferencedNode(f.tx,'node-a'),()=>service.forActor(f.tx,'scope','actor'),()=>service.forProfileActor(f.tx,'profile','actor')]){
+        const values=await action();assert.equal(values.length,1);await domain(values[0]);
+    }
+    const get=await service.get(f.tx,'scope','forward'),record=await service.record(f.tx,'scope','forward');
+    assert.deepEqual(Object.keys(get),['id','scopeId','revision','spec','ownerActorId']);assert.equal(get.ownerActorId,'owner-a');
+    assert.deepEqual(Object.keys(record),['id','scopeId','revision','spec','ownerActorId','deleting','recoverySuspended']);
+    assert.equal(record.ownerActorId,'owner-a');assert.equal(record.deleting,true);assert.equal(record.recoverySuspended,false);
+    for(const owner of [null,'owner-b']){f.set([{...row,owner_actor_id:owner}]);await domain(await service.currentForUpdate(f.tx,'scope','forward'));assert.equal((await service.get(f.tx,'scope','forward')).ownerActorId,owner);}
+    f.set([{...row,owner_actor_id:undefined}]);
+    for(const action of [()=>service.currentForUpdate(f.tx,'scope','forward'),()=>service.ownershipForUpdate(f.tx,'scope','forward'),()=>service.get(f.tx,'scope','forward'),()=>service.record(f.tx,'scope','forward'),()=>service.forNode(f.tx,'node-a')])
+        await assert.rejects(action(),{code:'INTEGRITY_FAILURE',status:409,message:'Invalid persisted Forward ownership'});
 });

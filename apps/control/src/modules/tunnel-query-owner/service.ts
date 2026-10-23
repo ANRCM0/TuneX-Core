@@ -2,7 +2,7 @@ import { deepFreeze, isCounter, isId, parseForwardSpec } from '@tunex/core';
 import { parseRelayEndpoint, nativeIsoTime, nativeWallClockSource } from '../../compatibility/public.ts';
 import { consolePage } from '../console-query-owner/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 
 import type { TunnelReadPort, TunnelPaging, TunnelQueryApi } from './contracts.ts';
 export type { TunnelNodeRecord, TunnelPeerRecord, TunnelReference, TunnelPaging, TunnelReadPort } from './contracts.ts';
@@ -14,10 +14,11 @@ function integrity(message: string): never { throw new ControlError('INTEGRITY_F
 export class TunnelQueries<Tx> implements TunnelQueryApi {
     private readonly db: TransactionBoundary<Tx>;
     private readonly identity: ScopeAuthorization<Tx>;
+    private readonly access: ResourceReadAccess<Tx>;
     private readonly read: TunnelReadPort<Tx>;
     private readonly clock: () => number;
-    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, read: TunnelReadPort<Tx>, clock: () => number = nativeWallClockSource()) {
-        this.db = db; this.identity = identity; this.read = read; this.clock = clock;
+    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, read: TunnelReadPort<Tx>, access: ResourceReadAccess<Tx>, clock: () => number = nativeWallClockSource()) {
+        this.db = db; this.identity = identity; this.access = access; this.read = read; this.clock = clock;
     }
 
     private validate(actor: string, scope: string, node: string) {
@@ -37,6 +38,7 @@ export class TunnelQueries<Tx> implements TunnelQueryApi {
         this.validate(actor, scope, node);
         return this.db.transaction(async tx => {
             await this.identity.scope(tx, actor, scope);
+            await this.access.node(tx, actor, scope, node, 'diagnostics');
             const record = await this.node(tx, scope, node), now = this.clock();
             if (!timestamp(now)) integrity('Invalid metadata observation clock');
             const endpoint = await this.read.endpoint(tx, node);
@@ -80,8 +82,10 @@ export class TunnelQueries<Tx> implements TunnelQueryApi {
         const paging = Object.freeze(consolePage(input.page, input.limit));
         return this.db.transaction(async tx => {
             await this.identity.scope(tx, actor, scope);
+            await this.access.node(tx, actor, scope, node, 'basic');
+            const principal = await this.access.principal(tx, actor, scope);
             await this.node(tx, scope, node);
-            const result = await this.read.references(tx, scope, node, paging);
+            const result = await this.read.references(tx, scope, principal, node, paging);
             if (!Number.isSafeInteger(result.total) || result.total < 0 || !Array.isArray(result.items) || result.items.length > paging.limit ||
                 new Set(result.items.map(item => item.forwardId)).size !== result.items.length) integrity('Invalid bounded tunnel reference page');
             const items = result.items.map(item => {

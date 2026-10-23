@@ -15,7 +15,7 @@ func Relay() executiondriver.Driver {
 			ID: "native.relay.v1", HostVersion: 1, SchemaVersion: 1,
 			Platforms: []string{"linux", "windows"},
 			Roles:     []string{"relay-ingress", "relay-egress"}, Phases: []string{"prepared", "active", "draining"}, Protocols: []string{"tcp", "udp"},
-			Capabilities: []string{"native.relay.v1", "relay.wire.1"}, RequiresRelay: true,
+			Capabilities: []string{"native.relay.v1", "relay.wire.1", "shared-resource-limits.v1"}, RequiresRelay: true,
 		},
 		Start: StartRelay, Phase: RelayPhase, Classify: ClassifyRelay,
 	}
@@ -27,7 +27,7 @@ func Multihop() executiondriver.Driver {
 			ID: "native.multihop.v1", HostVersion: 1, SchemaVersion: 1,
 			Platforms: []string{"linux", "windows"},
 			Roles:     []string{"multihop-ingress", "multihop-transit", "multihop-egress"}, Phases: []string{"prepared", "active", "draining"}, Protocols: []string{"tcp", "udp"},
-			Capabilities: []string{"adp.execution.1", "native.multihop.v1", "multihop.wire.1"}, RequiresRelay: true, RequiresMultihop: true,
+			Capabilities: []string{"adp.execution.1", "native.multihop.v1", "multihop.wire.1", "shared-resource-limits.v1"}, RequiresRelay: true, RequiresMultihop: true,
 		},
 		Start: StartMultihop, Phase: RelayPhase, Classify: ClassifyRelay,
 	}
@@ -50,7 +50,7 @@ func StartRelay(host executiondriver.Host, a adp3.Assignment, check func() error
 	if err != nil {
 		return nil, err
 	}
-	engine, err := relay.Prepare(assignment, identity, Maximum(host, a), check)
+	engine, err := relay.PrepareMetered(assignment, identity, Maximum(host, a), check, host.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func StartMultihop(host executiondriver.Host, a adp3.Assignment, check func() er
 	if err != nil {
 		return nil, err
 	}
-	engine, err := relay.PrepareMultihop(a, identity, Maximum(host, a), check)
+	engine, err := relay.PrepareMultihopMetered(a, identity, Maximum(host, a), check, host.Payload)
 	if err != nil {
 		return nil, err
 	}

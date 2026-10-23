@@ -162,6 +162,8 @@ type Runner struct{
 func newRunnerFixture()(*Runner,context.Context,context.CancelFunc){trace:=&traceFixture{};r:=&Runner{trace:trace,instances:map[string]running{},drains:map[string]drainFixture{}};r.options.NodeID="node";r.options.BootID="boot";r.journal.Generation=42;r.clock=&scheduleFixture{trace:trace,now:time.Unix(100,0),until:time.Hour};r.guard=&guardFixture{runner:r};decodedFixture=helloFixture{NodeId:"node",BootId:"boot",ServerTime:"server-time"};decodedFixture.Policy.PollIntervalSeconds=7;decodeFailureFixture=nil;parseFailureFixture=nil;ctx,cancel:=context.WithCancel(context.Background());return r,ctx,cancel}
 func(r *Runner)scheduler()*scheduleFixture{return r.clock}
 func(r *Runner)executionFeatures()int{return 1}
+func(r *Runner)executionCapabilities()[]string{return builtinExecutionDrivers.capabilities(r.executionFeatures())}
+func(r *Runner)stopPayloadLimitedLocked(){}
 func(r *Runner)channelProvider()channelFixture{return channelFixture{r}}
 func(r *Runner)localLog()logFixture{return logFixture{r}}
 func(r *Runner)stop(){r.trace.add("stop")}

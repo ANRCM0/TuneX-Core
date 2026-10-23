@@ -7,7 +7,7 @@ import type { ProbeTelemetryExport, ProbeTelemetryRecord } from './probe-contrac
 import type { TelemetryFamily, TelemetryResolution, TelemetryRollupRecord, TelemetryRollupLosses, TelemetryRollupCounts } from './rollup-contracts.ts';
 import type { TELEMETRY_ROLLUP_LIMITS } from './policy.ts';
 
-export const TELEMETRY_API_INTERFACE_VERSION=1 as const;
+export const TELEMETRY_API_INTERFACE_VERSION=2 as const;
 
 export interface TelemetryHistoryQuery {from?:string|undefined;to?:string|undefined;limit?:string|undefined}
 export interface TelemetryReadAdmission {admitReadRequest<T>(action:()=>Promise<T>):Promise<T>}
@@ -42,11 +42,11 @@ export interface TelemetryForwardPointEvidence {
     nodeRevoked:boolean;credentialWindowOpen:boolean;sessionCurrent:boolean;freshness:string;
 }
 export interface ForwardTelemetryPointView extends TelemetryForwardPointEvidence {
-    point:ForwardTelemetryPoint;exporter:ForwardTelemetryExport;delta:ForwardTelemetryDelta;
+    point:ForwardTelemetryPoint;exporter:Omit<ForwardTelemetryExport,'coverage'|'droppedSamples'>;delta:ForwardTelemetryDelta;
     mapping:{source:ForwardTelemetryRecord['mappingSource'];publishedUntil:string;currentBinding:string};
 }
 export interface ProbeTelemetryPointView extends TelemetryForwardPointEvidence {
-    point:ProbeTelemetryPoint;exporter:ProbeTelemetryExport;delta:ProbeTelemetryDelta;
+    point:ProbeTelemetryPoint;exporter:Omit<ProbeTelemetryExport,'coverage'|'droppedSamples'>;delta:ProbeTelemetryDelta;
     mapping:{source:ProbeTelemetryRecord['mappingSource'];publishedUntil:string;currentBinding:string;
         probeInstance:ProbeTelemetryRecord['probeInstance'];instanceUntil:string|null};
 }
@@ -96,7 +96,11 @@ export interface TelemetryRollupHistory {
     telemetryAggregateVersion:number;target:{kind:'node'|'forward';id:string};family:TelemetryFamily;enabled:boolean;
     source:string;health:string;executionAuthorized:boolean;observedAt:string;
     window:{from:string;to:string;resolution:TelemetryResolution;limit:number;seriesKey:string|null;after:string|null;nextAfter:string|null;truncated:boolean};
-    retention:typeof TELEMETRY_ROLLUP_LIMITS;losses:TelemetryRollupLosses&{scope:string};items:TelemetryRollupRecord[];
+    retention:typeof TELEMETRY_ROLLUP_LIMITS;
+    losses:({scope:'node-family'|'scope-family'}&TelemetryRollupLosses)|{
+        scope:'withheld-scope-family';minuteEvicted:null;hourEvicted:null;cursorEvicted:null;cursorExpired:null;
+    };
+    items:TelemetryRollupRecord[];
 }
 export interface TelemetryRollupCapacity {
     telemetryAggregateVersion:number;enabled:boolean;source:string;executionAuthorized:boolean;observedAt:string;

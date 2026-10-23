@@ -11,7 +11,7 @@ import * as legacy from '../src/application/path-templates.ts';
 import * as legacyParser from '../src/modules/path-template-contract.ts';
 import { nativeWallClockSource, nativeIsoTime } from '../src/compatibility/public.ts';
 import type { PathTemplateConfig, PathTemplateHead, PathTemplateRevision, PathTemplateReader, PathTemplateWriter } from '../src/modules/path-owner/public.ts';
-import type { PathTemplateStoredHead, PathTemplateStoredRevision, PathTemplateStorageReader, PathTemplateStorage, ReadPageWindow } from '../src/framework/public.ts';
+import type { PathTemplateStoredHead, PathTemplateStoredRevision, PathTemplateStorageReader, PathTemplateStorage, ReadPageWindow, ResourceReadAccess } from '../src/framework/public.ts';
 import type { ConsolePaging } from '../src/application/console-query.ts';
 
 type Equal<A,B>=(<T>()=>T extends A?1:2) extends (<T>()=>T extends B?1:2)?true:false;
@@ -38,15 +38,15 @@ test('54 original public legacy parser classes validators and mutable limits ret
     for(const name of ['PATH_TEMPLATE_LIMITS','validateTemplateHead','validateTemplateRevision'] as const)assert.equal(legacy[name],path[name]);
     assert.deepEqual(path.PATH_TEMPLATE_LIMITS,{templatesPerScope:128,revisionsPerTemplate:64});assert.equal(Object.isFrozen(path.PATH_TEMPLATE_LIMITS),false);
     Object.assign(path.PATH_TEMPLATE_LIMITS,{revisionsPerTemplate:2});
-    try{assert.throws(()=>path.validateTemplateHead({templateId:'id',currentRevision:3,archived:false}));}
+    try{assert.throws(()=>path.validateTemplateHead({templateId:'id',ownerActorId:'actor',currentRevision:3,archived:false}));}
     finally{Object.assign(path.PATH_TEMPLATE_LIMITS,{revisionsPerTemplate:64});}
     let reads=0;const original=()=>{reads++;return at;};t.mock.method(Date,'now',original);
     assert.equal(nativeWallClockSource(),Date.now);assert.equal(reads,0);
     const untouched=new Proxy({},{get(_target,key){assert.fail('construction read '+String(key));}});
-    new path.PathTemplateQueries(untouched as never,untouched as never,untouched as never);
-    new path.PathTemplateCommands(untouched as never,untouched as never,untouched as never,untouched as never,untouched as never);
-    assert.equal(reads,0);assert.equal(path.PathTemplateQueries.length,3);assert.equal(path.PathTemplateCommands.length,5);
-    for(const [owner,names] of [[path.PathTemplateQueries,['list','get']],[path.PathTemplateCommands,['publish','archive']]] as const)
+    new path.PathTemplateQueries(untouched as never,untouched as never,untouched as never,untouched as never);
+    new path.PathTemplateCommands(untouched as never,untouched as never,untouched as never,untouched as never,untouched as never,untouched as never);
+    assert.equal(reads,0);assert.equal(path.PathTemplateQueries.length,4);assert.equal(path.PathTemplateCommands.length,6);
+    for(const [owner,names] of [[path.PathTemplateQueries,['list','get']],[path.PathTemplateCommands,['publish','archive','classifyOwner']]] as const)
         for(const name of names){const method=Object.getOwnPropertyDescriptor(owner.prototype,name)!;assert.equal(method.enumerable,false);assert.equal(method.writable,true);assert.equal(method.configurable,true);assert.equal(method.value.constructor.name,'AsyncFunction');}
 });
 
@@ -70,7 +70,7 @@ test('54 parser and stored hash keep terminal newline behavior canonical key ord
     const newlineProfile=hash+'\n',newlineRecord={...record(),profileDigest:newlineProfile,configDigest:digest({config:parsed,profileDigest:newlineProfile})};
     assert.throws(()=>path.validateTemplateRevision(newlineRecord,1));
     assert.throws(()=>path.validateTemplateRevision({...record(),configDigest:record().configDigest+'\n'},1));
-    const input={templateId:'id',currentRevision:1,archived:false,extra:'native spread'};const result=path.validateTemplateHead(input);assert.notEqual(result,input);assert.equal((result as typeof input).extra,'native spread');assert.equal(Object.isFrozen(result),false);
+    const input={templateId:'id',ownerActorId:'actor',currentRevision:1,archived:false,extra:'native spread'};const result=path.validateTemplateHead(input);assert.notEqual(result,input);assert.equal((result as typeof input).extra,'native spread');assert.equal(Object.isFrozen(result),false);
 });
 
 test('54 current state and command digest helpers preserve independent input property order and original provider failures',async()=>{
@@ -82,7 +82,7 @@ test('54 current state and command digest helpers preserve independent input pro
     const calls:unknown[][]=[];let sampled=0;const compatibility={...injected,nativeWallClockSource(){calls.push(['capture']);return ()=>{sampled++;return at;};},nativeIsoTime};fail=false;
     const api=loaded('templates.ts',{'@tunex/core':core,'../../framework/public.ts':framework,'../../compatibility/public.ts':compatibility,'./template-values.ts':path,'./template-state.ts':path});
     const tx={},replay={status:200,body:{prior:'same raw object'}},db={transaction(action:(tx:object)=>unknown){calls.push(['begin']);return action(tx);}},auth={scope(...args:unknown[]){calls.push(['auth',...args]);}},requests={claim(_tx:unknown,request:unknown){calls.push(['claim',request]);return replay;}};
-    const owner=new api.PathTemplateCommands(db,auth,requests,{},{});assert.deepEqual(calls,[['capture']]);assert.equal(sampled,0);
+    const owner=new api.PathTemplateCommands(db,auth,{async owned(current:object,actor:string,scope:string,kind:string,id:string,governance:boolean){assert.equal(current,tx);assert.deepEqual([actor,scope,kind,id,governance],['actor','scope','path-template','id',true]);}},requests,{},{});assert.deepEqual(calls,[['capture']]);assert.equal(sampled,0);
     calls.length=0;digests.length=0;assert.equal(await owner.publish('actor','scope','id','key',0,config()),replay);
     const request=digests[0]![1] as Record<string,unknown>;assert.deepEqual(Object.keys(request),['method','path','expectedRevision','config']);assert.equal(request.path,'/api/v1/scopes/scope/path-templates/id');assert.equal(sampled,0);
     digests.length=0;await owner.archive('actor','scope','id','key',1);assert.deepEqual((digests[0]![0]),['method','path','expectedRevision']);
@@ -93,9 +93,10 @@ function fixture(){
     const data={head:null as PathTemplateHead|null,revision:null as PathTemplateRevision|null,total:0,page:[] as PathTemplateHead[],clock:at,profile:hash,replay:undefined as unknown,published:[] as PathTemplateRevision[],audits:[] as unknown[]};
     const trace=(name:string,supplied:unknown)=>{assert.equal(supplied,tx);calls.push(name);if(failAt===name)throw failure;};
     const db={async transaction<T>(action:(current:typeof tx)=>Promise<T>){calls.push('begin');const before=structuredClone(data);try{const value=await action(tx);calls.push('commit');return value;}catch(e){Object.assign(data,before);calls.push('rollback');throw e;}}};
-    const auth={scope(current:typeof tx,_actor:string,_scope:string,manage=false){trace('auth:'+manage,current);return Promise.resolve();}};
+    const auth={async owner(current:typeof tx){assert.equal(current,tx);assert.fail('unexpected classification');},scope(current:typeof tx,_actor:string,_scope:string,manage=false){trace('auth:'+manage,current);return Promise.resolve();}};
     const requests={async claim<T>(current:typeof tx){trace('claim',current);return data.replay as T|undefined;},async respond(current:typeof tx){trace('respond',current);}};
     const store:PathTemplateWriter<typeof tx>={
+        async classifyOwner(){assert.fail('unexpected classification');},async auditOwnership(){assert.fail('unexpected classification');},
         async lockScope(current){trace('scope-lock',current);},async count(current){trace('count',current);return data.total;},
         async head(current,_scope,_id,lock=false){trace('head:'+lock,current);return data.head;},async revision(current){trace('revision',current);return data.revision;},
         async list(current){trace('list',current);return {total:data.total,items:data.page};},
@@ -104,7 +105,12 @@ function fixture(){
     };
     const references={async validate(current:typeof tx){trace('references',current);return {profileDigest:data.profile};}};
     const clock=()=>{calls.push('clock');if(failAt==='clock')throw failure;return data.clock;};
-    return {tx,calls,data,failure,fail(name:string){failAt=name;},store,references,commands:new path.PathTemplateCommands(db,auth,requests,store,references,clock),queries:new path.PathTemplateQueries(db,auth,store)};
+    const access:ResourceReadAccess<typeof tx>={
+        async principal(current,actor,scope){assert.equal(current,tx);assert.equal(scope,'scope');if(failAt==='access')throw failure;return {actorId:actor,governance:false};},
+        async owned(current,actor,scope,kind,id,allowGovernance){assert.equal(current,tx);assert.deepEqual([actor,scope,kind,id],['actor','scope','path-template','id']);assert.equal(typeof allowGovernance,'boolean');if(failAt==='access')throw failure;},
+        async forward(){assert.fail('unexpected Forward read');},async node(){assert.fail('unexpected Node read');}
+    };
+    return {tx,calls,data,failure,fail(name:string){failAt=name;},store,references,commands:new path.PathTemplateCommands(db,auth,access,requests,store,references,clock),queries:new path.PathTemplateQueries(db,auth,access,store)};
 }
 
 test('54 complete command auth replay lock CAS prior-validation clock reference quota publication audit response prefix and failures',async()=>{
@@ -116,7 +122,7 @@ test('54 complete command auth replay lock CAS prior-validation clock reference 
     }
     const replay=fixture();replay.data.replay={original:true};assert.equal(await replay.commands.publish('actor','scope','id','key',0,config()),replay.data.replay);assert.deepEqual(replay.calls,['begin','auth:true','claim','commit']);
     for(const mode of ['conflict','archived','missing-old','invalid-old','bad-clock','bad-profile','quota'] as const){
-        const f=fixture();f.data.head={templateId:'id',currentRevision:1,archived:mode==='archived'};f.data.revision=record();
+        const f=fixture();f.data.head={templateId:'id',ownerActorId:'actor',currentRevision:1,archived:mode==='archived'};f.data.revision=record();
         if(mode==='missing-old')f.data.revision=null;if(mode==='invalid-old')f.data.revision={...record(),config:{} as never};
         if(mode==='bad-clock')f.data.clock=NaN;if(mode==='bad-profile')f.data.profile='bad';if(mode==='quota'){f.data.head=null;f.data.revision=null;f.data.total=128;}
         await assert.rejects(f.commands.publish('actor','scope','id','key',mode==='conflict'||mode==='quota'?0:1,config()));
@@ -124,7 +130,7 @@ test('54 complete command auth replay lock CAS prior-validation clock reference 
         if(['conflict','archived','missing-old','invalid-old'].includes(mode))assert.equal(f.calls.includes('clock'),false);
         if(mode==='bad-clock')assert.equal(f.calls.includes('references'),false);
     }
-    const unchanged=fixture();unchanged.data.head={templateId:'id',currentRevision:1,archived:false};unchanged.data.revision=record();
+    const unchanged=fixture();unchanged.data.head={templateId:'id',ownerActorId:'actor',currentRevision:1,archived:false};unchanged.data.revision=record();
     assert.equal((await unchanged.commands.publish('actor','scope','id','key',1,config())).body.changed,false);
     assert.deepEqual(unchanged.calls,['begin','auth:true','claim','scope-lock','head:true','revision','clock','references','respond','commit']);
     for(const at of [-1,0.5,Infinity,8640000000000001]){const f=fixture();f.data.clock=at;await assert.rejects(f.commands.publish('actor','scope','id','key',0,config()),error('Invalid template command time'));assert.equal(f.calls.includes('references'),false);}
@@ -132,15 +138,15 @@ test('54 complete command auth replay lock CAS prior-validation clock reference 
 
 test('54 query first-refusal order bounded page corruption and archived immutable metadata without reference authorization',async()=>{
     for(const mode of ['missing','head','missing-revision','configuration','timestamp'] as const){
-        const f=fixture();f.data.head=mode==='missing'?null:{templateId:'id',currentRevision:mode==='head'?0:1,archived:true};f.data.revision=mode==='missing-revision'?null:record();
+        const f=fixture();f.data.head=mode==='missing'?null:{templateId:'id',ownerActorId:'actor',currentRevision:mode==='head'?0:1,archived:true};f.data.revision=mode==='missing-revision'?null:record();
         if(mode==='configuration')f.data.revision={...record(),config:{} as never};if(mode==='timestamp')f.data.revision={...record(),createdAt:-1};
         await assert.rejects(f.queries.get('actor','scope','id'));assert.equal(f.calls[1],'auth:false');assert.equal(f.calls.at(-1),'rollback');assert.equal(f.calls.includes('references'),false);
         if(mode==='missing'||mode==='head')assert.equal(f.calls.includes('revision'),false);
     }
-    const f=fixture();f.data.head={templateId:'id',currentRevision:2,archived:true};f.data.revision=record(1);const view=await f.queries.get('actor','scope','id',1);
+    const f=fixture();f.data.head={templateId:'id',ownerActorId:'actor',currentRevision:2,archived:true};f.data.revision=record(1);const view=await f.queries.get('actor','scope','id',1);
     assert.deepEqual(f.calls,['begin','auth:false','head:false','revision','commit']);assert.equal(view.createdAt,new Date(at).toISOString());assert.equal(view.currentRevision,2);assert.equal(view.archived,true);assert.equal(view.reserved,false);assert.equal(Object.isFrozen(view.config),true);
     for(const input of [null,[],Object.create({}),{page:1},{limit:1},{prefix:'x'.repeat(129)},{prefix:'%'},{extra:true}]){const f=fixture();await assert.rejects(f.queries.list('actor','scope',input as never));assert.equal(f.calls.length,0);}
-    for(const data of [{total:-1,page:[]},{total:129,page:[]},{total:0.5,page:[]},{total:2,page:[{templateId:'id',currentRevision:1,archived:false},{templateId:'id',currentRevision:1,archived:false}]},{total:1,page:[{templateId:'foreign',currentRevision:1,archived:false}]}]){
+    for(const data of [{total:-1,page:[]},{total:129,page:[]},{total:0.5,page:[]},{total:2,page:[{templateId:'id',ownerActorId:'actor',currentRevision:1,archived:false},{templateId:'id',ownerActorId:'actor',currentRevision:1,archived:false}]},{total:1,page:[{templateId:'foreign',ownerActorId:'actor',currentRevision:1,archived:false}]}]){
         const f=fixture();Object.assign(f.data,data);await assert.rejects(f.queries.list('actor','scope',{prefix:'id'}),error('Invalid bounded PathTemplate page'));assert.equal(f.calls.at(-1),'rollback');
     }
     const empty=fixture();const page=await empty.queries.list('actor','scope');assert.equal(page.total,0);assert.equal(Object.isFrozen(page),true);assert.equal(page.executionAuthorized,false);
@@ -149,12 +155,12 @@ test('54 query first-refusal order bounded page corruption and archived immutabl
 test('54 archival validates prior revision and clock then writes only changed archive audit response and preserves every original failure',async()=>{
     const expected=['begin','auth:true','claim','scope-lock','head:true','revision','clock','archive','audit','respond','commit'];
     for(const fail of [undefined,...expected.slice(1,-1)]){
-        const f=fixture();f.data.head={templateId:'id',currentRevision:1,archived:false};f.data.revision=record();if(fail)f.fail(fail);
+        const f=fixture();f.data.head={templateId:'id',ownerActorId:'actor',currentRevision:1,archived:false};f.data.revision=record();if(fail)f.fail(fail);
         if(fail){await assert.rejects(f.commands.archive('actor','scope','id','key',1),e=>e===f.failure);assert.deepEqual(f.calls,[...expected.slice(0,expected.indexOf(fail)+1),'rollback']);}
         else{const result=await f.commands.archive('actor','scope','id','key',1);assert.equal(result.status,202);assert.deepEqual(result.body,{templateId:'id',revision:1,configDigest:record().configDigest,archived:true,changed:true});assert.deepEqual(f.calls,expected);}
         assert.equal(f.calls.includes('references'),false);assert.equal(f.calls.includes('publish'),false);
     }
-    const old=fixture();old.data.head={templateId:'id',currentRevision:1,archived:true};old.data.revision=record();
+    const old=fixture();old.data.head={templateId:'id',ownerActorId:'actor',currentRevision:1,archived:true};old.data.revision=record();
     assert.equal((await old.commands.archive('actor','scope','id','key',1)).body.changed,false);
     assert.deepEqual(old.calls,['begin','auth:true','claim','scope-lock','head:true','revision','clock','respond','commit']);
     for(const run of [(f:ReturnType<typeof fixture>)=>f.commands.archive('actor','scope','id','key',0),
@@ -192,5 +198,14 @@ test('54 native references sort every Node and Endpoint retain provider receiver
             const last=isProviderFailure?mode:mode.startsWith('node')||mode==='capability'?expected[0]!:mode.startsWith('profile')||mode==='protocol'?'profile':'endpoint:a-egress';
             assert.deepEqual(calls,expected.slice(0,expected.indexOf(last)+1));
         }
+    }
+});
+
+test('54 caller ownership denials preserve the original transaction and prevent template reads or mutation',async()=>{
+    for(const action of ['list','get','archive','update','replay'] as const){
+        const f=fixture();f.fail('access');f.data.head={templateId:'id',ownerActorId:'other',currentRevision:1,archived:false};f.data.revision=record();
+        if(action==='replay')f.data.replay={prior:true};
+        await assert.rejects(action==='list'?f.queries.list('actor','scope'):action==='get'?f.queries.get('actor','scope','id'):action==='archive'?f.commands.archive('actor','scope','id','key',1):f.commands.publish('actor','scope','id','key',1,config()),e=>e===f.failure);
+        assert.equal(f.calls.at(-1),'rollback');for(const denied of ['list','revision','publish','archive','respond'])assert.equal(f.calls.includes(denied),false);
     }
 });

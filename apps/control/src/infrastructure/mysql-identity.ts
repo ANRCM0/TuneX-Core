@@ -1,5 +1,6 @@
 import { ControlError } from '../framework/public.ts';
-import type { IdentityAccessStore, IdentityAccountLookup, IdentityMembershipRecord, IdentityListedMember } from '../framework/public.ts';
+import type { IdentityAccessStore, IdentityAccountLookup, IdentityMembershipRecord, IdentityListedMember,
+    IdentityScopeContextRecord, IdentityScopeContextWindow } from '../framework/public.ts';
 import { rows, write } from './mysql.ts';
 import type { MySqlUnitOfWork, Transaction } from './mysql.ts';
 
@@ -65,6 +66,18 @@ export class MySqlIdentityStore implements IdentityAccessStore<Transaction> {
     async listMembers(tx:Transaction,scopeId:string):Promise<IdentityListedMember[]> {
         const records=await rows<{actor_id:string;can_manage:number;active:number;revision:number;owner_id:string}>(tx,'SELECT m.*,s.owner_id FROM scope_members m JOIN scopes s ON s.id=m.scope_id WHERE m.scope_id=? ORDER BY m.actor_id',[scopeId]);
         return records.map(record=>({actorId:record.actor_id,canManage:record.can_manage,active:record.active,revision:record.revision,ownerId:record.owner_id}));
+    }
+    async scopeContext(tx:Transaction,actorId:string,window:IdentityScopeContextWindow):Promise<IdentityScopeContextRecord[]> {
+        if(!Number.isSafeInteger(window.limit)||window.limit<1||window.limit>100)
+            throw new ControlError('INTEGRITY_FAILURE',409,'Invalid bounded Scope context window');
+        const records=await rows<{scope_id:string;owner_id:string;actor_id:string|null;revision:number|null;active:number|null;can_manage:number|null}>(tx,
+            `SELECT s.id scope_id,s.owner_id,m.actor_id,m.revision,m.active,m.can_manage
+             FROM scopes s LEFT JOIN scope_members m ON m.scope_id=s.id AND m.actor_id=?
+             WHERE (s.owner_id=? OR m.active=TRUE)${window.after===null?'':' AND s.id>?'}
+             ORDER BY s.id COLLATE ascii_bin LIMIT ${window.limit+1}`,
+            [actorId,actorId,...(window.after===null?[]:[window.after])]);
+        return records.map(record=>({scopeId:record.scope_id,ownerId:record.owner_id,
+            membership:record.actor_id===null?null:{actorId:record.actor_id,revision:record.revision!,active:record.active!,canManage:record.can_manage!}}));
     }
 }
 

@@ -57,9 +57,10 @@ async function fixture() {
         }
         for (const [node, scope] of [['node-a', 'scope-a'], ['foreign-node', 'scope-b']]) {
             await connection.execute(`INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,
-                revoked,facts,enrollment_response) VALUES(?,?,?,0,?,FALSE,?,?)`, [node, scope,
+                revoked,facts,enrollment_response,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,0,?,FALSE,?,?,?,?,1)`, [node, scope,
                 createHash('sha256').update(node!).digest('hex'), Date.now() + 120000,
-                JSON.stringify({ secret: 'MUST_NOT_LEAK' }), JSON.stringify({ credential: 'MUST_NOT_LEAK' })]);
+                JSON.stringify({ secret: 'MUST_NOT_LEAK' }), JSON.stringify({ credential: 'MUST_NOT_LEAK' }),
+                'private', node === 'node-a' ? 'viewer-1' : 'outsider']);
         }
         await connection.execute('INSERT INTO runtime_nodes(node_id,session_epoch,boot_id,snapshot_generation) VALUES(?,2,?,3)',
             ['node-a', 'boot-a']);
@@ -86,17 +87,20 @@ async function fixture() {
         const control = new ControlApplication(reader, readIdentity,
             new Nodes(reader, readIdentity, {} as NodeCertificateAuthority));
         const app = createApp(control, {} as RuntimeController, { allow: async () => undefined } as unknown as AuthorityStore);
-        let nextActor = 0;
+        const lastRequest = new Map<string,number>();
         const request = async (options: {
             actor?: string; scope?: string; node?: string; input?: unknown; raw?: string; status?: number;
         } = {}) => {
-            const actor = options.actor ?? 'viewer-' + nextActor++;
+            const actor = options.actor ?? 'owner';
+            const elapsed = Date.now() - (lastRequest.get(actor) ?? 0);
+            if (options.status !== 429 && elapsed < 1100) await delay(1100 - elapsed);
             const response = await app.request('/api/v1/scopes/' + (options.scope ?? 'scope-a') + '/nodes/' +
                 (options.node ?? 'node-a') + '/observations', {
                 method: 'POST', headers: { Authorization: 'Bearer ' + tokens[actor], 'Content-Type': 'application/json' },
                 body: options.raw ?? JSON.stringify(options.input ?? command),
             });
             const text = await response.text();
+            lastRequest.set(actor, Date.now());
             assert.equal(response.status, options.status ?? 200, text);
             assert.equal(response.headers.get('cache-control'), 'no-store');
             assert.ok(new TextEncoder().encode(text).length <= 4096);
@@ -120,9 +124,10 @@ test('observation production assembly uses SELECT-only MySQL and preserves scope
             assert.equal(result.independentProbe, false); assert.equal(result.health, 'unknown');
             assert.equal(result.provenance?.reportSequence, 4); assert.equal(result.provenance?.assignmentCount, 1);
             assert.equal(result.scopeId, 'scope-a'); assert.equal(result.nodeId, 'node-a');
-            // Passive scope diagnostics do not grant execution rights and do not require an execution Node Grant.
-            assert.equal((await f.request({ actor: 'owner' })).status, 'observed');
-            assert.equal((await f.request({ actor: 'viewer-0', status: 429 })).code, 'OBSERVATION_BUSY');
+            // Scope governance and the explicit private Node owner can read persisted reports without execution grants.
+            assert.equal((await f.request({ actor: 'owner', status: 429 })).code, 'OBSERVATION_BUSY');
+            assert.equal((await f.request({ actor: 'viewer-1' })).status, 'observed');
+            await f.request({ actor: 'viewer-0', status: 404 });
             await f.request({ actor: 'outsider', status: 404 });
             await f.request({ actor: 'inactive', status: 404 });
             await f.request({ node: 'foreign-node', status: 404 });
@@ -185,9 +190,9 @@ test('a real MySQL authorization lock is stopped by the observation deadline wit
         try {
             const before = await digest(f.connection);
             await f.connection.beginTransaction();
-            await f.connection.execute("UPDATE scope_members SET can_manage=FALSE WHERE scope_id='scope-a' AND actor_id='viewer-0'");
+            await f.connection.execute("UPDATE scope_members SET can_manage=can_manage WHERE scope_id='scope-a' AND actor_id='owner'");
             try {
-                const result = await f.request({ actor: 'viewer-0', input: { ...command, timeoutMs: 100 }, status: 503 });
+                const result = await f.request({ actor: 'owner', input: { ...command, timeoutMs: 100 }, status: 503 });
                 assert.equal(result.code, 'OBSERVATION_TIMEOUT');
                 // The original authorization lock is still held. A closed source must release local admission,
                 // rather than leave mysql2's in-flight promise pending until this writer rolls back.

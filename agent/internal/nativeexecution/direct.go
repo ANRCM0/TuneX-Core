@@ -6,6 +6,7 @@ import (
 
 	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/executiondriver"
+	"github.com/tunex/vnext/agent/internal/executionhost"
 	"github.com/tunex/vnext/agent/internal/forward"
 )
 
@@ -17,11 +18,11 @@ func Direct() executiondriver.Driver {
 			ID: "native.direct.v1", HostVersion: 1, SchemaVersion: 1,
 			Platforms: []string{"linux", "windows"},
 			Roles:     []string{"direct"}, Phases: []string{"active"}, Protocols: []string{"tcp", "udp"},
-			Capabilities:      []string{"native.direct.v1", "tcp", "udp"},
+			Capabilities:      []string{"native.direct.v1", "tcp", "udp", "shared-resource-limits.v1"},
 			ProbeCapabilities: []string{"probe.tcp-connect.v1", "probe.tcp-ingress-connect.v1"},
 		},
 		Start: func(host executiondriver.Host, assignment adp3.Assignment, check func() error) (executiondriver.Instance, error) {
-			return StartDirect(assignment, host.Policy, check)
+			return StartDirectMetered(assignment, host.Policy, check, host.Payload)
 		},
 		Replace: ReplaceDirect,
 		Phase: func(_ executiondriver.Instance, phase string) error {
@@ -57,6 +58,12 @@ func Direct() executiondriver.Driver {
 }
 
 func StartDirect(a adp3.Assignment, p adp3.Policy, check func() error) (executiondriver.Instance, error) {
+	return StartDirectMetered(a, p, check, nil)
+}
+
+// StartDirectMetered projects native inputs while retaining the original host's
+// immutable payload gate. The legacy StartDirect path explicitly supplies nil.
+func StartDirectMetered(a adp3.Assignment, p adp3.Policy, check func() error, gate executionhost.PayloadGate) (executiondriver.Instance, error) {
 	direct, err := DirectAssignment(a)
 	if err != nil {
 		return nil, err
@@ -67,9 +74,9 @@ func StartDirect(a adp3.Assignment, p adp3.Policy, check func() error) (executio
 	}
 	switch a.Protocol {
 	case "tcp":
-		return forward.StartAuthorized(direct, policy, check)
+		return forward.StartAuthorizedMetered(direct, policy, check, gate)
 	case "udp":
-		return forward.StartUDPAuthorized(direct, policy, check)
+		return forward.StartUDPAuthorizedMetered(direct, policy, check, gate)
 	default:
 		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY")
 	}

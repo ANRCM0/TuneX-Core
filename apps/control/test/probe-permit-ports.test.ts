@@ -13,6 +13,23 @@ import type { ProbeResultRecord } from '../src/modules/probe-result-ports.ts';
 import type { ProbeResultRequest } from '@tunex/contracts';
 import { probeResultDigest } from '@tunex/contracts';
 
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { ControlError as ResourceAccessError } from '../src/framework/public.ts';
+import type { OwnedResourceKind } from '../src/framework/public.ts';
+
+function ownerAccess<Tx>(tx:Tx,scopeId:string,members:ReadonlyMap<string,boolean>,
+    claim:(kind:OwnedResourceKind,id:string)=>string|null|undefined,scopeOwner='scope-owner') {
+    const same=(actual:Tx,scope:string)=>{assert.equal(actual,tx);assert.equal(scope,scopeId);};
+    return new ResourceAccess<Tx>({async scope(actual,actor,scope,manage=false){
+        same(actual,scope);
+        if(!members.has(actor)||manage&&!members.get(actor))throw new ResourceAccessError('AUTHORIZATION_DENIED',403,'Fixture scope permission denied');
+    }},{async scopeOwner(actual,scope){same(actual,scope);return {ownerActorId:scopeOwner};},
+        async ownership(actual,scope,kind,id){same(actual,scope);const ownerActorId=claim(kind,id);return ownerActorId===undefined?undefined:{ownerActorId};},
+        async node(){throw Error('Node access is outside this owner fixture');}});
+}
+
+
+
 const input = { version: 1, kind: 'tcp-connect', expectedRevision: 1,
     instanceId: 'a'.repeat(64), instanceGeneration: 1 };
 const fingerprint = 'b'.repeat(64);
@@ -91,7 +108,8 @@ function fixture() {
             if (state.failAt === 'record-result') throw new Error('record-result');
         },
     };
-    const assemble = () => new ProbePermits(db, identity, plans, machines, instances, store, () => state.now);
+    const access=ownerAccess(tx,'scope-a',new Map([['actor-a',true],['actor-b',true],['scope-owner',true]]),()=>undefined);
+    const assemble = () => new ProbePermits(db, identity, access, plans, machines, instances, store, () => state.now);
     const host = assemble();
     const requests: IdempotentRequests<typeof tx> = {
         claim: async <R>(actual: typeof tx, request: RequestIdentity) => {
@@ -410,12 +428,14 @@ test('fresh issuance clips all deadline bounds and rejects withdrawn or foreign 
     }
 });
 
-test('scope managers can revoke after grant withdrawal, without reopening, consuming or refunding the reservation', async () => {
+test('scope governance can revoke after grant withdrawal, without reopening, consuming or refunding the reservation', async () => {
     const f = fixture(), permit = await f.issue(); f.state.denyPlan = true;
     await assert.rejects(f.host.revoke('actor-a', 'scope-b', permit.id), { code: 'NOT_FOUND' });
-    const revoked = await f.host.revoke('actor-b', 'scope-a', permit.id);
+    await assert.rejects(f.host.revoke('actor-b','scope-a',permit.id),{code:'AUTHORIZATION_DENIED'});
+    await assert.rejects(f.host.inspect('actor-b','scope-a',permit.id),{code:'AUTHORIZATION_DENIED'});
+    const revoked = await f.host.revoke('scope-owner', 'scope-a', permit.id);
     assert.equal(revoked.state, 'revoked'); assert.equal(revoked.closedAt, f.state.now);
-    assert.deepEqual(await f.host.revoke('actor-b', 'scope-a', permit.id), revoked);
+    assert.deepEqual(await f.host.revoke('scope-owner', 'scope-a', permit.id), revoked);
     await assert.rejects(f.consume(permit.id), { code: 'PROBE_PERMIT_UNAVAILABLE' });
     f.state.denyPlan = false; await assert.rejects(f.issue(), { code: 'PROBE_PERMIT_LIMIT' });
 });
@@ -544,11 +564,11 @@ test('explicit consumed withdrawal is sticky across owner restart and preserves 
     const f = fixture(), permit = await f.issue(), consumed = await f.consume(permit.id); f.state.now++;
     await assert.rejects(f.host.revoke('actor-b', 'scope-b', permit.id), { code: 'NOT_FOUND' });
     f.state.denyPlan = true;
-    const withdrawn = await f.host.revoke('actor-b', 'scope-a', permit.id);
+    const withdrawn = await f.host.revoke('scope-owner', 'scope-a', permit.id);
     assert.equal(withdrawn.state, 'consumed'); assert.equal(withdrawn.closedAt, consumed.closedAt);
     assert.equal('withdrawnAt' in withdrawn && withdrawn.withdrawnAt, f.state.now);
     const saved = structuredClone(f.state), before = f.calls.filter(c => c === 'withdraw').length;
-    assert.deepEqual(await f.host.revoke('actor-b', 'scope-a', permit.id), withdrawn);
+    assert.deepEqual(await f.host.revoke('scope-owner', 'scope-a', permit.id), withdrawn);
     assert.deepEqual(f.state, saved); assert.equal(f.calls.filter(c => c === 'withdraw').length, before);
     f.state.denyPlan = false;
     await assert.rejects(f.assemble().check('node-a', fingerprint, 2, f.claim(permit.id)), { code: 'PROBE_PERMIT_UNAVAILABLE' });
@@ -561,7 +581,7 @@ test('withdrawal insert, clock and post-acceptance failures roll back the flag w
         const f = fixture(), permit = await f.issue(); await f.consume(permit.id); f.state.now++;
         const saved = structuredClone(f.state.records), clock = f.state.observedAt;
         f.state.failAt = failure; f.state.postGuard = failure === 'guard';
-        await assert.rejects(f.host.revoke('actor-b', 'scope-a', permit.id));
+        await assert.rejects(f.host.revoke('scope-owner', 'scope-a', permit.id));
         assert.deepEqual(f.state.records, saved); assert.deepEqual(f.state.withdrawals, []); assert.equal(f.state.observedAt, clock);
         f.state.failAt = ''; f.state.postGuard = false; assert.equal((await f.status(permit.id)).state, 'consumed');
     }

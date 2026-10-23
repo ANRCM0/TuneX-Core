@@ -10,6 +10,8 @@ import { compileMultihopResources } from '../src/modules/runtime/multihop-plan.t
 import { RelayCoordinator } from '../src/modules/runtime/relay-coordinator.ts';
 import { multihopFixture } from './fixtures/multihop.ts';
 import { ControlError } from '../src/application/errors.ts';
+import type { NodeUseRole } from '../src/framework/node-authority-ports.ts';
+import type { Forward } from '@tunex/core';
 
 for (const count of [3, 4, 8]) test(`${count}-Node coordinator extracts domain intent from stored Forward metadata`, async () => {
   const input = multihopFixture(count), before = JSON.stringify(input);
@@ -18,7 +20,7 @@ for (const count of [3, 4, 8]) test(`${count}-Node coordinator extracts domain i
       if (sql === 'SELECT * FROM forwards WHERE id=? AND scope_id=?') {
         assert.deepEqual(args, [input.forward.id, input.forward.scopeId]);
         return [[{
-          id: input.forward.id, scope_id: input.forward.scopeId, revision: input.forward.revision,
+          id: input.forward.id, scope_id: input.forward.scopeId, owner_actor_id: 'owner', revision: input.forward.revision,
           spec: JSON.stringify(input.forward.spec), deleting: 0, recovery_suspended: 0,
         }], []];
       }
@@ -30,9 +32,21 @@ for (const count of [3, 4, 8]) test(`${count}-Node coordinator extracts domain i
     },
   } as unknown as Transaction;
   const nodes = {
-    authorizedRelayNode: async (_tx: Transaction, actor: string, scope: string, id: string) => {
+    reservationPorts: async (current: Transaction, actor: string, scope: string, id: string, ports: readonly number[]) => {
+      assert.equal(current, tx);
       assert.equal(actor, 'owner');
       assert.equal(scope, input.forward.scopeId);
+      const endpoint = input.endpoints.find(endpoint => endpoint.nodeId === id)!;
+      assert.deepEqual(ports, endpoint.config.allowedTcpPorts);
+      return ports;
+    },
+    authorizedRelayNode: async (_tx: Transaction, actor: string, scope: string, id: string, role: NodeUseRole, forward?: Forward) => {
+      assert.equal(_tx, tx);
+      assert.equal(actor, 'owner');
+      assert.equal(scope, input.forward.scopeId);
+      const path = [input.forward.spec.ingress.nodeId, ...input.forward.spec.path!.via];
+      assert.equal(role, id === path[0] ? 'ingress' : id === path.at(-1) ? 'egress' : 'transit');
+      assert.deepEqual(forward, { ...input.forward, ownerActorId: 'owner', deleting: false, recoverySuspended: false });
       return input.nodes.find(node => node.facts.nodeId === id)!.facts;
     },
     facts: async (_tx: Transaction, id: string) => ({ credentialUntil: input.nodes.find(node => node.facts.nodeId === id)!.credentialUntil }),
@@ -56,6 +70,7 @@ for (const count of [3, 4, 8]) test(`${count}-Node coordinator extracts domain i
   const coordinator = new RelayCoordinator(nodes, forwarding, transport, endpoints, ledger, undefined, true);
   const stored = await forwarding.record(tx, input.forward.scopeId, input.forward.id), storedBefore = JSON.stringify(stored);
   assert.equal(stored.deleting, false);
+  assert.equal(stored.ownerActorId, 'owner');
   assert.equal(stored.recoverySuspended, false);
   assert.throws(() => compileMultihopResources({ ...input, forward: stored }), /INVALID_CONFIG: Locked multi-hop Forward required/);
   assert.equal(await coordinator.canExecute(tx, 'owner', stored), true);

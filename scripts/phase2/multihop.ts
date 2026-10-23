@@ -86,7 +86,8 @@ try{
   const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:5,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:128};
   assert.equal((await call('PUT','transport-profiles/multihop-profile',{expectedRevision:0,config:profile})).status,202);
   for(let i=0;i<count;i++){
-    const node=await call('POST','nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:i===0&&copyPort!==undefined?[listenPort,copyPort,batchPort!]:[listenPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
+    const node=await call('POST','shared-nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:i===0&&copyPort!==undefined?[listenPort,copyPort,batchPort!]:[listenPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
+    const useGrant=await call('PUT',`nodes/${node.body.nodeId}/grants/${owner}`,{expectedRevision:1,allowed:true,allowedRoles:['ingress','transit','egress']});assert.equal(useGrant.status,202);assert.equal(useGrant.body.revision,2);
     const root=nativeRoot+'/node-'+i;const args:string[]=['--control',controlURL,'--node',node.body.nodeId,'--ca',linuxPath(caCert),'--state',root+'/state','--journal-key',root+'/secrets/journal.key','--relay','--multihop','--diagnostics'];
     try{const enroll=[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll'];if(lab)await lab.run(lab.namespaces[i]!,'/usr/bin/env',enroll);else await linux('env',enroll);}catch{throw Error('Multi-hop enrollment failed; token redacted');}
     const process=lab?lab.spawn(lab.namespaces[i]!,binary,args):spawnLinux(binary,args);const entry:typeof agents[number]={nodeId:node.body.nodeId,root,args,process,errors:''};observeAgent(entry);agents.push(entry);
@@ -153,15 +154,21 @@ try{
   const afterReplay=(await call('GET',resource+'/deployment')).body.deployment;assert.equal(afterReplay.stage,'preparing');assert.equal(afterReplay.preparedCount,beforeReplay.preparedCount);assert.equal(afterReplay.activatedCount,0);
   releaseReady!();releaseReady=undefined;control.runtime.report=reportHandler;await converge();assert.equal((await probe(listenPort)).tcp,true);
   pass('Authentic prior-generation Report replay receives duplicate ACK without advancing the held successor');
-  const grantPath=`nodes/${agents[1]!.nodeId}/grants/${owner}`,withdrawn=await call('PUT',grantPath,{expectedRevision:1,allowed:false});assert.equal(withdrawn.status,202);
+  const grantPath=`nodes/${agents[1]!.nodeId}/grants/${owner}`,withdrawn=await call('PUT',grantPath,{expectedRevision:2,allowed:false});assert.equal(withdrawn.status,202);
   await until(async()=>(await call('GET','operations/'+withdrawn.body.operationIds[0])).body.status==='succeeded','middle authority withdrawal');await assert.rejects(()=>probe(listenPort));
-  const restored=await call('PUT',grantPath,{expectedRevision:2,allowed:true});assert.equal(restored.status,202);await converge();assert.equal((await probe(listenPort)).tcp,true);
+  const restored=await call('PUT',grantPath,{expectedRevision:3,allowed:true,allowedRoles:['ingress','transit','egress']});assert.equal(restored.status,202);await converge();assert.equal((await probe(listenPort)).tcp,true);
   pass('Intermediate grant withdrawal revokes the whole path and restoration requires fresh execution authority');
   if(browserConsole){
     const current=await call('GET',resource);assert.equal(current.status,200);assert.equal(current.body.desired.revision,desiredRevision);
     consoleEvidence=await verifyMultihopConsole({url:`https://${host}:${control.port}`,scope,token,directory,sourceId:id,revision:desiredRevision,spec:current.body.desired.spec,profile:profile as import('@tunex/contracts').RelayProfileConfig,copyPort:copyPort!,batchPort:batchPort!,
       traffic:async listen=>{const actual=await probe(listen);assert.equal(actual.tcp,true);assert.equal(actual.udp,true);},
       closed:async listen=>{for(const flag of ['--tcp-only','--udp-only'])await assert.rejects(()=>linux(fixture,['--mode','probe','--port',String(listen),flag]),/connection refused|i\/o timeout/);},
+      operationProgress:async operationId=>{
+        const [rows]=await control!.db.pool.query<any[]>('SELECT o.forward_id,o.target_revision,o.execution_deadline,d.generation,d.stage,d.prepared_count,d.activated_count FROM operations o JOIN relay_deployments d ON d.forward_id=o.forward_id AND d.generation=(SELECT MAX(recent.generation) FROM relay_deployments recent WHERE recent.forward_id=o.forward_id) WHERE o.id=?',[operationId]);
+        assert.equal(rows.length,1);const row=rows[0];
+        return {forwardId:row.forward_id,revision:row.target_revision,executionDeadline:row.execution_deadline,
+          generation:row.generation,stage:row.stage,prepared:row.prepared_count,activated:row.activated_count};
+      },
       slots:async(owner,retained,businessPort=copyPort)=>{
         const [rows]=await control!.db.pool.query<any[]>('SELECT node_id,protocol,port,fence FROM port_slots WHERE owner_id=? ORDER BY node_id,protocol,port',[owner]);
         assert.equal(rows.length,retained?2*count:0);if(!retained)return;
@@ -187,7 +194,7 @@ try{
   console.log('Multi-hop acceptance evidence: '+directory);
 }catch(error){
   if(control){
-    const [operations]=await control.db.pool.query('SELECT id,forward_id,status,cleanup_pending,last_error FROM operations');
+    const [operations]=await control.db.pool.query('SELECT id,forward_id,target_revision,status,cleanup_pending,last_error,created_at,updated_at,execution_deadline,claim_until FROM operations');
     const [runtime]=await control.db.pool.query('SELECT node_id,session_epoch,snapshot_generation,last_report FROM runtime_nodes');
     // Keep only timing and instance identifiers, never wire bodies, credentials,
     // driver configuration or key material, in uploaded failure evidence.
@@ -196,8 +203,9 @@ try{
     const snapshots=storedSnapshots.map(row=>{const body=readBody(row.body);return {nodeId:row.node_id,generation:row.generation,sessionEpoch:row.session_epoch,
       issuedAt:body.issuedAt,validUntil:body.validUntil,assignments:body.assignments.map((assignment:any)=>({forwardId:assignment.forwardId,
         assignmentId:assignment.assignmentId,deploymentGeneration:assignment.deploymentGeneration,bindingFence:assignment.bindingFence,phase:assignment.phase,role:assignment.role,protocol:assignment.protocol}))};});
-    const [storedDeployments]=await control.db.pool.query<any[]>('SELECT forward_id,generation,stage,body FROM relay_deployments ORDER BY forward_id,generation');
+    const [storedDeployments]=await control.db.pool.query<any[]>('SELECT forward_id,generation,stage,prepared_count,activated_count,updated_at,body FROM relay_deployments ORDER BY forward_id,generation');
     const deployments=storedDeployments.map(row=>{const body=readBody(row.body);return {forwardId:row.forward_id,generation:row.generation,stage:row.stage,
+      preparedCount:row.prepared_count,activatedCount:row.activated_count,updatedAt:row.updated_at,
       authorizationUntil:body.authorizationUntil,nodes:body.nodes.map((node:any)=>({nodeId:node.nodeId,sessionEpoch:node.sessionEpoch}))};});
     const measurements=await diagnostics().catch(()=>undefined);
     await writeFile(join(directory,'failure.json'),JSON.stringify({passed:false,capturedAt:new Date().toISOString(),policy,

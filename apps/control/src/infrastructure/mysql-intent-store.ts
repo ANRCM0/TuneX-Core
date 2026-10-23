@@ -11,14 +11,21 @@ export class MySqlForwardIntentStore implements ForwardIntentStore<Transaction> 
     async forNode(tx:Transaction,id:string):Promise<StoredForwardIntent[]>{return rows(tx,"SELECT * FROM forwards WHERE deleting=FALSE AND recovery_suspended=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? ORDER BY id",[id]);}
     async forReferencedNode(tx:Transaction,id:string):Promise<StoredForwardIntent[]>{return rows(tx,"SELECT * FROM forwards WHERE deleting=FALSE AND recovery_suspended=FALSE AND (JSON_UNQUOTE(JSON_EXTRACT(spec,'$.ingress.nodeId'))=? OR JSON_CONTAINS(JSON_EXTRACT(spec,'$.path.via'),JSON_QUOTE(?))) ORDER BY id",[id,id]);}
     async forProfileActor(tx:Transaction,actor:string,id:string):Promise<StoredForwardIntent[]>{return rows(tx,"SELECT * FROM forwards WHERE authorization_actor=? AND deleting=FALSE AND recovery_suspended=FALSE AND JSON_UNQUOTE(JSON_EXTRACT(spec,'$.transport.profileId'))=? ORDER BY id",[actor,id]);}
-    async insertCurrent(tx:Transaction,id:string,scope:string,revision:number,encoded:string,actor:string):Promise<void>{await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor) VALUES(?,?,?,?,?)',[id,scope,revision,encoded,actor]);}
+    async insertCurrent(tx:Transaction,id:string,scope:string,revision:number,encoded:string,actor:string):Promise<void>{await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec,authorization_actor,owner_actor_id) VALUES(?,?,?,?,?,?)',[id,scope,revision,encoded,actor,actor]);}
     async insertRevision(tx:Transaction,id:string,revision:number,encoded:string):Promise<void>{await write(tx,'INSERT INTO forward_revisions(forward_id,revision,spec) VALUES(?,?,?)',[id,revision,encoded]);}
+    async classifyOwner(tx:Transaction,id:string,scope:string,expectedRevision:number,ownerActorId:string):Promise<number>{
+        return write(tx,'UPDATE forwards SET owner_actor_id=? WHERE id=? AND scope_id=? AND revision=? AND owner_actor_id IS NULL',[ownerActorId,id,scope,expectedRevision]);
+    }
+    async auditOwnership(tx:Transaction,eventId:string,id:string,scope:string,revision:number,actor:string,ownerActorId:string,at:number):Promise<void>{
+        await write(tx,'INSERT INTO forward_ownership_events(id,scope_id,forward_id,actor_id,owner_actor_id,revision,created_at) VALUES(?,?,?,?,?,?,?)',
+            [eventId,scope,id,actor,ownerActorId,revision,at]);
+    }
     async authorizer(tx:Transaction,id:string):Promise<{authorization_actor:string|null}|undefined>{return (await rows<{authorization_actor:string|null}>(tx,'SELECT authorization_actor FROM forwards WHERE id=?',[id]))[0];}
     async setAuthorizer(tx:Transaction,actor:string,id:string):Promise<void>{await write(tx,'UPDATE forwards SET authorization_actor=? WHERE id=?',[actor,id]);}
     async forActor(tx:Transaction,scope:string,actor:string):Promise<StoredForwardIntent[]>{return rows(tx,'SELECT * FROM forwards WHERE scope_id=? AND authorization_actor=? AND deleting=FALSE ORDER BY id',[scope,actor]);}
     async get(tx:Transaction,id:string,scope:string):Promise<StoredForwardIntent|undefined>{return (await rows<StoredForwardIntent>(tx,'SELECT * FROM forwards WHERE id=? AND scope_id=? AND deleting=FALSE',[id,scope]))[0];}
     async currentForUpdate(tx:Transaction,id:string,scope:string):Promise<StoredForwardIntent|undefined>{return (await rows<StoredForwardIntent>(tx,'SELECT * FROM forwards WHERE id=? AND scope_id=? AND deleting=FALSE FOR UPDATE',[id,scope]))[0];}
-    async record(tx:Transaction,id:string,scope:string):Promise<StoredForwardState|undefined>{return (await rows<StoredForwardState>(tx,'SELECT * FROM forwards WHERE id=? AND scope_id=?',[id,scope]))[0];}
+    async record(tx:Transaction,id:string,scope:string,lock=false):Promise<StoredForwardState|undefined>{return (await rows<StoredForwardState>(tx,'SELECT * FROM forwards WHERE id=? AND scope_id=?'+(lock?' FOR UPDATE':''),[id,scope]))[0];}
     async replaceCurrent(tx:Transaction,revision:number,encoded:string,id:string,expectedRevision:number):Promise<number>{return write(tx,'UPDATE forwards SET revision=?,spec=?,deleting=FALSE,recovery_suspended=FALSE WHERE id=? AND revision=? AND deleting=FALSE',[revision,encoded,id,expectedRevision]);}
     async markDeleting(tx:Transaction,revision:number,id:string,expectedRevision:number):Promise<number>{return write(tx,'UPDATE forwards SET revision=?,deleting=TRUE WHERE id=? AND revision=? AND deleting=FALSE',[revision,id,expectedRevision]);}
 }

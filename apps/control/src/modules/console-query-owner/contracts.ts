@@ -1,6 +1,6 @@
-import type { ReadPageWindow, ReadFilters, ManagementReadKind } from '../../framework/public.ts';
+import type { ReadPageWindow, ReadFilters, ManagementReadKind, ReadPrincipal } from '../../framework/public.ts';
 
-export const CONSOLE_QUERY_INTERFACE_VERSION=1 as const;
+export const CONSOLE_QUERY_INTERFACE_VERSION=2 as const;
 export type ConsoleListKind=ManagementReadKind;
 export type ConsoleFilters=ReadFilters;
 export interface ConsolePaging extends ReadPageWindow {}
@@ -8,7 +8,10 @@ export interface ConsolePaging extends ReadPageWindow {}
 export interface ConsolePage<T> { page: number; limit: number; total: number; items: T[] }
 export interface ConsoleNode {
     id: string; revoked: boolean; credentialUntil: string | null; policy: unknown;
+    resourceSource:'private'|'admin-shared'|'legacy-unclassified';ownerActorId:string|null;
+    allowedRoles:('ingress'|'transit'|'egress')[]|null;canUse:boolean;
     sessionEpoch: number; snapshotGeneration: number; lastReportAt: string | null;
+    readDetail: 'full' | 'shared';
 }
 export interface ConsoleForward {
     id: string; revision: number; spec: unknown; recoverySuspended: boolean;
@@ -39,12 +42,12 @@ export interface ConsoleDiagnostics {
 
 /** Deliberate cross-module read projections, not commands or live health probes. */
 export interface ConsoleReadPort<Tx> {
-    nodes(tx: Tx, scope: string, paging: ConsolePaging, filters: ConsoleFilters): Promise<ConsolePage<ConsoleNode>>;
-    forwards(tx: Tx, scope: string, paging: ConsolePaging, filters: ConsoleFilters): Promise<ConsolePage<ConsoleForward>>;
-    operations(tx: Tx, scope: string, paging: ConsolePaging, filters: ConsoleFilters): Promise<ConsolePage<ConsoleOperation>>;
-    candidates(tx: Tx, actor: string, scope: string, paging: ConsolePaging, filters: ConsoleFilters): Promise<ConsoleCandidates>;
-    overview(tx: Tx, scope: string): Promise<ConsoleOverview>;
-    diagnostics(tx: Tx, scope: string, nodeId: string): Promise<ConsoleDiagnostics>;
+    nodes(tx: Tx, scope: string, principal: ReadPrincipal, paging: ConsolePaging, filters: ConsoleFilters): Promise<ConsolePage<ConsoleNode>>;
+    forwards(tx: Tx, scope: string, principal: ReadPrincipal, paging: ConsolePaging, filters: ConsoleFilters): Promise<ConsolePage<ConsoleForward>>;
+    operations(tx: Tx, scope: string, principal: ReadPrincipal, paging: ConsolePaging, filters: ConsoleFilters): Promise<ConsolePage<ConsoleOperation>>;
+    candidates(tx: Tx, scope: string, principal: ReadPrincipal, paging: ConsolePaging, filters: ConsoleFilters): Promise<ConsoleCandidates>;
+    overview(tx: Tx, scope: string, principal: ReadPrincipal): Promise<ConsoleOverview>;
+    diagnostics(tx: Tx, scope: string, principal: ReadPrincipal, nodeId: string): Promise<ConsoleDiagnostics>;
 }
 
 

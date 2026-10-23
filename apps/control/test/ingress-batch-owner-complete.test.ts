@@ -17,9 +17,23 @@ import { IngressMigrations as LegacyMigration } from '../src/application/ingress
 import * as LegacyValues from '../src/modules/ingress-contract.ts';
 import * as LegacyMigrationValues from '../src/modules/ingress-migration-contract.ts';
 import { parsePathTemplate, pathPublicationStorageValues, parsePublicationState } from '../src/modules/path-owner/public.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { ControlError as ResourceAccessError } from '../src/framework/public.ts';
+import type { OwnedResourceKind } from '../src/framework/public.ts';
 import type { ForwardSpec } from '@tunex/core';
 import type { IngressDeploymentHead } from '../src/modules/ingress-owner/public.ts';
 import type { PublicationOperation, PublicationForwardState } from '../src/modules/path-owner/public.ts';
+
+function ownerAccess<Tx>(tx:Tx,scopeId:string,members:ReadonlyMap<string,boolean>,
+    claim:(kind:OwnedResourceKind,id:string)=>string|null|undefined,scopeOwner='scope-owner') {
+    const same=(actual:Tx,scope:string)=>{assert.equal(actual,tx);assert.equal(scope,scopeId);};
+    return new ResourceAccess<Tx>({async scope(actual,actor,scope,manage=false){
+        same(actual,scope);
+        if(!members.has(actor)||manage&&!members.get(actor))throw new ResourceAccessError('AUTHORIZATION_DENIED',403,'Fixture scope permission denied');
+    }},{async scopeOwner(actual,scope){same(actual,scope);return {ownerActorId:scopeOwner};},
+        async ownership(actual,scope,kind,id){same(actual,scope);const ownerActorId=claim(kind,id);return ownerActorId===undefined?undefined:{ownerActorId};},
+        async node(){throw Error('Node access is outside this owner fixture');}});
+}
 
 type Any=Record<string,any>;
 const at=1800000000000,hash='sha256:'+'a'.repeat(64),clone=<T>(value:T):T=>structuredClone(value);
@@ -52,7 +66,7 @@ function fixture(kind:'deployment'|'migration'='deployment',action:'add'|'update
     const store={async lockScope(actual:unknown,scope:string){assert.equal(this,store);assert.equal(scope,'scope');step('scopeLock',actual);},async count(actual:unknown){assert.equal(this,store);step('count',actual);return state.count;},
         async create(actual:unknown,scope:string,head:IngressDeploymentHead,createdPlan:Any){assert.equal(this,store);assert.equal(scope,'scope');step('createBatch',actual);state.record={head:clone(head),plan:clone(createdPlan),attempts:[]};},
         async read(actual:unknown,scope:string,id:string,lock=false){assert.equal(this,store);assert.equal(scope,'scope');assert.equal(id,'batch');step('read:'+lock,actual);return state.record===null?null:clone(state.record);},
-        async list(actual:unknown,scope:string,paging:Any,groupId?:string){assert.equal(this,store);assert.equal(scope,'scope');assert.deepEqual(paging,{page:1,limit:25,offset:0});assert.equal(groupId,'group');step('list',actual);return {total:1,items:[clone(state.record.head)]};},
+        async list(actual:unknown,scope:string,principal:Framework.ReadPrincipal,paging:Any,groupId?:string){assert.equal(this,store);assert.equal(scope,'scope');assert.deepEqual(principal,{actorId:'actor',governance:false});assert.deepEqual(paging,{page:1,limit:25,offset:0});assert.equal(groupId,'group');step('list',actual);return {total:1,items:[clone(state.record.head)]};},
         async operations(actual:unknown,scope:string,ids:string[]){assert.equal(this,store);assert.equal(scope,'scope');step('operations',actual);assert.deepEqual(ids,[...new Set(state.record.attempts.flatMap((entry:Any)=>entry.outcome.accepted&&entry.outcome.result.accepted.body.operationId?[entry.outcome.result.accepted.body.operationId]:[]))]);return state.operations as PublicationOperation[];},
         async isolate<T>(actual:unknown,run:()=>Promise<T>){assert.equal(this,store);step('savepoint',actual);const saved=clone(state.forwards);try{const value=await run();step('release',actual);return {accepted:true as const,value};}catch(error){if(!pathPublicationStorageValues.isRefusal(error))throw error;state.forwards=saved;step('rollbackSavepoint',actual);step('release',actual);return {accepted:false as const,error:pathPublicationStorageValues.refusal(error)};}},
         async append(actual:unknown,scope:string,id:string,revision:number,attempt:Any){assert.equal(this,store);assert.equal(scope,'scope');assert.equal(id,'batch');assert.equal(revision,state.record.head.revision);step('append',actual);state.record.head.revision++;state.record.attempts.push(clone(attempt));},
@@ -78,8 +92,9 @@ function fixture(kind:'deployment'|'migration'='deployment',action:'add'|'update
         async removeIngressIn(actual:unknown,request:Any,before:Any){assert.equal(this,forwards);assert.equal(request.actorId,'actor');return accepted('removeForward',actual,before.spec,before.path,before,true);},
         async compensatePublicationIn(actual:unknown,request:Any,before:Any,original:Any){assert.equal(this,forwards);assert.equal(request.actorId,'actor');assert.deepEqual(original,source.state);return accepted('restoreForward',actual,original.spec,original.path,before);}};
     const clock=()=>{step('clock');state.clockCalls++;return state.now;},newId=()=>{step('id');return state.id;};
-    const owner:any=migration?new IngressMigrations(db,auth,requests,store,groups,origins,forwards,clock,newId):new IngressDeployments(db,auth,requests,store,groups,forwards,clock,newId);
-    return {kind,migration,action,tx,events,failure,state,db,auth,requests,store,groups,origins,forwards,owner,input,plan,source,group,targetGroup,old,next,added,oldConfig,newConfig,ref,reset(){events.length=0;state.clockCalls=0;}};
+    const access=ownerAccess(tx,'scope',new Map([['actor',true]]),(resource,id)=>resource===(migration?'ingress-migration':'ingress-deployment')&&id==='batch'?state.record?.head.createdBy:undefined);
+    const owner:any=migration?new IngressMigrations(db,auth,access,requests,store,groups,origins,forwards,clock,newId):new IngressDeployments(db,auth,access,requests,store,groups,forwards,clock,newId);
+    return {kind,migration,action,tx,events,failure,state,db,auth,access,requests,store,groups,origins,forwards,owner,input,plan,source,group,targetGroup,old,next,added,oldConfig,newConfig,ref,reset(){events.length=0;state.clockCalls=0;}};
 }
 
 test('60/61 canonical legacy classes parsers limits and async prototypes preserve original identity and frozen migration limits',()=>{
@@ -88,7 +103,7 @@ test('60/61 canonical legacy classes parsers limits and async prototypes preserv
     for(const name of ['parseIngressOriginRef','parseIngressLineage','parseIngressMigrationInput','parseIngressMigrationPlan','INGRESS_MIGRATION_LIMITS'] as const)assert.equal(({parseIngressOriginRef,parseIngressLineage,parseIngressMigrationInput,parseIngressMigrationPlan,INGRESS_MIGRATION_LIMITS})[name],LegacyMigrationValues[name]);
     assert.equal(Object.isFrozen(INGRESS_LIMITS),false);assert.equal(Object.isFrozen(INGRESS_MIGRATION_LIMITS),true);assert.deepEqual(INGRESS_MIGRATION_LIMITS,{batchesPerScope:64,itemsPerBatch:8,sourcesPerBatch:8,attemptsPerItem:2,maxPlanBytes:131072,maxBatchRevision:20});
     for(const Ctor of [IngressDeployments,IngressMigrations])for(const method of ['preview','create','list','get','originIn','act','cancel']){const d=Object.getOwnPropertyDescriptor(Ctor.prototype,method)!;assert.equal(d.value.constructor.name,'AsyncFunction');assert.equal(d.enumerable,false);assert.equal(d.configurable,true);assert.equal(d.writable,true);}
-    assert.equal(IngressDeployments.length,6);assert.equal(IngressMigrations.length,7);
+    assert.equal(IngressDeployments.length,7);assert.equal(IngressMigrations.length,8);
 });
 
 for(const kind of ['deployment','migration'] as const){const number=kind==='deployment'?60:61;
@@ -202,7 +217,7 @@ test('60/61 default clocks capture constructor Date.now without sampling and can
     const original=Date.now;let reads=0;
     try{
         for(const kind of ['deployment','migration'] as const){const f=fixture(kind);Date.now=()=>{reads++;return at;};const before=reads;
-            const owner=kind==='deployment'?new IngressDeployments(f.db,f.auth,f.requests,f.store,f.groups,f.forwards):new IngressMigrations(f.db,f.auth,f.requests,f.store,f.groups,f.origins,f.forwards);
+            const owner=kind==='deployment'?new IngressDeployments(f.db,f.auth,f.access,f.requests,f.store,f.groups,f.forwards):new IngressMigrations(f.db,f.auth,f.access,f.requests,f.store,f.groups,f.origins,f.forwards);
             assert.equal(reads,before);Date.now=()=>assert.fail('default clock must retain the constructor function');
             await owner.cancel('actor','scope','batch','cancel',1);assert.equal(reads,before+1);assert.equal(f.state.record.head.revision,2);await owner.cancel('actor','scope','batch','noop',2);assert.equal(reads,before+1);
             f.state.replay={status:200,body:{batchId:'batch',revision:2,cancelled:true,changed:false}};await owner.cancel('actor','scope','batch','replay',20);assert.equal(reads,before+1);

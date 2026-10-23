@@ -11,15 +11,16 @@ connection/session clamp, observations and error/retry classification have one
 implementation here. Old private Control helper names delegate rather than copy it.
 
 These L2 adapters consume only the existing execution inputs, native engine/public
-contract APIs and authorization callback. They do not receive Runner/Journal/
-authority/permit state. Factory and start APIs are trusted internal adapter APIs,
+contract APIs, authorization callback and injected executionhost.PayloadGate.
+They do not receive Runner/Journal/authority/permit state. Factory and start APIs are trusted internal adapter APIs,
 not permission for a feature to bypass original execution acceptance or to create
 another composition/authority root. The check remains required throughout I/O;
 native engines retain their existing implementation and failure preconditions.
 
 Platform discovery belongs to executiondriver's actual-OS binding, never a remote
-capability or non-authoritative observation. No new feature flag, role, phase,
-protocol, descriptor/capability, Probe path, echo composition or fallback is added.
+capability or non-authoritative observation. The shared-resource-limits.v1
+capability is an optional payload-enforcement declaration on all three native
+drivers. No new role, phase, protocol, Probe path or echo composition is added.
 Remaining native engine/wire internals and Control/Probe/CLI coupling are separate
 classification work, not certified wholesale by this move.
 
@@ -43,3 +44,30 @@ Echo business/observed ingress numeric adapters preserve their separate original
 protocol/address/policy/port refusal order instead of reusing the different plain
 ingress predicate. See agent-probe-native-owner-v1.md for these source chains,
 remaining mixed wire/default work and unexecuted acceptance cases.
+
+FR-0032 payload integration binds Host.Payload before Direct listen or Relay peer
+listen/activation. StartDirectMetered, forward.StartAuthorizedMetered,
+forward.StartUDPAuthorizedMetered, relay.PrepareMetered and
+relay.PrepareMultihopMetered retain their original host gate for the instance's
+entire lifetime. The old Start/Prepare entrypoints explicitly pass nil for
+unmetered inputs. Hostless Direct replacement refuses a metered old instance;
+Runner owns close/start when the assignment or immutable bucket binding changes.
+SetAuthorization renews the original authorization without replacing its gate.
+
+Direct TCP/UDP and Relay ingress/egress charge application payload before the
+socket write in each direction. Multi-hop transit charges the decoded payload at
+one outgoing write per direction. TCP may split an allowed prefix across payload
+frames; UDP must reserve the entire datagram. Empty UDP still calls
+Acquire(ctx, 0, true), so the durable owner checks its period, zero rate and
+exhausted quota before allowing the datagram. TLS records, frame headers,
+Open/Accept, activation probes and FIN/Close consume no payload. Failed writes
+retain conservative debit; original operational telemetry counts actual written
+bytes and remains ingress-only for Relay. No private billing state, durable
+balance, authority, Journal or Runtime ledger is owned here.
+
+Rate waits receive the instance/session cancellation context and recheck original
+authorization after acquiring credit. UDP waits hold no listener/session locks.
+Original idle, peer credential, lease, drain and shutdown limits remain in force.
+The new payload gate/dispatch tests and metered Relay test helpers are authored
+only; no formatter, syntax/type/static check, tests, build, network experiment or
+CI has executed for this change.

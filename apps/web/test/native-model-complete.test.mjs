@@ -4,7 +4,7 @@ import * as legacy from '../model.js';
 import * as owner from '../console-model-owner/public.js';
 import { browserConsoleModelEffects as native } from '../browser-native/public.js';
 
-const node = () => ({ id: 'node-a', policy: { capabilities: ['adp.3', 'native.direct.v1', 'tcp', 'udp'],
+const node = () => ({ id: 'node-a', canUse:true, allowedRoles:null, readDetail:'full', resourceSource:'private', policy: { capabilities: ['adp.3', 'native.direct.v1', 'tcp', 'udp'],
   allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [80] } });
 const form = () => ({ protocol: 'both', listenAddress: '127.0.0.1', listenPort: '80', targetHost: ' target.example ', targetPort: '443', enabled: true });
 
@@ -40,12 +40,14 @@ test('native credential expression captures Date.parse before the second getter 
   assert.deepEqual(order, ['credential:1', 'lookup:parse', 'credential:2', ['captured:parse', 'expiry'], 'now']);
 });
 
-test('Direct capability keeps the original guard order and reads credentials only after every authorization fact', () => {
+test('Direct capability requires explicit use permission and reads credentials only after every authorization fact', () => {
   const failure = new Error('credential getter failure'), model = owner.createConsoleModel({ credentialActive() { throw failure; } });
-  const cases = [undefined, null, { revoked: true }, { policy: {} },
-    { policy: { capabilities: ['adp.3'] } },
-    { policy: { capabilities: ['adp.3', 'native.direct.v1'], allowedListenerAddresses: [] } },
-    { policy: { capabilities: ['adp.3', 'native.direct.v1'], allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [] } }];
+  const {canUse,...missingPermission}=node();
+  const cases = [undefined, null, missingPermission, {...node(),canUse:false}, {...node(),canUse:'true'},
+    { ...node(), revoked: true }, { canUse:true, policy: {} },
+    { canUse:true, policy: { capabilities: ['adp.3'] } },
+    { canUse:true, policy: { capabilities: ['adp.3', 'native.direct.v1'], allowedListenerAddresses: [] } },
+    { canUse:true, policy: { capabilities: ['adp.3', 'native.direct.v1'], allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [] } }];
   for (const value of cases) {
     if (value) Object.defineProperty(value, 'credentialUntil', { get() { assert.fail('guard must short circuit credential'); } });
     assert.equal(model.directCapable(value), false);
@@ -71,6 +73,9 @@ test('Direct form preserves property and String Number coercion order before lis
   assert.equal(Object.isFrozen(spec), false); spec.protocols.push('changed'); spec.ingress.listen.port = 81;
   assert.deepEqual(model.directSpec(form(), node()).protocols, ['tcp', 'udp']); assert.equal(node().policy.allowedPorts[0], 80);
   const failure = new Error('form getter failure');
+  for(const allowedRoles of [undefined,[],['transit'],['egress']])
+    assert.throws(()=>model.directSpec(new Proxy({}, {get(){throw failure;}}),{...node(),allowedRoles}),
+      {message:'所选节点不满足 Direct 执行能力或授权要求'});
   assert.throws(() => model.directSpec(new Proxy({}, { get() { throw failure; } }), { ...node(), revoked: true }),
     { message: '所选节点不满足 Direct 执行能力或授权要求' });
   assert.throws(() => model.directSpec({ protocol: 'quic', get listenAddress() { throw failure; } }, node()), { message: '节点不支持所选协议' });

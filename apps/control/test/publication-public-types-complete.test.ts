@@ -15,17 +15,19 @@ type Mutable<T> = {[K in keyof T]-?:Equal<Pick<T,K>,{-readonly [P in keyof Pick<
 type Tx = {readonly publicationContractTransaction:unique symbol};
 type ConfigA = {readonly family:'a';readonly nested:readonly number[]};
 type ConfigB = {readonly family:'b';readonly nested:readonly string[]};
-type Head = {templateId:string;currentRevision:number;archived:boolean};
+type Head = {templateId:string;ownerActorId:string|null;currentRevision:number;archived:boolean};
 type Revision<C> = {revision:number;config:C;profileDigest:string;configDigest:string;createdBy:string;createdAt:number};
 type TemplateReader<C> = {
     head(tx:Tx,scope:string,id:string,lock?:boolean):Promise<Head|null>;
     revision(tx:Tx,scope:string,id:string,revision:number):Promise<Revision<C>|null>;
-    list(tx:Tx,scope:string,paging:F.ReadPageWindow,prefix:string):Promise<{total:number;items:Head[]}>;
+    list(tx:Tx,scope:string,principal:F.ReadPrincipal,paging:F.ReadPageWindow,prefix:string):Promise<{total:number;items:Head[]}>;
 };
 type TemplateWriter<C> = TemplateReader<C> & {
     lockScope(tx:Tx,scope:string):Promise<void>;count(tx:Tx,scope:string):Promise<number>;
     publish(tx:Tx,scope:string,id:string,record:Revision<C>):Promise<void>;
     archive(tx:Tx,scope:string,id:string):Promise<void>;
+    classifyOwner(tx:Tx,scope:string,id:string,expectedRevision:number,ownerActorId:string):Promise<number>;
+    auditOwnership(tx:Tx,scope:string,id:string,actor:string,ownerActorId:string,revision:number,at:number):Promise<void>;
     audit(tx:Tx,scope:string,id:string,actor:string,revision:number,kind:'publish'|'archive',at:number):Promise<void>;
 };
 type TemplateConfig = {
@@ -63,7 +65,7 @@ type Hooks<K extends string> = {
 };
 type Store<P,O,E,K extends string> = {
     lockScope(tx:Tx,scope:string):Promise<void>;count(tx:Tx,scope:string):Promise<number>;
-    list(tx:Tx,scope:string,paging:F.ReadPageWindow,groupId?:string):Promise<{total:number;items:BatchHead[]}>;
+    list(tx:Tx,scope:string,principal:F.ReadPrincipal,paging:F.ReadPageWindow,groupId?:string):Promise<{total:number;items:BatchHead[]}>;
     read(tx:Tx,scope:string,id:string,lock?:boolean):Promise<RecordValue<P,O,K>|null>;
     create(tx:Tx,scope:string,head:BatchHead,plan:P):Promise<void>;
     append(tx:Tx,scope:string,id:string,expectedRevision:number,attempt:Attempt<O,K>):Promise<void>;
@@ -123,4 +125,15 @@ export type MigrationCompleteDeclarations61 = [
     Same<Equal<OldMigration.IngressMigrationStore<Tx>,Ingress.IngressMigrationStore<Tx>>>,
     Same<Equal<Mutable<Ingress.IngressMigrationRecord>,'head'|'plan'|'attempts'>>,
     Same<Equal<Optional<Ingress.IngressMigrationRecord>,never>>,
+];
+
+
+export type CallerAwareStorageVersions = [
+    Same<Equal<typeof F.PATH_TEMPLATE_STORAGE_INTERFACE_VERSION,2>>,
+    Same<Equal<typeof F.PATH_GROUP_STORAGE_INTERFACE_VERSION,2>>,
+    Same<Equal<typeof F.INGRESS_GROUP_STORAGE_INTERFACE_VERSION,2>>,
+    Same<Equal<typeof F.PATH_PUBLICATION_STORAGE_INTERFACE_VERSION,2>>,
+    Same<Equal<typeof F.INGRESS_DEPLOYMENT_STORAGE_INTERFACE_VERSION,2>>,
+    Same<Equal<typeof F.INGRESS_MIGRATION_STORAGE_INTERFACE_VERSION,2>>,
+    Same<Equal<F.ReadPrincipal,{readonly actorId:string;readonly governance:boolean}>>,
 ];

@@ -27,7 +27,7 @@ function fixture(){
         source_operation_id:null,previous_spec:null,created_at:1,requested_by:'actor-a',recovery_invalidated:0};
     const record:RuntimeRelayDeployment={forward_id:forward.id,generation:9,target_revision:1,ingress_node_id:plan.nodes[0]!.nodeId,
         egress_node_id:plan.nodes.at(-1)!.nodeId,body:JSON.stringify(plan),stage:'active',prepared_count:3,activated_count:3};
-    const state={now:Date.parse(input.issuedAt)+1000,fail:'',pending:0,unsafe:0,previousSafe:true,missing:false,actor:'actor-a',leasesLive:false,currentPins:true};
+    const state={now:Date.parse(input.issuedAt)+1000,fail:'',pending:0,unsafe:0,previousSafe:true,missing:false,actor:'actor-a',leasesLive:false,currentPins:true,deniedPorts:new Set<number>()};
     const failure=new Error('original Relay provider error');
     function called(self:unknown,owner:unknown,name:string,args:unknown[],transaction=true){assert.equal(self,owner);if(transaction)assert.equal(args[0],tx);events.push({name,args});if(state.fail===name)throw failure;}
     const store={async latest(this:unknown,...args:unknown[]){called(this,store,'latest',args);return state.missing?undefined:record;},
@@ -54,7 +54,7 @@ function fixture(){
     };
     const forwards={async record(this:unknown,...args:unknown[]){called(this,forwards,'forward',args);return forward;},
         async authorizer(this:unknown,...args:unknown[]){called(this,forwards,'authorizer',args);return state.actor;}};
-    const nodes={async authorizedRelayNode(this:unknown,...args:unknown[]){called(this,nodes,'authorizedNode',args);return input.nodes.find(n=>n.facts.nodeId===args[3])!.facts;},
+    const nodes={async reservationPorts(this:unknown,current:Tx,actor:string,scope:string,nodeId:string,ports:readonly number[]){assert.equal(this,nodes);assert.equal(current,tx);assert.equal(actor,state.actor);assert.equal(scope,forward.scopeId);const allowed=input.endpoints.find(endpoint=>endpoint.nodeId===nodeId)!.config.allowedTcpPorts;return ports.filter(port=>allowed.includes(port)&&!state.deniedPorts.has(port));},async authorizedRelayNode(this:unknown,...args:unknown[]){called(this,nodes,'authorizedNode',args);return input.nodes.find(n=>n.facts.nodeId===args[3])!.facts;},
         async facts(this:unknown,...args:unknown[]){called(this,nodes,'facts',args);const node=input.nodes.find(n=>n.facts.nodeId===args[1])!;return {facts:node.facts,credentialUntil:node.credentialUntil};},
         async relayCredentialFacts(this:unknown,...args:unknown[]){called(this,nodes,'peers',args);const peers=input.nodes.find(n=>n.facts.nodeId===args[1])!.peers;
             return args[2]===true&&!state.currentPins?[{fingerprint:'sha256:'+'e'.repeat(64),validUntil:state.now+3600000}]:peers;}};

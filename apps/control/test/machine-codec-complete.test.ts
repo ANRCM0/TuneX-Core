@@ -40,6 +40,8 @@ function fixture() {
             complete:true,snapshotDigest:'compiled',assignments:[...input.assignments],tombstones:input.tombstones};},
     };
     const ports:RuntimeHostOptions<Tx,NativeRuntimeFamily>={codec,now:()=>{events.push(`now:${data.now}`);return data.now;},
+        // Explicit unlimited fixture; retain the original codec trace independently of policy.
+        payloadPolicy:{async limits(current){assert.equal(current,tx);return {excludedAssignmentIds:[]};}},
         db:{async transaction(action){events.push('begin');try{const result=await action(tx);events.push('commit');return result;}catch(error){events.push('rollback');throw error;}}},
         nodes:{async credential(current){trace(current,'credential');return data.credentialUntil;},async facts(current){trace(current,'facts');return {facts};},
             async state(current){trace(current,'state');return {facts,revoked:data.revoked,credentialUntil:data.credentialUntil};},
@@ -277,6 +279,8 @@ test('119 Host publication retains every hold reuse deadline time sample and aut
         if(mode==='expired-credential')f.data.credentialUntil=f.data.now;
         if(mode==='new-session')f.data.previous!.sessionEpoch=1;
         if(mode==='changed-assignments')f.data.assignments=[f.assignment];
+        const digestValues:unknown[]=[],originalDigest=f.codec.digest;
+        f.codec.digest=function(value){digestValues.push(value);return originalDigest.call(this,value);};
         const host=f.ready(),snapshot=await host.snapshot('node',2),held=mode==='hold',reused=mode==='reuse';
         const events=f.events,clock=events.filter(event=>event.startsWith('now:')),parses=events.filter(event=>event.startsWith('parse:'));
         assert.equal(clock.length,mode==='withdrawn'?1:2,mode);
@@ -299,7 +303,10 @@ test('119 Host publication retains every hold reuse deadline time sample and aut
             assert.deepEqual(events.slice(events.indexOf('retire')),ordered);
         }
         const digests=events.filter(event=>event==='digest').length;
-        assert.equal(digests,f.data.previous&&!held&&mode!=='new-session'?2:0,'session equality short circuits assignment digests');
+        const assignmentDigests=f.data.previous&&!held&&mode!=='new-session'?2:0;
+        assert.equal(digests,2+assignmentDigests,'payload policy is compared first; session equality still short circuits assignment digests');
+        assert.deepEqual(digestValues.slice(0,2),[null,null]);
+        assert.deepEqual(digestValues.slice(2),assignmentDigests?[f.data.previous!.assignments,f.data.assignments]:[]);
     }
 });
 

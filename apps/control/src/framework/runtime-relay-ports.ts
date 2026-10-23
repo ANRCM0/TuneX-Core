@@ -2,11 +2,12 @@ import type { Forward } from '@tunex/core';
 import type { RuntimeValueFamily, RuntimeAssignmentFor } from '@tunex/contracts/execution-values';
 import type { Policy } from '@tunex/contracts/policy';
 import type { AuthorizedNodeFacts } from './node-facts.ts';
+import type { NodeUseRole } from './node-authority-ports.ts';
 import type { RequestIdentity } from './application-ports.ts';
 import type { RuntimeLedgerForwards, RuntimeOperation } from './runtime-ledger-ports.ts';
 import type { RelayResource, ReservedRelayResource, RuntimeSlotKey } from './runtime-resource-ports.ts';
 
-export const RUNTIME_RELAY_INTERFACE_VERSION=5 as const;
+export const RUNTIME_RELAY_INTERFACE_VERSION=7 as const;
 
 export interface RuntimeAssignmentNetworkPolicy {
     readonly egressPolicyRevision:number;
@@ -126,7 +127,8 @@ export interface RuntimeRelayObservations<Tx> {
     leaseNodes(tx:Tx,forwardId:string):Promise<{node_id:string}[]>;
 }
 export interface RuntimeRelayNodes<Tx> {
-    authorizedRelayNode(tx:Tx,actor:string,scopeId:string,nodeId:string):Promise<AuthorizedNodeFacts>;
+    reservationPorts(tx:Tx,actor:string,scopeId:string,nodeId:string,ports:readonly number[]):Promise<readonly number[]>;
+    authorizedRelayNode(tx:Tx,actor:string,scopeId:string,nodeId:string,role:NodeUseRole,forward?:Forward):Promise<AuthorizedNodeFacts>;
     facts(tx:Tx,nodeId:string):Promise<{facts:AuthorizedNodeFacts;credentialUntil:number}>;
     cleanupFacts(tx:Tx,nodeId:string,scopeId:string):Promise<AuthorizedNodeFacts>;
     relayCredentialFacts(tx:Tx,nodeId:string,currentOnly?:boolean):Promise<{fingerprint:string;certificate:string;validUntil:number}[]>;
@@ -140,7 +142,7 @@ export interface RuntimeRelayEndpointResolver<Tx> {
 export interface RuntimeRelayLedger<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> {
     lockNode(tx:Tx,nodeId:string,epoch?:number):Promise<void>;
     latest(tx:Tx,forwardId:string):Promise<RuntimeOperation|undefined>;
-    reserveRelay(tx:Tx,forward:Forward,resources:readonly RelayResource[],generation:number):Promise<ReservedRelayResource[]>;
+    reserveRelay(tx:Tx,forward:Forward,resources:readonly RelayResource[],generation:number,creatingOwnerActorId?:string):Promise<ReservedRelayResource[]>;
     sessionAuthoritySafe(tx:Tx,nodeId:string,epoch:number):Promise<boolean>;
     accept(tx:Tx,forward:Forward,request:RequestIdentity,kind?:RuntimeOperation['kind'],previousSpec?:unknown,sourceOperationId?:string|null):Promise<string>;
     assertCapacity(tx:Tx,forwarding:RuntimeLedgerForwards<Tx>,facts:AuthorizedNodeFacts):Promise<void>;

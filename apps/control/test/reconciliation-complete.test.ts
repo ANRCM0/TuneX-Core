@@ -20,7 +20,7 @@ function forward(id:string,node='node-a',enabled=true,path?:string[]):Forward{
 }
 function fixture(){
     const tx={marker:Symbol()},calls:unknown[][]=[],effects:string[]=[],failure=new Error('original reconciliation failure');
-    const options={fail:'',foreign:false},values=[forward('enabled','node-a',true,['node-middle','node-tail']),forward('disabled','node-b',false)],records=new Map(values.map(value=>[value.id,{...value,deleting:false,recoverySuspended:false}])),authorizers=new Map(values.map(value=>[value.id,'member']));
+    const options={fail:'',foreign:false},values=[forward('enabled','node-a',true,['node-middle','node-tail']),forward('disabled','node-b',false)],records=new Map(values.map(value=>[value.id,{...value,ownerActorId:'member',deleting:false,recoverySuspended:false}])),authorizers=new Map(values.map(value=>[value.id,'member']));
     const allowed=new Map(values.map(value=>[value.id,true])),until=new Map<string,number|null>([['node-a',0],['node-middle',23],['node-tail',17],['node-b',null]]);
     function called(self:unknown,owner:unknown,name:string,args:unknown[]){assert.equal(self,owner);assert.equal(args[0],tx);calls.push([name,...args]);if(options.fail===name)throw failure;}
     const forwards={async forProfileActor(this:unknown,...args:unknown[]){called(this,forwards,'profileReferences',args);return values;},
@@ -40,7 +40,7 @@ function fixture(){
         async assertNodeCapacity(this:unknown,...args:unknown[]){called(this,execution,'nodeCapacity',args);}};
     const facts:AuthorizedNodeFacts={nodeId:'node-middle',scopeId:'scope-a',capabilities:[],egressPolicyRevision:1,allowedListenerAddresses:[],allowedPorts:[],allowedDestinationCidrs:[],allowMetadataTargets:false};
     const profile=new ProfileGrantReconciler(forwards,execution),access=new AccessChangeReconciler(forwards,execution),node=new NodeChangeReconciler(forwards,execution);
-    const grant={profileId:'profile',actorId:'member',revision:1,allowed:true,changed:true},member={actorId:'member',revision:1,role:'manager',active:true,changed:true},nodeGrant={nodeId:'node-middle',actorId:'member',revision:1,allowed:true,changed:true};
+    const grant={profileId:'profile',actorId:'member',revision:1,allowed:true,changed:true},member={actorId:'member',revision:1,role:'manager',active:true,changed:true},nodeGrant={nodeId:'node-middle',actorId:'member',revision:1,allowed:true,allowedRoles:null,portLimits:null,changed:true};
     return {tx,calls,effects,options,failure,values,records,authorizers,allowed,until,forwards,execution,facts,profile,access,node,grant,member,nodeGrant,names:()=>calls.map(row=>row[0]),clear(){calls.length=0;effects.length=0;},
         async transaction(action:()=>Promise<unknown>){const before=[...effects];try{return await action();}catch(error){effects.splice(0,effects.length,...before);throw error;}}};
 }
@@ -84,8 +84,9 @@ test('116 member rejects candidate Scope before lock and latest reread Scope bef
 test('116 Node Grant filters unrelated paths preserves reference and affected-Node insertion order unconditional validation no-op and nullable maximum',async()=>{
     const f=fixture();f.values.push(forward('unrelated','node-unrelated'));f.values[1]=forward('disabled','node-middle',false);
     const result=await f.access.nodeGrant(f.tx,request,f.nodeGrant);assert.deepEqual(result,{operationIds:['operation:enabled','operation:disabled'],maximumAuthorization:23});
-    assert.deepEqual(f.names(),['actorReferences','lock:enabled','nodes:enabled','transition:enabled','accept:enabled','capacity:enabled','lock:disabled','accept:disabled','validateNode','until:node-middle','until:node-a','until:node-tail']);
-    assert.deepEqual(f.calls[8],['validateNode',f.tx,'node-middle','scope-a',true]);assert.deepEqual(f.calls[4],['accept:enabled',f.tx,f.values[0],request,'policy']);
+    assert.deepEqual(f.names(),['actorReferences','lock:enabled','nodes:enabled','allowed:enabled','transition:enabled','accept:enabled','capacity:enabled','lock:disabled','allowed:disabled','accept:disabled','validateNode','until:node-middle','until:node-a','until:node-tail']);
+    assert.deepEqual(f.calls[3],['allowed:enabled',f.tx,'member',f.values[0]]);assert.deepEqual(f.calls[8],['allowed:disabled',f.tx,'member',f.values[1]]);
+    assert.deepEqual(f.calls[10],['validateNode',f.tx,'node-middle','scope-a',true]);assert.deepEqual(f.calls[5],['accept:enabled',f.tx,f.values[0],request,'policy']);
     const noOp=fixture();assert.deepEqual(await noOp.access.nodeGrant(noOp.tx,request,{...noOp.nodeGrant,changed:false}),{operationIds:[],maximumAuthorization:23});assert.deepEqual(noOp.calls,[['validateNode',noOp.tx,'node-middle','scope-a',true],['until:node-middle',noOp.tx,'node-middle']]);
     const withdrawn=fixture();withdrawn.until.clear();await withdrawn.access.nodeGrant(withdrawn.tx,request,{...withdrawn.nodeGrant,allowed:false});assert.deepEqual(withdrawn.names(),['actorReferences','lock:enabled','nodes:enabled','accept:enabled','validateNode','until:node-middle','until:node-a','until:node-tail']);assert.equal(withdrawn.calls[3]![4],'revoke');assert.equal(withdrawn.calls[4]![4],false);
     const foreign=fixture();foreign.values.push({...forward('unrelated','other'),scopeId:'foreign'});await assert.rejects(foreign.access.nodeGrant(foreign.tx,request,foreign.nodeGrant),{code:'INTEGRITY_FAILURE'});assert.ok(!foreign.names().includes('validateNode'));

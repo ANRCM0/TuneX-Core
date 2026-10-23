@@ -6,6 +6,8 @@ import type { RowDataPacket } from 'mysql2/promise';
 import type { Forward } from '@tunex/core';
 import { MAX_COUNTER } from '@tunex/core';
 import { DEFAULT_POLICY } from '@tunex/contracts';
+import { NodePortLimitPolicy } from '../src/modules/node-owner/public.ts';
+import { MySqlNodeAuthorityStore } from '../src/infrastructure/mysql-node-authority.ts';
 import { RuntimeResources } from '../src/framework/public.ts';
 import { MySqlRuntimeResourceStore, createMySqlRuntimeResources } from '../src/infrastructure/mysql-runtime-resources.ts';
 import { MySqlUnitOfWork, rows, write } from '../src/infrastructure/mysql.ts';
@@ -47,7 +49,8 @@ test('8 original resource store SQL keeps every supplied receiver argument resul
 });
 
 test('8 resource native constructors keep supplied explicit zero/default capacity no connection and original missing node/epoch semantics',async()=>{
-    const native=createMySqlRuntimeResources(),zero=createMySqlRuntimeResources(0);
+    const policy=new NodePortLimitPolicy(new MySqlNodeAuthorityStore(),new MySqlRuntimeResourceStore());
+    const native=createMySqlRuntimeResources(policy),zero=createMySqlRuntimeResources(policy,0);
     const bound=(value:unknown)=>value as {store:unknown;maxAssignmentsPerNode:number};
     assert.equal(bound(native).maxAssignmentsPerNode,DEFAULT_POLICY.maxAssignmentsPerNode);assert.equal(bound(zero).maxAssignmentsPerNode,0);
     assert.ok(bound(native).store instanceof MySqlRuntimeResourceStore);assert.notEqual(bound(native).store,bound(zero).store);
@@ -61,25 +64,25 @@ async function withDatabase(action:(db:MySqlUnitOfWork)=>Promise<void>){
     const db=new MySqlUnitOfWork(url.toString());let created=false;
     try{await admin.query(`CREATE DATABASE \`${name}\``);created=true;await db.migrate();
         await db.transaction(async tx=>{await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',['owner','a'.repeat(64)]);await write(tx,'INSERT INTO scopes(id,owner_id) VALUES(?,?)',['scope-a','owner']);
-            for(const [index,id] of ['node-a','node-b'].entries()){await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,facts) VALUES(?,?,?,?,?)',[id,'scope-a',String(index).repeat(64),900000,'{}']);await write(tx,'INSERT INTO runtime_nodes(node_id,session_epoch) VALUES(?,?)',[id,2]);}
-            await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec) VALUES(?,?,?,?)',[forward.id,forward.scopeId,1,JSON.stringify(forward.spec)]);
+            for(const [index,id] of ['node-a','node-b'].entries()){await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,?,?)',[id,'scope-a',String(index).repeat(64),900000,'{}','private','owner',1]);await write(tx,'INSERT INTO runtime_nodes(node_id,session_epoch) VALUES(?,?)',[id,2]);}
+            await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec,owner_actor_id) VALUES(?,?,?,?,?)',[forward.id,forward.scopeId,1,JSON.stringify(forward.spec),'owner']);
         });await action(db);
     }finally{try{await db.close();if(created)await admin.query(`DROP DATABASE \`${name}\``);}finally{await admin.end();}}
 }
 
 test('8 real MySQL resource capacity failures roll back all reservations and preserve physical owner fence and old generation drain slots',
     {skip:!databaseURL,timeout:60000},async()=>withDatabase(async db=>{
-        const store=new MySqlRuntimeResourceStore(),host=createMySqlRuntimeResources(1);
+        const store=new MySqlRuntimeResourceStore(),policy=new NodePortLimitPolicy(new MySqlNodeAuthorityStore(),store),host=createMySqlRuntimeResources(policy,1);
         await assert.rejects(db.transaction(tx=>host.reserve(tx,forward)),{code:'RESOURCE_LIMIT'});
         assert.equal((await rows<RowDataPacket>(db.pool,'SELECT COUNT(*) n FROM port_slots'))[0]!.n,0);
-        const full=createMySqlRuntimeResources(4);const first=await db.transaction(tx=>full.reserve(tx,forward));
+        const full=createMySqlRuntimeResources(policy,4);const first=await db.transaction(tx=>full.reserve(tx,forward));
         assert.deepEqual(first.map(slot=>[slot.protocol,slot.bindingFence,slot.deploymentGeneration]),[['tcp',1,1],['udp',1,1]]);
         await assert.rejects(db.transaction(tx=>full.reserve(tx,forward)),{code:'PORT_RESERVED'});
         const next:Forward={...forward,revision:7,spec:{...forward.spec,ingress:{...forward.spec.ingress,listen:{address:'127.0.0.1',port:9001}}}};
         await db.transaction(async tx=>{await full.lockNode(tx,'node-a',2);const result=await full.transition(tx,forward,next);assert.deepEqual(result.map(slot=>slot.deploymentGeneration),[7,7]);
             assert.equal((await store.ownedSlots(tx,forward.id)).length,4);await full.releaseObsoleteSlots(tx,next);assert.deepEqual((await store.ownedSlots(tx,forward.id)).map(slot=>slot.port),[9001,9001]);});
         const before=await rows(db.pool,'SELECT * FROM port_slots ORDER BY node_id,protocol,port');
-        await assert.rejects(db.transaction(tx=>new RuntimeResources(store,1).reserveRelay(tx,next,[
+        await assert.rejects(db.transaction(tx=>new RuntimeResources(store,1,policy).reserveRelay(tx,next,[
             {nodeId:'node-b',role:'egress',forwardProtocol:'udp',physicalProtocol:'tcp',address:'127.0.0.1',port:9100},
             {nodeId:'node-a',role:'ingress',forwardProtocol:'udp',physicalProtocol:'tcp',address:'127.0.0.1',port:9001},
         ],9)),{code:'RESOURCE_LIMIT'});

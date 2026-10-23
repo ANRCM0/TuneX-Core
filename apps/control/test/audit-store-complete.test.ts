@@ -10,6 +10,7 @@ import type { AuditReadQuery } from '../src/modules/audit-owner/public.ts';
 import { randomUUID } from 'node:crypto';
 import { createConnection } from 'mysql2/promise';
 import { MySqlUnitOfWork, rows, write } from '../src/infrastructure/mysql.ts';
+import { Identity } from '../src/modules/identity.ts';
 import { AuditEvents } from '../src/modules/audit-owner/public.ts';
 
 const query:AuditReadQuery={from:100,to:200,limit:2,filters:{},before:null};
@@ -17,19 +18,37 @@ function fixture(){const calls:{sql:string;args:unknown[]}[]=[],state={rows:[] a
 const row=()=>({occurredAt:'100',revision:'9007199254740991',sequence:'0',position:null,retryable:1,recoveryInvalidated:0,unclassified:'retained'});
 
 test('68 SQL projection retains every source owner immutable attribution and stable bounded ordering on supplied Tx',async()=>{
- const f=fixture(),owners=['access_events','node_security_events','transport_events','path_template_events','forward_path_bindings','path_group_events','forward_path_group_bindings','path_publication_events','path_publication_attempts','ingress_group_events','ingress_deployment_events','ingress_deployment_attempts','ingress_migration_events','ingress_migration_attempts','operations'];
- for(const [index,source] of AUDIT_SOURCES.entries()){
+ const f=fixture(),owners:Record<typeof AUDIT_SOURCES[number],string>={access:'access_events','node-security':'node_security_events','forward-ownership':'forward_ownership_events',
+  'resource-limits':'shared_resource_limit_audit',transport:'transport_events','path-template':'path_template_events','path-binding':'forward_path_bindings',
+  'path-group':'path_group_events','path-group-binding':'forward_path_group_bindings','path-publication':'path_publication_events','path-publication-attempt':'path_publication_attempts',
+  'ingress-group':'ingress_group_events','ingress-deployment':'ingress_deployment_events','ingress-deployment-attempt':'ingress_deployment_attempts',
+  'ingress-migration':'ingress_migration_events','ingress-migration-attempt':'ingress_migration_attempts',operation:'operations'};
+ for(const source of AUDIT_SOURCES){
   assert.deepEqual(await f.store.source(f.tx,'scope',source,query,x=>x),[]);const call=f.calls.at(-1)!;
-  assert.ok(call.sql.includes('FROM '+owners[index]+' e'),source);assert.deepEqual(call.args,['scope',100,200]);
+  assert.ok(call.sql.includes('FROM '+owners[source]+' e'),source);assert.deepEqual(call.args,['scope',100,200]);
   assert.ok(call.sql.endsWith('ORDER BY audit.occurredAt DESC,CAST(audit.source AS BINARY) DESC,CAST(audit.`key` AS BINARY) DESC LIMIT 3'));
   assert.ok(call.sql.includes("CONCAT('sha256:',SHA2(CAST(JSON_ARRAY("));assert.ok(call.sql.includes('audit.occurredAt>=? AND audit.occurredAt<?'));
   assert.doesNotMatch(call.sql,/FOR UPDATE|INSERT |UPDATE |DELETE |SELECT \*/);
-  if(source.endsWith('-attempt')){assert.ok(call.sql.includes("'owner-attempt' AS `recordType`"));assert.ok(call.sql.includes('LEFT JOIN '+owners[index]+' applied'));assert.ok(call.sql.includes("e.kind='compensate'"));assert.ok(call.sql.includes("ELSE 'OTHER_ERROR' END"));assert.ok(call.sql.includes("'invalid'"));}
+  if(source.endsWith('-attempt')){assert.ok(call.sql.includes("'owner-attempt' AS `recordType`"));assert.ok(call.sql.includes('LEFT JOIN '+owners[source]+' applied'));assert.ok(call.sql.includes("e.kind='compensate'"));assert.ok(call.sql.includes("ELSE 'OTHER_ERROR' END"));assert.ok(call.sql.includes("'invalid'"));}
   if(['path-publication','ingress-deployment','ingress-migration'].includes(source)){assert.ok(call.sql.includes("CASE WHEN e.kind='recovery' THEN NULL ELSE e.actor_id END"));assert.ok(call.sql.includes("'unattributed-recovery'"));}
   if(source==='operation'){assert.ok(call.sql.includes('LEFT JOIN forward_revisions r ON r.forward_id=e.forward_id AND r.revision=e.target_revision'));assert.ok(call.sql.includes("'requester-not-status-actor'"));assert.ok(call.sql.includes('e.updated_at AS `occurredAt`'));}
   if(source==='node-security')assert.ok(call.sql.includes('owner.scope_id=?'));
   if(source==='path-binding'||source==='path-group-binding')assert.ok(call.sql.includes('owner.scope_id=e.scope_id'));
  }
+});
+
+test('resource limit audit projects immutable event revision and explicit Node/subject while filtering before the bounded window',async()=>{
+ const f=fixture();
+ await f.store.source(f.tx,'scope','resource-limits',{...query,filters:{nodeId:'shared-node',actorId:'administrator'}},x=>x);
+ const {sql,args}=f.calls[0]!;
+ assert.deepEqual(args,['scope','shared-node',100,200,'administrator']);
+ for(const clause of ['JOIN shared_resource_limit_buckets b ON b.bucket_id=e.bucket_id','WHERE b.scope_id=?',
+  'JSON_ARRAY(e.event_id)','e.at_ms AS `occurredAt`',"'configure' AS `kind`",'e.actor_id AS `actorId`','b.actor_id AS `subjectId`',
+  "'node' AS `entityKind`",'b.node_id AS `entityId`','b.node_id AS `nodeId`',"'explicit-node' AS `nodeAssociation`",
+  "JSON_EXTRACT(e.body,'$.revision')","'resource' AS `revisionKind`",'CAST(b.node_id AS BINARY)=CAST(? AS BINARY)',
+  'CAST(audit.`actorId` AS BINARY)=CAST(? AS BINARY)'])assert.ok(sql.includes(clause),clause);
+ assert.doesNotMatch(sql,/b\.revision|e\.body AS|shared_resource_limit_heads|node_grants|SUM\(|COUNT\(/);
+ assert.ok(sql.endsWith('DESC LIMIT 3'));
 });
 
 test('68 SQL node association follows immutable plans template revisions and accepted compensation rather than current routes',async()=>{
@@ -88,15 +107,47 @@ test('68 owner projection aliases policy array identity and zero constructor pro
 });
 
 const databaseURL=process.env.TUNEX_TEST_DATABASE_URL;
-test('68 migrated MySQL executes all fifteen audit SQL families and immutable node filters while access projection redacts raw JSON and preserves every table',{skip:!databaseURL},async()=>{
+test('resource audit MySQL keeps both immutable revisions after the bucket changes and isolates Scope Node and initiating actor',{skip:!databaseURL},async()=>{
+ const name='tunex_resource_audit_'+randomUUID().replaceAll('-',''),admin=await createConnection(databaseURL!);let db:MySqlUnitOfWork|undefined,created=false;
+ try{
+  await admin.query(`CREATE DATABASE \`${name}\``);created=true;const url=new URL(databaseURL!);url.pathname='/'+name;db=new MySqlUnitOfWork(url.toString());await db.migrate();
+  await db.transaction(async tx=>{
+   for(const [actor,hash] of [['administrator','c'],['member','d']])await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',[actor,hash!.repeat(64)]);
+   await write(tx,'INSERT INTO scopes(id,owner_id) VALUES(?,?)',['scope','administrator']);
+   await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,facts,resource_source) VALUES(?,?,?,?,?,?)',['node','scope','e'.repeat(64),10000,'{}','admin-shared']);
+   await write(tx,'INSERT INTO shared_resource_limit_heads(node_id,actor_id) VALUES(?,?)',['node','member']);
+   await write(tx,'INSERT INTO shared_resource_limit_buckets(bucket_id,scope_id,node_id,actor_id,revision,starts_at,ends_at,bytes_per_second,burst_bytes,byte_limit) VALUES(?,?,?,?,?,?,?,?,?,?)',
+    ['bucket','scope','node','member',2,0,10000,10,20,1000]);
+   await write(tx,'UPDATE shared_resource_limit_heads SET bucket_id=?,revision=? WHERE node_id=? AND actor_id=?',['bucket',2,'node','member']);
+   for(const revision of [1,2])await write(tx,'INSERT INTO shared_resource_limit_audit(event_id,actor_id,bucket_id,at_ms,body) VALUES(?,?,?,?,?)',
+    ['event-'+revision,'administrator','bucket',149+revision,JSON.stringify({revision,private:'DO_NOT_EXPOSE_POLICY_BODY'})]);
+   await write(tx,'UPDATE shared_resource_limit_buckets SET revision=9,byte_limit=500 WHERE bucket_id=?',['bucket']);
+   await write(tx,'UPDATE shared_resource_limit_heads SET revision=9 WHERE node_id=? AND actor_id=?',['node','member']);
+  });
+  const store=new MySqlAuditReadStore(auditStoragePolicy);
+  await db.transaction(async tx=>{
+   const records=await store.source(tx,'scope','resource-limits',{...query,filters:{nodeId:'node',actorId:'administrator'}},value=>value);
+   assert.equal(records.length,2);assert.deepEqual(records.map(record=>record.revision),[2,1]);
+   assert.notEqual(records[0]!.key,records[1]!.key);
+   for(const record of records){assert.equal(record.subjectId,'member');assert.equal(record.actorId,'administrator');assert.equal(record.entityKind,'node');
+    assert.equal(record.entityId,'node');assert.equal(record.nodeId,'node');assert.equal(record.nodeAssociation,'explicit-node');assert.equal(record.revisionKind,'resource');}
+   assert.doesNotMatch(JSON.stringify(records),/DO_NOT_EXPOSE_POLICY_BODY|byte_limit|byteLimit/);
+   assert.deepEqual(await store.source(tx,'other-scope','resource-limits',query,value=>value),[]);
+   for(const filters of [{nodeId:'other-node'},{actorId:'member'}])assert.deepEqual(await store.source(tx,'scope','resource-limits',{...query,filters},value=>value),[]);
+  });
+ }finally{try{await db?.close();if(created)await admin.query(`DROP DATABASE \`${name}\``);}finally{await admin.end();}}
+});
+
+test('68 migrated MySQL executes declared audit SQL families and immutable node filters while access projection redacts raw JSON and preserves every table',{skip:!databaseURL},async()=>{
  const name='tunex_a68_'+randomUUID().replaceAll('-',''),admin=await createConnection(databaseURL!);let db:MySqlUnitOfWork|undefined,created=false;
  try{
   await admin.query(`CREATE DATABASE \`${name}\``);created=true;const url=new URL(databaseURL!);url.pathname='/'+name;db=new MySqlUnitOfWork(url.toString());await db.migrate();const active=db;
-  await db.transaction(async tx=>{await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',['actor','a'.repeat(64)]);await write(tx,'INSERT INTO scopes(id,owner_id) VALUES(?,?)',['scope','actor']);await write(tx,'INSERT INTO access_events(id,scope_id,actor_id,subject_id,kind,revision,created_at,details) VALUES(?,?,?,?,?,?,?,?)',['event','scope','actor','subject','node_grant_change',1,150,JSON.stringify({nodeId:'node',token:'DO_NOT_EXPOSE',nested:{password:'DO_NOT_EXPOSE'}})]);});
+  await db.transaction(async tx=>{await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',['actor','a'.repeat(64)]);await write(tx,'INSERT INTO scopes(id,owner_id) VALUES(?,?)',['scope','actor']);await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',['selfservice-manager','b'.repeat(64)]);for(const actor of ['actor','selfservice-manager'])await write(tx,'INSERT INTO scope_members(scope_id,actor_id,can_manage,active) VALUES(?,?,TRUE,TRUE)',['scope',actor]);await write(tx,'INSERT INTO access_events(id,scope_id,actor_id,subject_id,kind,revision,created_at,details) VALUES(?,?,?,?,?,?,?,?)',['event','scope','actor','subject','node_grant_change',1,150,JSON.stringify({nodeId:'node',token:'DO_NOT_EXPOSE',nested:{password:'DO_NOT_EXPOSE'}})]);});
   async function snapshot(){const tables=await rows<{name:string}>(active.pool,'SELECT TABLE_NAME name FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME');return Object.fromEntries(await Promise.all(tables.map(async({name})=>[name,(await rows(active.pool,`SELECT * FROM \`${name}\``)).map(value=>JSON.stringify(value)).sort()])));}
   const before=await snapshot(),store=new MySqlAuditReadStore(auditStoragePolicy);
   await db.transaction(async tx=>{for(const source of AUDIT_SOURCES){const plain=await store.source(tx,'scope',source,query,x=>x),node=await store.source(tx,'scope',source,{...query,filters:{nodeId:'node'}},x=>x);assert.equal(plain.length,source==='access'?1:0,source);assert.equal(node.length,source==='access'?1:0,source+' node');assert.deepEqual(await store.source(tx,'other-scope',source,query,x=>x),[]);}});
-  let authCalls=0;const service=new AuditEvents(db,{async scope(_tx,actor,scope,manage){assert.equal(actor,'actor');assert.equal(scope,'scope');assert.equal(manage,true);authCalls++;}},new AuditReadModels(store),()=>200);
+  let authCalls=0;const identity=new Identity(db),service=new AuditEvents(db,{async scope(){assert.fail('Audit reader must use owner authorization');},async owner(tx,actor,scope,...extra:unknown[]){assert.equal(actor,'actor');assert.equal(scope,'scope');assert.deepEqual(extra,[]);authCalls++;await identity.owner(tx,actor,scope);}},new AuditReadModels(store),()=>200);
   const report=await service.query('actor','scope',{from:new Date(100).toISOString(),to:new Date(200).toISOString(),nodeId:'node'});assert.equal(authCalls,1);assert.equal(report.items.length,1);assert.equal(report.items[0]!.nodeAssociation,'explicit-node');assert.equal(report.items[0]!.nodeId,'node');assert.equal(report.items[0]!.revisionKind,'grant');assert.doesNotMatch(JSON.stringify(report),/DO_NOT_EXPOSE|password|token/);assert.deepEqual(await snapshot(),before);
+  await db.transaction(tx=>identity.scope(tx,'selfservice-manager','scope',true));const denied=new AuditEvents(db,identity,{async source(){assert.fail('same-Scope manager reached audit SQL');}},()=>200);await assert.rejects(denied.query('selfservice-manager','scope',{from:new Date(100).toISOString(),to:new Date(200).toISOString()}),{code:'AUTHORIZATION_DENIED'});assert.deepEqual(await snapshot(),before);
  }finally{try{await db?.close();if(created)await admin.query(`DROP DATABASE \`${name}\``);}finally{await admin.end();}}
 });

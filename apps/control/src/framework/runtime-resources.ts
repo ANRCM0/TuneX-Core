@@ -1,13 +1,20 @@
-import { MAX_COUNTER, isCounter } from '@tunex/core';
+import { MAX_COUNTER, isCounter, decideForwardChange } from '@tunex/core';
 import type { Forward } from '@tunex/core';
 import { ControlError } from './errors.ts';
 import type { RelayResource, ReservedRelayResource, ReservedSlot, RuntimeResourceAccess, RuntimeResourceStore, RuntimeSlotKey } from './runtime-resource-ports.ts';
+import type { RuntimePortReservationPolicy } from './runtime-port-policy-ports.ts';
 
 /** Coordinates the existing resource ledger; holds no independent authority/state. */
 export class RuntimeResources<Tx> implements RuntimeResourceAccess<Tx> {
     private readonly store:RuntimeResourceStore<Tx>;
     private readonly maxAssignmentsPerNode:number;
-    constructor(store:RuntimeResourceStore<Tx>,maxAssignmentsPerNode:number) {this.store=store;this.maxAssignmentsPerNode=maxAssignmentsPerNode;}
+    private readonly portPolicy:RuntimePortReservationPolicy<Tx>;
+    constructor(store:RuntimeResourceStore<Tx>,maxAssignmentsPerNode:number,portPolicy:RuntimePortReservationPolicy<Tx>) {
+        this.portPolicy=portPolicy;
+
+        if(typeof portPolicy?.assertReservation!=='function')throw new Error('Runtime port reservation policy is required');
+        this.store=store;this.maxAssignmentsPerNode=maxAssignmentsPerNode;
+    }
 
     initializeNode(tx:Tx,nodeId:string):Promise<void> { return this.store.initializeNode(tx,nodeId); }
     async lockNode(tx:Tx,nodeId:string,epoch?:number):Promise<void> {
@@ -17,7 +24,15 @@ export class RuntimeResources<Tx> implements RuntimeResourceAccess<Tx> {
     }
     maximumAuthorization(tx:Tx,nodeId:string):Promise<number|null> { return this.store.maximumAuthorization(tx,nodeId); }
 
-    async reserve(tx:Tx,forward:Forward):Promise<ReservedSlot[]> {
+    async lockOwnership(tx:Tx,forward:Forward):Promise<void> {
+        const occupied=await this.store.ownedSlots(tx,forward.id);
+        const nodeIds=new Set([forward.spec.ingress.nodeId,...forward.spec.path?.via??[],...occupied.map(slot=>slot.nodeId)]);
+        for(const nodeId of [...nodeIds].sort())await this.lockNode(tx,nodeId);
+    }
+
+    async reserve(tx:Tx,forward:Forward,creatingOwnerActorId?:string):Promise<ReservedSlot[]> {
+        await this.lockNode(tx,forward.spec.ingress.nodeId);
+        await this.portPolicy.assertReservation(tx,forward,forward.spec.protocols.map(protocol=>({nodeId:forward.spec.ingress.nodeId,protocol,port:forward.spec.ingress.listen.port})),creatingOwnerActorId);
         const slots:ReservedSlot[]=[];
         for(const protocol of [...forward.spec.protocols].sort()) {
             const key={nodeId:forward.spec.ingress.nodeId,protocol,port:forward.spec.ingress.listen.port};
@@ -32,8 +47,10 @@ export class RuntimeResources<Tx> implements RuntimeResourceAccess<Tx> {
             throw new ControlError('RESOURCE_LIMIT',429,'Node assignment capacity exceeded');
         return slots;
     }
-    async reserveRelay(tx:Tx,forward:Forward,resources:readonly RelayResource[],generation:number):Promise<ReservedRelayResource[]> {
+    async reserveRelay(tx:Tx,forward:Forward,resources:readonly RelayResource[],generation:number,creatingOwnerActorId?:string):Promise<ReservedRelayResource[]> {
         if(!isCounter(generation))throw new ControlError('RESOURCE_LIMIT',429,'Relay generation exhausted');
+        for(const nodeId of [...new Set(resources.map(resource=>resource.nodeId))].sort())await this.lockNode(tx,nodeId);
+        await this.portPolicy.assertReservation(tx,forward,resources.map(resource=>({nodeId:resource.nodeId,protocol:resource.physicalProtocol,port:resource.port})),creatingOwnerActorId);
         const reserved:ReservedRelayResource[]=[];
         for(const resource of [...resources].sort((a,b)=>a.nodeId.localeCompare(b.nodeId)||a.physicalProtocol.localeCompare(b.physicalProtocol)||a.port-b.port)) {
             const key={nodeId:resource.nodeId,protocol:resource.physicalProtocol,port:resource.port};
@@ -50,12 +67,18 @@ export class RuntimeResources<Tx> implements RuntimeResourceAccess<Tx> {
         return reserved;
     }
     async transition(tx:Tx,current:Forward,next:Forward):Promise<ReservedSlot[]> {
+        for(const nodeId of [...new Set([current.spec.ingress.nodeId,next.spec.ingress.nodeId])].sort())await this.lockNode(tx,nodeId);
+        const unchanged=decideForwardChange({...current,spec:{...current.spec,enabled:false}},current.revision,{kind:'replace',spec:next.spec});
+        const stopping=current.id===next.id&&current.scopeId===next.scopeId&&current.spec.enabled&&!next.spec.enabled&&
+            unchanged.ok&&unchanged.value.revision===current.revision;
+        if(!stopping)await this.portPolicy.assertReservation(tx,next,next.spec.protocols.map(protocol=>({nodeId:next.spec.ingress.nodeId,protocol,port:next.spec.ingress.listen.port})));
         const currentRows=await this.store.lockOwnedSlots(tx,current.spec.ingress.nodeId,current.id);
         const result:ReservedSlot[]=[];
         for(const protocol of [...next.spec.protocols].sort()) {
             const key={nodeId:next.spec.ingress.nodeId,protocol,port:next.spec.ingress.listen.port};
             await this.store.ensureSlot(tx,key);
             const slot=await this.store.lockSlot(tx,key);
+            if(stopping&&slot.owner_id!==current.id)throw new ControlError('PORT_RESERVED',409,'Exact stop cannot acquire a different physical slot');
             if(slot.owner_id!==null&&slot.owner_id!==current.id)throw new ControlError('PORT_RESERVED',409,'Listener port is reserved');
             if(slot.fence>=MAX_COUNTER)throw new ControlError('RESOURCE_LIMIT',429,'Resource counter exhausted');
             const generation=Math.max(next.revision,slot.deployment_generation+1,...currentRows.map(slot=>slot.deployment_generation+1));

@@ -3,7 +3,7 @@ import { nativeCompareTimes as compareTimes, nativeValueDigest as digest, native
 import { nativeForwardTelemetryAck, parseForwardTelemetryCoverage, parseForwardTelemetryIdentity, parseForwardTelemetryPoint, parseForwardTelemetrySample, telemetryUint64 } from '../../compatibility/public.ts';
 import type { ForwardTelemetryPoint, ForwardTelemetrySample } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import type { TelemetryMachineAuthorization, TelemetryNode } from './node-contracts.ts';
 import type { ForwardTelemetryAccepted, ForwardTelemetryExport, ForwardTelemetryForward,
     ForwardTelemetryHead, ForwardTelemetryRecord, ForwardTelemetryStore } from './forward-contracts.ts';
@@ -60,6 +60,7 @@ export class ForwardTelemetry<Tx> implements ForwardTelemetryApi {
     readonly enabled: boolean;
     private readonly db: TransactionBoundary<Tx>;
     private readonly auth: ScopeAuthorization<Tx>;
+    private readonly readAccess: ResourceReadAccess<Tx>;
     private readonly machine: TelemetryMachineAuthorization<Tx>;
     private readonly store: ForwardTelemetryStore<Tx>;
     private readonly mapping: ForwardTelemetryMappingPort<Tx>;
@@ -69,9 +70,9 @@ export class ForwardTelemetry<Tx> implements ForwardTelemetryApi {
     private requests = 0;
     private readonly activeKeys = new Set<string>();
     private readonly readStarts = new Map<string, number>();
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, machine: TelemetryMachineAuthorization<Tx>,
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, readAccess: ResourceReadAccess<Tx>, machine: TelemetryMachineAuthorization<Tx>,
         store: ForwardTelemetryStore<Tx>, mapping: ForwardTelemetryMappingPort<Tx>, enabled = false, clock: () => number = nativeWallClockSource(), rollups?: TelemetryRollupRecorder<Tx>) {
-        this.db = db; this.auth = auth; this.machine = machine; this.store = store;
+        this.db = db; this.auth = auth; this.readAccess = readAccess; this.machine = machine; this.store = store;
         this.mapping = mapping; this.enabled = enabled; this.clock = clock;
         this.rollups = rollups;
     }
@@ -221,7 +222,8 @@ export class ForwardTelemetry<Tx> implements ForwardTelemetryApi {
         const sessionCurrent = this.enabled && !forward.deleting && !forward.recoverySuspended && !record.recoverySuspended &&
             credentialWindowOpen && currentSession !== null && currentSession.sessionEpoch === point.identity.sessionEpoch &&
             currentSession.bootId === point.identity.bootId;
-        return { point, exporter: exported, receivedAt: nativeIsoTime(record.receivedAt),
+        const { coverage: _coverage, droppedSamples: _dropped, ...visibleExporter } = exported;
+        return { point, exporter: visibleExporter, receivedAt: nativeIsoTime(record.receivedAt),
             mapping: { source: record.mappingSource, publishedUntil: nativeIsoTime(record.publishedUntil), currentBinding: 'not-rechecked' },
             recoverySuspended: record.recoverySuspended, currentSession, nodeRevoked: !visibleNode || visibleNode.revoked,
             credentialWindowOpen, sessionCurrent,
@@ -245,6 +247,7 @@ export class ForwardTelemetry<Tx> implements ForwardTelemetryApi {
         this.readStarts.set(actor, now);
         return this.admitted('read:' + actor + ':' + forwardId, () => this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scopeId);
+            await this.readAccess.forward(tx, actor, scopeId, forwardId);
             const forward = this.forward(await this.store.forward(tx, scopeId, forwardId), scopeId, forwardId);
             const retainedFrom = Math.max(0, now - 86400000), effectiveFrom = Math.max(from, retainedFrom);
             const records = await this.store.history(tx, scopeId, forwardId, effectiveFrom, to, limit);

@@ -35,9 +35,10 @@ export class NodeManagementCommands<Tx> implements NodeManagementApi {
             const change = await this.nodes.applyManagement(tx, actorId, scopeId, nodeId, command);
             const result = await this.effects.reconcile(tx, request, change);
             const policyRevision = change.facts.egressPolicyRevision;
-            await this.nodes.audit(tx, nodeId, actorId, command.kind === 'policy' ? 'policy_update' : 'node_revocation',
+            if(command.kind!=='classify') await this.nodes.audit(tx, nodeId, actorId, command.kind === 'revoke' ? 'node_revocation' : 'policy_update',
                 { policyRevision, operationIds: result.operationIds, latestAuthorizationUntil: result.maximumAuthorization });
             const response: NodeChangeResponse = { status: 202, body: { nodeId, policyRevision, operationIds: result.operationIds,
+                ...(change.resource?{resourceRevision:change.resource.resource_revision}:{}),
                 latestAuthorizationUntil: result.maximumAuthorization ? nativeIsoTime(result.maximumAuthorization + 5000) : null } };
             await this.idempotency.respond(tx, request, response);
             return response;

@@ -39,7 +39,7 @@ export async function verifyTunnelConsole(fixture: TunnelFixture) {
             else if (path.startsWith(base) && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method())) writes++;
         });
         async function tunnel(node: string, total: number) {
-            await page.locator('[data-view="nodes"]').click();
+            await page.locator('[data-view="available"]').click();
             await page.locator('[data-action="node-tunnel"][data-id="' + node + '"]').click();
             await page.waitForFunction(() => document.getElementById('tunnel-status')?.textContent?.includes('peerCredentials'));
             await page.waitForFunction(count => document.getElementById('tunnel-references-meta')?.textContent?.includes('total ' + count + '.'), total);

@@ -1,7 +1,7 @@
 import type { AuditFilters, AuditRecord, AuditSource } from './contracts.ts';
 import type { AUDIT_COVERAGE, AUDIT_LIMITS } from './policy.ts';
 
-export const AUDIT_API_INTERFACE_VERSION=1 as const;
+export const AUDIT_API_INTERFACE_VERSION=2 as const;
 
 export interface AuditHistory {
     auditVersion:number;scopeId:string;capturedAt:string;source:'persisted-owner-records';readOnly:true;

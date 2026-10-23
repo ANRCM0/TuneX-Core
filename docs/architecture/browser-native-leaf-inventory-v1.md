@@ -5,6 +5,21 @@ Status: manual source classification authored; behavior/boundaries unverified.
 Scope: the22 named leaves previously listed in browserSourceInventory.remainingSources.
 Record revision1 is documentation identity, not a new runtime API version.
 
+## N Source Successor, 2026-10-21
+
+The original 22-leaf map below preserves its dated scope. FR-0028–0032 add five
+explicit L2 representation leaves, all served through the original fixed asset
+adapter: account-context.js (authenticated scope discovery), line-builder.js
+(purpose-specific path draft), template-reference.js (exact template/owner view),
+admin-resource-console.js (shared grants/classification/port usage) and
+resource-limit-console.js (payload policy CAS, unknown-result replay and personal
+configuration view). Their consumers are the original Control/Relay/Path/Ingress
+views; no blanket apps/web exemption is declared. Current source imports and
+declarations reside in the boundary inventory. Header/byte-exact asset cases,
+unit/DOM flows and public interfaces are authored only, not executed acceptance.
+See [Web integration](../../apps/web/PRODUCT-INTEGRATION.md) for public operations,
+late-result clearing and the explicit unavailable consumption contract.
+
 ## Six-Part Source Proposal
 
 1. Layers: existing21 L2 view/form/representation adapters; originally mixed Rule

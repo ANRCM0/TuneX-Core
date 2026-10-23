@@ -141,7 +141,7 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
             c.set('node', await control.nodes.machine(fingerprint));
         await next();
     });
-    function scope(value: string): string {
+    function scope(value: string | undefined): string {
         if (!isId(value))
             invalid('Invalid scope ID');
         return value;
@@ -152,6 +152,8 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
     app.get('/console/', async c => { consoleHeaders(c); return c.html(await nativeControlConsoleAsset('index.html')); });
     app.get('/console/app.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('app.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/model.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('model.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
+    for (const asset of ['account-context.js', 'line-builder.js', 'template-reference.js', 'admin-resource-console.js', 'resource-limit-console.js'] as const)
+        app.get('/console/' + asset, async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset(asset), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/console-model-owner/public.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('console-model-owner/public.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/console-model-owner/service.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('console-model-owner/service.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/browser-native/public.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('browser-native/public.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
@@ -289,6 +291,20 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
             c.req.header('idempotency-key'), input.expectedRevision);
         return c.json(result.body, result.status);
     });
+    for (const resource of ['forwards','path-templates','path-groups','ingress-groups'] as const) {
+        app.post('/api/v1/scopes/:scope/'+resource+'/:id/classify-owner',async c=>{
+            if(nativeControlQueryString(c.req.url))invalid('Owner classification accepts no query parameters');
+            const input=observationObject(parseJson(await body(c.req.raw,2048)),['expectedRevision','ownerActorId']);
+            if(!isCounter(input.expectedRevision)||!isId(input.ownerActorId))invalid('Owner classification requires current revision and explicit owner');
+            const id=c.req.param('id');
+            if(!isId(id))invalid('Valid resource ID required');
+            const args=[c.get('actor'),scope(c.req.param('scope')),id,c.req.header('idempotency-key'),input.expectedRevision,input.ownerActorId] as const;
+            const result=resource==='forwards'?await control.classifyOwner(...args):
+                resource==='path-templates'?await control.pathTemplates.classifyOwner(...args):
+                resource==='path-groups'?await control.pathGroups.classifyOwner(...args):await control.ingressGroups.classifyOwner(...args);
+            return c.json(result.body,result.status);
+        });
+    }
     app.get('/api/v1/scopes/:scope/path-templates', async c => c.json(await control.pathTemplateQueries.list(c.get('actor'), scope(c.req.param('scope')), pathTemplateListQuery(nativeControlQueryParams(c.req.url)))));
     app.get('/api/v1/scopes/:scope/path-templates/:template/references', async c => c.json(await control.pathBindings.references(c.get('actor'), scope(c.req.param('scope')), c.req.param('template'), pathReferenceQuery(nativeControlQueryParams(c.req.url)))));
     app.get('/api/v1/scopes/:scope/path-templates/:template', async c => c.json(await control.pathTemplateQueries.get(c.get('actor'), scope(c.req.param('scope')), c.req.param('template'), pathTemplateRevisionQuery(nativeControlQueryParams(c.req.url)))));
@@ -465,12 +481,30 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
         const response = await control.changeMember(c.get('actor'), scope(c.req.param('scope')), c.req.param('actor'), c.req.header('idempotency-key'), { expectedRevision: input.expectedRevision, role: input.role as 'manager' | 'viewer' | 'removed', ...(input.token !== undefined ? { token: input.token as string } : {}) });
         return c.json(response.body, response.status);
     });
+    app.get('/api/v1/scopes/:scope/nodes/:id/port-usage', async c => {
+        if (nativeControlQueryString(c.req.url)) invalid('Personal port usage does not accept query parameters');
+        return c.json(await control.nodes.portUsage(c.get('actor'), scope(c.req.param('scope')), c.req.param('id')));
+    });
+    app.get('/api/v1/scopes/:scope/nodes/:id/payload-limits/:actor',async c=>{
+        if(nativeControlQueryString(c.req.url))invalid('Payload limits do not accept query parameters');
+        return c.json(await control.resourceLimits.get(c.get('actor'),scope(c.req.param('scope')),c.req.param('id'),c.req.param('actor')));
+    });
+    app.put('/api/v1/scopes/:scope/nodes/:id/payload-limits/:actor',async c=>{
+        if(nativeControlQueryString(c.req.url))invalid('Payload limits do not accept query parameters');
+        const key=c.req.header('idempotency-key');
+        if(!isId(key))invalid('Explicit payload limit command identity required');
+        const input=parseJson(await body(c.req.raw,8192)) as import('../modules/resource-limit-owner/public.ts').SharedResourceLimitInput;
+        return c.json(await control.resourceLimits.set(c.get('actor'),scope(c.req.param('scope')),c.req.param('id'),c.req.param('actor'),key,input));
+    });
     app.get('/api/v1/scopes/:scope/nodes/:id/grants', async (c) => c.json(await control.nodes.listGrants(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'))));
     app.put('/api/v1/scopes/:scope/nodes/:id/grants/:actor', async (c) => {
         const input = parseJson(await body(c.req.raw)) as Record<string, unknown>;
-        if (!input || Array.isArray(input) || Object.keys(input).sort().join(',') !== 'allowed,expectedRevision' || typeof input.expectedRevision !== 'number' || typeof input.allowed !== 'boolean')
+        if (!input || Array.isArray(input) || Object.keys(input).some(key => !['allowed','expectedRevision','allowedRoles','portLimits'].includes(key)) || typeof input.expectedRevision !== 'number' || typeof input.allowed !== 'boolean' ||
+            input.allowedRoles !== undefined && input.allowedRoles !== null && (!Array.isArray(input.allowedRoles) || input.allowedRoles.some(role => !['ingress','transit','egress'].includes(role))))
             invalid('Node grant expectedRevision and allowed required');
-        const response = await control.changeNodeGrant(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.param('actor'), c.req.header('idempotency-key'), input.expectedRevision, input.allowed);
+        const response = await control.changeNodeGrant(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.param('actor'), c.req.header('idempotency-key'), input.expectedRevision, input.allowed,
+            input.allowedRoles as readonly ('ingress'|'transit'|'egress')[]|null|undefined,
+            input.portLimits as import('../modules/node-owner/public.ts').NodeGrantPortLimits|null|undefined);
         return c.json(response.body, response.status);
     });
     for (const kind of ['nodes', 'forwards', 'operations', 'candidates'] as const) {
@@ -484,6 +518,27 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
         return c.json(await control.queries.overview(c.get('actor'), scope(c.req.param('scope'))));
     });
     app.post('/api/v1/scopes/:scope/nodes', async (c) => c.json(await control.nodes.provision(c.get('actor'), scope(c.req.param('scope')), parseJson(await body(c.req.raw)) as NodePolicy), 201));
+    app.get('/api/v1/me/context', async c => {
+        const search=nativeControlQueryParams(c.req.url), input:Record<string,string>={};
+        for(const [key,value] of search) {
+            if (!['limit','after'].includes(key) || Object.hasOwn(input,key)) invalid('Closed current-account context query required');
+            input[key]=value;
+        }
+        return c.json(await control.identity.context(c.get('actor'),input));
+    });
+    app.post('/api/v1/scopes/:scope/shared-nodes', async (c) => c.json(await control.nodes.provisionShared(c.get('actor'), scope(c.req.param('scope')), parseJson(await body(c.req.raw)) as NodePolicy), 201));
+    app.post('/api/v1/scopes/:scope/nodes/:id/classify', async c => {
+        const input = parseJson(await body(c.req.raw)) as Record<string,unknown>;
+        if (!input || Array.isArray(input) || Object.keys(input).sort().join(',') !== 'expectedRevision,legacyGrants,ownerActorId,source' ||
+            typeof input.expectedRevision !== 'number' || !['private','admin-shared'].includes(input.source as string) ||
+            input.ownerActorId !== null && !isId(input.ownerActorId) || !['discard','retain'].includes(input.legacyGrants as string))
+            invalid('Explicit resource source, owner, legacy grant handling and CAS required');
+        const response = await control.changeNode(c.get('actor'), scope(c.req.param('scope')), c.req.param('id'), c.req.header('idempotency-key'), {
+            kind:'classify', expectedRevision:input.expectedRevision, source:input.source as 'private'|'admin-shared',
+            ownerActorId:input.ownerActorId as string|null, legacyGrants:input.legacyGrants as 'discard'|'retain',
+        });
+        return c.json(response.body,response.status);
+    });
     app.post('/enrollment/v1', async (c) => {
         const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;
         if (!input || typeof input !== 'object' || Object.keys(input).sort().join(',') !== 'csr,nodeId,token')
@@ -491,6 +546,10 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
         return c.json(await control.nodes.enroll(input.nodeId as string, input.token as string, input.csr as string));
     });
     app.post('/api/v1/scopes/:scope/forwards', async (c) => { const result = await control.create(c.get('actor'), scope(c.req.param('scope')), c.req.header('idempotency-key'), parseJson(await body(c.req.raw))); return c.json(result.body, result.status); });
+    app.get('/api/v1/scopes/:scope/forwards/:id/probe-capabilities', async c => {
+        if (nativeControlQueryString(c.req.url)) invalid('Probe capability detail does not accept query parameters');
+        return c.json(await control.probeCapabilities.get(c.get('actor'),scope(c.req.param('scope')),c.req.param('id')));
+    });
     function probeHistoryService() {
         if (!probeRuns) throw new ControlError('PROBE_HISTORY_UNAVAILABLE',503,'Probe history adapter is unavailable');
         return probeRuns;

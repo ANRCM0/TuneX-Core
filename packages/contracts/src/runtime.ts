@@ -2,6 +2,8 @@
 export type { Policy } from './policy.ts';
 export type { DirectConfig, Observation, Drain, Condition } from './types.ts';
 export type { RuntimeAssignment, RuntimeTombstone, RuntimeSnapshot, RuntimeMessages } from './adp3.ts';
+export { SHARED_RESOURCE_LIMITS_CAPABILITY } from './resource-limits.ts';
+export type { ResourceLimitBucket, ResourceLimits } from './resource-limits.ts';
 export { parseRuntimeMessage, validateRuntimeSnapshot } from './adp3.ts';
 export type * from './relay.ts';
 export { parseRelayMessage, parseRelayAssignment } from './relay.ts';

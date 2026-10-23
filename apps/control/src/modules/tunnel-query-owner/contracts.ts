@@ -1,7 +1,7 @@
-import type { ForwardIntent, RuntimeRelayEndpointConfig } from '../../framework/public.ts';
+import type { ReadPrincipal, ForwardIntent, RuntimeRelayEndpointConfig } from '../../framework/public.ts';
 import type { ConsolePaging } from '../console-query-owner/public.ts';
 
-export const TUNNEL_QUERY_INTERFACE_VERSION=1 as const;
+export const TUNNEL_QUERY_INTERFACE_VERSION=2 as const;
 export interface TunnelNodeRecord {
     nodeId:string;revoked:boolean;credentialUntil:number|null;capabilities:unknown;
     sessionEpoch:number;snapshotGeneration:number;lastReportAt:number|null;
@@ -13,7 +13,7 @@ export interface TunnelReadPort<Tx> {
     node(tx:Tx,scope:string,node:string):Promise<TunnelNodeRecord|null>;
     endpoint(tx:Tx,node:string):Promise<{revision:number;config:unknown}|null>;
     peers(tx:Tx,node:string,now:number):Promise<{total:number;windowCount:number;items:TunnelPeerRecord[]}>;
-    references(tx:Tx,scope:string,node:string,paging:ConsolePaging):Promise<{total:number;items:TunnelReference[]}>;
+    references(tx:Tx,scope:string,principal:ReadPrincipal,node:string,paging:ConsolePaging):Promise<{total:number;items:TunnelReference[]}>;
 }
 export interface TunnelPeerView {
     fingerprint:string;issuedAt:string;validUntil:string;retireAfter:string|null;revoked:boolean;

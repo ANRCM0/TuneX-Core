@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { validScope, parsePorts, parseCidrs, directCapable, allowedProtocols, directSpec, stateTone, pageCount, listResource, candidateChoices } from '../model.js';
 
 const node = {
-  id: 'node-a', revoked: false, credentialUntil: '2099-01-01T00:00:00Z',
+  id: 'node-a', canUse:true, allowedRoles:null, readDetail:'full', resourceSource:'private', revoked: false, credentialUntil: '2099-01-01T00:00:00Z',
   policy: {
     allowedListenerAddresses: ['127.0.0.1', '0.0.0.0'], allowedPorts: [25565, 25566],
     capabilities: ['adp.3', 'native.direct.v1', 'tcp', 'udp']
@@ -28,6 +28,12 @@ test('Direct form only offers authenticated capabilities and authorized listener
   assert.throws(() => directSpec({protocol:'tcp',listenAddress:'127.0.0.1',listenPort:'80',targetHost:'10.0.0.20',targetPort:'80',enabled:true},node));
   assert.throws(() => directSpec({protocol:'quic',listenAddress:'127.0.0.1',listenPort:'25565',targetHost:'10.0.0.20',targetPort:'80',enabled:true},node));
   assert.equal(directCapable({...node,revoked:true}), false);
+  assert.equal(directCapable({...node,canUse:false}), false);
+  const {canUse,...missingPermission}=node;
+  assert.equal(directCapable(missingPermission), false, 'rows without explicit use permission remain denied');
+  const authorizedForm={protocol:'tcp',listenAddress:'127.0.0.1',listenPort:'25565',targetHost:'10.0.0.20',targetPort:'80',enabled:true};
+  assert.throws(()=>directSpec(authorizedForm,{...node,allowedRoles:['egress']}));
+  assert.throws(()=>directSpec(authorizedForm,{...node,allowedRoles:undefined}));
   assert.equal(directCapable({...node,credentialUntil:'2020-01-01T00:00:00Z'}), false);
   assert.equal(directCapable({...node,policy:{...node.policy,capabilities:['adp.3','tcp']}}), false);
 });

@@ -3,7 +3,7 @@ import { nativeValueDigest as digest, nativeParseTime, nativeIsoTime, nativeWall
 import { nativeHostTelemetryAck, parseHostTelemetrySample, telemetryUint64 } from '../../compatibility/public.ts';
 import type { HostTelemetrySample } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import type { TelemetryHead, TelemetryMachineAuthorization, TelemetryNode, TelemetryPoint } from './node-contracts.ts';
 import type { HostTelemetryStore } from './host-contracts.ts';
 import type { TelemetryRollupRecorder } from './rollup-contracts.ts';
@@ -27,6 +27,7 @@ export class HostTelemetry<Tx> implements HostTelemetryApi {
     readonly enabled: boolean;
     private readonly db: TransactionBoundary<Tx>;
     private readonly auth: ScopeAuthorization<Tx>;
+    private readonly readAccess: ResourceReadAccess<Tx>;
     private readonly machine: TelemetryMachineAuthorization<Tx>;
     private readonly store: HostTelemetryStore<Tx>;
     private readonly clock: () => number;
@@ -35,9 +36,9 @@ export class HostTelemetry<Tx> implements HostTelemetryApi {
     private requests = 0;
     private readonly activeNodes = new Set<string>();
     private readonly readStarts = new Map<string, number>();
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, machine: TelemetryMachineAuthorization<Tx>,
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, readAccess: ResourceReadAccess<Tx>, machine: TelemetryMachineAuthorization<Tx>,
         store: HostTelemetryStore<Tx>, enabled = false, clock: () => number = nativeWallClockSource(), rollups?: TelemetryRollupRecorder<Tx>) {
-        this.db = db; this.auth = auth; this.machine = machine; this.store = store; this.enabled = enabled; this.clock = clock;
+        this.db = db; this.auth = auth; this.readAccess = readAccess; this.machine = machine; this.store = store; this.enabled = enabled; this.clock = clock;
         this.rollups = rollups;
     }
     private now() { const now = this.clock(); if (!timestamp(now)) corrupt(); return now; }
@@ -169,6 +170,7 @@ export class HostTelemetry<Tx> implements HostTelemetryApi {
         this.readStarts.set(actor, now);
         return this.admitted('read:' + actor + ':' + nodeId, () => this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scopeId);
+            await this.readAccess.node(tx, actor, scopeId, nodeId, 'host');
             const current = this.node(await this.store.node(tx, nodeId), nodeId);
             if (current.scopeId !== scopeId) notFound();
             const retainedFrom = Math.max(0, now - 86400000), effectiveFrom = Math.max(from, retainedFrom);

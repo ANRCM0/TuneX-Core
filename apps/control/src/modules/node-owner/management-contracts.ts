@@ -1,4 +1,5 @@
 import type { AuthorizedNodeFacts } from '../../framework/public.ts';
+import type { NodeResourceClaim } from '../../framework/public.ts';
 export type { AuthorizedNodeFacts } from '../../framework/public.ts';
 
 export type NodePolicy = Omit<AuthorizedNodeFacts, 'nodeId' | 'scopeId' | 'capabilities'>;
@@ -7,12 +8,17 @@ export type NodeManagementCommand = {
     readonly kind: 'policy';
     readonly expectedRevision: number;
     readonly policy: NodePolicy;
-} | { readonly kind: 'revoke' };
+} | { readonly kind: 'revoke' } | {
+    readonly kind:'classify';readonly expectedRevision:number;
+    readonly source:'private'|'admin-shared';readonly ownerActorId:string|null;
+    readonly legacyGrants:'discard'|'retain';
+};
 
 export interface NodeManagementChange {
     readonly nodeId: string;
     readonly kind: NodeManagementCommand['kind'];
     readonly facts: AuthorizedNodeFacts;
+    readonly resource?:NodeResourceClaim;
 }
 
 export interface NodeManagementAudit {

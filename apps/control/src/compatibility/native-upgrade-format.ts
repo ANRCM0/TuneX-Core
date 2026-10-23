@@ -11,6 +11,7 @@ export interface DatabaseInspection {
     unsupportedSnapshots: number;
     multihopDeployments: number;
     enabledMultihopForwards: number;
+    resourceLimitSnapshots:number;
     latestLeaseUntil: number | null;
 }
 const migrationName = /^[0-9]{4}-[a-z0-9-]+\.sql$/;

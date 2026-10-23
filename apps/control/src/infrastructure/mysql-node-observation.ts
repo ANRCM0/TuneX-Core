@@ -1,7 +1,7 @@
 import { isCounter, isId } from '@tunex/core';
 import type { Duplex } from 'node:stream';
 import { ControlError, notFound } from '../framework/public.ts';
-import type { ScopeAuthorization } from '../framework/public.ts';
+import type { ScopeAuthorization, ResourceReadAccess } from '../framework/public.ts';
 import { rows } from './mysql.ts';
 import type { MySqlUnitOfWork, Transaction } from './mysql.ts';
 import type { AgentReportProvenance, AuthorizedNodeReportReader, NodeObservationContext,
@@ -38,7 +38,11 @@ function reportFrom(row: ReportRow): AgentReportProvenance | null {
 export class MySqlNodeObservationReader implements AuthorizedNodeReportReader {
     private readonly db: Pick<MySqlUnitOfWork, 'pool' | 'guard'>;
     private readonly identity: ScopeAuthorization<Transaction>;
-    constructor(db: Pick<MySqlUnitOfWork, 'pool' | 'guard'>, identity: ScopeAuthorization<Transaction>) {
+    private readonly access:ResourceReadAccess<Transaction>;
+    constructor(db: Pick<MySqlUnitOfWork, 'pool' | 'guard'>, identity: ScopeAuthorization<Transaction>,
+        access: ResourceReadAccess<Transaction>) {
+        this.access=access;
+
         this.db = db; this.identity = identity;
     }
     async read(context: NodeObservationContext): Promise<NodeReportEvidence> {
@@ -68,6 +72,7 @@ export class MySqlNodeObservationReader implements AuthorizedNodeReportReader {
             await tx.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
             await tx.beginTransaction(); begun = true;
             await this.identity.scope(tx, context.actorId, context.scopeId);
+            await this.access.node(tx, context.actorId, context.scopeId, context.nodeId, 'diagnostics');
             context.signal.throwIfAborted();
             const [row] = await rows<ReportRow>(tx, `SELECT n.id,n.scope_id,n.revoked,n.credential_until,
                 r.session_epoch,r.boot_id,r.snapshot_generation,r.received_at,r.last_report_sequence,

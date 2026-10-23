@@ -67,6 +67,7 @@ export type NativeControlConsoleAsset = 'index.html' | 'app.js' | 'model.js' | '
     'rule-command-owner/public.js' | 'rule-command-owner/service.js' | 'browser-native/rule-console.js' |
     'browser-native/control-console.js' |
     'browser-native/relay-forms.js' | 'browser-native/relay-console.js' |
+    'account-context.js' | 'line-builder.js' | 'template-reference.js' | 'admin-resource-console.js' | 'resource-limit-console.js' |
     'probe.js' | 'transport-console.js' | 'rule-console.js' | 'tunnel-console.js' | 'path-templates.js' |
     'observation-services.js' | 'path-groups.js' | 'path-publications.js' | 'ingress-groups.js' |
     'ingress-migrations.js' | 'forward-diagnostics.js' | 'forward-status.js' | 'forward-preflight.js' |

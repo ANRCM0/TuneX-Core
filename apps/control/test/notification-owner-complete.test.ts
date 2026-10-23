@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { nativeValueDigest as digest } from '../src/compatibility/public.ts';
 import { ControlError } from '../src/framework/public.ts';
 import { NotificationDeliveries, NotificationEndpoints, notificationDeliveryId, notificationAttemptId, notificationPayload,
-    parseNotificationDelivery } from '../src/modules/notification-owner/public.ts';
+    parseNotificationDelivery, NOTIFICATION_API_INTERFACE_VERSION } from '../src/modules/notification-owner/public.ts';
 import { emptyStationAlertState } from '../src/modules/station-alert-owner/public.ts';
 
 type Any=Record<string,any>;
@@ -24,7 +24,7 @@ function fixture() {
     const failure=new Error('original owner port failure');
     const checked=(tx:unknown,label:string)=>{assert.equal(tx,state.tx);trace.push(label);if(state.fail===label)throw failure;};
     const db={async transaction(action:(tx:object)=>Promise<unknown>){assert.equal(state.tx,null);const tx={number:++state.transactions},saved=copy({row:state.row,attempts:state.attempts,endpoint:state.endpoint,audit:state.audit,losses:state.losses,inserted:state.inserted});state.tx=tx;trace.push('begin');try{const answer=await action(tx);trace.push('commit');return answer;}catch(error){Object.assign(state,saved);trace.push('rollback');throw error;}finally{state.tx=null;}}};
-    const auth={async scope(tx:unknown,actor:string,actualScope:string,manage:boolean){checked(tx,'auth:'+actor);assert.equal(actualScope,scope);assert.equal(manage,true);if(state.denied)throw new ControlError('AUTHORIZATION_DENIED',403,'denied');}};
+    const auth={async scope(tx:unknown,actor:string,actualScope:string,manage:boolean){assert.equal(tx,state.tx);assert.equal(actor,'selfservice-manager');assert.equal(actualScope,scope);assert.equal(manage,true);},async owner(tx:unknown,actor:string,actualScope:string,...extra:unknown[]){checked(tx,'auth:'+actor);assert.equal(actualScope,scope);assert.deepEqual(extra,[]);if(state.denied||!['actor','policy-manager','endpoint-manager'].includes(actor))throw new ControlError('AUTHORIZATION_DENIED',403,'Scope owner permission required');}};
     const store:Any={async lockScope(tx:unknown){checked(tx,'outbox-lock');},async due(tx:unknown,now:number){checked(tx,'due');assert.equal(now,state.now);return state.due?{scopeId:scope,id,revision:state.row.revision}:null;},
         async get(tx:unknown,actualScope:string,actualId:string,lock:unknown=false){checked(tx,'get:'+lock);assert.equal(actualScope,scope);assert.equal(actualId,id);if(lock===true)state.lockMutate?.();return state.row;},
         async put(tx:unknown,_scope:string,value:unknown){checked(tx,'put');state.row=value;},async activeCount(tx:unknown){checked(tx,'active');return state.active;},async reserveRate(tx:unknown,_scope:string,_endpoint:string,_now:number,interval:number){checked(tx,'rate');assert.equal(interval,10000);return state.rate;},
@@ -139,4 +139,13 @@ test('72 readonly history closed query canonical cursor filter ordering loss and
 
 test('72 failure-header defers original revision cutoff exactly five minutes with rollback preserved and no private send',async()=>{
     const f=fixture();f.state.fail='append';await assert.rejects(f.worker.tick(),error=>error===f.failure);assert.equal(f.state.row.status,'queued');assert.equal(f.state.row.fence,0);assert.equal(f.state.attempts.length,0);assert.deepEqual(f.state.deferred,{header:{scopeId:scope,id:f.id,revision:1},cutoff:at,retryAt:at+300000});assert.deepEqual(f.trace.slice(-3),['defer','commit','idle']);
+});
+
+test('notification governance refuses same-Scope selfservice managers before endpoint secrets or delivery history',async()=>{
+ assert.equal(NOTIFICATION_API_INTERFACE_VERSION,2);
+ for(const operation of ['list','get','publish','disable','history','delivery'] as const){
+  const f=fixture(),before=copy({endpoint:f.state.endpoint,row:f.state.row,attempts:f.state.attempts,audit:f.state.audit,inserted:f.state.inserted});
+  const action=()=>operation==='list'?f.commands().list('selfservice-manager',scope):operation==='get'?f.commands().get('selfservice-manager',scope,'endpoint'):operation==='publish'?f.commands().publish('selfservice-manager',scope,'endpoint','manager-key',1,f.endpoint.config,f.destination):operation==='disable'?f.commands().disable('selfservice-manager',scope,'endpoint','manager-key',1):operation==='history'?f.worker.history('selfservice-manager',scope,{from:new Date(at-1).toISOString(),to:new Date(at+1).toISOString()}):f.worker.get('selfservice-manager',scope,f.id);
+  await assert.rejects(action(),{code:'AUTHORIZATION_DENIED'});assert.deepEqual(f.trace,[...(operation==='history'?['clock']:[]),'begin','auth:selfservice-manager','rollback']);assert.deepEqual({endpoint:f.state.endpoint,row:f.state.row,attempts:f.state.attempts,audit:f.state.audit,inserted:f.state.inserted},before);assert.deepEqual(f.state.stages,[]);
+ }
 });

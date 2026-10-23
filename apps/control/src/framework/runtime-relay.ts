@@ -48,8 +48,10 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
   private async facts(tx:Tx,actor:string,forward:Forward):Promise<RelayNodeExecutionFacts[]>{
     if(!forward.spec.path||!forward.spec.transport||forward.spec.path.via.length>1&&!this.multihopEnabled)throw new ControlError('UNSUPPORTED_CAPABILITY',422,'Multi-hop execution is disabled or a locked Profile is missing');
     const result:RelayNodeExecutionFacts[]=[];
-    for(const nodeId of [forward.spec.ingress.nodeId,...forward.spec.path.via].sort()){
-      const facts=await this.nodes.authorizedRelayNode(tx,actor,forward.scopeId,nodeId);
+    const path=[forward.spec.ingress.nodeId,...forward.spec.path.via];
+    const roles=new Map(path.map((nodeId,index)=>[nodeId,index===0?'ingress' as const:index===path.length-1?'egress' as const:'transit' as const]));
+    for(const nodeId of [...path].sort()){
+      const facts=await this.nodes.authorizedRelayNode(tx,actor,forward.scopeId,nodeId,roles.get(nodeId)!,forward);
       const state=await this.nodes.facts(tx,nodeId);
       const runtime=await this.observations.nodeSession(tx,nodeId);
       if(!runtime?.session_epoch)throw new ControlError('SESSION_SUPERSEDED',409,'Every path Node requires an online session');
@@ -65,8 +67,9 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
         path:[forward.spec.ingress.nodeId,...forward.spec.path!.via],resources:this.compiler.multihopResources(input),executionSupported:false,runtimeEnabled:this.multihopEnabled,reserved:false};
     }
     const facts=await this.facts(tx,actor,forward),profile=await this.transport.resolve(tx,actor,forward.scopeId,forward.spec.transport!.profileId,forward.spec.transport!.configRevision),endpoint=await this.endpoints.resolve(tx,forward.spec.path!.via[0]!);
+    const ports=await this.nodes.reservationPorts(tx,actor,forward.scopeId,endpoint.nodeId,endpoint.config.allowedTcpPorts);
     return {profile:{profileId:profile.profileId,revision:profile.revision,configDigest:profile.configDigest},endpointRevision:endpoint.revision,
-      resources:this.compiler.relayResources(forward,facts.map(n=>n.facts),profile,endpoint,{tcp:endpoint.config.allowedTcpPorts[0]!,udp:endpoint.config.allowedTcpPorts[forward.spec.protocols.length===2?1:0]!}),executionSupported:false,runtimeEnabled:true,reserved:false};
+      resources:this.compiler.relayResources(forward,facts.map(n=>n.facts),profile,endpoint,{tcp:ports[0]!,udp:ports[forward.spec.protocols.length===2?1:0]!}),executionSupported:false,runtimeEnabled:true,reserved:false};
   }
   async status(tx:Tx,forward:Forward){
     const record=await this.latest(tx,forward.id);if(!record)return null;const plan=this.plan(record);
@@ -97,9 +100,9 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
     try{
       if((forward.spec.path?.via.length??0)>1){this.compiler.multihopResources(await this.multihopInput(tx,actor,forward));return true;}
       const facts=await this.facts(tx,actor,forward),profile=await this.transport.resolve(tx,actor,forward.scopeId,forward.spec.transport!.profileId,forward.spec.transport!.configRevision),endpoint=await this.endpoints.resolve(tx,forward.spec.path!.via[0]!);
-      const ports=endpoint.config.allowedTcpPorts;
+      const ports=await this.nodes.reservationPorts(tx,actor,forward.scopeId,endpoint.nodeId,endpoint.config.allowedTcpPorts);
       this.compiler.relayResources({id:forward.id,scopeId:forward.scopeId,revision:forward.revision,spec:{...forward.spec,enabled:true}},facts.map(node=>node.facts),profile,endpoint,{tcp:ports[0]!,udp:ports[forward.spec.protocols.length===2?1:0]!});return true;
-    }catch(error){if(error instanceof ControlError&&[403,404,409,422].includes(error.status))return false;if(error instanceof Error&&/^(UNSUPPORTED_CAPABILITY|AUTHORIZATION_DENIED|RESOURCE_CONFLICT):/.test(error.message))return false;throw error;}
+    }catch(error){if(error instanceof ControlError&&[403,404,409,422,429].includes(error.status))return false;if(error instanceof Error&&/^(UNSUPPORTED_CAPABILITY|AUTHORIZATION_DENIED|RESOURCE_CONFLICT):/.test(error.message))return false;throw error;}
   }
   async acceptPlan(tx:Tx,actor:string,forward:Forward):Promise<RelayPreparedPlan<F>>{
     await this.lockNodes(tx,forward);
@@ -107,7 +110,7 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
     if(generation>MAX_COUNTER)throw new ControlError('RESOURCE_LIMIT',429,'Relay generation exhausted');
     if((forward.spec.path?.via.length??0)>1){
       const input=await this.multihopInput(tx,actor,forward,previous?this.plan(previous):undefined,true);
-      const reservations=await this.ledger.reserveRelay(tx,forward,this.compiler.multihopResources(input),generation);
+      const reservations=await this.ledger.reserveRelay(tx,forward,this.compiler.multihopResources(input),generation,actor);
       const plan=this.compiler.multihopPlan({...input,reservations,issuedAt:this.compiler.formatTime(this.now()),drainTimeoutSeconds:this.policy.drainTimeoutSeconds});
       await this.store.insertMultihop(tx,forward,generation,plan,this.now(),this.now());
       return plan;
@@ -116,13 +119,14 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
     const old=previous?this.plan(previous):undefined,ports={} as Record<'tcp'|'udp',number>,used=new Set<number>();
     for(const protocol of forward.spec.protocols){
       const preferred=old?.nodes.find(node=>node.nodeId===endpoint.nodeId)?.assignments.find(a=>a.protocol===protocol&&a.role==='relay-egress')?.resource.port;
-      const candidates=[...new Set([...(preferred&&endpoint.config.allowedTcpPorts.includes(preferred)?[preferred]:[]),...endpoint.config.allowedTcpPorts])];
+      const allowed=await this.nodes.reservationPorts(tx,actor,forward.scopeId,endpoint.nodeId,endpoint.config.allowedTcpPorts);
+      const candidates=[...new Set([...(preferred&&allowed.includes(preferred)?[preferred]:[]),...allowed])];
       for(const port of candidates){if(used.has(port))continue;const slot=await this.observations.portOwner(tx,endpoint.nodeId,port);if(!slot||slot.owner_id===null||slot.owner_id===forward.id){ports[protocol]=port;used.add(port);break;}}
       if(!ports[protocol])throw new ControlError('PORT_RESERVED',409,'No authorized exclusive internal TLS port is available');
     }
     const enabled={id:forward.id,scopeId:forward.scopeId,revision:forward.revision,spec:{...forward.spec,enabled:true}};
     const resources=this.compiler.relayResources(enabled,facts.map(node=>node.facts),profile,endpoint,ports);
-    const reservations=await this.ledger.reserveRelay(tx,forward,resources,generation);
+    const reservations=await this.ledger.reserveRelay(tx,forward,resources,generation,actor);
     const plan=this.compiler.relayPlan({forward:enabled,nodes:facts,profile,endpoint,reservations,issuedAt:this.compiler.formatTime(this.now()),drainTimeoutSeconds:this.policy.drainTimeoutSeconds});
     await this.store.insertRelay(tx,forward,generation,plan,this.now(),this.now());
     return plan;
@@ -134,7 +138,8 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
       const endpoint=await this.endpoints.resolve(tx,id);endpoints.push(endpoint);ports[id]={};const used=new Set<number>();
       for(const protocol of forward.spec.protocols){
         const preferred=previous?.nodes.find(n=>n.nodeId===id)?.assignments.find(a=>a.protocol===protocol)?.resource.port;
-        const candidates=[...new Set([...(preferred&&endpoint.config.allowedTcpPorts.includes(preferred)?[preferred]:[]),...endpoint.config.allowedTcpPorts])];
+        const allowed=await this.nodes.reservationPorts(tx,actor,forward.scopeId,endpoint.nodeId,endpoint.config.allowedTcpPorts);
+        const candidates=[...new Set([...(preferred&&allowed.includes(preferred)?[preferred]:[]),...allowed])];
         for(const port of candidates){
           if(used.has(port))continue;
           const slot=reserve?await this.observations.portOwner(tx,id,port):undefined;

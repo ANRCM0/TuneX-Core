@@ -1,6 +1,6 @@
 # Runtime Journal Coordination Boundary
 
-Public Go interface 3 (FR-0013), source candidate and unverified. RuntimeHost coordinates
+Public Go interface 4 (FR-0013 and FR-0032), source candidate and unverified. RuntimeHost coordinates
 the one existing authenticated Runtime Journal through RuntimeStore, SnapshotInput
 and SnapshotCodec. It does not open files, acquire OS locks, compute MACs, parse a
 native wire protocol, read time or create an execution lease.
@@ -61,3 +61,27 @@ Native state type identity now belongs to state, so direct cross-layer assignmen
 reflection identity changes are intentional even where native fields stay the same.
 Readiness141-143 covers exact native bytes/MAC/nil/reference/error/order and actual
 consumer migration, all planned/unexecuted. Original14-15 and138-140 remain pending.
+
+FR-0032 adds ResourceBudgets to RuntimeJournal and ResourceLimits to
+SnapshotHistory. These are payloadbudget interface1 decision facts, not a second
+store or authority. Native projections copy policies and limit values; original
+Snapshot bytes, fences, retired slots and extension facts retain their previous
+ownership. Accept reloads the authoritative budget history under the existing
+RuntimeStore lock, preserving debits made after the Runner cached its Snapshot.
+New generations preserve all old buckets; equal generations return the latest
+durable consumption without writing or accepting a changed retained policy.
+
+RuntimeHost.Precharge uses that same lock and authenticated Load/Save. It verifies
+the immutable bucket binding and latest policy revision, checks the explicit
+period and counter bounds, and persists the debit before permission is returned.
+A stale expected policy returns the current record and ErrPolicyChanged without
+charging; the gate adopts it with zero rate credit. Zero-byte datagrams validate
+the policy and authority but need no write. Persistence errors never authorize
+payload, and cancellation/short writes never refund an ambiguous reservation.
+The original state adapter supplies MAC, key, path and OS lock; an additional
+in-process mutex serializes Snapshot and payload writers before that OS lock.
+
+The new payloadbudget, executionstate, state and Runner source cases cover
+aggregate bidirectional use, concurrent writers, restart, policy revision changes,
+drain retention, read-only inspection and original authority preservation. They
+are authored only: no tests, checks, formatter or build ran for FR-0032.

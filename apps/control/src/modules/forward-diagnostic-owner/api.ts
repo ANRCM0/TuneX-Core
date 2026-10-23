@@ -3,7 +3,7 @@ import type { ProbeResultRequest, ProbeTypesResultRequest, ProbeServicesResultRe
 import type { DiagnosticRetirement, DiagnosticSlot } from './contracts.ts';
 import type { FORWARD_DIAGNOSTIC_LIMITS } from './policy.ts';
 
-export const FORWARD_DIAGNOSTIC_API_INTERFACE_VERSION=1 as const;
+export const FORWARD_DIAGNOSTIC_API_INTERFACE_VERSION=2 as const;
 
 export interface DiagnosticBindingView {nodeId:string;assignmentId:string;deploymentGeneration:number;bindingFence:number}
 export interface DiagnosticEndpointView {host:string;port:number}

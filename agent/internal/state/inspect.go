@@ -6,22 +6,26 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 )
 
 // JournalInspection exports no keys, raw snapshots, endpoints or physical slot maps.
 // The caller must retain the original journal and key; this is not a backup.
 type JournalInspection struct {
-	Version            uint64 `json:"version"`
-	NodeID             string `json:"nodeId"`
-	ProtocolVersion    uint64 `json:"protocolVersion"`
-	ExecutionExtension uint64 `json:"executionExtension"`
-	Generation         uint64 `json:"generation"`
-	SnapshotDigest     string `json:"snapshotDigest"`
-	FileDigest         string `json:"fileDigest"`
-	MaxBindingFence    uint64 `json:"maxBindingFence"`
-	MaxRetiredFence    uint64 `json:"maxRetiredFence"`
-	ImportedTransit    bool   `json:"importedTransit"`
+	Version               uint64 `json:"version"`
+	NodeID                string `json:"nodeId"`
+	ProtocolVersion       uint64 `json:"protocolVersion"`
+	ExecutionExtension    uint64 `json:"executionExtension"`
+	Generation            uint64 `json:"generation"`
+	SnapshotDigest        string `json:"snapshotDigest"`
+	FileDigest            string `json:"fileDigest"`
+	MaxBindingFence       uint64 `json:"maxBindingFence"`
+	MaxRetiredFence       uint64 `json:"maxRetiredFence"`
+	ImportedTransit       bool   `json:"importedTransit"`
+	ResourceBudgetVersion uint64 `json:"resourceBudgetVersion"`
+	ResourceBudgetBuckets uint64 `json:"resourceBudgetBuckets"`
+	PrechargedBytes       string `json:"prechargedBytes"`
 }
 
 func journalBytes(path string) ([]byte, error) {
@@ -58,13 +62,23 @@ func InspectRuntimeJournal(path string, key []byte, node string) (JournalInspect
 	}
 	hash := sha256.Sum256(after)
 	result := JournalInspection{
-		Version: 1, NodeID: record.NodeID, ProtocolVersion: record.ProtocolVersion,
+		Version: 2, NodeID: record.NodeID, ProtocolVersion: record.ProtocolVersion,
 		Generation: record.Journal.Generation, SnapshotDigest: record.Journal.Digest,
 		FileDigest:      "sha256:" + hex.EncodeToString(hash[:]),
 		ImportedTransit: record.ImportedTransitDigest != "",
+		PrechargedBytes: "0",
 	}
 	if record.ExecutionExtension != nil {
 		result.ExecutionExtension = *record.ExecutionExtension
+	}
+	if record.ResourceBudgets != nil {
+		result.ResourceBudgetVersion = record.ResourceBudgets.Version
+		result.ResourceBudgetBuckets = uint64(len(record.ResourceBudgets.Buckets))
+		total := new(big.Int)
+		for _, bucket := range record.ResourceBudgets.Buckets {
+			total.Add(total, new(big.Int).SetUint64(bucket.Consumed))
+		}
+		result.PrechargedBytes = total.String()
 	}
 	for _, fence := range record.Journal.Fences {
 		result.MaxBindingFence = max(result.MaxBindingFence, fence)

@@ -149,9 +149,12 @@ try {
     const ingressPorts = reservations.map(server => (server.address() as { port: number }).port), ingressPort = ingressPorts[0]!;
     if (browserEnabled) await new Promise<void>(resolve => ruleTarget.listen(0, '127.0.0.1', resolve));
     await Promise.all(reservations.map(server => new Promise<void>(resolve => server.close(() => resolve()))));
-    const provision = await call('POST', `/api/v1/scopes/${scope}/nodes`, { allowedListenerAddresses: ['127.0.0.1'],
+    const provision = await call('POST', `/api/v1/scopes/${scope}/shared-nodes`, { allowedListenerAddresses: ['127.0.0.1'],
         allowedPorts: ingressPorts, egressPolicyRevision: 1, allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false });
     assert.equal(provision.status, 201); nodeId = provision.body.nodeId;
+    const useGrant = await call('PUT', `/api/v1/scopes/${scope}/nodes/${nodeId}/grants/${actor}`,
+        { expectedRevision: 1, allowed: true, allowedRoles: ['ingress'] });
+    assert.equal(useGrant.status, 202); assert.equal(useGrant.body.revision, 2);
     agentArgs = ['--control', `https://127.0.0.1:${control.port}`, '--node', nodeId, '--ca', caCert,
         '--state', join(directory, 'agent-state'), '--journal-key', join(directory, 'secrets', 'journal.key')];
     await execute(binary, [...agentArgs, '--enroll'], { env: { ...process.env, TUNEX_ENROLLMENT_TOKEN: provision.body.enrollmentToken } });

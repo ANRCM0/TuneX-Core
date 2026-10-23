@@ -49,6 +49,8 @@ export class ForwardCommandExecutor<Tx> implements ForwardCommandPreparation<Tx>
 
     async lock(tx: Tx, forward: Forward): Promise<void> { await this.execution.lock(tx, forward); }
 
+    async lockOwnership(tx: Tx, forward: Forward): Promise<void> { await this.resources.lockOwnership(tx, forward); }
+
     async lockRemoval(tx: Tx, forward: Forward): Promise<void> {
         await this.adapters.select(forward).lockRemoval(tx,forward);
     }

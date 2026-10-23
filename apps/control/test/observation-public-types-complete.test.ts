@@ -88,7 +88,7 @@ type HistoryStore<R extends {state:string;result:{status:string}|null}> = {
     lockScope(tx:Tx,scope:string):Promise<void>;losses(tx:Tx,scope:string):Promise<{rowsExpired:number;rowsEvicted:number;updatesWithoutHead:number}>;
     missingUpdate(tx:Tx,scope:string):Promise<void>;insert(tx:Tx,value:R,now:number):Promise<void>;
     get(tx:Tx,scope:string,id:string,lock?:boolean):Promise<R|null>;put(tx:Tx,value:R):Promise<void>;
-    history(tx:Tx,scope:string,query:HistoryQuery<R['state'],NonNullable<R['result']>['status']>):Promise<R[]>;
+    history(tx:Tx,scope:string,principal:F.ReadPrincipal,query:HistoryQuery<R['state'],NonNullable<R['result']>['status']>):Promise<R[]>;
 };
 type PlanHead<C={forwardId:string;mode:string;expiresAt:number},B=unknown,S=string,K=string> = {
     id:string;scopeId:string;createdBy:string;createdAt:number;config:C;configDigest:string;originBinding:B;revision:number;state:S;
@@ -100,7 +100,7 @@ type PlanStore<H extends {state:string;config:{mode:string}},D,E> = {
     lockScope(tx:Tx,scope:string):Promise<void>;losses(tx:Tx,scope:string):Promise<{rowsExpired:number;rowsEvicted:number;decisionsEvicted:number}>;
     create(tx:Tx,head:H,now:number):Promise<void>;get(tx:Tx,scope:string,id:string,lock?:boolean|'share'):Promise<H|null>;
     put(tx:Tx,head:H):Promise<void>;append(tx:Tx,scope:string,id:string,decision:D):Promise<void>;decisions(tx:Tx,scope:string,id:string):Promise<D[]>;
-    history(tx:Tx,scope:string,query:PlanQuery<H['state'],H['config']['mode']>):Promise<H[]>;due(tx:Tx,now:number):Promise<OutboxHeader|null>;
+    history(tx:Tx,scope:string,principal:F.ReadPrincipal,query:PlanQuery<H['state'],H['config']['mode']>):Promise<H[]>;due(tx:Tx,now:number):Promise<OutboxHeader|null>;
     defer(tx:Tx,header:OutboxHeader,cutoff:number,retryAt:number):Promise<void>;
     isolate<T>(tx:Tx,action:()=>Promise<T>):Promise<{accepted:true;value:T}|{accepted:false;error:E}>;
 };
@@ -150,7 +150,7 @@ type MetadataStore<C,K> = {
     insertRevision(tx:Tx,scope:string,id:string,value:MetadataRevision<C>):Promise<void>;putHead(tx:Tx,scope:string,value:MetadataHead):Promise<void>;
     audit(tx:Tx,scope:string,value:MetadataAudit<K>):Promise<void>;audits(tx:Tx,scope:string,id:string):Promise<MetadataAudit<K>[]>;auditLosses(tx:Tx,scope:string):Promise<number>;
 };
-type AuditSources = 'access'|'node-security'|'transport'|'path-template'|'path-binding'|'path-group'|'path-group-binding'|'path-publication'|'path-publication-attempt'|'ingress-group'|'ingress-deployment'|'ingress-deployment-attempt'|'ingress-migration'|'ingress-migration-attempt'|'operation';
+type AuditSources = 'access'|'node-security'|'forward-ownership'|'resource-limits'|'transport'|'path-template'|'path-binding'|'path-group'|'path-group-binding'|'path-publication'|'path-publication-attempt'|'ingress-group'|'ingress-deployment'|'ingress-deployment-attempt'|'ingress-migration'|'ingress-migration-attempt'|'operation';
 type AuditErrors = 'AUTHORIZATION_DENIED'|'EXECUTION_DEADLINE'|'INTEGRITY_FAILURE'|'INVALID_CONFIG'|'UNSUPPORTED_CAPABILITY'|'RESOURCE_CONFLICT'|'RESOURCE_LIMIT'|'PORT_RESERVED'|'FENCING_REJECTED'|'LEASE_EXPIRED'|'SESSION_SUPERSEDED'|'LISTEN_FAILED'|'BIND_FAILED'|'TARGET_DENIED'|'CONNECT_FAILED'|'DIAL_FAILED'|'PEER_UNAVAILABLE'|'TLS_FAILED'|'RELAY_HANDSHAKE_FAILED'|'DRAIN_TIMEOUT'|'INTERNAL_ERROR'|'CLOCK_UNCERTAIN'|'CONFIG_DIGEST_MISMATCH'|'AUTHENTICATION_FAILED'|'TARGET_REJECTED'|'DOWNSTREAM_NOT_ACTIVE'|'DOWNSTREAM_UNAVAILABLE'|'TARGET_UNAVAILABLE'|'PORT_IN_USE'|'REVISION_CONFLICT'|'GROUP_ARCHIVED'|'TEMPLATE_ARCHIVED'|'REVISION_EXHAUSTED'|'PUBLICATION_STATE_CHANGED'|'NOT_FOUND'|'OTHER_ERROR';
 type RawAudit = {occurredAt:number|null;source:unknown;key:unknown;kind:unknown;recordType:unknown;timeMeaning:unknown;actorId:unknown;actorAttribution:unknown;subjectId:unknown;entityKind:unknown;entityId:unknown;revision:number|null;revisionKind:unknown;sequence:number|null;position:number|null;nodeId:unknown;nodeAssociation:unknown;forwardId:unknown;operationId:unknown;outcome:unknown;errorCode:unknown;retryable:boolean|null;recoveryInvalidated:boolean|null};
 type AuditFilters<S=string,E=string> = {actorId?:string;nodeId?:string;forwardId?:string;operationId?:string;errorCode?:E;source?:S};
@@ -160,12 +160,12 @@ type AuditRecord = AuditPosition<AuditSources>&{
     kind:string;recordType:'owner-event'|'immutable-provenance'|'owner-attempt'|'latest-operation-state';timeMeaning:'recorded-at'|'latest-operation-update';
     actorId:string|null;actorAttribution:'initiator'|'unattributed'|'unattributed-recovery'|'requester-not-status-actor';subjectId:string|null;
     entityKind:'scope-access'|'node'|'transport-profile'|'path-template'|'forward'|'path-group'|'path-publication'|'ingress-group'|'ingress-deployment'|'ingress-migration';
-    entityId:string;revision:number|null;revisionKind:'access'|'grant'|'config'|'forward'|'batch'|null;sequence:number|null;position:number|null;
+    entityId:string;revision:number|null;revisionKind:'access'|'grant'|'config'|'forward'|'batch'|'resource'|null;sequence:number|null;position:number|null;
     nodeId:string|null;nodeAssociation:'explicit-node'|'immutable-forward-spec'|'immutable-template-config'|'immutable-group-definition'|'none';
     forwardId:string|null;operationId:string|null;outcome:'recorded'|'accepted'|'rejected'|'running'|'succeeded'|'failed'|'superseded';errorCode:AuditErrors|null;retryable:boolean|null;recoveryInvalidated:boolean|null;
 };
 export type MetadataAuditCompleteDeclarations37 = [
-    Same<Equal<typeof Audit.AUDIT_SOURCES,readonly ['access','node-security','transport','path-template','path-binding','path-group','path-group-binding','path-publication','path-publication-attempt','ingress-group','ingress-deployment','ingress-deployment-attempt','ingress-migration','ingress-migration-attempt','operation']>>,
+    Same<Equal<typeof Audit.AUDIT_SOURCES,readonly ['access','node-security','forward-ownership','resource-limits','transport','path-template','path-binding','path-group','path-group-binding','path-publication','path-publication-attempt','ingress-group','ingress-deployment','ingress-deployment-attempt','ingress-migration','ingress-migration-attempt','operation']>>,
     Same<Equal<typeof Audit.AUDIT_KINDS,Readonly<Record<AuditSources,readonly string[]>>>>,
     Same<Equal<Services.ObservationTLSServiceConfig,{
         readonly version:1;readonly purpose:'direct-ingress-tls-handshake';readonly endpoint:{readonly address:string;readonly port:number};

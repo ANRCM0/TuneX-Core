@@ -6,6 +6,7 @@ import type { ForwardRelayHost, ForwardResourceHost } from './execution-contract
 import type { ForwardExecutionAdapter } from './execution-contracts.ts';
 import { compileDirect } from '../../compatibility/public.ts';
 import type { AuthorizedNodeFacts } from '../../framework/public.ts';
+import { nativeValueDigest as digest } from '../../compatibility/public.ts';
 
 type SharedExecution<Tx>=Pick<ForwardAuthorizationExecution<Tx>,'lock'>;
 
@@ -25,11 +26,16 @@ class NativeDirectForwardAdapter<Tx> implements ForwardExecutionAdapter<Tx> {
     async prepareCreate(tx:Tx,actor:string,forward:Forward) {
         const facts=await this.nodes.authorized(tx,actor,forward);
         await this.resources.lockNode(tx,facts.nodeId);this.validate(forward,facts);
-        const slots=await this.resources.reserve(tx,forward);
+        const slots=await this.resources.reserve(tx,forward,actor);
         compileDirect({...forward,spec:{...forward.spec,enabled:true}},facts,slots);
     }
     async planCreate(_tx:Tx,_actor:string,_forward:Forward) {}
     async prepareUpdate(tx:Tx,actor:string,current:Forward,next:Forward) {
+        if(current.spec.enabled&&!next.spec.enabled&&digest({...current.spec,enabled:false})===digest(next.spec)) {
+            await this.execution.lock(tx,next);
+            await this.resources.transition(tx,current,next);
+            return;
+        }
         const facts=await this.nodes.authorized(tx,actor,next);
         await this.execution.lock(tx,next);this.validate(next,facts);
         if(next.revision===current.revision)return;
@@ -52,18 +58,32 @@ class NativePathForwardAdapter<Tx> implements ForwardExecutionAdapter<Tx> {
     }
     async prepareCreate(tx:Tx,actor:string,forward:Forward) {
         if(!forward.spec.path||!forward.spec.transport)throw new ControlError('UNSUPPORTED_CAPABILITY',422,'Relay path and Transport Profile are both required');
-        for(const nodeId of [forward.spec.ingress.nodeId,...forward.spec.path.via].sort()) {
-            await this.nodes.authorizedRelayNode(tx,actor,forward.scopeId,nodeId);await this.resources.lockNode(tx,nodeId);
+        const path=[forward.spec.ingress.nodeId,...forward.spec.path.via];
+        const uses=path.map((nodeId,index)=>({nodeId,role:index===0?'ingress' as const:index===path.length-1?'egress' as const:'transit' as const}));
+        for(const {nodeId,role} of uses.sort((a,b)=>a.nodeId<b.nodeId?-1:a.nodeId>b.nodeId?1:0)) {
+            await this.nodes.authorizedRelayNode(tx,actor,forward.scopeId,nodeId,role,forward);await this.resources.lockNode(tx,nodeId);
         }
     }
     async planCreate(tx:Tx,actor:string,forward:Forward) {await this.relay.acceptPlan(tx,actor,forward);}
-    async prepareUpdate(tx:Tx,actor:string,_current:Forward,next:Forward) {
+    async prepareUpdate(tx:Tx,actor:string,current:Forward,next:Forward) {
         await this.relay.lockNodes(tx,next);
-        if(next.spec.enabled&&!await this.relay.canExecute(tx,actor,next))throw new ControlError('AUTHORIZATION_DENIED',403,'Relay execution is not authorized');
+        const stopping=current.spec.enabled&&!next.spec.enabled&&digest({...current.spec,enabled:false})===digest(next.spec);
+        if(stopping)return;
+        if(next.spec.enabled){
+            if(!await this.relay.canExecute(tx,actor,next))throw new ControlError('AUTHORIZATION_DENIED',403,'Relay execution is not authorized');
+        }else{
+            // Disabled intent changes require product access, without online execution readiness.
+            const path=[next.spec.ingress.nodeId,...next.spec.path!.via];
+            const uses=path.map((nodeId,index)=>({nodeId,role:index===0?'ingress' as const:index===path.length-1?'egress' as const:'transit' as const}));
+            for(const {nodeId,role} of uses.sort((a,b)=>a.nodeId<b.nodeId?-1:a.nodeId>b.nodeId?1:0))
+                await this.nodes.authorizedRelayNode(tx,actor,next.scopeId,nodeId,role,next);
+        }
     }
     async planUpdate(tx:Tx,actor:string,forward:Forward) {if(forward.spec.enabled)await this.relay.acceptPlan(tx,actor,forward);}
     async lockRemoval(tx:Tx,forward:Forward) {await this.relay.lockNodes(tx,forward);}
-    async authorizeRetry(tx:Tx,actor:string,forward:Forward) {await this.nodes.authorizedRelayNode(tx,actor,forward.scopeId,forward.spec.ingress.nodeId);}
+    async authorizeRetry(tx:Tx,actor:string,forward:Forward) {
+        if(!await this.relay.canExecute(tx,actor,forward))throw new ControlError('AUTHORIZATION_DENIED',403,'Whole Relay path execution is not authorized');
+    }
 }
 
 export function nativeForwardAdapters<Tx>(nodes:ForwardNodeAuthorization<Tx>,resources:ForwardResourceHost<Tx>,

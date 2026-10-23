@@ -1,12 +1,12 @@
-import type { ForwardIntent } from '../../framework/public.ts';
+import type { ReadPrincipal, ForwardIntent } from '../../framework/public.ts';
 import type { ConsolePaging } from '../console-query-owner/public.ts';
 
-export const TRANSPORT_QUERY_INTERFACE_VERSION=1 as const;
+export const TRANSPORT_QUERY_INTERFACE_VERSION=2 as const;
 export interface ProfileReferenceQuery {page?:string|undefined;limit?:string|undefined;revision?:number|undefined;targetRevision?:number|undefined}
 export interface ProfileReference {forwardId:string;revision:number;configRevision:number;spec:ForwardIntent;recoverySuspended:boolean}
 export interface TransportReferenceReader<Tx> {
     profile(tx:Tx,scope:string,profile:string):Promise<{currentRevision:number}|null>;
-    references(tx:Tx,scope:string,profile:string,paging:ConsolePaging,revision?:number):Promise<{total:number;items:ProfileReference[]}>;
+    references(tx:Tx,scope:string,principal:ReadPrincipal,profile:string,paging:ConsolePaging,revision?:number):Promise<{total:number;items:ProfileReference[]}>;
 }
 type Mutable<T>={-readonly [K in keyof T]:T[K]};
 export type ProposedProfileSpec=Mutable<Omit<ForwardIntent,'transport'>>&{transport:{profileId:string;configRevision:number}};

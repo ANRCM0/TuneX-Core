@@ -99,6 +99,29 @@ network/MySQL/browser experiments, commits or pushes without later authorization
 Do not expand test/CI tooling as a substitute for the source task. Record required
 acceptance cases and unresolved compatibility in the foundation readiness document.
 
+On 2026-10-21 the human explicitly authorized the new N product development stage,
+with a persistent goal and named parallel agents working through the confirmed
+product priorities. The phase ledger is
+`docs/development/product-development-stage-n-2026-10-21.md`; PR-01 through PR-14
+in the linked product baseline define its scope. This authorizes source changes,
+necessary FR proposals, contract-case authoring and isolated named worktrees.
+Shared foundation contracts, schema catalog and composition roots are integrated
+serially. This does not authorize executing verification, commit/push, merge,
+release or unrelated parallel features; preserve their separate gates.
+
+The human subsequently authorized N verification on 2026-10-21 with
+"好，开始进行测试". This opens the N candidate's verification and necessary failure
+repairs. Local execution remains limited to static/type/boundary/generated-parity
+checks, formatting and compilation/vet; functional, MySQL, network, container and
+browser evidence belongs in Actions. Record the tested source separately from
+the dirty checkout baseline. This testing instruction does not itself authorize
+commit/push, merge or release.
+
+The human then explicitly approved saving and pushing the N candidate to a
+testing branch and running Actions, including necessary failure repairs. This
+bounded authorization permits the candidate commits, pushes and draft PR for N
+verification. It does not authorize merge, image publication or release.
+
 When verification is authorized, functional/MySQL/network/container/browser evidence
 belongs in GitHub Actions. Record the exact tested source revision. Historical
 passes do not validate current changes. Independent physical-host gates remain

@@ -1,10 +1,16 @@
 import type { ScopeAuthorization, ScopeOwnerAuthorization } from './application-ports.ts';
 import type { NodeSecrets } from './node-authority-ports.ts';
 
-export const IDENTITY_ACCESS_INTERFACE_VERSION=1 as const;
+export const IDENTITY_ACCESS_INTERFACE_VERSION=2 as const;
 
 export interface IdentityMembershipRecord { revision:number; active:number; canManage:number }
 export interface IdentityListedMember extends IdentityMembershipRecord { actorId:string; ownerId:string }
+export interface IdentityScopeContextWindow { readonly after:string|null; readonly limit:number }
+export interface IdentityScopeContextRecord {
+    readonly scopeId:string;
+    readonly ownerId:string;
+    readonly membership:({readonly actorId:string}&IdentityMembershipRecord)|null;
+}
 
 /** Storage effects only; each locked read/mutation uses the caller's transaction. */
 export interface IdentityAccessStore<Tx> {
@@ -25,6 +31,8 @@ export interface IdentityAccessStore<Tx> {
     saveMember(tx:Tx,scopeId:string,actor:string,manage:boolean,active:boolean,revision:number):Promise<void>;
     audit(tx:Tx,id:string,scopeId:string,actor:string,subject:string,kind:string,revision:number,at:number,details:unknown):Promise<void>;
     listMembers(tx:Tx,scopeId:string):Promise<IdentityListedMember[]>;
+    /** Current actor membership or owned Scopes, binary ID order, at most limit + 1 records. */
+    scopeContext(tx:Tx,actorId:string,window:IdentityScopeContextWindow):Promise<IdentityScopeContextRecord[]>;
 }
 
 /** The existing pool-backed bearer lookup is separate from transaction operations. */

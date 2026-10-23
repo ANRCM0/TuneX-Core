@@ -8,7 +8,7 @@ export const PATH_TEMPLATE_LIMITS = { templatesPerScope: 128, revisionsPerTempla
 export const pathTemplateHash = (value: unknown): value is string => typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value);
 export function validateTemplateHead(record: PathTemplateHead, id = record.templateId) {
     if (record.templateId !== id || !isId(record.templateId) || !isCounter(record.currentRevision) ||
-        record.currentRevision > PATH_TEMPLATE_LIMITS.revisionsPerTemplate || typeof record.archived !== 'boolean')
+        record.currentRevision > PATH_TEMPLATE_LIMITS.revisionsPerTemplate || typeof record.archived !== 'boolean' || record.ownerActorId !== null && !isId(record.ownerActorId))
         throw new ControlError('INTEGRITY_FAILURE', 409, 'Invalid persisted PathTemplate head');
     return { ...record };
 }

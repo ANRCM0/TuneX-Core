@@ -1,4 +1,4 @@
-export const INGRESS_MODULE_INTERFACE_VERSION=1 as const;
+export const INGRESS_MODULE_INTERFACE_VERSION=2 as const;
 export { INGRESS_RECOVERY_INTERFACE_VERSION, IngressRecovery } from './recovery.ts';
 export { IngressGroups } from './groups.ts';
 export { IngressDeployments } from './deployments.ts';

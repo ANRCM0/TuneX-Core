@@ -15,7 +15,10 @@ function fixture() {
         catch (error) { events.push('rollback'); throw error; }
     } };
     const auth = { async scope(actual: typeof tx, actor: string, scope: string, manage?: boolean) {
-        check(actual); events.push('authorize'); assert.equal(scope, 'scope'); assert.equal(manage, true); assert.ok(actor);
+        check(actual); assert.equal(actor,'selfservice-manager'); assert.equal(scope,'scope'); assert.equal(manage,true);
+    }, async owner(actual: typeof tx, actor: string, scope: string, ...extra: unknown[]) {
+        check(actual); events.push('authorize'); assert.equal(scope, 'scope'); assert.deepEqual(extra,[]); assert.ok(actor);
+        if(!['manager','manager-a','manager-b','manager-c','reader-a','reader-b','reader-c'].includes(actor)) throw new ControlError('AUTHORIZATION_DENIED',403,'Scope owner permission required');
         if (state.deny) throw new ControlError('AUTHORIZATION_DENIED', 403, 'denied');
     } };
     const read: AuditReadPort<typeof tx> = { async source(actual, scope, source, query) {
@@ -88,4 +91,10 @@ test('audit store and malformed-row failures release active slots for later inde
     f.state.rows = [];
     const next = await f.service.query('reader-c', 'scope', {});
     assert.deepEqual(next.items, []); assert.equal(f.events.at(-1), 'commit');
+});
+
+test('same-Scope selfservice management cannot read cross-owner audit records',async()=>{
+    const f=fixture();f.state.rows=[record(f.now-1,'a')];
+    await assert.rejects(f.service.query('selfservice-manager','scope',{}),{code:'AUTHORIZATION_DENIED'});
+    assert.deepEqual(f.events,['begin','authorize','rollback']);assert.equal(f.state.clocks,1);
 });

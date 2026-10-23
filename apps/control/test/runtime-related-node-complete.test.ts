@@ -30,7 +30,8 @@ function fixture(){
     const nodes={async facts(tx:Tx,id:string){same('facts',tx,[id]);return {facts:{...facts,nodeId:id}};},async state(tx:Tx,id:string){same('state',tx,[id]);return {facts:{...facts,nodeId:id},credentialUntil:state.now+3600000,revoked:false};},async credential(tx:Tx,...args:unknown[]){same('credential',tx,args);return state.now+3600000;},async capabilities(tx:Tx,...args:unknown[]){same('capabilities',tx,args);effects.push('capabilities');}};
     const ledger={async assignments(tx:Tx,...args:unknown[]){same('assignments',tx,args);return [];},async retireChanged(tx:Tx,...args:unknown[]){same('retire',tx,args);effects.push('retirement');},async tombstones(tx:Tx,...args:unknown[]){same('tombstones',tx,args);return [];},async verifyPublishable(tx:Tx,...args:unknown[]){same('verify',tx,args);},async recordLeases(tx:Tx,...args:unknown[]){same('leases',tx,args);effects.push('leases');},async complete(tx:Tx,...args:unknown[]){same('complete',tx,args);effects.push('cleanup');},async observeDrains(tx:Tx,...args:unknown[]){same('drains',tx,args);effects.push('drains');},async claim(tx:Tx){same('claim',tx);return undefined;}};
     const authority={async issue(...args:unknown[]){assert.ok(active);event('authority',active,args);}};
-    const host=new RuntimeHost({db,store,nodes,ledger,relay,authority,codec:runtimeCodec,now:()=>state.now,forwards:{},observations:{}} as never);
+    const unlimitedPayloadPolicy={async limits(tx:Tx){same('payload-policy',tx);return {excludedAssignmentIds:[]};}};
+    const host=new RuntimeHost({db,store,nodes,ledger,relay,authority,payloadPolicy:unlimitedPayloadPolicy,codec:runtimeCodec,now:()=>state.now,forwards:{},observations:{}} as never);
     const hello:RuntimeMessages['HelloRequest']={protocolVersion:3,nodeId:'node-c',bootId:'boot',agentBuild:'test',capabilities:[...facts.capabilities],lastStoredSnapshotGeneration:0};
     return {host,relay,db,events,effects,failure,state,deployments,store,nodes,ledger,hello,clear(){events.length=0;effects.length=0;state.transaction=0;}};
 }
@@ -78,9 +79,9 @@ test('4/11 pending Nodes retain ingress priority lexical ties historical/lease m
 
 test('4 publication and cleanup retain same closure transaction through authority save leases complete and fail atomically at every provider',async()=>{
     const success=fixture();await success.host.snapshot('node-c',2,'fingerprint');
-    const expected=['begin','allDeployments','lock','lock','lock','lock','state','credential','snapshot','awaiting','forwardIDs','assignments','retire','tombstones','verify','authority','save','leases','complete','commit'];
+    const expected=['begin','allDeployments','lock','lock','lock','lock','state','credential','snapshot','awaiting','forwardIDs','assignments','payload-policy','retire','tombstones','verify','authority','save','leases','complete','commit'];
     assert.deepEqual(names(success),expected);assert.ok(success.events.every(e=>e.tx===success.events[0]!.tx));
-    for(const step of ['allDeployments','lock','state','credential','snapshot','awaiting','forwardIDs','assignments','retire','tombstones','verify','authority','save','leases','complete']){
+    for(const step of ['allDeployments','lock','state','credential','snapshot','awaiting','forwardIDs','assignments','payload-policy','retire','tombstones','verify','authority','save','leases','complete']){
         const f=fixture();f.state.fail=step;await assert.rejects(f.host.snapshot('node-c',2,'fingerprint'),e=>e===f.failure);assert.equal(f.events.at(-1)!.name,'rollback');assert.deepEqual(f.effects,[]);assert.deepEqual(names(f).slice(0,-1),expected.slice(0,expected.indexOf(step)+1),step);
     }
 });

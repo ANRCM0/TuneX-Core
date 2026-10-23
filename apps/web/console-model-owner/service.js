@@ -41,13 +41,13 @@ export function candidateChoices(items, selectedIds, selectedItems) {
 export function createConsoleModel(effects) {
   function directCapable(node) {
     const capabilities = node?.policy?.capabilities;
-    return !node?.revoked && Array.isArray(capabilities) && ['adp.3', 'native.direct.v1'].every(c => capabilities.includes(c)) &&
+    return node?.canUse === true && !node?.revoked && Array.isArray(capabilities) && ['adp.3', 'native.direct.v1'].every(c => capabilities.includes(c)) &&
       Array.isArray(node.policy.allowedListenerAddresses) && node.policy.allowedListenerAddresses.length > 0 &&
       Array.isArray(node.policy.allowedPorts) && node.policy.allowedPorts.length > 0 &&
       (node.credentialUntil === undefined || effects.credentialActive(() => node.credentialUntil));
   }
   function directSpec(form, node) {
-    if (!directCapable(node)) throw new Error('所选节点不满足 Direct 执行能力或授权要求');
+    if (!directCapable(node) || !(node.allowedRoles===null||Array.isArray(node.allowedRoles)&&node.allowedRoles.includes('ingress'))) throw new Error('所选节点不满足 Direct 执行能力或授权要求');
     const protocol = String(form.protocol);
     if (!allowedProtocols(node).includes(protocol)) throw new Error('节点不支持所选协议');
     const listen = String(form.listenAddress);

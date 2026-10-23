@@ -1,3 +1,4 @@
+import { roleAllowed } from '../account-context.js';
 export function createNativeRelayForms({ parsePorts, directCapable }) {
 function relayCapable(node) {
   return directCapable(node) && ['native.relay.v1', 'relay.wire.1'].every(c => node.policy.capabilities.includes(c));
@@ -8,6 +9,7 @@ function multihopCapable(node) {
 function multihopSpec(form, path, profile, enabled) {
   if(!enabled)throw new Error('Control 尚未开启多跳执行');
   if(!Array.isArray(path)||path.length<3||path.length>8||new Set(path.map(n=>n?.id)).size!==path.length||path.some(n=>!multihopCapable(n)))throw new Error('多跳路径要求 3–8 个不同且支持多跳执行的有效节点');
+  if(path.slice(1,-1).some(node=>!roleAllowed(node,'transit')))throw new Error('中继节点未获 transit 用途授权');
   const spec=relaySpec(form,path[0],path.at(-1),profile);
   if(path.some(n=>spec.protocols.some(p=>!n.policy.capabilities.includes(p))))throw new Error('路径中的每个节点都必须支持业务协议');
   return {...spec,path:{via:path.slice(1).map(n=>n.id)}};
@@ -41,7 +43,7 @@ function relayEndpoint(form) {
   return {listenAddress:address,advertisedHost:host,allowedTcpPorts:ports};
 }
 function relaySpec(form, ingress, egress, profile) {
-  if(!relayCapable(ingress)||!relayCapable(egress)||ingress.id===egress.id)throw new Error('Relay 要求两台不同且支持 Relay 的有效节点');
+  if(!roleAllowed(ingress,'ingress')||!roleAllowed(egress,'egress')||!relayCapable(ingress)||!relayCapable(egress)||ingress.id===egress.id)throw new Error('Relay 要求两台不同且支持 Relay 的有效节点');
   if(!profile||!Number.isSafeInteger(profile.revision)||profile.revision<1)throw new Error('请选择有效的不可变 Transport Profile revision');
   const protocols=form.protocol==='both'?['tcp','udp']:[form.protocol];
   if(protocols.some(x=>!['tcp','udp'].includes(x)||!ingress.policy.capabilities.includes(x)||!egress.policy.capabilities.includes(x)||!profile.config.protocols.includes(x)))throw new Error('协议必须被两台节点和 Profile 同时支持');

@@ -1,10 +1,19 @@
 import { DEFAULT_POLICY } from '@tunex/contracts/shared';
 import { RuntimeResources, RuntimeExclusiveReservations, RuntimeReservationRelease } from '../framework/public.ts';
-import type { RuntimeResourceStore, RuntimeSlotKey, RuntimeSlotState, RuntimeExclusiveReservationStore, RuntimeReservationReleaseStore } from '../framework/public.ts';
+import type { RuntimeResourceStore, RuntimeSlotKey, RuntimeSlotState, RuntimeExclusiveReservationStore, RuntimeReservationReleaseStore, RuntimePortUsageStore, RuntimePortReservationPolicy } from '../framework/public.ts';
 import { rows, write } from './mysql.ts';
 import type { Transaction } from './mysql.ts';
 
-export class MySqlRuntimeResourceStore implements RuntimeResourceStore<Transaction>,RuntimeExclusiveReservationStore<Transaction>,RuntimeReservationReleaseStore<Transaction> {
+export class MySqlRuntimeResourceStore implements RuntimeResourceStore<Transaction>,RuntimeExclusiveReservationStore<Transaction>,RuntimeReservationReleaseStore<Transaction>,RuntimePortUsageStore<Transaction> {
+    async forwardPortOwner(tx:Transaction,forwardId:string):Promise<{scopeId:string;ownerActorId:string|null}|undefined> {
+        return (await rows<{scopeId:string;ownerActorId:string|null}>(tx,
+            'SELECT scope_id AS scopeId,owner_actor_id AS ownerActorId FROM forwards WHERE id=?',[forwardId]))[0];
+    }
+    async actorPortSlots(tx:Transaction,nodeId:string,ownerActorId:string,ownedForwardId?:string):Promise<readonly (RuntimeSlotKey&{forwardId:string})[]> {
+        return rows(tx,
+            'SELECT p.node_id AS nodeId,p.protocol,p.port,p.owner_id AS forwardId FROM port_slots p LEFT JOIN forwards f ON f.id=p.owner_id WHERE p.node_id=? AND (f.owner_actor_id=? OR p.owner_id=?) ORDER BY p.protocol,p.port',
+            [nodeId,ownerActorId,ownedForwardId??null]);
+    }
     async lockedNodes(tx:Transaction,nodeId:string):Promise<{node_id:string}[]> {
         return rows<{node_id:string}>(tx,'SELECT node_id FROM runtime_nodes WHERE node_id=? FOR UPDATE',[nodeId]);
     }
@@ -58,14 +67,14 @@ export class MySqlRuntimeResourceStore implements RuntimeResourceStore<Transacti
     }
 }
 
-/** Legacy callers may omit injection; this creates no connection or second ledger. */
-export function createMySqlRuntimeResources(maxAssignmentsPerNode=DEFAULT_POLICY.maxAssignmentsPerNode):RuntimeResources<Transaction> {
-    return new RuntimeResources(new MySqlRuntimeResourceStore(),maxAssignmentsPerNode);
+/** Compatibility factory must receive the same product policy as the primary host. */
+export function createMySqlRuntimeResources(portPolicy:RuntimePortReservationPolicy<Transaction>,maxAssignmentsPerNode=DEFAULT_POLICY.maxAssignmentsPerNode):RuntimeResources<Transaction> {
+    return new RuntimeResources(new MySqlRuntimeResourceStore(),maxAssignmentsPerNode,portPolicy);
 }
 
 /** Preserve the original per-Node late default-policy read, without a new ledger. */
-export function createMySqlExclusiveReservations():RuntimeExclusiveReservations<Transaction> {
-    return new RuntimeExclusiveReservations(new MySqlRuntimeResourceStore(),()=>DEFAULT_POLICY.maxAssignmentsPerNode);
+export function createMySqlExclusiveReservations(portPolicy:RuntimePortReservationPolicy<Transaction>):RuntimeExclusiveReservations<Transaction> {
+    return new RuntimeExclusiveReservations(new MySqlRuntimeResourceStore(),()=>DEFAULT_POLICY.maxAssignmentsPerNode,portPolicy);
 }
 
 /** Original exact release over the same resource SQL owner, without a new transaction. */

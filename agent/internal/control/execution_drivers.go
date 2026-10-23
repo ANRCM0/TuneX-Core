@@ -7,6 +7,7 @@ import (
 
 	"github.com/tunex/vnext/agent/internal/adp3"
 	"github.com/tunex/vnext/agent/internal/executiondriver"
+	"github.com/tunex/vnext/agent/internal/executionhost"
 	"github.com/tunex/vnext/agent/internal/nativeexecution"
 	"github.com/tunex/vnext/agent/internal/relay"
 )
@@ -48,6 +49,7 @@ type executionHost struct {
 	sessionEpoch  uint64
 	policy        adp3.Policy
 	relayIdentity func() (relay.Identity, time.Time, error)
+	payload       executionhost.PayloadGate
 }
 
 func (host executionHost) peerIdentity() (relay.Identity, time.Time, error) {

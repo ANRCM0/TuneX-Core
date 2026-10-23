@@ -1,3 +1,4 @@
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { nativeValueDigest as digest } from '../src/compatibility/public.ts';
@@ -26,7 +27,7 @@ function fixture() {
         try { const result = await action(tx); events.push('commit'); return result; }
         catch (error) { Object.assign(state, saved); events.push('rollback'); throw error; }
     } };
-    const auth = { async scope(actual: typeof tx, actor: string, scope: string, manage?: boolean) {
+    const auth = { async owner() { assert.fail('not owner classification'); }, async scope(actual: typeof tx, actor: string, scope: string, manage?: boolean) {
         check(actual); assert.deepEqual([actor, scope, manage], ['actor', 'scope', true]); events.push('authorize');
         if (state.deny) throw new ControlError('AUTHORIZATION_DENIED', 403, 'denied');
     } };
@@ -38,13 +39,14 @@ function fixture() {
         },
     };
     const store: IngressGroupStore<typeof tx> = {
+        async classifyOwner() { assert.fail('not owner classification'); },
         async lockScope(actual) { check(actual); events.push('lock-scope'); },
         async head(actual) { check(actual); events.push('head'); return state.head; },
         async revision(actual) { check(actual); events.push('revision'); return state.record; },
         async count(actual) { check(actual); events.push('count'); return state.head ? 1 : 0; },
         async list() { assert.fail('not a list operation'); },
         async publish(actual, _scope, id, record) {
-            check(actual); events.push('publish'); state.head = { groupId: id, currentRevision: record.revision, archived: false };
+            check(actual); events.push('publish'); state.head = { groupId: id, currentRevision: record.revision, archived: false, ownerActorId: record.createdBy };
             state.record = record;
         },
         async archive(actual) { check(actual); events.push('archive'); state.head = { ...state.head!, archived: true }; },
@@ -52,7 +54,7 @@ function fixture() {
     };
     const reader: PathTemplateReader<typeof tx> = {
         async list() { assert.fail('not a template list operation'); },
-        async head(actual, _scope, id, lock) { check(actual); events.push(`template:${id}:${lock}`); return { templateId: id, currentRevision: 1, archived: false }; },
+        async head(actual, _scope, id, lock) { check(actual); events.push(`template:${id}:${lock}`); return { templateId: id, currentRevision: 1, archived: false, ownerActorId: 'actor' }; },
         async revision(actual, _scope, id) { check(actual); return templates.get(id) ?? null; },
     };
     const references: PathTemplateReferences<typeof tx> = {
@@ -61,7 +63,12 @@ function fixture() {
             return { profileDigest };
         },
     };
-    const host = new IngressGroups(db, auth, requests, store, reader, references, () => { state.clocks++; return 1800000000000; });
+    const access = new ResourceAccess({async scope(actual:typeof tx, actor:string, scope:string) { assert.equal(actual,tx); assert.equal(actor,'actor'); assert.equal(scope,'scope'); }}, {
+        async scopeOwner(actual,scope) { assert.equal(actual,tx); assert.equal(scope,'scope'); return {ownerActorId:'governor'}; },
+        async ownership(actual,scope,kind,id) { assert.equal(actual,tx); assert.equal(scope,'scope'); return kind === 'ingress-group' && id === 'group' ? {ownerActorId:state.head ? state.head.ownerActorId : 'actor'} : kind === 'path-template' && ['template-a','template-z'].includes(id) ? {ownerActorId:'actor'} : kind === 'forward' && id === 'forward' ? {ownerActorId:'actor'} : undefined; },
+        async node() { assert.fail('not a Node read'); },
+    });
+    const host = new IngressGroups(db, auth, access, requests, store, reader, references, () => { state.clocks++; return 1800000000000; });
     const selection = () => ({ groupId: 'group', revision: 1, configDigest: digest(input) });
     return { tx, host, events, state, input, templates, selection, publish: (key = 'key', expected = 0) => host.publish('actor', 'scope', 'group', key, expected, input) };
 }

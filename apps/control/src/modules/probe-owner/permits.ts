@@ -95,9 +95,12 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
     private readonly clock: () => number;
     private readonly history: ProbeRunRecorder<Tx> | undefined;
     private readonly types:ProbeTypeQualifications<Tx>|undefined;
-    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>,
+    private readonly access:import('../../framework/public.ts').ResourceReadAccess<Tx>;
+    constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, access: import('../../framework/public.ts').ResourceReadAccess<Tx>,
         plans: ProbePermitPlans<Tx>, machines: ProbeMachineReader<Tx>,
         instances: CurrentProbeInstances<Tx>, store: ProbePermitStore<Tx>, clock: () => number = nativeWallClockSource(), history?: ProbeRunRecorder<Tx>,types?:ProbeTypeQualifications<Tx>) {
+        this.access=access;
+
         this.db = db; this.identity = identity; this.plans = plans; this.machines = machines;
         this.instances = instances; this.store = store; this.clock = clock; this.history = history;this.types=types;
     }
@@ -240,13 +243,15 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
         return view(record);
     }
 
-    /** Historical receipt, not current execution authority. Scope managers may also inspect after revocation. */
+    /** Historical receipt, available to its requester or explicit Scope governance. */
     async inspect(actor: string, scope: string, id: string) {
         if (![actor, scope, id].every(isId)) invalid('Valid Probe receipt identity required');
         return this.db.transaction(async tx => {
             await this.identity.scope(tx, actor, scope, true);
             const budget = await this.budget(tx), permit = budget.records.find(p => p.id === id && p.scopeId === scope);
             if (!permit) notFound();
+            if (permit.actorId !== actor && !(await this.access.principal(tx, actor, scope)).governance)
+                throw new ControlError('AUTHORIZATION_DENIED', 403, 'Probe receipt belongs to another actor');
             const result = await this.store.result(tx, id), now = this.now(budget.now);
             if (result) {
                 try {
@@ -382,10 +387,12 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
     async revoke(actor: string, scope: string, id: string) {
         if (![actor, scope, id].every(isId)) invalid('Valid Probe revocation identity required');
         return this.db.transaction(async tx => {
-            // Any current manager may close a permit, even after its original Node grant was withdrawn.
+            // Requester or governance may close without reacquiring execution use rights.
             await this.identity.scope(tx, actor, scope, true);
             const budget = await this.budget(tx), permit = budget.records.find(p => p.id === id && p.scopeId === scope);
             if (!permit) notFound();
+            if (permit.actorId !== actor && !(await this.access.principal(tx, actor, scope)).governance)
+                throw new ControlError('AUTHORIZATION_DENIED', 403, 'Probe receipt belongs to another actor');
             const now = this.now(budget.now);
             if (permit.state === 'consumed') {
                 const previous = budget.withdrawals.find(w => w.permitId === id);

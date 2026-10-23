@@ -142,6 +142,9 @@ func validateSnapshot(s Snapshot, raw []byte) error {
 	if hash != s.SnapshotDigest {
 		return fmt.Errorf("INTEGRITY_FAILURE: Snapshot digest differs")
 	}
+	if err := validateResourceLimits(s); err != nil {
+		return err
+	}
 	logical := map[string]bool{}
 	physical := map[string]bool{}
 	previous := ""

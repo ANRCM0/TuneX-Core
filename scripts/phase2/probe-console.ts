@@ -5,10 +5,25 @@ import type { BrowserContext, Page } from 'playwright';
 export interface ConsoleFixture { url: string; scope: string; token: string; directory: string }
 async function connect(page: Page, fixture: ConsoleFixture) {
     await page.goto(fixture.url + '/console', { waitUntil: 'networkidle' });
-    await page.locator('#scope').fill(fixture.scope);
     await page.locator('#token').fill(fixture.token);
-    await page.locator('#connect').click();
-    await page.waitForFunction(scope => document.getElementById('connection-indicator')?.textContent?.includes(scope), fixture.scope);
+    const contextResponse = (response: import('playwright').Response) =>
+        new URL(response.url()).pathname === '/api/v1/me/context' && response.request().method() === 'GET';
+    const [login] = await Promise.all([page.waitForResponse(contextResponse), page.locator('#connect').click()]);
+    assert.equal(login.status(), 200);
+    let account = await login.json();
+    const first = account.scopes.find((scope: any) => scope.canEnter);
+    // Login enters the first accessible scope; let its refresh finish before changing workspace.
+    if (first) await page.waitForFunction(scope => document.getElementById('connection-indicator')?.textContent === '已认证 · ' + scope, first.scopeId);
+    while (!account.scopes.some((scope: any) => scope.scopeId === fixture.scope) && account.truncated) {
+        const [next] = await Promise.all([page.waitForResponse(contextResponse), page.locator('#scope-more').click()]);
+        assert.equal(next.status(), 200);
+        account = await next.json();
+    }
+    const scope = account.scopes.find((entry: any) => entry.scopeId === fixture.scope);
+    assert.equal(scope?.canEnter, true, 'Fixture workspace must be discovered and accessible to the authenticated actor');
+    await page.locator('#scope option[value="' + fixture.scope + '"]').waitFor({ state: 'attached' });
+    if (await page.locator('#scope').inputValue() !== fixture.scope) await page.locator('#scope').selectOption(fixture.scope);
+    await page.waitForFunction(scope => document.getElementById('connection-indicator')?.textContent === '已认证 · ' + scope, fixture.scope);
     assert.equal(await page.locator('#token').inputValue(), '');
 }
 async function noPersistence(context: BrowserContext, page: Page) {

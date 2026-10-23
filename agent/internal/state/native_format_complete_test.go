@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/tunex/vnext/agent/internal/executionstate"
+	"github.com/tunex/vnext/agent/internal/payloadbudget"
 )
 
 func TestJournalNativeFormatCompleteExactLowerAndNativeDeclarations(t *testing.T) {
@@ -23,8 +24,8 @@ func TestJournalNativeFormatCompleteExactLowerAndNativeDeclarations(t *testing.T
 	}{
 		{reflect.TypeOf(executionstate.Journal{}), []string{"Snapshot", "Generation", "Digest", "Fences", "Retired"}, []reflect.Type{reflect.TypeOf([]byte(nil)), reflect.TypeOf(uint64(0)), reflect.TypeOf(""), reflect.TypeOf(map[string]uint64(nil)), reflect.TypeOf(map[string]uint64(nil))}, []string{"", "", "", "", ""}},
 		{reflect.TypeOf(Journal{}), []string{"Snapshot", "Generation", "Digest", "Fences", "Retired"}, []reflect.Type{reflect.TypeOf(json.RawMessage(nil)), reflect.TypeOf(uint64(0)), reflect.TypeOf(""), reflect.TypeOf(map[string]uint64(nil)), reflect.TypeOf(map[string]uint64(nil))}, []string{`json:"snapshot"`, `json:"generation"`, `json:"digest"`, `json:"fences"`, `json:"retired"`}},
-		{reflect.TypeOf(executionstate.RuntimeJournal{}), []string{"FormatVersion", "NodeID", "Journal", "ExecutionExtension", "ImportedHistoryDigest"}, []reflect.Type{reflect.TypeOf(uint64(0)), reflect.TypeOf(""), reflect.TypeOf(executionstate.Journal{}), reflect.TypeOf((*uint64)(nil)), reflect.TypeOf("")}, []string{"", "", "", "", ""}},
-		{reflect.TypeOf(RuntimeJournal{}), []string{"ProtocolVersion", "NodeID", "Journal", "ExecutionExtension", "ImportedTransitDigest"}, []reflect.Type{reflect.TypeOf(uint64(0)), reflect.TypeOf(""), reflect.TypeOf(Journal{}), reflect.TypeOf((*uint64)(nil)), reflect.TypeOf("")}, []string{`json:"protocolVersion"`, `json:"nodeId"`, `json:"journal"`, `json:"executionExtension,omitempty"`, `json:"importedTransitDigest,omitempty"`}},
+		{reflect.TypeOf(executionstate.RuntimeJournal{}), []string{"FormatVersion", "NodeID", "Journal", "ExecutionExtension", "ImportedHistoryDigest", "ResourceBudgets"}, []reflect.Type{reflect.TypeOf(uint64(0)), reflect.TypeOf(""), reflect.TypeOf(executionstate.Journal{}), reflect.TypeOf((*uint64)(nil)), reflect.TypeOf(""), reflect.TypeOf((*payloadbudget.History)(nil))}, []string{"", "", "", "", "", ""}},
+		{reflect.TypeOf(RuntimeJournal{}), []string{"ProtocolVersion", "NodeID", "Journal", "ExecutionExtension", "ImportedTransitDigest", "ResourceBudgets"}, []reflect.Type{reflect.TypeOf(uint64(0)), reflect.TypeOf(""), reflect.TypeOf(Journal{}), reflect.TypeOf((*uint64)(nil)), reflect.TypeOf(""), reflect.TypeOf((*ResourceBudgetHistory)(nil))}, []string{`json:"protocolVersion"`, `json:"nodeId"`, `json:"journal"`, `json:"executionExtension,omitempty"`, `json:"importedTransitDigest,omitempty"`, `json:"resourceBudgets,omitempty"`}},
 	} {
 		if vector.actual.NumField() != len(vector.names) {
 			t.Fatalf("%v field count", vector.actual)

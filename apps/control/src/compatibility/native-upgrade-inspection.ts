@@ -29,7 +29,7 @@ export async function upgradeSchemaCatalog() {
     const root = new URL('../../migrations/', import.meta.url);
     const names = (await readdir(root)).filter(n => n.endsWith('.sql')).sort();
     // New migrations require a deliberate compatibility-profile review.
-    if (names.length !== 38 || names.at(-1) !== '0038-probe-plan-json-integers.sql' ||
+    if (names.length !== 41 || names.at(-1) !== '0041-shared-resource-payload-limits.sql' ||
         names.some((name, index) => !name.startsWith(String(index + 1).padStart(4, '0') + '-')))
         throw new Error('UNREVIEWED_UPGRADE_SCHEMA');
     const files = await Promise.all(names.map(async name => {
@@ -80,6 +80,10 @@ export async function inspectUpgradeDatabase(db: Connection, catalog: Awaited<Re
         });
         const [protocols] = hasTable('snapshots') ? await query<{ n: unknown }>(db,
             "SELECT COUNT(*) n FROM snapshots WHERE JSON_EXTRACT(body,'$.protocolVersion') IS NULL OR JSON_TYPE(JSON_EXTRACT(body,'$.protocolVersion'))<>'INTEGER' OR JSON_EXTRACT(body,'$.protocolVersion')<>3 OR (JSON_EXTRACT(body,'$.executionExtension') IS NOT NULL AND (JSON_TYPE(JSON_EXTRACT(body,'$.executionExtension'))<>'INTEGER' OR JSON_EXTRACT(body,'$.executionExtension')<>1))") : [{ n: 0 }];
+        const [resourceLimits]=hasTable('snapshots')?await query<{n:unknown}>(db,
+            "SELECT COUNT(*) n FROM snapshots WHERE JSON_CONTAINS_PATH(body,'one','$.resourceLimits')=1"):[{n:0}];
+        const [resourceFormats]=hasTable('snapshots')?await query<{n:unknown}>(db,
+            "SELECT COUNT(*) n FROM snapshots WHERE JSON_CONTAINS_PATH(body,'one','$.resourceLimits')=1 AND (JSON_TYPE(JSON_EXTRACT(body,'$.resourceLimits'))<>'OBJECT' OR JSON_EXTRACT(body,'$.resourceLimits.version') IS NULL OR JSON_TYPE(JSON_EXTRACT(body,'$.resourceLimits.version'))<>'INTEGER' OR JSON_EXTRACT(body,'$.resourceLimits.version')<>1 OR JSON_EXTRACT(body,'$.resourceLimits.buckets') IS NULL OR JSON_TYPE(JSON_EXTRACT(body,'$.resourceLimits.buckets'))<>'ARRAY')"):[{n:0}];
         const [leases] = hasTable('execution_leases') ? await query<{ until: unknown }>(db,
             'SELECT MAX(bound) until FROM (SELECT MAX(valid_until) bound FROM execution_leases UNION ALL SELECT MAX(valid_until) bound FROM snapshots) authorization_bounds') : [{ until: null }];
         const [paths] = columns.some(c => c.table === 'relay_deployments' && c.column === 'path_nodes') ?
@@ -91,7 +95,8 @@ export async function inspectUpgradeDatabase(db: Connection, catalog: Awaited<Re
             'SELECT TABLE_NAME AS `table`,COLUMN_NAME AS `column`,COLUMN_TYPE AS `type` FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,COLUMN_NAME LIMIT 10001');
         if (JSON.stringify(columns) !== JSON.stringify(after)) throw new Error('UPGRADE_SCHEMA_CHANGED_RETRY');
         return { ...metadata, migrations, schemaIssues, nodes,
-            unsupportedSnapshots: integer(protocols!.n), multihopDeployments: integer(paths!.n),
+            unsupportedSnapshots: integer(integer(protocols!.n)+integer(resourceFormats!.n)), multihopDeployments: integer(paths!.n),
+            resourceLimitSnapshots:integer(resourceLimits!.n),
             enabledMultihopForwards: integer(intents!.n),
             latestLeaseUntil: leases!.until === null ? null : integer(leases!.until) };
     } finally { await db.rollback(); }

@@ -1,5 +1,5 @@
 import type { Forward } from '@tunex/core';
-import type { TransactionBoundary, RuntimeRelayNodes, TransitStagingStorage, RuntimeReservationReleaseAccess } from '../../framework/public.ts';
+import type { TransactionBoundary, RuntimeRelayNodes, TransitStagingStorage, RuntimeReservationReleaseAccess, OfflinePayloadPolicy } from '../../framework/public.ts';
 import type { ForwardStateOwner } from '../forward-owner/public.ts';
 import type { TransportProfileResolver } from '../transport-owner/public.ts';
 import type { RelayEndpointResolver } from '../relay-endpoint-owner/public.ts';
@@ -15,10 +15,11 @@ export interface TransitStagingApi {
 export interface TransitStagingOptions<Tx> {
     readonly db:TransactionBoundary<Tx>;
     readonly store:TransitStagingStorage<Tx>;
-    readonly nodes:Pick<RuntimeRelayNodes<Tx>,'authorizedRelayNode'|'facts'|'relayCredentialFacts'>;
+    readonly nodes:Pick<RuntimeRelayNodes<Tx>,'authorizedRelayNode'|'facts'|'relayCredentialFacts'|'reservationPorts'>;
     readonly forwarding:Pick<ForwardStateOwner<Tx>,'currentForUpdate'|'authorizer'>;
     readonly transport:TransportProfileResolver<Tx>;
     readonly endpoints:RelayEndpointResolver<Tx>;
     readonly reservations:TransitReservationAccess<Tx>;
     readonly release:RuntimeReservationReleaseAccess<Tx>;
+    readonly payloadPolicy:OfflinePayloadPolicy<Tx>;
 }

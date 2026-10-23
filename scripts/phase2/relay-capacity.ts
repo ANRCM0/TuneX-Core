@@ -28,6 +28,7 @@ const caKey = join(directory, 'ca.key'), caCert = join(directory, 'ca.pem'), ser
 const policy = { ...DEFAULT_POLICY, pollIntervalSeconds: 1, leaseSeconds: 30, renewalLeadSeconds: 12, observationFreshnessSeconds: 5, drainTimeoutSeconds: 2, udpIdleTimeoutSeconds: 2 };
 const database = `tunex_relay_capacity_${randomUUID().replaceAll('-', '')}`;
 let control: Awaited<ReturnType<typeof startControl>> | undefined, admin: Awaited<ReturnType<typeof createConnection>> | undefined, evidence: Record<string, unknown> | undefined;
+let releasePeerPoll: (()=>void)|undefined, restorePeerPoll: (()=>void)|undefined;
 let caBytes: Buffer, nativeProvisioned = false;
 function pass(message: string) { checks.push(message); console.log(`PASS ${message}`); }
 async function until(action: () => Promise<boolean>, label: string, timeout = 45000) { const started = Date.now(); while (Date.now() - started < timeout) { if (await action()) return; await new Promise(resolve => setTimeout(resolve, 150)); } throw new Error(`Relay capacity timed out: ${label}`); }
@@ -241,23 +242,51 @@ try {
   pass('Repeated renewal: a second automatic key change and stable new traffic cross original effective expiry without restarting either Agent or resetting any persistent counter');
   const [beforeOffline] = await control.db.pool.query<any[]>('SELECT node_id,session_epoch,snapshot_generation FROM runtime_nodes WHERE node_id=?',[ingress.nodeId]);
   const [offlineCredential] = await control.db.pool.query<any[]>('SELECT fingerprint,valid_until FROM node_relay_credentials WHERE node_id=? AND retire_after IS NULL',[ingress.nodeId]);
+  const publishSnapshot=control.runtime.snapshot.bind(control.runtime);
+  const peerPollGate=new Promise<void>(resolve=>{releasePeerPoll=resolve;});let peerPollHeld=false;
+  control.runtime.snapshot=async(...args:Parameters<typeof publishSnapshot>)=>{
+   if(args[0]===egress.nodeId){peerPollHeld=true;await peerPollGate;}
+   return publishSnapshot(...args);
+  };
+  restorePeerPoll=()=>{control!.runtime.snapshot=publishSnapshot;};
+  await until(async()=>peerPollHeld,'actual peer Snapshot response held',10000);
   await stop(ingress);
   console.log('Waiting for the stopped Agent peer credential to reach its actual configured expiry');
   await until(async()=>Date.now()>offlineCredential[0].valid_until+policy.maxClockSkewSeconds*1000,'real offline peer authority expiry',150000);
+  await until(async()=>egress.process.exitCode!==null,'peer independent guard exits after real lease expiry',45000);
+  releasePeerPoll!();releasePeerPoll=undefined;restorePeerPoll();restorePeerPoll=undefined;
   for(const args of [['-H','-ltn'],['-H','-lun']])assert.equal((await lab.run(ingressNS,lab.ss,[...args,`sport = :${listenPort}`])).stdout.trim(),'');
-  await launchAgent(ingress); await waitHealthy();
+  const [beforePeerRecovery] = await control.db.pool.query<any[]>('SELECT session_epoch FROM runtime_nodes WHERE node_id=?',[egress.nodeId]);
+  let peerRestarted = false;
+  await launchAgent(ingress);
+  await until(async()=>{
+   if(egress.process.exitCode!==null&&!peerRestarted){
+    assert.notEqual(egress.process.exitCode,0,'peer recovery requires an authorization-ended exit');
+    assert.match(egress.errors,/Agent authorization ended:.*LEASE_EXPIRED/);
+    const oldPlan=await latest(),ports=new Set<number>(oldPlan.body.nodes.find((node:any)=>node.nodeId===egress.nodeId).assignments.map((a:any)=>a.resource.port));
+    for(const port of ports)assert.equal((await lab.run(egressNS,lab.ss,['-H','-ltn',`sport = :${port}`])).stdout.trim(),'','expired peer retains no Relay listener');
+    // A path peer's expired pin can retire this Agent's entire session as well.
+    // Recover only that confirmed fail-closed exit, using its existing state.
+    await launchAgent(egress);peerRestarted=true;
+   }
+   const plan=await latest(),resource=(await call('GET',resourcePath)).body;
+   return plan.stage==='active'&&resource.health.condition==='ready'&&resource.applied.length===4&&resource.applied.every((obs:any)=>obs.phase==='active'&&obs.deploymentGeneration===plan.generation&&obs.forwardRevision===revision);
+  },'fresh sessions after actual peer expiry',65000);
+  const [afterPeerRecovery] = await control.db.pool.query<any[]>('SELECT session_epoch FROM runtime_nodes WHERE node_id=?',[egress.nodeId]);
+  assert.equal(peerRestarted,true,'held peer response must exercise the fail-closed restart branch');
+  assert.ok(afterPeerRecovery[0].session_epoch>beforePeerRecovery[0].session_epoch);
   const [recoveredSession] = await control.db.pool.query<any[]>('SELECT node_id,session_epoch,snapshot_generation FROM runtime_nodes WHERE node_id=?',[ingress.nodeId]);
   const [recoveredPeer] = await control.db.pool.query<any[]>('SELECT fingerprint,valid_until FROM node_relay_credentials WHERE node_id=? AND retire_after IS NULL',[ingress.nodeId]);
   assert.ok(recoveredSession[0].session_epoch>beforeOffline[0].session_epoch); assert.ok(recoveredSession[0].snapshot_generation>beforeOffline[0].snapshot_generation);
   assert.notEqual(recoveredPeer[0].fingerprint,offlineCredential[0].fingerprint); assert.ok(recoveredPeer[0].valid_until>Date.now());
   const recoveryPayload=JSON.parse((await lab.run(ingressNS,fixture,['--mode','probe','--port',String(listenPort)])).stdout); assert.equal(recoveryPayload.tcp,true); assert.equal(recoveryPayload.udp,true);
-  pass('Expired peer recovery: a stopped non-root Agent waits for genuine effective expiry, then uses the intact MAC journal and fresh online session/issuance to restore both payloads without executing cached authority');
+  pass('Expired peer recovery: genuine effective expiry closes old authority; intact MAC journals and fresh sessions restore both payloads, including any peer that exited on LEASE_EXPIRED');
   const removed = await call('DELETE',resourcePath,{expectedRevision:revision}); assert.equal(removed.status,202); await waitOperation(removed.body.operationId);
   const [remaining] = await control.db.pool.query<any[]>('SELECT COUNT(*) n FROM port_slots WHERE owner_id=?',[forwardId]); assert.equal(remaining[0].n,0);
   await until(async()=> (await diagnostics()).every(value=>value.tcpStreams===0&&value.udpAssociations===0),'rotation cleanup');
   pass('Rotation cleanup: current and historical peer deployments remove safely and every physical reservation releases');
   const commit=(await execute('git',['rev-parse','HEAD'])).stdout.trim();
-  evidence={commit,workingTreeDirty:Boolean((await execute('git',['status','--porcelain'])).stdout.trim()),command:'npm run test:relay-rotation',checks,processFacts,baseline,samples,initialCredentials,rotationDetails,attempts,requests,heldResult,firstWindow,secondWindow,negative,beforeOffline,offlineCredential,recoveredSession,recoveredPeer,recoveryPayload,policy,synchronization,kernel:(await linux('/bin/uname',['-a'])).stdout.trim(),protocolVersion:3,agentSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/tunex-agent-linux':binary)).digest('hex'),fixtureSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/network-fixture-linux':fixture)).digest('hex'),topology:`${viaWSL?'Windows locked Control/MySQL with WSL':'Native Linux Control/MySQL and'} two non-root Agents in independent namespaces, real configured 120-second peer authority/30-second overlap; no clocks, certificate fields or DB expiry injection`,limitations:'Two live renewal cycles on one physical host; CA-signed leaf lifetime is one day, effective peer authority is configured to 120 seconds. Whole release and long-duration production stability remain separate gates.'};
+  evidence={commit,workingTreeDirty:Boolean((await execute('git',['status','--porcelain'])).stdout.trim()),command:'npm run test:relay-rotation',checks,processFacts,baseline,samples,initialCredentials,rotationDetails,attempts,requests,heldResult,firstWindow,secondWindow,negative,beforeOffline,offlineCredential,recoveredSession,recoveredPeer,recoveryPayload,peerRestarted,beforePeerRecovery,afterPeerRecovery,policy,synchronization,kernel:(await linux('/bin/uname',['-a'])).stdout.trim(),protocolVersion:3,agentSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/tunex-agent-linux':binary)).digest('hex'),fixtureSHA:createHash('sha256').update(await readFile(viaWSL?'.artifacts/network-fixture-linux':fixture)).digest('hex'),topology:`${viaWSL?'Windows locked Control/MySQL with WSL':'Native Linux Control/MySQL and'} two non-root Agents in independent namespaces, real configured 120-second peer authority/30-second overlap; no clocks, certificate fields or DB expiry injection`,limitations:'Two live renewal cycles on one physical host; CA-signed leaf lifetime is one day, effective peer authority is configured to 120 seconds. Whole release and long-duration production stability remain separate gates.'};
  } else {
  const sustained = await launchFixture(ingressNS, 'load', ['--port', String(listenPort), '--tcp-clients', '16', '--udp-clients', '8', '--seconds', '60', '--payload-bytes', '1024', '--load-progress'], 'sustained-load');
  let sustainedDone = false; sustained.entry.done.finally(() => { sustainedDone = true; }).catch(() => {});
@@ -321,6 +350,7 @@ try {
 })) }, null, 2)); }
  console.error(`Failure evidence: ${directory}`); throw error;
 } finally {
+ releasePeerPoll?.();restorePeerPoll?.();
  const errors: unknown[] = [];
  for (const entry of [...agents, ...processes].reverse()) await stop(entry).catch(error => errors.push(error));
  await control?.close().catch(error => errors.push(error));

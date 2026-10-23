@@ -1,6 +1,7 @@
 package executionhost
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -33,7 +34,7 @@ func TestExecutionHostCompletePublicBindingsFieldsAndZeroRegistry(t *testing.T){
 	var _ func(Host[completeHostPolicy,completeHostIdentity])(completeHostIdentity,time.Time,error)=Host[completeHostPolicy,completeHostIdentity].RequirePeerIdentity
 	if HostVersion!=1||PreparedInstanceVersion!=1{t.Fatal("host vocabulary version changed")}
 	for _,shape:=range []struct{actual,want reflect.Type}{
-		{reflect.TypeOf(Host[completeHostPolicy,completeHostIdentity]{}),reflect.TypeOf(struct{NodeID string;SessionEpoch uint64;Policy completeHostPolicy;PeerIdentity func()(completeHostIdentity,time.Time,error)}{})},
+		{reflect.TypeOf(Host[completeHostPolicy,completeHostIdentity]{}),reflect.TypeOf(struct{NodeID string;SessionEpoch uint64;Policy completeHostPolicy;PeerIdentity func()(completeHostIdentity,time.Time,error);Payload PayloadGate}{})},
 		{reflect.TypeOf(ProbeTarget{}),reflect.TypeOf(struct{Address string;Port uint64;Check func()error}{})},
 		{reflect.TypeOf(Features{}),reflect.TypeOf(struct{Relay,Multihop bool}{})},
 		{reflect.TypeOf(Selection{}),reflect.TypeOf(struct{DriverID string;SchemaVersion uint64;Role,Phase,Protocol string}{})},
@@ -45,6 +46,9 @@ func TestExecutionHostCompletePublicBindingsFieldsAndZeroRegistry(t *testing.T){
 		{reflect.TypeOf(Host[completeHostPolicy,completeHostIdentity]{}),[]string{"RequirePeerIdentity"}},
 		{reflect.TypeOf(Descriptor{}),[]string{"Clone","Enabled"}},
 	}{if entry.typ.NumMethod()!=len(entry.methods){t.Fatal("public method set changed",entry.typ)};for i,name:=range entry.methods{if entry.typ.Method(i).Name!=name{t.Fatal("public method name changed",entry.typ)}}}
+	gateType:=reflect.TypeOf((*PayloadGate)(nil)).Elem()
+	if gateType.NumMethod()!=1{t.Fatal("payload gate method set changed")}
+	if method:=gateType.Method(0);method.Name!="Acquire"||method.Type!=reflect.TypeOf((func(context.Context,int,bool)(int,error))(nil)){t.Fatal("payload gate acquisition contract changed",method)}
 	descriptorFields:=[]string{"ID","HostVersion","SchemaVersion","Platforms","Roles","Phases","Protocols","Capabilities","ProbeCapabilities","RequiresRelay","RequiresMultihop"}
 	typ:=reflect.TypeOf(Descriptor{});if typ.NumField()!=len(descriptorFields){t.Fatal("descriptor field count changed")};for i,name:=range descriptorFields{f:=typ.Field(i);want:=reflect.TypeOf([]string(nil));switch{case i==0:want=reflect.TypeOf("");case i==1||i==2:want=reflect.TypeOf(uint64(0));case i>=9:want=reflect.TypeOf(false)};if f.Name!=name||f.Type!=want||f.Tag!=""{t.Fatal("descriptor field/order/type changed",f)}}
 	raw,err:=json.Marshal(Descriptor{ID:"d",HostVersion:1,SchemaVersion:2,Platforms:[]string{"linux"},Roles:[]string{},RequiresRelay:true})

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { createConnection } from 'mysql2/promise';
+import { Identity } from '../src/modules/identity.ts';
 import { TelemetryRecovery } from '../src/modules/telemetry-owner/public.ts';
 import { StationAlertRecovery, StationAlerts, emptyStationAlertState, parseStationAlertConfig, parseStationAlertPolicy } from '../src/modules/station-alert-owner/public.ts';
 import type { StationAlertState } from '../src/modules/station-alert-owner/public.ts';
@@ -119,6 +120,8 @@ async function withDatabase(action:(db:MySqlUnitOfWork)=>Promise<void>) {
     try{await admin.query(`CREATE DATABASE \`${database}\``);created=true;await db.migrate();
         await db.transaction(async tx=>{await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',['actor','a'.repeat(64)]);
             await write(tx,'INSERT INTO scopes(id,owner_id) VALUES(?,?)',['scope','actor']);
+            await write(tx,'INSERT INTO accounts(id,token_hash) VALUES(?,?)',['selfservice-manager','c'.repeat(64)]);
+            for(const actor of ['actor','selfservice-manager'])await write(tx,'INSERT INTO scope_members(scope_id,actor_id,can_manage,active) VALUES(?,?,TRUE,TRUE)',['scope',actor]);
             await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,facts) VALUES(?,?,?,?,?)',['node','scope','b'.repeat(64),900000,'{}']);
             await write(tx,'INSERT INTO forwards(id,scope_id,revision,spec) VALUES(?,?,?,?)',['forward','scope',1,'{}']);});
         await action(db);
@@ -243,7 +246,7 @@ test('31/161 real native Station event SQL precedes original Notification outbox
             return db.transaction(async tx=>{let supplied:Transaction;supplied=new Proxy(tx,{get(target,key,receiver){if(key==='execute')return async function(this:unknown,sql:string,args:unknown[]=[]){
                 assert.equal(this,supplied);statements.push(sql);return Reflect.apply(target.execute,target,[sql,args]);};return Reflect.get(target,key,receiver);}});
                 seen.push(supplied);return action(supplied);});}};
-        const auth={async scope(tx:Transaction,actor:string,scope:string,manage?:boolean){assert.equal(tx,seen[0]);assert.deepEqual([actor,scope,manage],['actor','scope',true]);}};
+        const identity=new Identity(db),auth={async scope(){assert.fail('Station worker must retain owner authorization');},async owner(tx:Transaction,actor:string,scope:string,...extra:unknown[]){assert.equal(tx,seen[0]);assert.deepEqual([actor,scope],['actor','scope']);assert.deepEqual(extra,[]);await identity.owner(tx,actor,scope);}};
         const handoff=new NotificationDeliveries({db:boundary,auth,store:outbox,endpoints,policies:station,enabled:true,
             secrets:new Proxy({},{get(){assert.fail('enqueue must not acquire vault material');}}) as never,
             sender:{async send(){assert.fail('enqueue must not send');},async idle(){assert.fail('enqueue must not await sender');},async close(){assert.fail('enqueue must not close sender');}},
@@ -260,4 +263,15 @@ test('31/161 real native Station event SQL precedes original Notification outbox
         assert.equal(delivery[0]!.created_at,now);assert.equal(delivery[0]!.next_attempt_at,now);
         assert.deepEqual(await table(db,'notification_delivery_attempts'),[]);assert.deepEqual(await table(db,'notification_delivery_rates'),[]);
     });
+});
+
+test('native Station worker suspends same-Scope selfservice management while retaining governance records',{skip:!databaseURL},async()=>{
+ await withDatabase(async db=>{
+  const now=1800000000000,identity=new Identity(db),station=new MySqlStationAlertStore();
+  const config=parseStationAlertConfig({schemaVersion:1,rule:'node-credential-expiring',target:{kind:'node',id:'node'},enabled:true,thresholdSeconds:60});
+  const policy=parseStationAlertPolicy({policyId:'manager-policy',revision:1,configRevision:1,config,configDigest:digest(config),managedBy:'selfservice-manager',createdAt:now-1,updatedAt:now-1,silencedUntil:null,suspended:'none',nextEvaluateAt:now,state:{...emptyStationAlertState(),condition:'clear',armed:true}});
+  await db.transaction(async tx=>{await identity.scope(tx,'selfservice-manager','scope',true);await station.lockScope(tx,'scope');await station.putPolicy(tx,'scope',policy);});
+  const before=await table(db,'scope_members'),worker=new StationAlerts(db,identity,{async claim(){assert.fail('worker must not claim a receipt');},async respond(){assert.fail('worker must not store a receipt');}},station,{async read(){assert.fail('selfservice manager must not evaluate cross-owner facts');}},true,()=>now,1000,{async enqueueIn(){assert.fail('unauthorized worker must not enqueue delivery');}});
+  await worker.tick();const persisted=await db.transaction(tx=>station.policy(tx,'scope','manager-policy',false));assert.equal(persisted?.suspended,'actor-not-authorized');assert.deepEqual(await table(db,'station_alert_events'),[]);assert.deepEqual(await table(db,'notification_deliveries'),[]);assert.deepEqual(await table(db,'scope_members'),before);
+ });
 });

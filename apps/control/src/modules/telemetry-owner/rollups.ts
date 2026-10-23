@@ -1,7 +1,7 @@
 import { deepFreeze, isId } from '@tunex/core';
 import { nativeParseJson as parseJson, nativeParseTime, nativeIsoTime, nativeWallClockSource, nativeJsonBase64Url, nativeBase64UrlText } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ResourceReadAccess } from '../../framework/public.ts';
 import type { TelemetryFamily, TelemetryResolution, TelemetryRollupAfter, TelemetryRollupCounts,
     TelemetryRollupBucket, TelemetryRollupRecord, TelemetryRollupStore, TelemetryRollupTargets } from './rollup-contracts.ts';
 import { TELEMETRY_ROLLUP_LIMITS, parseTelemetryRollupBucket } from './rollup-values.ts';
@@ -53,6 +53,7 @@ export class TelemetryRollups<Tx> implements TelemetryRollupApi {
     readonly enabled: boolean;
     private readonly db: TransactionBoundary<Tx>;
     private readonly auth: ScopeAuthorization<Tx>;
+    private readonly readAccess: ResourceReadAccess<Tx>;
     private readonly store: TelemetryRollupStore<Tx>;
     private readonly targets: TelemetryRollupTargets<Tx>;
     private readonly clock: () => number;
@@ -60,9 +61,9 @@ export class TelemetryRollups<Tx> implements TelemetryRollupApi {
     private requests = 0;
     private readonly keys = new Set<string>();
     private readonly readStarts = new Map<string, number>();
-    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, store: TelemetryRollupStore<Tx>,
+    constructor(db: TransactionBoundary<Tx>, auth: ScopeAuthorization<Tx>, readAccess: ResourceReadAccess<Tx>, store: TelemetryRollupStore<Tx>,
         targets: TelemetryRollupTargets<Tx>, enabled = false, clock: () => number = nativeWallClockSource()) {
-        this.db = db; this.auth = auth; this.store = store; this.targets = targets; this.enabled = enabled; this.clock = clock;
+        this.db = db; this.auth = auth; this.readAccess = readAccess; this.store = store; this.targets = targets; this.enabled = enabled; this.clock = clock;
     }
     private now(): number { const at = this.clock(); if (!timestamp(at)) corrupt(); return at; }
     async admitReadRequest<T>(action: () => Promise<T>): Promise<T> {
@@ -105,11 +106,14 @@ export class TelemetryRollups<Tx> implements TelemetryRollupApi {
         this.cooldown(actor, now);
         return this.admitted('history:' + actor, () => this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scopeId);
+            const principal = await this.readAccess.principal(tx, actor, scopeId);
             if (kind === 'node') {
+                await this.readAccess.node(tx, actor, scopeId, targetId, 'host');
                 const target = await this.targets.node(tx, targetId);
                 if (!target || target.scopeId !== scopeId) notFound();
                 if (target.nodeId !== targetId) corrupt();
             } else {
+                await this.readAccess.forward(tx, actor, scopeId, targetId);
                 const target = await this.targets.forward(tx, scopeId, targetId);
                 if (!target) notFound();
                 if (target.scopeId !== scopeId || target.forwardId !== targetId) corrupt();
@@ -129,13 +133,16 @@ export class TelemetryRollups<Tx> implements TelemetryRollupApi {
                 preceding = key;
                 return { body, recoverySuspended: row.recoverySuspended };
             });
-            const losses = this.losses(await this.store.losses(tx, scopeId, family, kind === 'node' ? targetId : null));
+            const lossesVisible = kind === 'node' || principal.governance;
+            const losses = lossesVisible ? { scope: kind === 'node' ? 'node-family' as const : 'scope-family' as const,
+                ...this.losses(await this.store.losses(tx, scopeId, family, kind === 'node' ? targetId : null)) } :
+                { scope: 'withheld-scope-family' as const, minuteEvicted: null, hourEvicted: null, cursorEvicted: null, cursorExpired: null };
             const items = valid.slice(0, limit), truncated = valid.length > limit;
             return deepFreeze({ telemetryAggregateVersion: 1, target: { kind, id: targetId }, family, enabled: this.enabled,
                 source: 'agent-reported', health: 'unknown', executionAuthorized: false, observedAt: nativeIsoTime(this.now()),
                 window: { from: nativeIsoTime(from), to: nativeIsoTime(to), resolution, limit, seriesKey,
                     after: input.after ?? null, nextAfter: truncated && items.length ? encodeAfter(rowKey(items[items.length - 1]!)) : null, truncated },
-                retention: TELEMETRY_ROLLUP_LIMITS, losses: { scope: kind === 'node' ? 'node-family' : 'scope-family', ...losses }, items });
+                retention: TELEMETRY_ROLLUP_LIMITS, losses, items });
         }));
     }
     private losses(input: unknown) {
@@ -153,6 +160,7 @@ export class TelemetryRollups<Tx> implements TelemetryRollupApi {
         this.cooldown(actor, this.now());
         return this.admitted('capacity:' + actor, () => this.db.transaction(async tx => {
             await this.auth.scope(tx, actor, scopeId);
+            if (!(await this.readAccess.principal(tx, actor, scopeId)).governance) notFound();
             const observed = this.counts(await this.store.capacity(tx, scopeId)), limits = TELEMETRY_ROLLUP_LIMITS;
             return deepFreeze({ telemetryAggregateVersion: 1, enabled: this.enabled, source: 'observation-read-model', executionAuthorized: false,
                 observedAt: nativeIsoTime(this.now()), policy: limits, observed,

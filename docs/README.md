@@ -12,6 +12,10 @@
 | [实施进度](development/progress.md) | 当前实现、合并源码、准确证据与剩余门槛 |
 | [开发执行方案](development/development-plan.md) | 地基接受、产品切片、负载／人工切换和独立能力的顺序 |
 | [下一阶段目标](development/next-milestones.md) | 当前可推进项及退出条件 |
+| [N：多用户产品开发阶段](development/product-development-stage-n-2026-10-21.md) | 新阶段目标、逐项状态、并行分工、兼容与验收门槛 |
+| [产品用途、流程与缺口](development/product-requirements-and-gap-analysis-2026-10-21.md) | 多用户私有／管理员资源、自助组线、额度、探测监控及源码缺口；产品需求基线 |
+| [转发参考学习](development/forwarding-reference-study-2026-10-21.md) | Forwardx 引擎闭环、参考 TuneX 调用链与开发者扩展方向；仅源码分析 |
+| [转发框架诊断与路线](development/forwarding-open-development-plan-2026-10-21.md) | 当前完整调用链、原生扩展缺口、参考取舍与后续顺序；源码诊断与提案 |
 | [地基 readiness](development/foundation-readiness.md) | 1–220 验收病例、证据映射与并行开发门禁 |
 | [验收规范](testing/acceptance-v1.md) | 安全、可靠性与实际网络测试要求 |
 | [多跳开发与验收](development/multihop-execution.md) | 默认关闭的执行能力、Actions、物理主机和发行门槛 |
@@ -46,6 +50,9 @@ decisions 与 changes 保留仍约束当前源码的设计与兼容变更。
 | --- | --- |
 | [Core](spec/core-v1.md) 与 [Forward](spec/forward-v1.md) | 纯领域与最小转发语义 |
 | [Control API](spec/control-api-v1.md) 与 [Runtime/Agent](spec/runtime-agent-v1.md) | 公共命令、Operation、部署状态与恢复 |
+| [产品资源访问](spec/product-resource-access-v1.md) | N 源码候选：私有／共享、用途、个人端口额度、读取隔离与显式存量分类；未验收 |
+| [共享资源带宽／流量](spec/shared-resource-payload-limits-v1.md) | FR-0032：每用户 × 共享机器的双向 payload、显式周期、保守预扣与恢复边界；源码未验收 |
+| [共享额度公共示例](../examples/shared-resource-limits/README.md) | 仅消费公共端口的政策注入、原事务与显式周期命令示例；未执行 |
 | [ADP/3](protocol/agent-deployment-v3.md) 与 [执行扩展](protocol/agent-deployment-execution-v1.md) | 当前在线协议及版本化多跳执行 |
 | [ADP/3 在线切换](development/adp3-cutover.md) | 当前 Direct 在线协议、旧 ADP/2 拒绝与状态边界 |
 | [模块边界](architecture/module-boundaries.md) | 原 owner、公共调用与事务归属 |

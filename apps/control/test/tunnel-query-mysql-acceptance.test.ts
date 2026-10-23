@@ -6,6 +6,8 @@ import type { Connection, RowDataPacket } from 'mysql2/promise';
 import { createApp } from '../src/api/app.ts';
 import { TunnelQueries } from '../src/application/tunnel-queries.ts';
 import type { ControlApplication } from '../src/application/control.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { MySqlResourceAccessStore } from '../src/infrastructure/mysql-resource-access.ts';
 import { MySqlTunnelReader } from '../src/infrastructure/mysql-tunnel-read.ts';
 import { MySqlUnitOfWork } from '../src/infrastructure/mysql.ts';
 import type { AuthorityStore } from '../src/infrastructure/authority.ts';
@@ -39,9 +41,10 @@ test('tunnel API uses real prepared SELECT-only MySQL: bounded windows, scoped e
             await connection.execute('INSERT INTO accounts(id,token_hash) VALUES(?,?)', ['viewer', tokenHash(tokens.viewer)]);
             await connection.execute('INSERT INTO scope_members(scope_id,actor_id,can_manage) VALUES(?,?,FALSE)', ['scope-a', 'viewer']);
             for (const id of ['node-a', 'node-A', 'node-b', 'node-c', 'foreign']) {
-                await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',
-                    [id, id === 'foreign' ? 'scope-b' : 'scope-a', createHash('sha256').update(id).digest('hex'), now, now + 10000, JSON.stringify({ capabilities: ['adp.3', 'native.relay.v1'] })]);
+                await connection.execute('INSERT INTO nodes(id,scope_id,resource_source,owner_actor_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?,?,?)',
+                    [id, id === 'foreign' ? 'scope-b' : 'scope-a', id === 'node-b' ? 'admin-shared' : 'private', id === 'node-b' ? null : id === 'foreign' ? 'outsider' : id === 'node-A' ? 'owner' : 'viewer', createHash('sha256').update(id).digest('hex'), now, now + 10000, JSON.stringify({ capabilities: ['adp.3', 'native.relay.v1'] })]);
             }
+            await connection.execute('INSERT INTO node_grants(node_id,actor_id,allowed_roles) VALUES(?,?,?)', ['node-b', 'viewer', JSON.stringify(['transit', 'egress'])]);
             await connection.execute('INSERT INTO runtime_nodes(node_id,session_epoch,snapshot_generation,received_at,last_report) VALUES(?,2,3,?,?)', ['node-a', now - 1000, JSON.stringify({ secretMarker: 'raw-report-must-not-escape' })]);
             await connection.execute('INSERT INTO node_relay_endpoints(node_id,revision,config,created_by,updated_at) VALUES(?,2,?,?,?)',
                 ['node-a', JSON.stringify({ listenAddress: '127.0.0.1', advertisedHost: '127.0.0.1', allowedTcpPorts: [32002, 32001] }), 'owner', now]);
@@ -50,7 +53,7 @@ test('tunnel API uses real prepared SELECT-only MySQL: bounded windows, scoped e
                     [String(i).repeat(64), 'node-a', now - 10000 + i, i < 2 ? now + 20000 : i === 2 ? now + 10000 : now - 1,
                         i === 1 ? now + 5000 : i === 3 ? now - 1 : null, i === 2, 'PEM-SECRET-MARKER']);
             }
-            for (let i = 0; i < 33; i++) {
+            for (let i = 0; i < 35; i++) {
                 const spec: any = { enabled: i !== 0, protocols: ['tcp', 'udp'], ingress: { nodeId: 'node-a', listen: { address: '127.0.0.1', port: 32001 } },
                     target: { host: 'private-target.invalid', port: 80 }, path: { via: ['node-b'] }, transport: { profileId: 'locked-profile', configRevision: 7 } };
                 if (i === 1) { spec.ingress.nodeId = 'node-b'; spec.path.via = ['node-a', 'node-c']; }
@@ -58,15 +61,15 @@ test('tunnel API uses real prepared SELECT-only MySQL: bounded windows, scoped e
                 if (i === 29) spec.ingress.nodeId = 'node-A';
                 if (i === 30) { delete spec.path; delete spec.transport; }
                 if (i === 32) { spec.ingress.nodeId = 'node-b'; spec.path.via = ['node-A']; }
-                await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,deleting,recovery_suspended) VALUES(?,?,5,?,?,?)',
-                    ['forward-' + String(i).padStart(2, '0'), i === 28 ? 'scope-b' : 'scope-a', JSON.stringify(spec), i === 31, i === 1]);
+                await connection.execute('INSERT INTO forwards(id,scope_id,owner_actor_id,revision,spec,deleting,recovery_suspended) VALUES(?,?,?,5,?,?,?)',
+                    ['forward-' + String(i).padStart(2, '0'), i === 28 ? 'scope-b' : 'scope-a', i === 28 ? 'outsider' : i < 28 ? 'viewer' : i === 34 ? null : 'owner', JSON.stringify(spec), i === 31, i === 1]);
             }
             await admin.query("CREATE USER ?@'%' IDENTIFIED BY ?", [user, password]); userCreated = true;
             await admin.query(`GRANT SELECT ON \`${name}\`.* TO ?@'%'`, [user]);
             const readUrl = new URL(url); readUrl.username = user; readUrl.password = password;
             reader = new MySqlUnitOfWork(readUrl.toString()); const readIdentity = new Identity(reader);
             await assert.rejects(reader.pool.query('UPDATE nodes SET revoked=TRUE'));
-            const control = { db: reader, identity: readIdentity, tunnelQueries: new TunnelQueries(reader, readIdentity, new MySqlTunnelReader(), () => now) } as unknown as ControlApplication;
+            const control = { db: reader, identity: readIdentity, tunnelQueries: new TunnelQueries(reader, readIdentity, new MySqlTunnelReader(), new ResourceAccess(readIdentity, new MySqlResourceAccessStore()), () => now) } as unknown as ControlApplication;
             const app = createApp(control, {} as RuntimeController, { allow: async () => undefined } as unknown as AuthorityStore);
             async function get(path: string, status = 200, actor: keyof typeof tokens = 'viewer') {
                 const response = await app.request('/api/v1/scopes/scope-a/nodes/' + path, { headers: { Authorization: 'Bearer ' + tokens[actor] } });
@@ -90,6 +93,14 @@ test('tunnel API uses real prepared SELECT-only MySQL: bounded windows, scoped e
             assert.deepEqual(second.items.map((row: any) => row.forwardId), ['forward-25', 'forward-26', 'forward-27']);
             assert.equal((await get('node-a/tunnel/references?page=10000')).items.length, 0);
             assert.equal((await get('node-c/tunnel')).endpoint, null);
+            await get('node-b/tunnel', 404);
+            await get('node-A/tunnel', 404);
+            const shared = await get('node-b/tunnel/references');
+            assert.equal(shared.total, 28);
+            assert.ok(shared.items.every((row: any) => Number(row.forwardId.slice(-2)) < 28));
+            const governed = await get('node-a/tunnel/references', 200, 'owner');
+            assert.equal(governed.total, 30);
+            assert.equal((await get('node-a/tunnel/references?page=2', 200, 'owner')).items.length, 5);
             for (const path of ['node-a/tunnel?issue=1', 'node-a/tunnel?revision=1', ...['page=01', 'page=1&page=2', 'limit=101', 'limit=1%20OR%201=1', 'node=foreign', 'revision=1'].map(query => 'node-a/tunnel/references?' + query)])
                 await get(path, 422);
             for (const path of ['foreign/tunnel', 'foreign/tunnel/references', 'missing/tunnel', 'missing/tunnel/references']) await get(path, 404);

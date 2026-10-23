@@ -82,9 +82,10 @@ export class RuntimeLedgerHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamil
     lockNode(tx:Tx,nodeId:string,epoch?:number):Promise<void> { return this.resources.lockNode(tx,nodeId,epoch); }
     maximumAuthorization(tx:Tx,nodeId:string):Promise<number|null> { return this.resources.maximumAuthorization(tx,nodeId); }
     latest(tx:Tx,forwardId:string):Promise<Operation|undefined> { return this.store.latestOperation(tx,forwardId); }
-    reserve(tx:Tx,forward:Forward):Promise<ReservedSlot[]> { return this.resources.reserve(tx,forward); }
-    reserveRelay(tx:Tx,forward:Forward,resources:readonly RelayResource[],generation:number):Promise<ReservedRelayResource[]> {
-        return this.resources.reserveRelay(tx,forward,resources,generation);
+    lockOwnership(tx:Tx,forward:Forward):Promise<void> { return this.resources.lockOwnership(tx,forward); }
+    reserve(tx:Tx,forward:Forward,creatingOwnerActorId?:string):Promise<ReservedSlot[]> { return this.resources.reserve(tx,forward,creatingOwnerActorId); }
+    reserveRelay(tx:Tx,forward:Forward,resources:readonly RelayResource[],generation:number,creatingOwnerActorId?:string):Promise<ReservedRelayResource[]> {
+        return this.resources.reserveRelay(tx,forward,resources,generation,creatingOwnerActorId);
     }
     transition(tx:Tx,current:Forward,next:Forward):Promise<ReservedSlot[]> { return this.resources.transition(tx,current,next); }
     releaseForwardSlots(tx:Tx,forwardId:string):Promise<void> { return this.resources.releaseForwardSlots(tx,forwardId); }

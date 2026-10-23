@@ -14,6 +14,10 @@ import { RuntimeHost, RuntimeLedgerHost, RuntimeRelayHost, RuntimeResources } fr
 import { MySqlRuntimeStateStore } from '../src/infrastructure/mysql-runtime-host.ts';
 import { MySqlRuntimeStatusStore } from '../src/infrastructure/mysql-runtime-status-store.ts';
 import { MySqlRuntimeLedgerStore } from '../src/infrastructure/mysql-runtime-ledger.ts';
+import { NodePortLimitPolicy } from '../src/modules/node-owner/public.ts';
+import { SharedResourceLimitPublicationPolicy } from '../src/modules/resource-limit-owner/public.ts';
+import { MySqlSharedResourceLimitStore } from '../src/infrastructure/mysql-resource-limits.ts';
+import { MySqlNodeAuthorityStore } from '../src/infrastructure/mysql-node-authority.ts';
 import { MySqlRuntimeResourceStore } from '../src/infrastructure/mysql-runtime-resources.ts';
 import { MySqlRelayDeploymentStore, MySqlRelayObservations } from '../src/infrastructure/mysql-runtime-relay.ts';
 import { RuntimeStatusQueries } from '../src/modules/runtime-status-owner/public.ts';
@@ -30,13 +34,17 @@ test('203/205 RuntimeController constructs original state/status providers and p
     const calls: unknown[][] = [], result = {};
     const ledger = Object.fromEntries(['assignments','retireChanged','tombstones','verifyPublishable','recordLeases','complete','claim','get','observeDrains'].map(name => [name, function(this: unknown,...args: unknown[]) { assert.equal(this,ledger); calls.push([name,...args]); return result; }]));
     const controller = new RuntimeController(db as never,nodes as never,forwards as never,ledger as never,undefined,authority as never,relay as never);
-    assert.ok(controller instanceof RuntimeHost); assert.equal(RuntimeController.length,7);
+    assert.ok(controller instanceof RuntimeHost); assert.equal(RuntimeController.length,8);
     const ports = bindings(controller).ports;
     for(const [key,value] of Object.entries({db,nodes,forwards,authority,relay,codec:runtimeCodec,now:nativeWallClockNow})) assert.equal(ports[key],value);
     assert.ok(ports.store instanceof MySqlRuntimeStateStore); assert.equal(bindings(ports.store).db,db);
     assert.ok(ports.observations instanceof RuntimeStatusQueries);
     assert.ok(bindings(ports.observations).store instanceof MySqlRuntimeStatusStore);
     assert.equal(bindings(ports.observations).codec,nativeRuntimeStatusCodec);
+    assert.ok(ports.payloadPolicy instanceof SharedResourceLimitPublicationPolicy);
+    const payloadOptions=bindings(ports.payloadPolicy).options;
+    assert.ok(payloadOptions.nodes instanceof MySqlNodeAuthorityStore);assert.ok(payloadOptions.owners instanceof MySqlRuntimeResourceStore);
+    assert.ok(payloadOptions.store instanceof MySqlSharedResourceLimitStore);assert.equal(typeof payloadOptions.codec.formatTime,'function');
     const cases: [string,unknown[],unknown[]][] = [
         ['assignments',[tx,facts],[tx,forwards,facts]], ['retireChanged',[tx,'node',previous,next,7],[tx,'node',previous,next,7]],
         ['tombstones',[tx,'node',7],[tx,'node',7]], ['verifyPublishable',[tx,assignments],[tx,assignments]],
@@ -49,6 +57,9 @@ test('203/205 RuntimeController constructs original state/status providers and p
     const policy={...DEFAULT_POLICY}; const explicit=new RuntimeController(db as never,nodes as never,forwards as never,ledger as never,policy);
     assert.equal(bindings(explicit).ports.policy,policy); assert.deepEqual(bindings(bindings(explicit).ports.observations).policy,policy);
     assert.notEqual(bindings(bindings(explicit).ports.observations).policy,policy);
+    const payloadPolicy={async limits(){assert.fail('construction must not sample payload policy');}};
+    const custom=new RuntimeController(db as never,nodes as never,forwards as never,ledger as never,policy,authority as never,relay as never,payloadPolicy);
+    assert.equal(bindings(custom).ports.payloadPolicy,payloadPolicy);
 });
 
 test('203/205 RuntimeLedger retains policy spread resource short circuit native stores collector authorization and captured clock/UUID', t => {
@@ -67,6 +78,7 @@ test('203/205 RuntimeLedger retains policy spread resource short circuit native 
     assert.deepEqual(defaults.policy,DEFAULT_POLICY); assert.notEqual(defaults.policy,DEFAULT_POLICY);
     assert.ok(defaults.resources instanceof RuntimeResources); assert.ok(bindings(defaults.resources).store instanceof MySqlRuntimeResourceStore);
     assert.equal(bindings(defaults.resources).maxAssignmentsPerNode,DEFAULT_POLICY.maxAssignmentsPerNode);
+    assert.ok(bindings(defaults.resources).portPolicy instanceof NodePortLimitPolicy);
     const selected=new RuntimeLedger({...DEFAULT_POLICY,maxAssignmentsPerNode:19},undefined,collector as never);
     assert.equal(bindings(bindings(selected).resources).maxAssignmentsPerNode,19);
     assert.throws(()=>new RuntimeLedger(undefined,undefined,undefined as never),/Snapshot assignment collector is required/);

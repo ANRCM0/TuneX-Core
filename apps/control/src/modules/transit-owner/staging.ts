@@ -14,7 +14,10 @@ function integrity(message:string):never {throw new ControlError('INTEGRITY_FAIL
 /** Original offline stage/abort decisions; providers join the same transaction. */
 export class TransitStagingService<Tx> implements TransitStagingApi {
   private readonly options:TransitStagingOptions<Tx>;
-  constructor(options:TransitStagingOptions<Tx>) {this.options=options;}
+  constructor(options:TransitStagingOptions<Tx>) {
+    if(typeof options.payloadPolicy?.assertUnmetered!=='function')throw new Error('Offline payload policy is required');
+    this.options=options;
+  }
 
   async stage(actor:string,scopeId:string,forwardId:string,expectedRevision:number):Promise<TransitPreparation>{
     if(!isCounter(expectedRevision))
@@ -45,11 +48,14 @@ export class TransitStagingService<Tx> implements TransitStagingApi {
           throw new ControlError('SESSION_SUPERSEDED',409,'Current online session required');
         sessions.set(id,row.session_epoch);
       }
+      await this.options.payloadPolicy.assertUnmetered(tx,forward,path.nodes.map(node=>node.nodeId));
       const profile=await this.options.transport.resolve(tx,actor,scopeId,ref.profileId,ref.configRevision);
       const facts:RuntimeRelayNodeFacts[]=[],pins:Record<string,string>={};
       const now=nativeWallClockNow();
       for(const id of path.nodes.map(n=>n.nodeId).sort()){
-        const allowed=await this.options.nodes.authorizedRelayNode(tx,actor,scopeId,id);
+        const role=path.nodes.find(node=>node.nodeId===id)!.role;
+        if(role==='direct')integrity('Transit staging requires explicit path roles');
+        const allowed=await this.options.nodes.authorizedRelayNode(tx,actor,scopeId,id,role,forward);
         const state=await this.options.nodes.facts(tx,id);
         const peers=await this.options.nodes.relayCredentialFacts(tx,id,true);
         const selected=[...peers].sort((a,b)=>b.validUntil-a.validUntil||
@@ -68,7 +74,7 @@ export class TransitStagingService<Tx> implements TransitStagingApi {
         const seen=new Set<number>();
         for(const protocol of forward.spec.protocols){
           let picked:number|undefined;
-          for(const port of endpoint.config.allowedTcpPorts){
+          for(const port of await this.options.nodes.reservationPorts(tx,actor,scopeId,endpoint.nodeId,endpoint.config.allowedTcpPorts)){
             if(seen.has(port))continue;
             const previous=await this.options.store.candidateOwner(tx,endpoint.nodeId,port);
             if(!previous||previous.owner_id===null){picked=port;break;}

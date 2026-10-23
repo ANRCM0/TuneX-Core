@@ -41,7 +41,7 @@ immutability, no physical/store side effects and logger/drain cases listed in
 not recorded as a passing test. New module development uses an independent branch
 only after the foundation gate passes; this existing source worktree is preserved.
 
-Current-source integration reading (2026-10-19): the module still consumes public
+Current-source integration reading (2026-10-21): the module still consumes public
 L1 ForwardIntent/ForwardImportAdapter, transaction, scoped authorization, freezing,
 identity and logging contracts. The existing main binds public L1 RequestLifecycle
 and ControlError with the public L2 flatForwardAdapter; JSON/stderr/stdout stay in
@@ -49,3 +49,12 @@ that composition. Ops/upgrade/native contract classification does not change thi
 example's public surface or prove its imports execute. This is the same preview
 example, not a RuntimeHost/Agent/MySQL demonstration. Full type/import/asset closure
 and the already planned example acceptance remain unexecuted on current source.
+
+The N resource-ownership successor does not add a resource read to this preview.
+It parses caller-supplied intent and checks Scope entry through the existing
+authorization port; it reads no Node, Forward, template, report or saved reference.
+No ResourceReadAccess provider is needed for this example. Its preview result
+cannot establish ownership, grant a purpose or authorize publication. Integrations
+that read saved resources must supply the successor access provider; integrations
+that publish must call the original Forward owner and consume its command receipt.
+This example's unchanged contract does not demonstrate those product operations.

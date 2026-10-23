@@ -1,6 +1,6 @@
 import { isId } from '@tunex/core';
 import { ControlError, invalid } from '../framework/public.ts';
-import type { ReadPageWindow, PathPublicationStoredHead, PathPublicationStoredAttempt, PathPublicationStoredRecord,
+import type { ReadPageWindow, ReadPrincipal, PathPublicationStoredHead, PathPublicationStoredAttempt, PathPublicationStoredRecord,
     PathPublicationStoredOperation, PathPublicationStorage, PathPublicationStorageValues, PathPublicationStorageHooks } from '../framework/public.ts';
 import { consolePageSql } from './mysql-read-pagination.ts';
 import { json, rows, write } from './mysql.ts';
@@ -26,10 +26,12 @@ export class MySqlPathPublicationStore<Plan,Outcome,Failure> implements PathPubl
     async count(tx: Transaction, scope: string) {
         return (await rows<{ n: number }>(tx, 'SELECT COUNT(*) n FROM path_publications WHERE scope_id=?', [scope]))[0]!.n;
     }
-    async list(tx: Transaction, scope: string, paging: ReadPageWindow, hooks: PathPublicationStorageHooks<Transaction> = {}) {
-        const total = await (hooks.count ? hooks.count(tx, scope) : this.count(tx, scope));
+    async list(tx: Transaction, scope: string, principal: ReadPrincipal, paging: ReadPageWindow) {
+        const filter = 'scope_id=?' + (principal.governance ? '' : ' AND created_by=?');
+        const args = [scope, ...(principal.governance ? [] : [principal.actorId])];
+        const total = (await rows<{ n: number }>(tx, 'SELECT COUNT(*) n FROM path_publications WHERE ' + filter, args))[0]!.n;
         const records = await rows<StoredHead>(tx,
-            'SELECT batch_id,revision,created_by,created_at,plan_digest,cancelled,recovery_invalidated FROM path_publications WHERE scope_id=? ORDER BY batch_id ' + consolePageSql(paging), [scope]);
+            'SELECT batch_id,revision,created_by,created_at,plan_digest,cancelled,recovery_invalidated FROM path_publications WHERE ' + filter + ' ORDER BY batch_id ' + consolePageSql(paging), args);
         return { total, items: records.map(head) };
     }
     async read(tx: Transaction, scope: string, id: string, lock = false): Promise<PathPublicationStoredRecord<Plan,Outcome> | null> {

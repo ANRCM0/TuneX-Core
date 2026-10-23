@@ -3,14 +3,21 @@ import type { Forward } from '@tunex/core';
 import { ControlError } from './errors.ts';
 import type { RelayResource, ReservedRelayResource } from './runtime-resource-ports.ts';
 import type { RuntimeExclusiveReservationStore, RuntimeExclusiveReservationAccess } from './runtime-exclusive-reservation-ports.ts';
+import type { RuntimePortReservationPolicy } from './runtime-port-policy-ports.ts';
 
 /** Original exclusive reservation mode of the same Runtime resource owner. */
 export class RuntimeExclusiveReservations<Tx> implements RuntimeExclusiveReservationAccess<Tx> {
     private readonly store:RuntimeExclusiveReservationStore<Tx>;
     private readonly capacity:()=>number;
-    constructor(store:RuntimeExclusiveReservationStore<Tx>,capacity:()=>number) {this.store=store;this.capacity=capacity;}
+    private readonly portPolicy:RuntimePortReservationPolicy<Tx>;
+    constructor(store:RuntimeExclusiveReservationStore<Tx>,capacity:()=>number,portPolicy:RuntimePortReservationPolicy<Tx>) {
+        this.portPolicy=portPolicy;
 
-    async reserve(tx:Tx,forward:Pick<Forward,'id'>,resources:readonly RelayResource[],generation:number):Promise<readonly ReservedRelayResource[]> {
+        if(typeof portPolicy?.assertReservation!=='function')throw new Error('Runtime port reservation policy is required');
+        this.store=store;this.capacity=capacity;
+    }
+
+    async reserve(tx:Tx,forward:Pick<Forward,'id'|'scopeId'>,resources:readonly RelayResource[],generation:number,creatingOwnerActorId?:string):Promise<readonly ReservedRelayResource[]> {
         const uniqueNodes = new Set(resources.map(r => r.nodeId));
         const ordered = [...resources].sort((a,b) =>
             a.nodeId.localeCompare(b.nodeId) ||
@@ -20,6 +27,7 @@ export class RuntimeExclusiveReservations<Tx> implements RuntimeExclusiveReserva
             if (state.length !== 1)
                 throw new ControlError('SESSION_SUPERSEDED',409,'Current Node session required');
         }
+        await this.portPolicy.assertReservation(tx,forward,resources.map(resource=>({nodeId:resource.nodeId,protocol:resource.physicalProtocol,port:resource.port})),creatingOwnerActorId);
         const reservations:ReservedRelayResource[]=[];
         for (const resource of ordered) {
             const key={nodeId:resource.nodeId,protocol:resource.physicalProtocol,port:resource.port};

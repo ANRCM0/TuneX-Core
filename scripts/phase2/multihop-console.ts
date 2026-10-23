@@ -14,6 +14,8 @@ interface MultihopConsoleFixture extends ConsoleFixture {
     closed(port: number): Promise<void>;
     slots(id: string, retained: boolean, businessPort?: number): Promise<void>;
     onlySourceReservations(): Promise<void>;
+    operationProgress(id: string): Promise<{ forwardId: string; revision: number; executionDeadline: number;
+        generation: number; stage: string; prepared: number; activated: number }>;
 }
 
 /** Extends the real multi-Agent fixture; no mocked API or production feature enablement. */
@@ -24,20 +26,39 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         const source = 'forwards/' + fixture.sourceId, sourcePath = base + source;
         assert.ok([3, 4, 8].includes(path.length)); assert.equal(new Set(path).size, path.length);
         assert.equal(fixture.spec.transport!.configRevision, 1);
+        const operationTimings: { id: string; elapsedMs: number; progress: unknown[] }[] = [];
         async function get(resource: string) {
             const response = await context.request.get(fixture.url + base + resource, { headers, timeout: 5000, maxRedirects: 0 });
             assert.equal(response.status(), 200); return response.json();
         }
         async function succeeded(id: string) {
             assert.equal(typeof id, 'string');
-            const deadline = Date.now() + 120000;
+            const started = Date.now(), initial = path.length === 8 ? await fixture.operationProgress(id) : undefined;
+            const deadline = Math.min(started + Math.max(120000, path.length * 30000), initial?.executionDeadline ?? Infinity);
+            let progressedAt = started, checkedAt = started, prepared = initial?.prepared ?? 0, activated = initial?.activated ?? 0;
+            const progress: unknown[] = initial ? [{ elapsedMs: 0, ...initial }] : [];
             while (Date.now() < deadline) {
                 const operation = await get('operations/' + id);
-                if (operation.status === 'succeeded') return;
+                if (operation.status === 'succeeded') {
+                    operationTimings.push({ id, elapsedMs: Date.now() - started, progress }); return;
+                }
                 assert.notEqual(operation.status, 'failed'); assert.notEqual(operation.status, 'superseded');
+                if (initial && Date.now() - checkedAt >= 5000) {
+                    const current = await fixture.operationProgress(id); checkedAt = Date.now();
+                    assert.equal(current.forwardId, initial.forwardId); assert.equal(current.revision, initial.revision);
+                    assert.equal(current.executionDeadline, initial.executionDeadline);
+                    // Renewals and a replacement generation cannot disguise a stalled cursor.
+                    if (current.generation === initial.generation && (current.prepared > prepared || current.activated > activated)) {
+                        prepared = Math.max(prepared, current.prepared); activated = Math.max(activated, current.activated);
+                        progressedAt = checkedAt; progress.push({ elapsedMs: checkedAt - started, ...current });
+                    }
+                    assert.ok(checkedAt - progressedAt < 120000,
+                        JSON.stringify({ message: 'Multi-hop Console made no topology progress', id, elapsedMs: checkedAt - started, current }));
+                }
                 await sleep(250);
             }
-            throw Error('Real multi-hop Console Operation timed out');
+            throw Error(JSON.stringify({ message: 'Real multi-hop Console Operation timed out', id,
+                elapsedMs: Date.now() - started, progress }));
         }
         async function readyDeployment(resource: string) {
             const deadline = Date.now() + 120000;
@@ -143,7 +164,7 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         await fixture.slots(copy.forwardId, true); await fixture.closed(fixture.copyPort);
 
         const middle = path[1]!;
-        await page.locator('[data-view="nodes"]').click();
+        await page.locator('[data-view="available"]').click();
         await page.locator('[data-action="node-tunnel"][data-id="' + middle + '"]').click();
         await page.waitForFunction(() => document.getElementById('tunnel-references-meta')?.textContent?.includes('total 2.'));
         assert.match((await page.locator('#tunnel-reference-rows').textContent())!, /transit.*previous:.*next:/);
@@ -214,6 +235,7 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
             physicalHostAcceptance: false, defaultOffOptIn: true, profileCurrentRevision: 2, retainedProfileRevision: 1,
             sourceUnchanged: true, orderedPathRetained: true, draftInvalidation: path.length > 3 ? 'transit-reorder-and-restore' : 'target-edit-and-restore',
             freshPlanChecks: previews, pathProposals: pathPreviews, explicitIntentAttempts: writes, disabledCopy: true, disabledResourcesRetained: true,
-            tcpUdpVerifiedForSourceAndCopy: true, copyCleanupVerified: true, pathSwitch: pathSwitch.evidence, pathBatch: pathBatch.evidence, templates };
+            tcpUdpVerifiedForSourceAndCopy: true, copyCleanupVerified: true, operationTimings,
+            pathSwitch: pathSwitch.evidence, pathBatch: pathBatch.evidence, templates };
     });
 }

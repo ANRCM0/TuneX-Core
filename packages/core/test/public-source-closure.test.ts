@@ -57,6 +57,9 @@ export type ProtectedDomainAndContractShapes = [
     Same<Equal<common.RuntimeAssignmentFor['driver'], common.RuntimeDriverValue>>,
     Same<Equal<NativeRuntimeFamily['relayProfile'], native.RelayProfileConfig>>,
     Same<Equal<common.RuntimeValueFamily['relayProfile'], unknown>>,
+    Same<Equal<NonNullable<common.RuntimeSnapshotValue['resourceLimits']>,NonNullable<native.RuntimeSnapshot['resourceLimits']>>>,
+    Same<Equal<framework.RuntimeHostOptions<unknown>['payloadPolicy'],framework.RuntimePayloadPolicy<unknown>>>,
+    Same<Equal<{} extends Pick<framework.RuntimeHostOptions<unknown>,'payloadPolicy'>?true:false,false>>,
 ];
 
 const root = new URL('../../../', import.meta.url);
@@ -95,36 +98,39 @@ framework/public FRAMEWORK_INTERFACE_VERSION 1
 framework/background-tasks BACKGROUND_TASKS_INTERFACE_VERSION 2
 framework/cancellation-ports CANCELLATION_INTERFACE_VERSION 1
 framework/forward-diagnostic-store-ports FORWARD_DIAGNOSTIC_STORAGE_INTERFACE_VERSION 1
-framework/identity-access-ports IDENTITY_ACCESS_INTERFACE_VERSION 1
-framework/ingress-deployment-storage-ports INGRESS_DEPLOYMENT_STORAGE_INTERFACE_VERSION 1
-framework/ingress-group-storage-ports INGRESS_GROUP_STORAGE_INTERFACE_VERSION 1
-framework/ingress-migration-storage-ports INGRESS_MIGRATION_STORAGE_INTERFACE_VERSION 1
-framework/intent-store-ports INTENT_STORAGE_INTERFACE_VERSION 1
+framework/identity-access-ports IDENTITY_ACCESS_INTERFACE_VERSION 2
+framework/ingress-deployment-storage-ports INGRESS_DEPLOYMENT_STORAGE_INTERFACE_VERSION 2
+framework/ingress-group-storage-ports INGRESS_GROUP_STORAGE_INTERFACE_VERSION 2
+framework/ingress-migration-storage-ports INGRESS_MIGRATION_STORAGE_INTERFACE_VERSION 2
+framework/intent-store-ports INTENT_STORAGE_INTERFACE_VERSION 2
 framework/machine-session-lock-ports MACHINE_SESSION_LOCK_INTERFACE_VERSION 1
-framework/management-read-ports MANAGEMENT_READ_INTERFACE_VERSION 1
-framework/node-authority-ports NODE_AUTHORITY_INTERFACE_VERSION 3
+framework/management-read-ports MANAGEMENT_READ_INTERFACE_VERSION 2
+framework/node-authority-ports NODE_AUTHORITY_INTERFACE_VERSION 5
 framework/node-report-read-ports NODE_REPORT_READ_INTERFACE_VERSION 2
 framework/notification-effects-ports NOTIFICATION_EFFECTS_INTERFACE_VERSION 2
 framework/notification-store-ports NOTIFICATION_STORAGE_INTERFACE_VERSION 1
 framework/observation-read-store-ports OBSERVATION_READ_STORAGE_INTERFACE_VERSION 1
 framework/observation-recovery-storage-ports OBSERVATION_RECOVERY_STORAGE_INTERFACE_VERSION 1
-framework/path-binding-storage-ports PATH_BINDING_STORAGE_INTERFACE_VERSION 1
-framework/path-group-storage-ports PATH_GROUP_STORAGE_INTERFACE_VERSION 1
-framework/path-publication-storage-ports PATH_PUBLICATION_STORAGE_INTERFACE_VERSION 1
-framework/path-template-storage-ports PATH_TEMPLATE_STORAGE_INTERFACE_VERSION 1
-framework/probe-history-store-ports PROBE_HISTORY_STORAGE_INTERFACE_VERSION 1
+framework/path-binding-storage-ports PATH_BINDING_STORAGE_INTERFACE_VERSION 2
+framework/path-group-storage-ports PATH_GROUP_STORAGE_INTERFACE_VERSION 2
+framework/path-publication-storage-ports PATH_PUBLICATION_STORAGE_INTERFACE_VERSION 2
+framework/path-template-storage-ports PATH_TEMPLATE_STORAGE_INTERFACE_VERSION 2
+framework/probe-history-store-ports PROBE_HISTORY_STORAGE_INTERFACE_VERSION 2
 framework/probe-permit-storage-ports PROBE_PERMIT_STORAGE_INTERFACE_VERSION 1
 framework/probe-registration-store-ports PROBE_REGISTRATION_STORAGE_INTERFACE_VERSION 1
 framework/publication-recovery-storage-ports PUBLICATION_RECOVERY_STORAGE_INTERFACE_VERSION 1
 framework/recovery-event-storage-ports RECOVERY_EVENT_STORAGE_INTERFACE_VERSION 1
+framework/resource-access-ports RESOURCE_ACCESS_INTERFACE_VERSION 1
+framework/runtime-port-policy-ports RUNTIME_PORT_POLICY_INTERFACE_VERSION 1
 framework/relay-configuration-ports RELAY_CONFIGURATION_INTERFACE_VERSION 2
 framework/runtime-evidence-read-ports RUNTIME_EVIDENCE_READ_INTERFACE_VERSION 2
-framework/runtime-exclusive-reservation-ports RUNTIME_EXCLUSIVE_RESERVATION_INTERFACE_VERSION 1
-framework/runtime-host-ports RUNTIME_HOST_INTERFACE_VERSION 3
+framework/runtime-exclusive-reservation-ports RUNTIME_EXCLUSIVE_RESERVATION_INTERFACE_VERSION 2
+framework/runtime-host-ports RUNTIME_HOST_INTERFACE_VERSION 4
 framework/runtime-ledger-ports RUNTIME_LEDGER_INTERFACE_VERSION 3
-framework/runtime-relay-ports RUNTIME_RELAY_INTERFACE_VERSION 5
+framework/runtime-relay-ports RUNTIME_RELAY_INTERFACE_VERSION 7
 framework/runtime-reservation-release-ports RUNTIME_RESERVATION_RELEASE_INTERFACE_VERSION 1
-framework/runtime-resource-ports RUNTIME_RESOURCE_INTERFACE_VERSION 1
+framework/runtime-resource-ports RUNTIME_RESOURCE_INTERFACE_VERSION 2
+framework/resource-limit-ports RESOURCE_LIMIT_INTERFACE_VERSION 1
 framework/runtime-status-storage-ports RUNTIME_STATUS_STORAGE_INTERFACE_VERSION 1
 framework/station-alert-store-ports STATION_ALERT_STORAGE_INTERFACE_VERSION 1
 framework/telemetry-rollup-store-ports TELEMETRY_ROLLUP_STORAGE_INTERFACE_VERSION 1
@@ -136,75 +142,79 @@ compatibility/public COMPATIBILITY_INTERFACE_VERSION 1
 compatibility/native-control-bootstrap-command CONTROL_BOOTSTRAP_NATIVE_INTERFACE_VERSION 1
 compatibility/native-operator-command OPERATOR_COMMAND_NATIVE_INTERFACE_VERSION 1
 compatibility/native-recovery RECOVERY_NATIVE_INTERFACE_VERSION 1
-api/public CONTROL_HTTP_INTERFACE_VERSION 1
+api/public CONTROL_HTTP_INTERFACE_VERSION 2
 application/management-read-models MANAGEMENT_READ_MODEL_INTERFACE_VERSION 1
-modules/audit-owner/api AUDIT_API_INTERFACE_VERSION 1
+modules/audit-owner/api AUDIT_API_INTERFACE_VERSION 2
 modules/audit-owner/public AUDIT_MODULE_INTERFACE_VERSION 1
-modules/console-query-owner/contracts CONSOLE_QUERY_INTERFACE_VERSION 1
+modules/console-query-owner/contracts CONSOLE_QUERY_INTERFACE_VERSION 2
 modules/control-bootstrap-command-owner/public CONTROL_BOOTSTRAP_COMMAND_INTERFACE_VERSION 1
 modules/control-client-command-owner/contracts CONTROL_CLIENT_COMMAND_INTERFACE_VERSION 1
-modules/control-query-owner/contracts CONTROL_DETAIL_INTERFACE_VERSION 1
+modules/control-query-owner/contracts CONTROL_DETAIL_INTERFACE_VERSION 2
 modules/control-startup-owner/contracts CONTROL_STARTUP_INTERFACE_VERSION 1
-modules/forward-diagnostic-owner/api FORWARD_DIAGNOSTIC_API_INTERFACE_VERSION 1
+modules/forward-diagnostic-owner/api FORWARD_DIAGNOSTIC_API_INTERFACE_VERSION 2
 modules/forward-diagnostic-owner/public FORWARD_DIAGNOSTIC_MODULE_INTERFACE_VERSION 1
-modules/forward-owner/command-api FORWARD_COMMAND_INTERFACE_VERSION 1
+modules/forward-owner/command-api FORWARD_COMMAND_INTERFACE_VERSION 2
 modules/forward-owner/execution-contracts EXECUTION_HOST_VERSION 1
-modules/forward-owner/public FORWARD_STATE_INTERFACE_VERSION 1
-modules/identity-owner/command-api ACCESS_COMMAND_INTERFACE_VERSION 1
-modules/identity-owner/public IDENTITY_MODULE_INTERFACE_VERSION 1
-modules/ingress-owner/deployment-api INGRESS_DEPLOYMENT_API_INTERFACE_VERSION 1
-modules/ingress-owner/group-api INGRESS_GROUP_API_INTERFACE_VERSION 1
-modules/ingress-owner/migration-api INGRESS_MIGRATION_API_INTERFACE_VERSION 1
-modules/ingress-owner/public INGRESS_MODULE_INTERFACE_VERSION 1
+modules/forward-owner/public FORWARD_STATE_INTERFACE_VERSION 2
+modules/identity-owner/command-api ACCESS_COMMAND_INTERFACE_VERSION 3
+modules/identity-owner/public IDENTITY_MODULE_INTERFACE_VERSION 2
+modules/ingress-owner/deployment-api INGRESS_DEPLOYMENT_API_INTERFACE_VERSION 2
+modules/ingress-owner/group-api INGRESS_GROUP_API_INTERFACE_VERSION 2
+modules/ingress-owner/migration-api INGRESS_MIGRATION_API_INTERFACE_VERSION 2
+modules/ingress-owner/public INGRESS_MODULE_INTERFACE_VERSION 2
 modules/ingress-owner/recovery INGRESS_RECOVERY_INTERFACE_VERSION 1
 modules/native-driver-owner/contracts NATIVE_DRIVER_QUERY_INTERFACE_VERSION 1
 modules/native-tunnel-owner/contracts NATIVE_TUNNEL_API_INTERFACE_VERSION 1
 modules/node-observation-owner/api NODE_OBSERVATION_API_INTERFACE_VERSION 1
-modules/node-owner/command-api NODE_MANAGEMENT_INTERFACE_VERSION 1
-modules/node-owner/public NODE_MODULE_INTERFACE_VERSION 1
-modules/notification-owner/api NOTIFICATION_API_INTERFACE_VERSION 1
+modules/node-owner/command-api NODE_MANAGEMENT_INTERFACE_VERSION 2
+modules/node-owner/contracts NODE_PORT_USAGE_QUERY_INTERFACE_VERSION 1
+modules/node-owner/public NODE_MODULE_INTERFACE_VERSION 3
+modules/notification-owner/api NOTIFICATION_API_INTERFACE_VERSION 2
 modules/notification-owner/public NOTIFICATION_MODULE_INTERFACE_VERSION 1
 modules/notification-owner/recovery NOTIFICATION_RECOVERY_INTERFACE_VERSION 1
 modules/observation-service-owner/api OBSERVATION_SERVICE_API_INTERFACE_VERSION 1
-modules/observation-service-owner/public OBSERVATION_SERVICE_MODULE_INTERFACE_VERSION 1
+modules/observation-service-owner/public OBSERVATION_SERVICE_MODULE_INTERFACE_VERSION 2
 modules/operator-command-owner/contracts OPERATOR_COMMAND_INTERFACE_VERSION 1
-modules/path-owner/binding-api PATH_BINDING_API_INTERFACE_VERSION 1
-modules/path-owner/group-api PATH_GROUP_API_INTERFACE_VERSION 1
-modules/path-owner/public PATH_MODULE_INTERFACE_VERSION 1
-modules/path-owner/publication-api PATH_PUBLICATION_API_INTERFACE_VERSION 1
+modules/path-owner/binding-api PATH_BINDING_API_INTERFACE_VERSION 2
+modules/path-owner/group-api PATH_GROUP_API_INTERFACE_VERSION 2
+modules/path-owner/public PATH_MODULE_INTERFACE_VERSION 2
+modules/path-owner/publication-api PATH_PUBLICATION_API_INTERFACE_VERSION 2
 modules/path-owner/recovery PATH_RECOVERY_INTERFACE_VERSION 1
-modules/path-owner/template-api PATH_TEMPLATE_API_INTERFACE_VERSION 1
-modules/probe-history-owner/api PROBE_HISTORY_API_INTERFACE_VERSION 1
+modules/path-owner/template-api PATH_TEMPLATE_API_INTERFACE_VERSION 2
+modules/probe-history-owner/api PROBE_HISTORY_API_INTERFACE_VERSION 2
 modules/probe-history-owner/public PROBE_HISTORY_MODULE_INTERFACE_VERSION 1
-modules/probe-owner/command-api FORWARD_PROBE_API_INTERFACE_VERSION 1
+modules/probe-owner/command-api FORWARD_PROBE_API_INTERFACE_VERSION 2
+modules/probe-owner/capability-api FORWARD_PROBE_CAPABILITY_API_INTERFACE_VERSION 1
 modules/probe-owner/machine-api PROBE_MACHINE_API_INTERFACE_VERSION 1
 modules/probe-owner/owner-contracts PROBE_OWNER_INTERFACE_VERSION 1
-modules/probe-owner/public PROBE_MODULE_INTERFACE_VERSION 1
-modules/probe-plan-owner/public PROBE_PLAN_MODULE_INTERFACE_VERSION 1
+modules/probe-owner/public PROBE_MODULE_INTERFACE_VERSION 3
+modules/probe-plan-owner/public PROBE_PLAN_MODULE_INTERFACE_VERSION 2
+modules/resource-access-owner/public RESOURCE_ACCESS_OWNER_INTERFACE_VERSION 1
+modules/resource-limit-owner/public RESOURCE_LIMIT_MODULE_INTERFACE_VERSION 1
 modules/recovery-owner/contracts RECOVERY_QUARANTINE_INTERFACE_VERSION 1
 modules/recovery-owner/workflow-contracts RECOVERY_WORKFLOW_INTERFACE_VERSION 1
 modules/relay-endpoint-owner/public RELAY_ENDPOINT_MODULE_INTERFACE_VERSION 1
 modules/relay-plan-owner/contracts RELAY_QUERY_INTERFACE_VERSION 1
 modules/runtime-status-owner/contracts RUNTIME_STATUS_QUERY_INTERFACE_VERSION 1
-modules/station-alert-owner/api STATION_ALERT_API_INTERFACE_VERSION 1
+modules/station-alert-owner/api STATION_ALERT_API_INTERFACE_VERSION 2
 modules/station-alert-owner/public STATION_ALERT_MODULE_INTERFACE_VERSION 1
 modules/station-alert-owner/recovery STATION_ALERT_RECOVERY_INTERFACE_VERSION 1
-modules/telemetry-owner/api TELEMETRY_API_INTERFACE_VERSION 1
+modules/telemetry-owner/api TELEMETRY_API_INTERFACE_VERSION 2
 modules/telemetry-owner/public TELEMETRY_MODULE_INTERFACE_VERSION 1
 modules/telemetry-owner/recovery TELEMETRY_RECOVERY_INTERFACE_VERSION 1
 modules/transit-owner/contracts TRANSIT_API_INTERFACE_VERSION 1
-modules/transit-owner/public TRANSIT_MODULE_INTERFACE_VERSION 1
+modules/transit-owner/public TRANSIT_MODULE_INTERFACE_VERSION 2
 modules/transport-owner/grant-api TRANSPORT_GRANT_INTERFACE_VERSION 1
 modules/transport-owner/public TRANSPORT_MODULE_INTERFACE_VERSION 2
-modules/transport-owner/query-contracts TRANSPORT_QUERY_INTERFACE_VERSION 1
-modules/tunnel-query-owner/contracts TUNNEL_QUERY_INTERFACE_VERSION 1
-modules/upgrade-assessment-owner/contracts UPGRADE_ASSESSMENT_INTERFACE_VERSION 2
+modules/transport-owner/query-contracts TRANSPORT_QUERY_INTERFACE_VERSION 2
+modules/tunnel-query-owner/contracts TUNNEL_QUERY_INTERFACE_VERSION 2
+modules/upgrade-assessment-owner/contracts UPGRADE_ASSESSMENT_INTERFACE_VERSION 5
 `.trim().split('\n').map(line => { const [path, name, value] = line.split(' '); return { path: `apps/control/src/${path}.ts`, name: name!, value: Number(value) }; });
 const otherCounters = [
     ['packages/contracts/src/policy.ts', 'RUNTIME_POLICY_INTERFACE_VERSION', 1],
     ['packages/contracts/src/execution-observation.ts', 'EXECUTION_OBSERVATION_INTERFACE_VERSION', 1],
-    ['packages/contracts/src/execution-values.ts', 'RUNTIME_VALUES_INTERFACE_VERSION', 2],
-    ['apps/web/console-model-owner/public.js', 'CONSOLE_MODEL_INTERFACE_VERSION', 1],
+    ['packages/contracts/src/execution-values.ts', 'RUNTIME_VALUES_INTERFACE_VERSION', 3],
+    ['apps/web/console-model-owner/public.js', 'CONSOLE_MODEL_INTERFACE_VERSION', 2],
     ['apps/web/console-request-owner/public.js', 'CONSOLE_REQUEST_INTERFACE_VERSION', 1],
     ['apps/web/rule-command-owner/public.js', 'RULE_COMMAND_INTERFACE_VERSION', 1],
     ['apps/web/browser-native/public.js', 'BROWSER_NATIVE_INTERFACE_VERSION', 1],
@@ -249,7 +259,7 @@ executionhost/driver HostVersion 1
 executionhost/prepared PreparedInstanceVersion 1
 executionidentity/provider InterfaceVersion 2
 executiontime/clock InterfaceVersion 2
-executionstate/types InterfaceVersion 3
+executionstate/types InterfaceVersion 4
 nativeexecution/direct InterfaceVersion 2
 nativeexecution/offline_transit OfflineTransitAdapterVersion 1
 platformruntime/native InterfaceVersion 2
@@ -261,6 +271,7 @@ runtimeobservation/ports InterfaceVersion 2
 observationtrust/trust InterfaceVersion 1
 runtimeplatform/ports InterfaceVersion 2
 platformclock/clock InterfaceVersion 2
+payloadbudget/history InterfaceVersion 1
 `.trim().split('\n').map(line => { const [path, name, value] = line.split(' '); return { path: `agent/internal/${path}.go`, name: name!, value: value! }; });
     const actual: string[] = [];
     for (const path of leaves('agent/internal').filter(path => path.endsWith('.go') && !path.endsWith('_test.go'))) {
@@ -330,9 +341,9 @@ test('saved package support assets and actual deployment COPY embed fs and sourc
     assert.match(read('.github/workflows/container.yml'), /docker build --pull/);
     assert.match(read('.github/workflows/container.yml'), /network none[^\n]+upgrade-inspect\.ts/);
     const migrations = readdirSync(new URL('apps/control/migrations/', root)).filter(name => name.endsWith('.sql')).sort();
-    assert.equal(migrations.length, 38);
-    assert.equal(migrations.at(-1), '0038-probe-plan-json-integers.sql');
-    assert.deepEqual(migrations.map(name => name.slice(0, 4)), Array.from({ length: 38 }, (_, index) => String(index + 1).padStart(4, '0')));
+    assert.equal(migrations.length, 41);
+    assert.equal(migrations.at(-1), '0041-shared-resource-payload-limits.sql');
+    assert.deepEqual(migrations.map(name => name.slice(0, 4)), Array.from({ length: 41 }, (_, index) => String(index + 1).padStart(4, '0')));
     for (const path of leaves('agent/internal').filter(path => path.endsWith('.go') && !path.endsWith('_test.go'))) {
         const source = read(path);
         for (const match of source.matchAll(/^\/\/go:embed\s+([^\r\n]+)/gm)) {

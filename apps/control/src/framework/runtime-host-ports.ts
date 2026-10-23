@@ -1,12 +1,13 @@
 import type { Forward } from '@tunex/core';
 import type { Policy } from '@tunex/contracts/policy';
-import type { RuntimeValueFamily, RuntimeAssignmentFor, RuntimeMessagesFor, RuntimeSnapshotFor, RuntimeTombstoneValue } from '@tunex/contracts/execution-values';
+import type { RuntimeValueFamily, RuntimeAssignmentFor, RuntimeMessagesFor, RuntimeSnapshotFor, RuntimeTombstoneValue, RuntimeResourceLimitsValue } from '@tunex/contracts/execution-values';
+import type { RuntimePayloadPolicy } from './resource-limit-ports.ts';
 import type { Observation } from '@tunex/contracts/execution-observation';
 import type { TransactionBoundary } from './application-ports.ts';
 import type { AuthorizedNodeFacts } from './node-facts.ts';
 import type { RuntimeObservationReader } from './runtime-contracts.ts';
 
-export const RUNTIME_HOST_INTERFACE_VERSION=3 as const;
+export const RUNTIME_HOST_INTERFACE_VERSION=4 as const;
 
 export interface RuntimeNodeState {
     node_id:string;session_epoch:number;boot_id:string|null;snapshot_generation:number;
@@ -62,6 +63,7 @@ export interface RuntimeAuthorityRecorder {
 export interface RuntimeSnapshotInput<F extends RuntimeValueFamily=RuntimeValueFamily> {
     nodeId:string;sessionEpoch:number;snapshotGeneration:number;issuedAt:string;validUntil:string;
     assignments:readonly RuntimeAssignmentFor<F>[];tombstones:RuntimeTombstoneValue[];policy?:Policy;
+    resourceLimits?:RuntimeResourceLimitsValue;
 }
 /** Wire validation and compilation are injected, not dependencies on parser internals. */
 export interface RuntimeCodec<F extends RuntimeValueFamily=RuntimeValueFamily> {
@@ -87,5 +89,6 @@ export interface RuntimeHostOptions<Tx,F extends RuntimeValueFamily=RuntimeValue
     readonly policy?:Policy|undefined;
     readonly authority?:RuntimeAuthorityRecorder|undefined;
     readonly relay?:RuntimeRelay<Tx,F>|undefined;
+    readonly payloadPolicy:RuntimePayloadPolicy<Tx>;
     readonly now:()=>number;
 }

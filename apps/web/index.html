@@ -15,15 +15,17 @@
     <p class="nav-heading">工作空间</p>
     <nav aria-label="控制台导航">
       <button class="nav active" data-view="overview" type="button">▣ <span>概览</span></button>
-      <button class="nav" data-view="nodes" type="button">◈ <span>节点管理</span></button>
-      <button class="nav" data-view="forwards" type="button">⇄ <span>转发管理</span></button>
-      <button class="nav" data-view="relay" type="button">⛓ <span>隧道管理</span></button>
+      <button class="nav" data-view="nodes" type="button">◈ <span>我的机器</span></button>
+      <button class="nav" data-view="available" type="button">◇ <span>可用资源</span></button>
+      <button class="nav" data-view="forwards" type="button">⇄ <span>我的转发</span></button>
+      <button class="nav" data-view="relay" type="button">⛓ <span>我的线路</span></button>
       <button class="nav" data-view="probes" type="button">◎ <span>受限探测</span></button>
       <button class="nav" data-view="operations" type="button">◷ <span>执行记录</span></button>
-      <button class="nav" data-view="audit" type="button">◇ <span>管理审计</span></button>
-      <button class="nav" data-view="alerts" type="button">⚑ <span>站内事件</span></button>
-      <button class="nav" data-view="notifications" type="button">↗ <span>通知端点</span></button>
-      <button class="nav" data-view="observation-services" type="button">◇ <span>观测服务声明</span></button>
+      <button class="nav" data-governance hidden data-view="resources" type="button">◇ <span>资源管理</span></button>
+      <button class="nav" data-governance hidden data-view="audit" type="button">◇ <span>管理审计</span></button>
+      <button class="nav" data-governance hidden data-view="alerts" type="button">⚑ <span>站内事件</span></button>
+      <button class="nav" data-governance hidden data-view="notifications" type="button">↗ <span>通知端点</span></button>
+      <button class="nav" data-governance hidden data-view="observation-services" type="button">◇ <span>观测服务声明</span></button>
     </nav>
     <p class="sidebar-note">Forward First · ADP/3<br>数据由 Control API 提供，流量不经过本页面。</p>
   </aside>
@@ -34,33 +36,38 @@
     </header>
     <section class="connect-card" aria-label="连接控制面">
       <form id="connection-form" class="connection-form">
-        <label>Scope ID <input id="scope" name="scope" autocomplete="off" spellcheck="false" placeholder="例如：my-scope" required></label>
-        <label>Owner / Member Bearer Token <input id="token" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="当前标签页内存保存，不写入本地存储" required></label>
-        <button type="submit" id="connect">连接控制面</button>
+        <label>Bearer Token <input id="token" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="当前标签页内存保存，不写入本地存储" required></label>
+        <button type="submit" id="connect">登录账号</button>
         <button type="button" id="disconnect" class="secondary" disabled>断开</button>
       </form>
-      <p class="hint">仅连接当前 HTTPS Control；需要已有的 Scope 和 Bearer Token。刷新、关闭页面或断开连接后必须重新输入。</p>
+      <div class="account-context" id="account-context" hidden>
+        <p id="account-actor" class="hint"></p>
+        <label>工作空间 <select id="scope" disabled><option value="">登录后选择可进入的工作空间</option></select></label>
+        <button id="scope-more" type="button" class="secondary" hidden>读取下一页工作空间</button>
+        <p id="scope-status" class="hint" role="status"></p>
+      </div>
+      <p class="hint">使用现有 Bearer Token 登录后选择工作空间。凭据仅保存在当前标签页内存，刷新或关闭页面后重新登录。</p>
     </section>
     <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
 
     <section id="view-overview" class="view">
       <div class="metrics">
-        <div class="metric"><span>受管节点</span><strong id="metric-nodes">—</strong><small>按 Scope 筛选</small></div>
+        <div class="metric"><span>受管节点</span><strong id="metric-nodes">—</strong><small>按当前账号授权筛选</small></div>
         <div class="metric"><span>转发规则</span><strong id="metric-forwards">—</strong><small>Direct / Relay</small></div>
-        <div class="metric"><span>待执行 / 执行中操作</span><strong id="metric-running">—</strong><small>Scope 全量 · 非已生效状态</small></div>
-        <div class="metric"><span>历史失败操作</span><strong id="metric-failed">—</strong><small>Scope 全量 · 非当前故障节点数</small></div>
+        <div class="metric"><span>待执行 / 执行中操作</span><strong id="metric-running">—</strong><small>当前可见范围 · 非已生效状态</small></div>
+        <div class="metric"><span>历史失败操作</span><strong id="metric-failed">—</strong><small>当前可见范围 · 非当前故障节点数</small></div>
       </div>
       <section class="panel"><div class="panel-head"><h2>运行状态说明</h2></div>
         <div class="explain-grid"><div><b>Desired</b><p>用户希望系统如何转发；Revision 代表配置版本。</p></div><div><b>Operation</b><p>Control 是否已经接收、执行或完成部署动作。</p></div><div><b>Applied</b><p>Agent 实际应用且仍新鲜的部署观察结果。</p></div><div><b>Health</b><p>Agent 上报的运行状况；不等于独立端到端探测。</p></div></div>
       </section>
-      <section class="panel"><div class="panel-head"><h2>使用说明</h2></div><p class="muted">从“节点管理”确认 Agent 能力和端口授权，再到“转发管理”创建规则。202 Accepted 仅表示任务已持久接收，不代表执行完成。默认关闭的受限 TCP 探测只检查 Direct 已有目标的 TCP 连接，不发送应用数据，不把 Agent 在线或历史连接成功当作当前业务健康。</p></section>
+      <section class="panel"><div class="panel-head"><h2>使用说明</h2></div><p class="muted">从“我的机器”接入 Agent，或在“可用资源”查看共享用途，再到“我的线路”组线或“我的转发”创建规则。202 Accepted 仅表示任务已持久接收，不代表执行完成。默认关闭的受限 TCP 探测只检查 Direct 已有目标的 TCP 连接，不发送应用数据，不把 Agent 在线或历史连接成功当作当前业务健康。</p></section>
       <section class="panel" aria-labelledby="ops-title">
         <div class="panel-head"><h2 id="ops-title">运维闭环 · 只读</h2><span id="ops-status" class="hint" role="status"></span></div>
         <div class="explain-grid">
           <div><b>失败 Operation（当前页）</b><div id="ops-failed-operations" class="hint"></div></div>
           <div><b>报告过期 / 已撤销节点（当前页）</b><div id="ops-stale-nodes" class="hint"></div></div>
         </div>
-        <div class="actions"><button id="ops-audit" type="button" class="secondary">管理审计</button><button id="ops-alerts" type="button" class="secondary">站内事件</button><button id="ops-notifications" type="button" class="secondary">通知端点</button><button id="ops-operations" type="button" class="secondary">执行记录</button><button id="ops-forwards" type="button" class="secondary">转发分层诊断</button></div>
+        <div class="actions"><button data-governance hidden id="ops-audit" type="button" class="secondary">管理审计</button><button data-governance hidden id="ops-alerts" type="button" class="secondary">站内事件</button><button data-governance hidden id="ops-notifications" type="button" class="secondary">通知端点</button><button id="ops-operations" type="button" class="secondary">执行记录</button><button id="ops-forwards" type="button" class="secondary">转发分层诊断</button></div>
         <p class="hint">数据库不可达或请求失败时，页面显示错误并保留“未知”，不会把缺失记录当作零或健康。支持包在 Forward 分层诊断中按同次读取生成；升级评估与恢复仍由原 ops/Authority/Journal owner 执行，本页不提供写操作。</p>
       </section>
       <section class="panel" aria-labelledby="topology-entry-title">
@@ -72,7 +79,7 @@
     </section>
 
     <section id="view-nodes" class="view" hidden>
-      <div class="panel-head section-actions"><div><h2>节点管理</h2><p class="hint">可查看授权地址、可用端口、Agent 会话和最近报告。</p></div><button id="show-node-form" type="button">注册节点</button></div>
+      <div class="panel-head section-actions"><div><h2 id="nodes-title">我的机器</h2><p id="nodes-description" class="hint">管理归属于我的私有机器与接入凭据。</p></div><button id="show-node-form" type="button">注册节点</button></div>
       <form id="node-form" class="panel editor" hidden>
         <h3>新节点 · 预设授权</h3>
         <p class="hint">注册仅生成一次性 Enrollment Token；安装 Agent 还需要按现有运维文档准备 TLS CA、状态目录和密钥。</p>
@@ -82,9 +89,31 @@
           <label>允许目标网段（逗号分隔） <input name="cidrs" value="127.0.0.0/8" required></label>
         </div>
         <label class="check"><input name="metadata" type="checkbox"> 允许访问元数据地址（默认禁止）</label>
-        <div class="actions"><button type="submit">创建节点并签发注册凭据</button><button id="cancel-node" class="secondary" type="button">取消</button></div>
+        <div class="actions"><button id="node-provision-submit" type="submit">接入我的私有机器</button><button id="node-provision-reset" type="button" class="secondary" hidden>已核对结果，准备另一条接入</button><button id="cancel-node" class="secondary" type="button">取消</button></div>
+        <p id="node-provision-state" class="hint" role="status"></p>
       </form>
+      <details class="panel" id="node-enrollment-guide">
+        <summary>接入机器：准备、注册与确认运行</summary>
+        <ol>
+          <li>在“我的机器”创建私有机器，记录弹窗中的节点标识、一次性接入凭据和到期时间。共享资源由工作空间所有者从“共享资源管理”创建并另行授权。</li>
+          <li>向部署管理员取得与当前 Control 配套的 Agent、实际 HTTPS 地址和可信 CA 文件。预先准备受保护的状态目录与位于状态目录外的 Journal 密钥路径。</li>
+          <li>在目标机器的交互终端输入凭据，使用下面的 Linux Bash 示例完成注册。替换节点标识、地址和路径；凭据只在提示中输入，不放入命令参数、服务文件或日志。</li>
+        </ol>
+        <pre><code>read -r -s -p 'Enrollment Token: ' TUNEX_ENROLLMENT_TOKEN; echo
+export TUNEX_ENROLLMENT_TOKEN
+tunex-agent --control 'https://CONTROL_HOST:41001' --node 'NODE_ID' \
+  --ca /etc/tunex/control-ca.pem --state /var/lib/tunex/agent \
+  --journal-key /etc/tunex/secrets/journal.key --enroll
+unset TUNEX_ENROLLMENT_TOKEN</code></pre>
+        <p class="hint">注册完成后，在同一机器用相同路径启动 Agent。Direct 无需额外开关；组线需要 --relay，多跳还需要 --multihop，Control 也必须开放对应能力。后台服务与重启策略由部署管理员配置。</p>
+        <pre><code>tunex-agent --control 'https://CONTROL_HOST:41001' --node 'NODE_ID' \
+  --ca /etc/tunex/control-ca.pem --state /var/lib/tunex/agent \
+  --journal-key /etc/tunex/secrets/journal.key</code></pre>
+        <p class="hint">回到机器列表刷新：先确认凭据，再看节点诊断中的会话与报告时效。等待接入、报告过期和业务不可达分别处理；注册成功不会证明转发已部署或目标可达。注册失败先核对原结果和凭据到期时间；已有状态的机器沿原凭据轮换／恢复流程处理，保留 Journal 与历史。</p>
+      </details>
       <form id="nodes-filter" class="query-controls panel" aria-label="节点服务端筛选">
+        <label>资源归属<select name="ownership"><option value="mine">我的机器</option><option value="available">我可使用的资源</option></select></label>
+        <label>资源来源<select name="resourceSource"><option value="">全部来源</option><option value="private">私有机器</option><option value="admin-shared">管理员共享</option><option value="legacy-unclassified" data-governance hidden>历史待分类</option></select></label>
         <label>Node ID 前缀<input name="idPrefix" maxlength="128" autocomplete="off" placeholder="留空查询全部"></label>
         <label>凭据状态<select name="credential"><option value="">全部状态</option><option value="valid">有效且未撤销</option><option value="expired">已到期且未撤销</option><option value="unenrolled">未注册且未撤销</option><option value="revoked">已撤销</option></select></label>
         <button type="submit" class="secondary">应用筛选</button>
@@ -93,8 +122,77 @@
       <div id="nodes-pagination" class="pagination"></div>
     </section>
 
+    <section id="view-resources" class="view" hidden>
+      <div class="panel-head section-actions"><div><h2>共享资源管理</h2><p class="hint">当前工作空间所有者管理共享接入、成员用途与历史归属。查看资源不等于拥有使用权，每次操作仍由原服务核验。</p></div><button id="resource-refresh" type="button" class="secondary">刷新资源列表</button></div>
+      <section class="panel" aria-labelledby="resource-provision-title">
+        <h3 id="resource-provision-title">接入管理员共享节点</h3>
+        <p class="hint">这里创建工作空间共享资源；“我的机器”中的接入继续创建个人私有机器。共享节点接入后，还需为成员明确用途与端口限制。</p>
+        <form id="resource-provision-form">
+          <div class="form-grid">
+            <label>监听地址<select name="address"><option value="127.0.0.1">127.0.0.1 · 仅本机</option><option value="0.0.0.0">0.0.0.0 · IPv4 全网卡</option><option value="::">:: · IPv6 全网卡</option><option value="::1">::1 · IPv6 本机</option></select></label>
+            <label>节点允许端口（逗号分隔）<input name="ports" value="25565" required></label>
+            <label>允许目标网段（逗号分隔）<input name="cidrs" value="127.0.0.0/8" required></label>
+          </div>
+          <label class="check"><input name="metadata" type="checkbox">允许访问元数据地址</label>
+          <div class="actions"><button id="resource-provision-submit" type="submit">创建共享节点并签发接入凭据</button><button id="resource-provision-reset" type="button" class="secondary" hidden>已核对结果，准备另一条接入</button></div>
+        </form>
+        <p id="resource-provision-state" class="hint" role="status"></p>
+      </section>
+      <section class="panel" aria-labelledby="resource-list-title">
+        <h3 id="resource-list-title">治理可见节点</h3>
+        <div class="query-controls"><label>资源来源<select id="resource-source"><option value="admin-shared">管理员共享</option><option value="legacy-unclassified">历史待分类</option><option value="private">私有机器（治理只读）</option><option value="">全部来源</option></select></label></div>
+        <p id="resource-list-state" class="hint" role="status"></p>
+        <div class="table-wrap inner-table"><table><thead><tr><th>节点</th><th>来源</th><th>私人所有者</th><th>管理入口</th></tr></thead><tbody id="resource-rows"></tbody></table></div>
+        <div class="pagination"><button id="resource-prev" type="button" class="secondary" disabled>上一页</button><button id="resource-next" type="button" class="secondary" disabled>下一页</button></div>
+      </section>
+      <section id="resource-grant-panel" class="panel" aria-labelledby="resource-grant-title">
+        <h3 id="resource-grant-title">共享用途与端口授权</h3>
+        <div class="query-controls"><label>共享节点标识<input id="resource-grant-node" maxlength="128" autocomplete="off"></label><button id="resource-grant-read" type="button" class="secondary">读取当前授权</button><label>已读取的节点授权修订<input id="resource-grant-revision" readonly class="mono"></label></div>
+        <div class="form-grid"><label>成员<select id="resource-grant-actor" disabled></select></label><label>用途范围<select id="resource-grant-role-mode" disabled><option value="all">全部用途</option><option value="selected">仅勾选用途</option></select></label></div>
+        <div class="actions resource-role-options"><label class="check"><input id="resource-grant-allowed" type="checkbox" checked disabled>允许此成员使用</label><label class="check"><input id="resource-grant-role-ingress" type="checkbox" disabled>入口</label><label class="check"><input id="resource-grant-role-transit" type="checkbox" disabled>中继</label><label class="check"><input id="resource-grant-role-egress" type="checkbox" disabled>出口</label></div>
+        <p id="resource-grant-current" class="hint"></p>
+        <div class="form-grid">
+          <label>端口限制处理<select id="resource-grant-limit-mode" disabled><option value="keep">保留现有限制（只更新用途）</option><option value="replace">替换为下面的限制</option><option value="clear">明确清空额外端口与额度限制</option></select></label>
+          <label>允许端口（空白沿用节点策略）<input id="resource-grant-ports" autocomplete="off" placeholder="例如 25565,25566" disabled></label>
+          <label>物理绑定上限（空白不额外限制，0 禁止占用）<input id="resource-grant-max-bindings" type="number" min="0" step="1" disabled></label>
+        </div>
+        <p class="hint">TCP 与 UDP 的同号端口分别计为物理绑定。保留限制不会发送清空字段；清空额外限制仍受节点原策略约束。收紧用途、端口或额度可能触发原 Operation 重协调，不表示旧授权立即消失。</p>
+        <div class="actions"><button id="resource-grant-save" type="button" disabled>保存此成员授权</button></div>
+        <div class="table-wrap inner-table"><table><thead><tr><th>成员</th><th>用途</th><th>端口与额度</th><th>操作</th></tr></thead><tbody id="resource-grant-rows"></tbody></table></div>
+      </section>
+      <section class="panel" aria-labelledby="payload-title">
+        <h3 id="payload-title">成员带宽与流量</h3>
+        <p class="hint">按成员在每台共享机器上的双向有效载荷汇总，包含其全部相关转发。私有机器不扣此额度。先读取修订，再配置明确的 UTC 周期。</p>
+        <div class="query-controls"><label>共享节点标识<input id="payload-node" maxlength="128" autocomplete="off"></label><label>成员标识<input id="payload-actor" maxlength="128" autocomplete="off"></label><button id="payload-read" type="button" class="secondary">读取此成员配置</button><label>当前配置修订<input id="payload-revision" readonly></label></div>
+        <div class="form-grid">
+          <label>周期开始（UTC，含毫秒）<input id="payload-starts" placeholder="2026-11-01T00:00:00.000Z" autocomplete="off"></label>
+          <label>周期结束（UTC，不含此时刻）<input id="payload-ends" placeholder="2026-12-01T00:00:00.000Z" autocomplete="off"></label>
+          <label>双向合计速率（B/s，空白不额外限速）<input id="payload-rate" inputmode="numeric" placeholder="例如 1048576"></label>
+          <label>突发字节数（1–65536 B）<input id="payload-burst" inputmode="numeric" value="65536"></label>
+          <label>周期流量（B，空白不额外限制）<input id="payload-bytes" inputmode="numeric" placeholder="例如 10737418240"></label>
+        </div>
+        <p class="hint">带宽与流量至少填写一项，0 表示禁止。相同周期更新不清除已扣额度；新周期不得重叠历史周期。最新配置可能是未来周期，当前有效周期将保留至结束。额度耗尽后停止相关转发；已签发授权的切换仍受原租约边界约束。</p>
+        <p id="payload-state" class="hint" role="status"></p>
+        <div class="actions"><button id="payload-save" type="button" disabled>保存额度配置</button><button id="payload-replay" type="button" class="secondary" disabled>重放原额度命令</button><button id="payload-discard" type="button" class="secondary" disabled>已核对结果，重新读取</button></div>
+        <pre id="payload-result" class="plan-output" aria-label="共享带宽与流量配置，不含消费量"></pre>
+      </section>
+      <details id="resource-classification-panel" class="panel">
+        <summary>专家操作：明确分类历史资源</summary>
+        <p class="hint">只接收尚未分类的原资源，不转移已确定的所有权，不清空 Authority、Journal 或受保护历史。先读取当前修订，再选择归属。Forward、线路、候选组与入口组分别通过原所有者命令分类。</p>
+        <div class="query-controls"><label>资源类型<select id="resource-classify-kind"><option value="nodes">历史节点</option><option value="forwards">历史转发</option><option value="path-templates">历史线路 / 模板</option><option value="path-groups">历史候选组</option><option value="ingress-groups">历史入口组</option></select></label><label>资源标识<input id="resource-classify-id" maxlength="128" autocomplete="off"></label><button id="resource-classify-read" type="button" class="secondary">读取当前资源与修订</button></div>
+        <div class="form-grid"><label>已读取的精确修订<input id="resource-classify-revision" readonly class="mono"></label><label>节点目标来源<select id="resource-classify-source" disabled><option value="">明确选择</option><option value="private">个人私有机器</option><option value="admin-shared">管理员共享资源</option></select></label><label>私人资源所有者<select id="resource-classify-owner" disabled></select></label><label>旧节点授权处理<select id="resource-classify-legacy" disabled><option value="">明确选择</option><option value="discard">移除旧委托授权</option><option value="retain">保留旧授权，仅限管理员共享资源</option></select></label></div>
+        <pre id="resource-classify-preview" class="plan-output" aria-label="本次分类读取的精确资源修订"></pre>
+        <div class="actions"><button id="resource-classify-save" type="button" disabled>确认提交历史资源分类</button></div>
+      </details>
+      <section class="panel" aria-labelledby="resource-command-title">
+        <h3 id="resource-command-title">原子命令回执</h3><p id="resource-command-state" class="hint" role="status"></p>
+        <div class="actions"><button id="resource-replay" type="button" class="secondary" disabled>仅重放原命令</button><button id="resource-discard" type="button" class="secondary" disabled>放弃本地命令记录</button><button id="resource-operations" type="button" class="secondary">查看原执行记录</button></div>
+        <pre id="resource-command-result" class="plan-output" aria-label="资源原子命令回执"></pre>
+      </section>
+    </section>
+
     <section id="view-forwards" class="view" hidden>
-      <div class="panel-head section-actions"><div><h2>转发管理</h2><p class="hint">Direct 使用简化表单；Relay / 多跳在链路编辑器重新预检。复制默认停用，必须另选入口端口，不继承执行或健康状态。</p></div><button id="show-forward-form" type="button">新建转发</button></div>
+      <div class="panel-head section-actions"><div><h2>我的转发</h2><p class="hint">Direct 使用简化表单；Relay / 多跳在链路编辑器重新预检。复制默认停用，必须另选入口端口，不继承执行或健康状态。</p></div><button id="show-forward-form" type="button">新建转发</button></div>
       <form id="forward-form" class="panel editor" hidden>
         <h3 id="forward-form-title">创建 Direct Forward</h3>
         <div class="query-controls">
@@ -123,6 +221,7 @@
         <div class="actions"><button id="save-forward" type="submit">提交操作</button><button id="cancel-forward" class="secondary" type="button">取消</button></div>
       </form>
       <form id="forwards-filter" class="query-controls panel" aria-label="转发服务端筛选">
+        <label>资源归属<select name="ownership"><option value="mine">我的转发</option><option value="" data-governance hidden>治理可见转发</option></select></label>
         <label>Forward ID 前缀<input name="idPrefix" maxlength="128" autocomplete="off"></label>
         <label>期望启用<select name="enabled"><option value="">全部</option><option value="true">希望启用</option><option value="false">希望停用</option></select></label>
         <label>恢复挂起<select name="recoverySuspended"><option value="">全部</option><option value="true">挂起</option><option value="false">未挂起</option></select></label>
@@ -138,7 +237,20 @@
     </section>
 
     <section id="view-relay" class="view" hidden>
-      <div class="panel-head section-actions"><div><h2>隧道管理 · 原生 TLS</h2><p class="hint">发布可复用的逻辑隧道定义，再显式绑定转发规则。配置、规则部署和实际网络连接分开管理。</p></div><button id="relay-reload" type="button" class="secondary">刷新配置</button></div>
+      <div class="panel-head section-actions"><div><h2>我的线路</h2><p class="hint">选择有权使用的资源，直接用于转发或保存成可复用线路。配置、规则部署和实际网络连接分开管理。</p></div><button id="relay-reload" type="button" class="secondary">刷新配置</button></div>
+      <section class="panel line-builder" aria-labelledby="line-builder-title">
+        <div class="panel-head"><h3 id="line-builder-title">选择资源，组成线路</h3><button id="line-resources-refresh" type="button" class="secondary">读取可用资源</button></div>
+        <p class="hint">按入口、中继、出口用途读取当前授权。直接使用不发布线路，仍须填写目标、明确预览并提交；选择本身不预留资源。</p>
+        <div class="form-grid"><label>保存线路时填写名称<input id="line-name" maxlength="128" autocomplete="off" placeholder="直接使用可留空"></label><label>传输配置<select id="line-profile"></select></label><label>业务协议<select id="line-protocol"><option value="both">TCP + UDP</option><option value="tcp">TCP</option><option value="udp">UDP</option></select></label></div>
+        <div class="line-resource-roles">
+          <div><label>入口<select id="line-ingress"></select></label><button id="line-ingress-next" type="button" class="secondary" disabled>更多入口</button></div>
+          <div><label>可选中继<select id="line-transit"></select></label><div class="actions"><button id="line-transit-next" type="button" class="secondary" disabled>更多中继</button><button id="line-add-transit" type="button" class="secondary">添加中继</button></div></div>
+          <div><label>出口<select id="line-egress"></select></label><button id="line-egress-next" type="button" class="secondary" disabled>更多出口</button></div>
+        </div>
+        <ol id="line-transits" class="topology" aria-label="已选中继顺序"></ol>
+        <p id="line-builder-status" class="hint" role="status">读取资源后选择入口与出口；每条线路最多 8 个不同节点。</p>
+        <div class="actions"><button id="line-use" type="button">直接用于转发</button><button id="line-prepare" type="button" class="secondary">准备保存为可复用线路</button></div>
+      </section>
       <section class="panel" aria-labelledby="tunnel-definition-title">
         <h3 id="tunnel-definition-title">当前逻辑隧道</h3>
         <p class="hint">先在下方读取精确修订；定义复用现有路径模板标识和历史，不是新建的常驻连接。每条 Forward 仍有独立执行资源。发布新修订不自动切换已有规则，健康状态未评估。</p>
@@ -146,13 +258,14 @@
         <ol id="tunnel-definition-topology" class="topology" aria-label="只读配置拓扑，不代表网络可达或已部署"></ol>
         <div class="actions"><button id="path-template-use" type="button" class="secondary" disabled>将此精确修订载入规则绑定</button></div>
       </section>
-      <section class="panel" aria-labelledby="transport-catalog-title">
+      <section class="panel" data-governance hidden aria-labelledby="transport-catalog-title">
         <h3 id="transport-catalog-title">原生驱动能力声明</h3>
         <p class="hint">目录只描述代码内建能力与 Control 开关，不是当前 Node 实测、授权、可用端口或部署/物理主机验收。Relay/多跳的节点间 UDP 承载仍占 TCP；面向用户的入口仍按业务 TCP/UDP 绑定。低端口服从 OS 权限；目录不会启用驱动或续期租约。</p>
         <div class="table-wrap inner-table"><table><thead><tr><th>驱动 / 描述版本</th><th>业务 → 物理承载</th><th>进程开关（非就绪）</th><th>声明与限制</th></tr></thead><tbody id="transport-catalog-rows"><tr><td colspan="4" class="empty">连接后加载原生声明</td></tr></tbody></table></div>
       </section>
       <section class="panel" aria-label="Relay 独立节点候选">
         <div class="query-controls">
+          <label>候选用途<select id="relay-candidate-role"><option value="ingress">入口</option><option value="transit">中继</option><option value="egress">出口</option></select></label>
           <label>Relay 节点候选 · ID 前缀<input id="relay-candidate-prefix" maxlength="128" autocomplete="off" placeholder="搜索其他页的节点"></label>
           <button id="relay-candidate-search" type="button" class="secondary">查询候选</button>
           <button id="relay-candidate-prev" type="button" class="secondary" disabled>上一页</button>
@@ -192,7 +305,7 @@
           <label>组类型<select id="path-group-kind"><option value="backup-paths">固定优先级备用路径</option><option value="egress-candidates">出口候选组</option></select></label>
           <label>读取精确组修订（空白读当前）<input id="path-group-read-revision" type="number" min="1" max="64"></label>
         </div>
-        <label>有序候选，每行：候选ID TemplateID 精确修订 sha256:摘要<textarea id="path-group-candidates" rows="5" maxlength="4096" spellcheck="false" placeholder="primary template-a 1 sha256:...&#10;backup template-b 2 sha256:..."></textarea></label>
+        <label>有序候选，每行：候选名称 线路名称 精确修订（摘要自动读取）<textarea id="path-group-candidates" rows="5" maxlength="4096" spellcheck="false" placeholder="primary template-a 1&#10;backup template-b 2"></textarea></label>
         <p class="hint">一至八个候选；候选 ID 与完整路径摘要均不能重复，行序锁定固定优先级（第一行优先级 1）。从上方隧道定义读取精确 Template 修订与摘要后填入，不使用 latest。所有分支须同入口、同业务协议；出口候选组须不同末端节点。每 Scope 最多 64 个组（含归档）、每组最多 64 个修订；发布或归档不改变现有规则、不预留资源，也不自动跟随最新路径。</p>
         <div class="actions"><button id="path-group-inspect" type="button" class="secondary">读取精确组修订</button><button id="path-group-publish" type="button">发布不可变组修订</button><button id="path-group-archive" type="button" class="secondary">归档组</button><button id="path-group-discard" type="button" class="secondary" disabled>放弃本地原命令信息</button><button id="path-group-cancel-read" type="button" class="secondary" disabled>取消本地读取</button></div>
         <ol id="path-group-topology" class="path-group-topology" aria-label="组级 OR 替代分支与路径内部 AND 必经顺序，健康未知"></ol>
@@ -237,7 +350,7 @@
         <div class="panel-head"><h3 id="ingress-title">入口组定义与独立规则创建</h3><button id="ingress-clear" type="button" class="secondary">清除本地面板</button></div>
         <p class="hint">此面板只新建独立规则与条件删除补偿：入口组是有界、完整路径的元数据集合，成员使用不同入口节点和相同业务协议。每次明确选定成员及各自监听，逐项通过原所有者创建独立 Forward/Operation；不是 VIP、DNS 切流、负载均衡或全局入口高可用，不共享物理连接。入口组不是原出口候选组的 OR 自动选择，也不会生成成员×目标笛卡尔组合。已有部署的显式增改删见下方<a href="#ingress-migration-title">独立迁移面板</a>；C3 自动故障转移仍待实现，创建回执不是成员当前状态。</p>
         <div class="form-grid"><label>入口定义 ID<input id="ingress-group" maxlength="128" autocomplete="off"></label><label>当前定义 CAS（新建填 0）<input id="ingress-expected" type="number" min="0" max="64" value="0"></label><label>读取精确修订（空白读当前）<input id="ingress-read-revision" type="number" min="1" max="64"></label></div>
-        <label>有序成员，每行：memberID TemplateID 精确修订 sha256:摘要<textarea id="ingress-members" rows="5" maxlength="4096" spellcheck="false" placeholder="ingress-a template-a 1 sha256:...&#10;ingress-b template-b 2 sha256:..."></textarea></label>
+        <label>有序成员，每行：成员名称 线路名称 精确修订（摘要自动读取）<textarea id="ingress-members" rows="5" maxlength="4096" spellcheck="false" placeholder="ingress-a template-a 1&#10;ingress-b template-b 2"></textarea></label>
         <p class="hint">每组一至八个唯一成员和不同完整路径摘要，各路径的入口节点必须不同、业务协议必须相同。完整 Template 修订锁定 Node 顺序、Endpoint 和 Profile；发布定义不会自动创建规则或跟随最新路径。每 Scope 最多 64 个定义（含归档），每定义最多 64 个不可变修订；归档不停止已有规则或取消既有持久计划。</p>
         <div class="actions"><button id="ingress-inspect" type="button" class="secondary">读取精确入口定义</button><button id="ingress-publish" type="button">仅发布定义修订</button><button id="ingress-archive" type="button" class="secondary">仅归档定义</button><button id="ingress-replay" type="button" class="secondary" disabled>仅重放完整原命令</button><button id="ingress-cancel-read" type="button" class="secondary" disabled>取消本地读取</button></div>
         <ol id="ingress-topology" class="ingress-topology" aria-label="完整成员路径与独立入口，只读元数据，健康未知"></ol>
@@ -310,7 +423,7 @@
       </section>
       <section class="panel">
         <div class="panel-head"><h3>底层配置 · 发布 Transport Profile</h3></div>
-        <form id="relay-profile-form">
+        <form id="relay-profile-form" data-governance hidden>
           <div class="form-grid">
             <label>Profile ID <input id="relay-profile-id" name="profileId" autocomplete="off" required placeholder="例如 secure-relay" pattern="[A-Za-z0-9][A-Za-z0-9._:-]*"></label>
             <label>协议 <select name="protocol"><option value="both">TCP + UDP</option><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
@@ -545,7 +658,7 @@
       </form>
       <section class="panel"><p id="audit-state" class="hint" role="status" aria-live="polite"></p><p id="audit-meta" class="hint"></p><pre id="audit-coverage" class="plan-output" aria-label="来源、保留期、关联和查询边界"></pre></section>
       <div class="panel table-wrap"><table id="audit-table"><thead><tr><th>UTC / Asia Shanghai · 时间含义</th><th>原来源 / 类型 / 记录键</th><th>Actor / 归因 / Subject</th><th>实体 / 修订 / 序号</th><th>Node / Forward / Operation 关联</th><th>结果 / 固定错误 / 恢复</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
-      <section class="panel"><p class="hint">仅展示十五类现存所有者记录，没有统一保留期或完整事件流承诺；关联记录不是独立命令计数，Node 关联来自显式字段或不可变配置，不依据当前拓扑补猜，单值关联不是关系全集。批次事件不虚构 Forward/Operation。Operation 行是最新可变状态及更新时间，不是状态转换日志；requester 不是最后更新者。recoveryInvalidated(current-owner-at-read) 是读取时原所有者标记：批次/尝试取当前 batch head，Operation 取最新状态，不倒推为事件发生时的恢复快照。全局恢复记录缺少 Scope 归属，不进入此查询。排序是 occurredAt/source/key 降序；查询不是跨页全局快照，输出上限不证明 SQL 成本已验证。</p><p class="hint">安全时间线仅本地管理查看，不进入 Forward 脱敏 support、不提供导出或批量复制。没有写命令、Probe、回滚、自动重试、轮询或自动续页；取消本地查询不会修改任何原记录。</p></section>
+      <section class="panel"><p class="hint">仅展示已声明的现存所有者记录，没有统一保留期或完整事件流承诺；关联记录不是独立命令计数，Node 关联来自显式字段或不可变配置，不依据当前拓扑补猜，单值关联不是关系全集。批次事件不虚构 Forward/Operation。Operation 行是最新可变状态及更新时间，不是状态转换日志；requester 不是最后更新者。recoveryInvalidated(current-owner-at-read) 是读取时原所有者标记：批次/尝试取当前 batch head，Operation 取最新状态，不倒推为事件发生时的恢复快照。全局恢复记录缺少 Scope 归属，不进入此查询。排序是 occurredAt/source/key 降序；查询不是跨页全局快照，输出上限不证明 SQL 成本已验证。</p><p class="hint">安全时间线仅本地管理查看，不进入 Forward 脱敏 support、不提供导出或批量复制。没有写命令、Probe、回滚、自动重试、轮询或自动续页；取消本地查询不会修改任何原记录。</p></section>
     </section>
   </main>
 </div>
@@ -639,7 +752,7 @@
     <label>单页最多桶数<select id="telemetry-aggregate-limit"><option value="128">128</option><option value="256">256</option><option value="512">512</option></select></label>
     <label>精确 Series Key（可空）<input id="telemetry-aggregate-series" maxlength="71" autocomplete="off" spellcheck="false" placeholder="sha256: + 64 lowercase hex"></label>
   </div>
-  <div class="actions"><button id="telemetry-aggregate-reload" type="button" class="secondary">手动读取 / 重建窗口</button><button id="telemetry-aggregate-next" type="button" class="secondary" disabled>同一固定窗口下一页</button><button id="telemetry-aggregate-capacity" type="button" class="secondary">单独读取 Scope 容量</button></div>
+  <div class="actions"><button id="telemetry-aggregate-reload" type="button" class="secondary">手动读取 / 重建窗口</button><button id="telemetry-aggregate-next" type="button" class="secondary" disabled>同一固定窗口下一页</button><button data-governance hidden id="telemetry-aggregate-capacity" type="button" class="secondary">单独读取 Scope 容量</button></div>
   <p id="telemetry-aggregate-state" class="hint" role="status" aria-live="polite"></p>
   <p id="telemetry-aggregate-meta" class="hint"></p>
   <p class="hint">指标语义：source 以面板响应为准（原始族为 agent-reported）；health 通常为 unknown / executionAuthorized=false。delta 仅在相邻连续样本内计算速率；baseline/gap/counter-reset/historical/unavailable/overflowed/terminal 不推算。coverage 的 returned/available、omitted/truncated 与 tails 淘汰分别表示窗口覆盖和保留边界；historyComplete=false。fresh 仅表示当前会话且接收时间在 30 秒内；stale/historical 不是当前健康。缺测不补零，图表点不是分母，四族指标互不替代。</p>

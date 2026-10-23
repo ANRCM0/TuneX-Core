@@ -186,7 +186,7 @@ try{
   }
   assert.ok(validCount>0&&validCount<1000);
   await server.db.transaction(async tx=>{
-    await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',[capacityNode,capacityScope,'a'.repeat(64),Date.now()+600000,Date.now()+86400000,JSON.stringify(capacityFacts)]);
+    await write(tx,'INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,\'private\',?,1)',[capacityNode,capacityScope,'a'.repeat(64),Date.now()+600000,Date.now()+86400000,JSON.stringify(capacityFacts),capacityActor]);
     await write(tx,'INSERT INTO runtime_nodes(node_id) VALUES(?)',[capacityNode]);await write(tx,'INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)',[capacityNode,capacityActor]);
     for(let i=0;i<validCount;i++){
       const forward:Forward={id:`capacity-${i}`,scopeId:capacityScope,revision:1,spec:{...capacitySpec,ingress:{nodeId:capacityNode,listen:{address:'127.0.0.1',port:10000+i}}}};

@@ -18,7 +18,7 @@ var _ func(string, []byte, string) (executionstate.RuntimeJournal, error) = Boot
 var _ func(string, []byte, string, string) (executionstate.RuntimeJournal, error) = Bootstrap{}.EnableRuntime
 
 func TestJournalProviderCompleteBootstrapInterfaceTwoExactConsumerMethodSets(t *testing.T) {
-	if InterfaceVersion != 2 || runtimeplatform.InterfaceVersion != 2 || executionstate.InterfaceVersion != 3 {
+	if InterfaceVersion != 2 || runtimeplatform.InterfaceVersion != 2 || executionstate.InterfaceVersion != 4 {
 		t.Fatal("native/lower provider contract versions changed")
 	}
 	provider := reflect.TypeOf((*runtimeplatform.Bootstrap[*x509.CertPool])(nil)).Elem()

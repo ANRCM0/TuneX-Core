@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import ts from 'typescript';
 import * as core from '@tunex/core';
 import * as framework from '../src/framework/public.ts';
+import type { ResourceReadAccess } from '../src/framework/public.ts';
 import { nativeValueDigest as digest } from '../src/compatibility/public.ts';
 import { TelemetryRollups, processObservation, hostObservation, parseTelemetryObservation, parseTelemetryRollupBucket, foldTelemetryRollup, telemetryRollupStorageValues, TELEMETRY_ROLLUP_LIMITS } from '../src/modules/telemetry-owner/public.ts';
 import type { NodeTelemetrySample } from '../src/compatibility/public.ts';
@@ -58,17 +59,32 @@ test('77 bucket parser preserves reachable wide sums and rejects decimal128 maxi
 });
 function owner() {
     const tx = {}, trace: string[] = [], state: Any = { now: at + 1000, rows: [], losses: { ...losses }, target: { nodeId: 'node', scopeId: 'scope' },
-        counts: { minuteRows: 1, hourRows: 2, cursorRows: 3, nodeFamilies: 4 }, denied: false };
+        counts: { minuteRows: 1, hourRows: 2, cursorRows: 3, nodeFamilies: 4 }, denied: false, governance: true, resourceDenied: false };
     const same = (actual: unknown, name: string) => { assert.equal(actual, tx); trace.push(name); };
     const db = { async transaction(action: any) { trace.push('begin'); try { const result = await action(tx); trace.push('commit'); return result; } catch (e) { trace.push('rollback'); throw e; } } };
     const auth = { async scope(actual: unknown, actor: string, scope: string) { same(actual, 'scope'); assert.deepEqual([actor, scope], ['reader', 'scope']); if (state.denied) throw new framework.ControlError('AUTHORIZATION_DENIED', 403, 'denied'); } };
+    const access: ResourceReadAccess<typeof tx> = {
+        principal: async (actual, actor, scope) => {
+            same(actual, 'principal'); assert.deepEqual([actor, scope], ['reader', 'scope']);
+            return Object.freeze({ actorId: actor, governance: state.governance });
+        },
+        node: async (actual, actor, scope, node, detail) => {
+            same(actual, 'access:host'); assert.deepEqual([actor, scope, node, detail], ['reader', 'scope', 'node', 'host']);
+            if (state.resourceDenied) throw new framework.ControlError('NOT_FOUND', 404, 'not found'); return 'full';
+        },
+        forward: async (actual, actor, scope, forward) => {
+            same(actual, 'access:forward'); assert.deepEqual([actor, scope, forward], ['reader', 'scope', 'forward']);
+            if (state.resourceDenied) throw new framework.ControlError('NOT_FOUND', 404, 'not found');
+        },
+        owned: async () => assert.fail('Aggregate reads must not enter mutation ownership'),
+    };
     const store = { async history(actual: unknown, window: unknown) { same(actual, 'history'); state.window = window; return state.rows; },
         async losses(actual: unknown, ...args: unknown[]) { same(actual, 'losses'); state.lossArgs = args; return state.losses; },
         async capacity(actual: unknown, scope: string) { same(actual, 'capacity'); assert.equal(scope, 'scope'); return state.counts; },
         async prune(actual: unknown, now: number) { same(actual, 'prune'); assert.equal(now, state.now); return 7; }, async append() {} };
     const targets = { async node(actual: unknown, node: string) { same(actual, 'node'); assert.equal(node, 'node'); return state.target; },
         async forward(actual: unknown, scope: string, forward: string) { same(actual, 'forward'); assert.deepEqual([scope, forward], ['scope', 'forward']); return state.target; } };
-    return { service: new TelemetryRollups(db, auth, store, targets, true, () => state.now), tx, state, trace };
+    return { service: new TelemetryRollups(db, auth, access, store, targets, true, () => state.now), tx, state, trace };
 }
 
 test('77 aggregate history authorizes in its transaction and returns canonical exclusive pagination without issuing authority', async () => {
@@ -77,7 +93,7 @@ test('77 aggregate history authorizes in its transaction and returns canonical e
     const input = { ...query, to: new Date(at + 120000).toISOString() };
     f.state.now = at + 61000;
     const result = await f.service.history('reader', 'scope', 'node', 'node', input);
-    assert.deepEqual(f.trace, ['begin', 'scope', 'node', 'history', 'losses', 'commit']);
+    assert.deepEqual(f.trace, ['begin', 'scope', 'principal', 'access:host', 'node', 'history', 'losses', 'commit']);
     assert.deepEqual(f.state.window, { scopeId: 'scope', family: 'process', resolution: 'minute', kind: 'node', targetId: 'node', from: at, to: at + 120000, limit: 1, seriesKey: null, after: null });
     assert.deepEqual(f.state.lossArgs, ['scope', 'process', 'node']);
     assert.equal(result.executionAuthorized, false); assert.equal(result.health, 'unknown'); assert.equal(result.window.truncated, true);
@@ -90,7 +106,7 @@ test('77 aggregate history authorizes in its transaction and returns canonical e
 test('77 aggregate Forward hourly queries keep scope-family loss attribution and original default aligned minute windows', async () => {
     const f = owner(); f.state.target = { scopeId: 'scope', forwardId: 'forward' };
     const result = await f.service.history('reader', 'scope', 'forward', 'forward', { family: 'forward', resolution: 'hour', from: new Date(at).toISOString(), to: new Date(at + 3600000).toISOString() });
-    assert.deepEqual(f.trace, ['begin', 'scope', 'forward', 'history', 'losses', 'commit']); assert.deepEqual(f.state.lossArgs, ['scope', 'forward', null]);
+    assert.deepEqual(f.trace, ['begin', 'scope', 'principal', 'access:forward', 'forward', 'history', 'losses', 'commit']); assert.deepEqual(f.state.lossArgs, ['scope', 'forward', null]);
     assert.equal(result.losses.scope, 'scope-family'); assert.equal(f.state.window.resolution, 'hour'); assert.equal(result.window.limit, 128);
     const defaults = owner(); await defaults.service.history('reader', 'scope', 'node', 'node', { family: 'host' });
     assert.deepEqual(defaults.state.window, { scopeId: 'scope', family: 'host', resolution: 'minute', kind: 'node', targetId: 'node',
@@ -118,13 +134,13 @@ test('77 aggregate history detects persisted scope family target ordering duplic
     const denied = owner(); denied.state.denied = true;
     await assert.rejects(denied.service.history('reader', 'scope', 'node', 'node', query), { code: 'AUTHORIZATION_DENIED' }); assert.deepEqual(denied.trace, ['begin', 'scope', 'rollback']);
     const missing = owner(); missing.state.target = null;
-    await assert.rejects(missing.service.history('reader', 'scope', 'node', 'node', query), { code: 'NOT_FOUND' }); assert.deepEqual(missing.trace, ['begin', 'scope', 'node', 'rollback']);
+    await assert.rejects(missing.service.history('reader', 'scope', 'node', 'node', query), { code: 'NOT_FOUND' }); assert.deepEqual(missing.trace, ['begin', 'scope', 'principal', 'access:host', 'node', 'rollback']);
 });
 
 test('77 aggregate capacity preserves over-budget inspection and exact wide logical budgets plus reader cooldown', async () => {
     const f = owner(); f.state.counts.minuteRows = TELEMETRY_ROLLUP_LIMITS.maxMinuteRowsPerScope + 1;
     const result = await f.service.capacity('reader', 'scope');
-    assert.deepEqual(f.trace, ['begin', 'scope', 'capacity', 'commit']); assert.deepEqual(result.observed, f.state.counts);
+    assert.deepEqual(f.trace, ['begin', 'scope', 'principal', 'capacity', 'commit']); assert.deepEqual(result.observed, f.state.counts);
     assert.equal(result.logicalBudget.maxBucketJsonBytesPerNode, ((10081n + 721n) * 4n * 8192n).toString());
     assert.equal(result.logicalBudget.maxCursorJsonBytesPerNode, (512n * 4n * 8192n).toString());
     assert.equal(result.logicalBudget.maxBucketJsonBytesPerScope, (550000n * 8192n).toString());
@@ -134,6 +150,27 @@ test('77 aggregate capacity preserves over-budget inspection and exact wide logi
     f.state.now += 1000; f.state.counts = { ...f.state.counts, cursorRows: -1 };
     await assert.rejects(f.service.capacity('reader', 'scope'), { code: 'INTEGRITY_FAILURE' });
     assert.equal(await f.service.prune(), 7);
+});
+
+test('77 personal Forward aggregates withhold Scope losses without reading the loss store', async () => {
+    const f = owner(); f.state.governance = false; f.state.target = { scopeId: 'scope', forwardId: 'forward' };
+    const result = await f.service.history('reader', 'scope', 'forward', 'forward', {
+        family: 'forward', from: new Date(at).toISOString(), to: new Date(at + 60000).toISOString(),
+    });
+    assert.deepEqual(result.losses, { scope: 'withheld-scope-family', minuteEvicted: null, hourEvicted: null, cursorEvicted: null, cursorExpired: null });
+    assert.deepEqual(f.trace, ['begin', 'scope', 'principal', 'access:forward', 'forward', 'history', 'commit']);
+    assert.equal(f.state.lossArgs, undefined);
+});
+
+test('77 shared host and foreign Forward aggregates stop before storage; personal capacity is withheld', async () => {
+    for (const kind of ['node', 'forward'] as const) {
+        const f = owner(); f.state.governance = false; f.state.resourceDenied = true;
+        await assert.rejects(f.service.history('reader', 'scope', kind, kind, { ...query, family: kind === 'node' ? 'process' : 'forward' }), { code: 'NOT_FOUND' });
+        assert.deepEqual(f.trace, ['begin', 'scope', 'principal', kind === 'node' ? 'access:host' : 'access:forward', 'rollback']);
+    }
+    const f = owner(); f.state.governance = false;
+    await assert.rejects(f.service.capacity('reader', 'scope'), { code: 'NOT_FOUND' });
+    assert.deepEqual(f.trace, ['begin', 'scope', 'principal', 'rollback']);
 });
 
 test('77 aggregate four request slots reject the fifth and release slots after success and failure', async () => {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ControlError } from '../framework/public.ts';
-import type { ReadPageWindow, ForwardIntent, PathGroupStoredHead, PathGroupStoredRevision, PathGroupStorage, PathGroupBindingStoredRecord, PathGroupBindingStorage } from '../framework/public.ts';
+import type { ReadPageWindow, ReadPrincipal, ForwardIntent, PathGroupStoredHead, PathGroupStoredRevision, PathGroupStorage, PathGroupBindingStoredRecord, PathGroupBindingStorage } from '../framework/public.ts';
 
 import { consolePageSql } from './mysql-read-pagination.ts';
 import { json, rows, write } from './mysql.ts';
@@ -10,9 +10,9 @@ export class MySqlPathGroupStore<Config> implements PathGroupStorage<Transaction
     async lockScope(tx: Transaction, scope: string) { await rows(tx, 'SELECT id FROM scopes WHERE id=? FOR UPDATE', [scope]); }
     async count(tx: Transaction, scope: string) { return (await rows<{ n: number }>(tx, 'SELECT COUNT(*) n FROM path_groups WHERE scope_id=?', [scope]))[0]!.n; }
     async head(tx: Transaction, scope: string, id: string, lock = false): Promise<PathGroupStoredHead | null> {
-        const record = (await rows<{ group_id: string; current_revision: number; archived: number }>(tx,
-            'SELECT group_id,current_revision,archived FROM path_groups WHERE scope_id=? AND group_id=?' + (lock ? ' FOR UPDATE' : ''), [scope, id]))[0];
-        return record ? { groupId: record.group_id, currentRevision: record.current_revision, archived: Boolean(record.archived) } : null;
+        const record = (await rows<{ group_id: string; owner_actor_id: string | null; current_revision: number; archived: number }>(tx,
+            'SELECT group_id,owner_actor_id,current_revision,archived FROM path_groups WHERE scope_id=? AND group_id=?' + (lock ? ' FOR UPDATE' : ''), [scope, id]))[0];
+        return record ? { groupId: record.group_id, ownerActorId: record.owner_actor_id, currentRevision: record.current_revision, archived: Boolean(record.archived) } : null;
     }
     async revision(tx: Transaction, scope: string, id: string, number: number): Promise<PathGroupStoredRevision<Config> | null> {
         const record = (await rows<{ revision: number; config: unknown; config_digest: string; created_by: string; created_at: number }>(tx,
@@ -20,19 +20,20 @@ export class MySqlPathGroupStore<Config> implements PathGroupStorage<Transaction
         return record ? { revision: record.revision, config: json<Config>(record.config), configDigest: record.config_digest,
             createdBy: record.created_by, createdAt: record.created_at } : null;
     }
-    async list(tx: Transaction, scope: string, paging: ReadPageWindow, prefix: string) {
-        const filter = 'scope_id=? AND LEFT(group_id,CHAR_LENGTH(?))=?', args = [scope, prefix, prefix];
+    async list(tx: Transaction, scope: string, principal: ReadPrincipal, paging: ReadPageWindow, prefix: string) {
+        const filter = 'scope_id=? AND LEFT(group_id,CHAR_LENGTH(?))=?' + (principal.governance ? '' : ' AND owner_actor_id=?');
+        const args = [scope, prefix, prefix, ...(principal.governance ? [] : [principal.actorId])];
         const total = (await rows<{ n: number }>(tx, 'SELECT COUNT(*) n FROM path_groups WHERE ' + filter, args))[0]!.n;
-        const records = await rows<{ group_id: string; current_revision: number; archived: number }>(tx,
-            'SELECT group_id,current_revision,archived FROM path_groups WHERE ' + filter + ' ORDER BY group_id ' + consolePageSql(paging), args);
-        return { total, items: records.map(record => ({ groupId: record.group_id, currentRevision: record.current_revision, archived: Boolean(record.archived) })) };
+        const records = await rows<{ group_id: string; owner_actor_id: string | null; current_revision: number; archived: number }>(tx,
+            'SELECT group_id,owner_actor_id,current_revision,archived FROM path_groups WHERE ' + filter + ' ORDER BY group_id ' + consolePageSql(paging), args);
+        return { total, items: records.map(record => ({ groupId: record.group_id, ownerActorId: record.owner_actor_id, currentRevision: record.current_revision, archived: Boolean(record.archived) })) };
     }
     /** Caller holds the Scope lock before the group head lock in the same transaction. */
     // Only the legacy bridge supplies count, retaining its original dynamic override.
     async publish(tx: Transaction, scope: string, id: string, record: PathGroupStoredRevision<Config>, count: (tx: Transaction, scope: string) => Promise<number> = (tx, scope) => this.count(tx, scope)) {
         if (record.revision === 1) {
             if (await count(tx, scope) >= 64) throw new ControlError('RESOURCE_LIMIT', 429, 'Scope immutable path group limit reached');
-            await write(tx, 'INSERT INTO path_groups(scope_id,group_id,current_revision) VALUES(?,?,1)', [scope, id]);
+            await write(tx, 'INSERT INTO path_groups(scope_id,group_id,current_revision,owner_actor_id) VALUES(?,?,1,?)', [scope, id, record.createdBy]);
         }
         await write(tx, 'INSERT INTO path_group_revisions(scope_id,group_id,revision,config,config_digest,created_by,created_at) VALUES(?,?,?,?,?,?,?)',
             [scope, id, record.revision, JSON.stringify(record.config), record.configDigest, record.createdBy, record.createdAt]);
@@ -42,6 +43,14 @@ export class MySqlPathGroupStore<Config> implements PathGroupStorage<Transaction
             throw new ControlError('REVISION_CONFLICT', 409, 'Path group head changed or archived');
     }
     async archive(tx: Transaction, scope: string, id: string) { await write(tx, 'UPDATE path_groups SET archived=TRUE WHERE scope_id=? AND group_id=?', [scope, id]); }
+    async classifyOwner(tx:Transaction,scope:string,id:string,expectedRevision:number,ownerActorId:string):Promise<number> {
+        return write(tx,'UPDATE path_groups SET owner_actor_id=? WHERE scope_id=? AND group_id=? AND current_revision=? AND owner_actor_id IS NULL',
+            [ownerActorId,scope,id,expectedRevision]);
+    }
+    async auditOwnership(tx:Transaction,scope:string,id:string,actor:string,ownerActorId:string,revision:number,at:number):Promise<void> {
+        await write(tx,"INSERT INTO path_group_events(id,scope_id,group_id,actor_id,owner_actor_id,revision,kind,created_at) VALUES(?,?,?,?,?,?,'classify-owner',?)",
+            [randomUUID(),scope,id,actor,ownerActorId,revision,at]);
+    }
     async audit(tx: Transaction, scope: string, id: string, actor: string, revision: number, kind: 'publish' | 'archive', at: number) {
         await write(tx, 'INSERT INTO path_group_events(id,scope_id,group_id,actor_id,revision,kind,created_at) VALUES(?,?,?,?,?,?,?)', [randomUUID(), scope, id, actor, revision, kind, at]);
     }
@@ -66,9 +75,9 @@ export class MySqlPathGroupBindingStore implements PathGroupBindingStorage<Trans
         const records = await rows<StoredBinding>(tx, 'SELECT b.* FROM forward_path_group_bindings b JOIN forwards f ON f.id=b.forward_id WHERE f.scope_id=? AND b.scope_id=? AND f.id=? ORDER BY b.sequence LIMIT 64', [scope, scope, forwardId]);
         return records.map(binding);
     }
-    async references(tx: Transaction, scope: string, id: string, paging: ReadPageWindow, revision?: number) {
-        const filter = ' WHERE f.scope_id=? AND b.scope_id=? AND b.group_id=? AND f.deleting=FALSE' + (revision === undefined ? '' : ' AND b.group_revision=?');
-        const args = [scope, scope, id, ...(revision === undefined ? [] : [revision])];
+    async references(tx: Transaction, scope: string, principal: ReadPrincipal, id: string, paging: ReadPageWindow, revision?: number) {
+        const filter = ' WHERE f.scope_id=? AND b.scope_id=? AND b.group_id=? AND f.deleting=FALSE' + (principal.governance ? '' : ' AND f.owner_actor_id=?') + (revision === undefined ? '' : ' AND b.group_revision=?');
+        const args = [scope, scope, id, ...(principal.governance ? [] : [principal.actorId]), ...(revision === undefined ? [] : [revision])];
         const total = (await rows<{ n: number }>(tx, 'SELECT COUNT(*) n' + join + filter, args))[0]!.n;
         const data = await rows<StoredBinding & { id: string; revision: number; spec: unknown; recovery_suspended: number }>(tx,
             'SELECT b.*,f.id,f.revision,f.spec,f.recovery_suspended' + join + filter + ' ORDER BY f.id ' + consolePageSql(paging), args);

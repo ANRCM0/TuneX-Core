@@ -1,3 +1,7 @@
+import { initAdminResourceConsole, personalPortUsageView } from '../admin-resource-console.js';
+import { initResourceLimitConsole, personalPayloadLimitView } from '../resource-limit-console.js';
+import { readIdentityContext, scopeGovernance } from '../account-context.js';
+import { initLineBuilder } from '../line-builder.js';
 import { summarizeForwardRecord } from '../forward-status.js';
 import { explainNodePreflight, summarizePreflight } from '../forward-preflight.js';
 
@@ -11,6 +15,11 @@ export function mountControlConsole({
 }) {
 const byId = id => document.getElementById(id);
 const auth = { scope: '', token: '' };
+let account = null, accountPage = null, accountEpoch = 0, accountController = null;
+let nodeOwnership = 'mine';
+const governanceViews = new Set(['resources','audit','alerts','notifications','observation-services']);
+const selectedScope = () => account?.scopes.find(item => item.scopeId === auth.scope);
+const governance = () => scopeGovernance(selectedScope());
 const page = { nodes: 1, forwards: 1, operations: 1 };
 const store = { nodes: [], forwards: [], operations: [] };
 const candidates = { direct: [], relay: [] };
@@ -27,6 +36,7 @@ let currentView = 'overview';
 let editing = null;
 let currentSecret = null;
 let overview = null, connectionVersion = 0;
+let privateProvisioning=false,privateProvisionUnknown=false;
 
 function element(tag, value, className) {
   const item = document.createElement(tag);
@@ -67,10 +77,19 @@ function notify(message, failure = false) {
   box.hidden = false;
 }
 function display(view) {
+  if(governanceViews.has(view)&&!governance())return;
+  if(view==='nodes'||view==='available'){
+    nodeOwnership=view==='available'?'available':'mine';
+    filters.nodes.ownership=nodeOwnership;page.nodes=1;
+    byId('nodes-filter').elements.namedItem('ownership').value=nodeOwnership;
+    byId('nodes-title').textContent=view==='available'?'可用资源':'我的机器';
+    byId('nodes-description').textContent=view==='available'?'按当前账号授权列出私有机器与管理员共享资源；用途限制不授予整机管理权限。':'管理归属于我的私有机器与接入凭据。';
+    byId('show-node-form').hidden=view==='available';
+  }
   currentView = view;
-  const labels = { overview: '运行概览', nodes: '节点管理', forwards: '转发管理', relay: '隧道管理', probes: '受限 TCP 探测', operations: '执行记录', audit: '管理审计 · 只读查询', alerts: '站内事件 · 固定告警政策', notifications: '通知端点 · 受保护配置' };
+  const labels = { overview: '运行概览', nodes: '我的机器', available: '可用资源', forwards: '我的转发', relay: '我的线路', resources:'共享资源管理', probes: '受限 TCP 探测', operations: '执行记录', audit: '管理审计 · 只读查询', alerts: '站内事件 · 固定告警政策', notifications: '通知端点 · 受保护配置' };
   byId('page-title').textContent = view === 'observation-services' ? '观测服务 · 仅声明与公有信任' : labels[view] || labels.overview;
-  document.querySelectorAll('.view').forEach(node => { node.hidden = node.id !== 'view-' + view; });
+  document.querySelectorAll('.view').forEach(node => { node.hidden = node.id !== 'view-' + (view==='available'?'nodes':view); });
   document.querySelectorAll('.nav').forEach(node => { node.classList.toggle('active', node.dataset.view === view); });
 }
 async function load(kind) {
@@ -91,14 +110,15 @@ async function loadOverview() {
   overview = result;
   updateOverview();
 }
-async function loadCandidates(mode, pinnedIds = []) {
+async function loadCandidates(mode, pinnedIds = [], pinnedRoles = {}) {
   const key = 'candidates-' + mode, version = readVersions[key] = (readVersions[key] ?? 0) + 1;
   const prefix = byId(mode + '-candidate-prefix').value.trim();
   const selected = [...new Set(pinnedIds.filter(Boolean))];
+  const role=mode==='direct'?'ingress':byId('relay-candidate-role').value||'ingress';
   if (selected.length > 9) throw new Error('最多保留 9 个已选节点');
   const [result, ...pinned] = await Promise.all([
-    request('GET', listResource('nodes/candidates', candidatePages[mode], { mode, idPrefix: prefix })),
-    ...selected.map(nodeId => request('GET', listResource('nodes/candidates', 1, { mode, nodeId }))),
+    request('GET', listResource('nodes/candidates', candidatePages[mode], { mode, role, idPrefix: prefix })),
+    ...selected.map(nodeId => request('GET', listResource('nodes/candidates', 1, { mode, role:pinnedRoles[nodeId]??role, nodeId }))),
   ]);
   if (version !== readVersions[key]) return false;
   candidates[mode] = candidateChoices(result.items, selected, pinned.flatMap(p => p.items));
@@ -127,9 +147,9 @@ function renderOps() {
   if (!status || !failedBox || !staleBox) return;
   const failed = store.operations.filter(item => item.status === 'failed').slice(0, 5);
   const now = Date.now();
-  const stale = store.nodes.filter(node => node.revoked || !node.lastReportAt ||
+  const stale = store.nodes.filter(node => node.readDetail==='full').filter(node => node.revoked || !node.lastReportAt ||
     !Number.isFinite(Date.parse(node.lastReportAt)) || now - Date.parse(node.lastReportAt) > 90000).slice(0, 5);
-  status.textContent = 'Scope 全量失败 Operation ' + (overview ? overview.failedOperations : '—') +
+  status.textContent = '当前可见失败 Operation ' + (overview ? overview.failedOperations : '—') +
     ' · 当前页失败 ' + failed.length + ' · 当前页报告过期/撤销 ' + stale.length;
   failedBox.replaceChildren();
   if (!failed.length) failedBox.append(element('span', '当前页无失败 Operation；缺失不等于成功。', 'subline'));
@@ -167,15 +187,21 @@ function renderNodes() {
     const tr = element('tr');
     const first = cell(tr, element('span', shortId(node.id), 'mono cell-title'));
     first.append(element('div', node.id, 'subline'));
+    first.append(label(node.resourceSource==='private'?'私有机器':node.resourceSource==='admin-shared'?'管理员共享':'历史待分类'));
+    first.append(element('div', node.canUse?'可用用途：'+(node.allowedRoles===null?'入口 / 中继 / 出口':node.allowedRoles.map(role=>({ingress:'入口',transit:'中继',egress:'出口'})[role]).join(' / ')):'当前无执行使用权', 'subline'));
     const expired = node.credentialUntil ? new Date(node.credentialUntil).getTime() <= Date.now() : true;
     cell(tr, node.revoked ? label('已撤销', 'bad') : expired ? label('未注册 / 凭据失效', 'progress') : label('凭据有效', 'good'));
     const recent = node.lastReportAt && Date.now() - Date.parse(node.lastReportAt) < 60000;
-    const report = cell(tr, label(recent ? '报告较新' : '未知 / 过期', recent ? 'good' : ''));
-    report.append(element('div', date(node.lastReportAt), 'subline'));
+    const report = cell(tr, label(node.readDetail==='shared'?'报告不可见':recent ? '报告较新' : '未知 / 过期', recent ? 'good' : ''));
+    report.append(element('div', node.readDetail==='shared'?'共享用途授权不包含主机报告':date(node.lastReportAt), 'subline'));
     cell(tr, element('span', (node.policy?.capabilities ?? []).join(', ') || '等待 Agent 上报', 'mono'));
     const actionCell=cell(tr);
     const actionGroup=element('div',undefined,'cell-actions');
-    actionGroup.append(button('详情','node-detail',node.id,'secondary'),button('诊断','node-diagnostics',node.id,'secondary'),button('TLS Tunnel','node-tunnel',node.id,'secondary'),button('进程指标','node-telemetry',node.id,'secondary'),button('OS 资源','node-host-telemetry',node.id,'secondary'),button('聚合历史','node-telemetry-aggregate',node.id,'secondary'));
+    if(node.readDetail==='full')actionGroup.append(button('详情','node-detail',node.id,'secondary'),button('诊断','node-diagnostics',node.id,'secondary'),button('TLS Tunnel','node-tunnel',node.id,'secondary'),button('进程指标','node-telemetry',node.id,'secondary'),button('OS 资源','node-host-telemetry',node.id,'secondary'),button('聚合历史','node-telemetry-aggregate',node.id,'secondary'));
+    if(node.canUse)actionGroup.append(button('我的端口用量','node-port-usage',node.id,'secondary'));
+    if(node.canUse&&node.resourceSource==='admin-shared')actionGroup.append(button('我的带宽与流量配置','node-payload-limits',node.id,'secondary'));
+    if(node.resourceSource==='private')actionGroup.append(element('span','私有机器不扣共享带宽与流量额度','subline'));
+    if(node.readDetail==='shared')actionGroup.append(element('span','用于组线；主机详情由所有者管理','subline'));
     actionCell.append(actionGroup);
     tbody.append(tr);
   }
@@ -239,6 +265,7 @@ function renderForwards() {
     group.append(button('入口流量观察', 'forward-telemetry', item.id, 'secondary'));
     group.append(button('Probe 计数', 'probe-telemetry', item.id, 'secondary'));
     group.append(button('聚合历史', 'forward-telemetry-aggregate', item.id, 'secondary'));
+    group.append(button('探测支持','forward-probe-capabilities',item.id,'secondary'));
     if(!a.path && a.protocols.includes('tcp'))group.append(button('TCP 探测', 'forward-probe', item.id, 'secondary'));
     if(a.path)group.append(button('部署进度', 'forward-deployment', item.id, 'secondary'));
     group.append(button(a.enabled ? '停用' : '启用', 'forward-toggle', item.id, 'secondary'), button('删除', 'forward-delete', item.id, 'secondary'));
@@ -276,7 +303,7 @@ function addOptions(select, options, selected) {
   select.disabled = !options.length;
 }
 function fillNodes(preferred) {
-  const choices = candidates.direct.filter(directCapable);
+  const choices = candidates.direct.filter(node=>directCapable(node)&&(node.allowedRoles===null||node.allowedRoles?.includes('ingress')));
   const select = byId('forward-node');
   addOptions(select, choices.map(n => ({ value: n.id, label: shortId(n.id) + ' · ' + n.policy.capabilities.filter(x => x === 'tcp' || x === 'udp').join('/') })), preferred);
   fillCapabilities();
@@ -286,7 +313,7 @@ function renderForwardPreflight() {
   if (!tbody || !summary) return;
   tbody.replaceChildren();
   const protocol = byId('forward-protocol').value;
-  const rows = store.nodes.map(node => explainNodePreflight(node, { protocol }));
+  const rows = store.nodes.map(node => explainNodePreflight(node, { protocol, role:'ingress' }));
   const counts = summarizePreflight(rows);
   summary.textContent = '已加载节点 ' + counts.total + ' · 可选 ' + counts.supported + ' · 不可选 ' + counts.unsupported + ' · 未知 ' + counts.unknown;
   if (!rows.length) {
@@ -299,7 +326,7 @@ function renderForwardPreflight() {
     cell(tr, label(row.label, row.tone));
     const dimensions = '平台 ' + row.dimensions.platform + ' / 角色 ' + row.dimensions.roles + ' / flag ' + row.dimensions.flags;
     cell(tr, element('span', (row.reasons.length ? row.reasons.map(value => value.message).join('；') : '声明满足') + ' · ' + dimensions, 'subline'));
-    cell(tr, element('span', row.facts.status === 'fresh' ? '报告新鲜' : row.facts.status === 'stale' ? '报告过期' : '无报告', 'subline'));
+    cell(tr, element('span', row.facts.status === 'hidden' ? '报告不可见' : row.facts.status === 'fresh' ? '报告新鲜' : row.facts.status === 'stale' ? '报告过期' : '无报告', 'subline'));
     tbody.append(tr);
   }
 }
@@ -371,6 +398,18 @@ function detail(title, data, secret) {
 }
 async function action(kind, id) {
   try {
+    if (kind === 'node-payload-limits') {
+      const version=connectionVersion,identity={nodeId:id,scopeId:auth.scope,actorId:account?.actorId};
+      const result=await request('GET','nodes/'+encodeURIComponent(id)+'/payload-limits/'+encodeURIComponent(identity.actorId));
+      if(version!==connectionVersion)return;
+      return detail('当前账号 · 共享带宽与流量配置（只读）',personalPayloadLimitView(result,identity));
+    }
+    if (kind === 'node-port-usage') {
+      const version=connectionVersion,identity={nodeId:id,scopeId:auth.scope,actorId:account?.actorId};
+      const result=await request('GET','nodes/'+encodeURIComponent(id)+'/port-usage');
+      if(version!==connectionVersion)return;
+      return detail('当前账号 · 个人物理端口用量（只读）',personalPortUsageView(result,identity));
+    }
     if (kind === 'node-detail') return detail('Node · ' + shortId(id), await request('GET', 'nodes/' + encodeURIComponent(id)));
     if (kind === 'node-diagnostics') return detail('Node · 运行与租约诊断（非链路探测）', await request('GET', 'nodes/' + encodeURIComponent(id) + '/diagnostics'));
     if (kind === 'forward-diagnostics') return forwardDiagnostics.open(id);
@@ -392,6 +431,7 @@ async function action(kind, id) {
     if (kind === 'forward-edit') return forward.spec.path?await relayConsole.edit(forward):await editor(forward);
     if (kind === 'forward-copy') return forward.spec.path?await relayConsole.copy(forward):await editor(forward, true);
     if (kind === 'forward-probe') return await probeConsole.open(forward);
+    if (kind === 'forward-probe-capabilities') return await probeConsole.openCapabilities(forward);
     if (kind === 'forward-deployment') return await relayConsole.deployment(id);
     if (kind === 'forward-toggle') {
       const result = await mutate('PUT', 'forwards/' + encodeURIComponent(id), { expectedRevision: forward.revision, spec: { ...forward.spec, enabled: !forward.spec.enabled } });
@@ -407,9 +447,10 @@ async function action(kind, id) {
   } catch (error) { notify(error.message, true); }
 }
 async function createNode(event) {
-  event.preventDefault();
+  event.preventDefault();if(privateProvisioning||privateProvisionUnknown)return;
+  const version=connectionVersion,form=byId('node-form');
   try {
-    const form = byId('node-form');
+    connected();
     const policy = {
       allowedListenerAddresses: [form.elements.namedItem('address').value],
       allowedPorts: parsePorts(form.elements.namedItem('ports').value),
@@ -417,12 +458,23 @@ async function createNode(event) {
       allowMetadataTargets: form.elements.namedItem('metadata').checked,
       egressPolicyRevision: 1,
     };
-    const result = await mutate('POST', 'nodes', policy);
+    privateProvisioning=true;byId('node-provision-submit').disabled=true;
+    byId('node-provision-state').textContent='正在接入个人私有机器……';
+    const result = await request('POST', 'nodes', policy);
+    if(version!==connectionVersion)return;
+    if(!validScope(result.nodeId)||!/^[A-Za-z0-9_-]{32,128}$/.test(result.enrollmentToken)||!Number.isFinite(Date.parse(result.expiresAt)))throw Error('接入回执无效，原结果仍不确定。');
     form.hidden = true;
-    await Promise.all([load('nodes'), loadOverview()]);
-    detail('Node · 一次性注册凭据', { nodeId: result.nodeId, enrollmentToken: result.enrollmentToken, expiresAt: result.expiresAt }, result.enrollmentToken);
-    notify('节点已创建；请使用受信任的 Agent 安装流程完成 Enrollment。');
-  } catch (error) { notify(error.message, true); }
+    detail('我的私有机器 · 一次性接入凭据', { nodeId: result.nodeId, enrollmentToken: result.enrollmentToken, expiresAt: result.expiresAt }, result.enrollmentToken);
+    byId('node-provision-state').textContent='个人私有机器已创建。';
+    notify('私有机器已创建；请使用受信任的 Agent 安装流程完成接入。');
+    await Promise.all([load('nodes'), loadOverview()]).catch(error=>notify('机器已创建，但列表刷新失败：'+error.message,true));
+  } catch (error) {
+    if(version===connectionVersion){
+      privateProvisionUnknown=privateProvisioning&&![400,401,403,404,409,413,422,429].includes(error.httpStatus);
+      byId('node-provision-state').textContent=privateProvisionUnknown?'接入结果不确定，请先核对“我的机器”列表。接入接口没有幂等重放，页面不会自动再创建。':'接入未完成，请检查输入和当前权限。';
+      byId('node-provision-reset').hidden=!privateProvisionUnknown;notify(error.message,true);
+    }
+  }finally{if(version===connectionVersion){privateProvisioning=false;byId('node-provision-submit').disabled=privateProvisionUnknown;}}
 }
 const relayConsole=initRelayConsole({request,mutate,notify,byId,candidates,load,loadOverview,loadCandidates,detail,display,
   inspectProfile:profile=>transportConsole.open(profile),loadCatalog:()=>transportConsole.catalog(),inspectTunnel:id=>tunnelConsole.open(id)});
@@ -441,6 +493,10 @@ const pathSwitch=initPathSwitch({request,notify,byId,tunnelManagement:true,prepa
 const pathTemplates=initPathTemplates({request,notify,byId,tunnelManagement:true,onSelectDefinition:value=>{
   if(pathSwitch.selectDefinition(value))byId('path-switch-title').scrollIntoView({block:'start',behavior:'smooth'});
 }});
+const adminResources=initAdminResourceConsole({request,notify,byId,detail,parsePorts,parseCidrs,canGovern:governance,
+  onChanged:()=>Promise.all([load('nodes'),load('operations'),loadOverview(),adminResources.refresh()])});
+const resourceLimits=initResourceLimitConsole({request,notify,byId,canGovern:governance,identity:()=>({scopeId:auth.scope})});
+const lineBuilder=initLineBuilder({request,notify,byId,loadDraft:value=>pathTemplates.loadDraft(value),useDraft:value=>relayConsole.loadPathDraft(value)});
 const pathGroups=initPathGroups({request,notify,byId});
 const pathPublications=initPathPublications({request,notify,byId,getScope:()=>auth.scope});
 const ingressGroups=initIngressGroups({request,notify,byId,getScope:()=>auth.scope});
@@ -455,12 +511,14 @@ byId('relay-reload').addEventListener('click',()=>pathTemplates.list().catch(err
 function clearConnectionData() {
   connectionVersion++;
   for (const key of Object.keys(readVersions)) readVersions[key]++;
-  currentSecret = null; editing = null; overview = null; consoleRequests.clearPending();
+  privateProvisioning=false;privateProvisionUnknown=false;byId('node-provision-submit').disabled=false;byId('node-provision-reset').hidden=true;byId('node-provision-state').textContent='';
+  currentSecret = null; editing = null; overview = null; forwardStatusCache.clear(); consoleRequests.clearPending();
   candidates.direct = []; candidates.relay = [];
   candidatePages.direct = candidatePages.relay = 1;
   for (const kind of ['nodes', 'forwards', 'operations']) {
     page[kind] = 1; store[kind] = []; totals[kind] = 0; filters[kind] = {};
     byId(kind + '-filter').reset();
+    if(kind==='nodes'||kind==='forwards')filters[kind].ownership='mine';
     pagination(kind, { page: 1, limit: 25, total: 0 });
   }
   byId('detail-dialog').close(); byId('detail-content').textContent = '';
@@ -475,10 +533,12 @@ function clearConnectionData() {
   observationServices.clear();
   byId('forward-form').hidden = true; byId('node-form').hidden = true;
   byId('direct-candidate-prefix').value = ''; byId('relay-candidate-prefix').value = '';
+  byId('relay-candidate-role').value = 'ingress';
   for (const mode of ['direct', 'relay']) {
     byId(mode + '-candidate-page').textContent = '尚未查询候选';
     byId(mode + '-candidate-prev').disabled = byId(mode + '-candidate-next').disabled = true;
   }
+  adminResources.clear();resourceLimits.clear();lineBuilder.clear();
   relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); ruleConsole.clear(); tunnelConsole.clear(); telemetryConsole.clear(); forwardTelemetryConsole.clear(); hostTelemetryConsole.clear(); probeTelemetryConsole.clear(); telemetryAggregateConsole.clear(); pathTemplates.clear(); pathSwitch.clear(); pathGroups.clear(); pathPublications.clear(); ingressGroups.clear(); ingressMigrations.clear(); fillNodes();
   renderNodes(); renderForwards(); renderOperations(); renderForwardPreflight(); updateOverview();
 }
@@ -500,12 +560,14 @@ for (const kind of ['nodes', 'forwards', 'operations']) {
     event.preventDefault();
     filters[kind] = Object.fromEntries([...new FormData(event.currentTarget)].map(([key, value]) => [key, String(value).trim()]));
     page[kind] = 1;
+    if(kind==='nodes')nodeOwnership=filters.nodes.ownership;
     load(kind).catch(error => notify(error.message, true));
   });
 }
 for (const mode of ['direct', 'relay']) {
   const reload = () => (mode === 'direct' ? refreshDirectCandidates() : relayConsole.refreshCandidates()).catch(error => notify(error.message, true));
   byId(mode + '-candidate-search').addEventListener('click', () => { candidatePages[mode] = 1; reload(); });
+  if(mode==='relay')byId('relay-candidate-role').addEventListener('change',()=>{candidatePages.relay=1;reload();});
   for (const [suffix, direction] of [['prev', -1], ['next', 1]])
     byId(mode + '-candidate-' + suffix).addEventListener('click', () => { candidatePages[mode] += direction; reload(); });
   byId(mode + '-candidate-prefix').addEventListener('keydown', event => {
@@ -513,8 +575,11 @@ for (const mode of ['direct', 'relay']) {
   });
 }
 document.querySelectorAll('.nav').forEach(node => node.addEventListener('click', () => {
+  if(node.hidden)return;
   if (node.dataset.view !== 'notifications') notificationEndpoints.leave();
   display(node.dataset.view);
+  if(node.dataset.view==='resources'&&auth.scope)adminResources.refresh();
+  if(['nodes','available'].includes(node.dataset.view)&&auth.scope)load('nodes').catch(e=>notify(e.message,true));
   if(node.dataset.view==='relay' && auth.scope) Promise.all([relayConsole.refresh(),pathTemplates.list()]).catch(e=>notify(e.message,true));
 }));
 for (const [id, view] of [['ops-audit', 'audit'], ['ops-alerts', 'alerts'], ['ops-notifications', 'notifications'],
@@ -526,30 +591,75 @@ for (const [id, anchor] of [['topology-templates', 'tunnel-definition-title'], [
     [...document.querySelectorAll('.nav')].find(node => node.dataset.view === 'relay')?.click();
     byId(anchor).scrollIntoView({ block: 'start', behavior: 'smooth' });
   });
-byId('connection-form').addEventListener('submit', async event => {
+function updateAccountNavigation() {
+  document.querySelectorAll('[data-governance]').forEach(node=>{node.hidden=!governance();});
+  const scope=selectedScope();
+  byId('scope-status').textContent=scope?('角色：'+({owner:'所有者',manager:'成员管理者',viewer:'只读成员'})[scope.role]+'；成员状态：'+scope.membership+'；'+(scope.canEnter?'可以进入':'当前不可进入')):'选择一个可进入的工作空间。';
+}
+function scopeOptions(values) {
+  const select=byId('scope');select.replaceChildren();
+  const empty=element('option','选择工作空间');empty.value='';select.append(empty);
+  for(const scope of values){
+    const option=element('option',scope.scopeId+' · '+({owner:'所有者',manager:'成员管理者',viewer:'只读成员'})[scope.role]+' · '+scope.membership+(scope.canEnter?'':' · 不可进入'));
+    option.value=scope.scopeId;option.disabled=!scope.canEnter;select.append(option);
+  }
+  select.value=auth.scope;select.disabled=!values.some(scope=>scope.canEnter);
+}
+async function enterScope(scopeId) {
+  const scope=account?.scopes.find(item=>item.scopeId===scopeId&&item.canEnter);
+  clearConnectionData();auth.scope=scope?.scopeId??'';
+  byId('refresh').disabled=!scope;updateAccountNavigation();display('overview');
+  if(scope)await refresh();
+}
+async function accountPageRead(token,after=null) {
+  const version=++accountEpoch;
+  accountController?.abort();accountController=new AbortController();
+  const value=await readIdentityContext(token,{after,signal:accountController.signal});
+  if(version!==accountEpoch)return false;
+  if(after&&account?.actorId!==value.actorId)throw Error('账号已变化，请重新登录');
+  const retained=after?account.scopes.find(scope=>scope.scopeId===auth.scope):null;
+  account={...value,scopes:retained&&!value.scopes.some(scope=>scope.scopeId===retained.scopeId)?[retained,...value.scopes]:value.scopes};
+  accountPage=value;byId('account-context').hidden=false;byId('account-actor').textContent='当前账号：'+value.actorId;
+  scopeOptions(account.scopes);byId('scope-more').hidden=!value.truncated;
+  if(!account.scopes.some(scope=>scope.canEnter))byId('scope-status').textContent='当前页没有可进入的工作空间。可读取下一页，或联系所有者恢复成员资格。';
+  return true;
+}
+byId('connection-form').addEventListener('submit',async event=>{
   event.preventDefault();
-  const scope = byId('scope').value.trim();
-  const token = byId('token').value.trim();
-  if (!validScope(scope) || !/^[A-Za-z0-9_-]{32,128}$/.test(token)) return notify('Scope 或 Token 格式不正确', true);
-  clearConnectionData();
-  auth.scope = scope;
-  auth.token = token;
-  byId('token').value = '';
-  byId('refresh').disabled = false;
-  byId('disconnect').disabled = false;
-  display('overview');
-  await refresh();
+  const token=byId('token').value.trim();
+  if(!/^[A-Za-z0-9_-]{32,128}$/.test(token))return notify('Bearer Token 格式不正确',true);
+  auth.scope='';auth.token='';account=null;accountPage=null;clearConnectionData();updateAccountNavigation();
+  byId('account-context').hidden=true;byId('refresh').disabled=true;byId('disconnect').disabled=false;
+  byId('connection-indicator').textContent='正在读取账号';byId('token').value='';
+  const loginEpoch=accountEpoch+1;
+  try {
+    if(!await accountPageRead(token))return;
+    auth.token=token;byId('connection-indicator').textContent='账号已认证，选择工作空间';
+    const first=account.scopes.find(scope=>scope.canEnter);
+    if(first){byId('scope').value=first.scopeId;await enterScope(first.scopeId);}
+  }catch(error){if(loginEpoch===accountEpoch){notify(error.message,true);byId('connection-indicator').textContent='登录未完成';}}
 });
-byId('disconnect').addEventListener('click', () => {
-  auth.scope = ''; auth.token = '';
-  clearConnectionData();
-  byId('scope').value = ''; byId('token').value = '';
-  byId('refresh').disabled = true; byId('disconnect').disabled = true;
-  byId('connection-indicator').textContent = '未连接';
+byId('scope').addEventListener('change',()=>enterScope(byId('scope').value));
+byId('scope-more').addEventListener('click',async()=>{
+  if(!auth.token||!accountPage?.nextAfter)return;
+  const version=accountEpoch+1;
+  byId('scope-more').disabled=true;
+  try{await accountPageRead(auth.token,accountPage.nextAfter);}catch(error){if(version===accountEpoch)notify(error.message,true);}
+  finally{byId('scope-more').disabled=false;}
+});
+byId('disconnect').addEventListener('click',()=>{
+  accountEpoch++;accountController?.abort();account=null;accountPage=null;auth.scope='';auth.token='';clearConnectionData();updateAccountNavigation();
+  byId('scope').replaceChildren();byId('token').value='';byId('account-context').hidden=true;
+  byId('refresh').disabled=true;byId('disconnect').disabled=true;byId('connection-indicator').textContent='未连接';display('overview');
   notify('已断开连接；当前标签页中的 Bearer Token 已清除。');
 });
+byId('resource-operations').addEventListener('click',()=>{display('operations');load('operations').catch(error=>notify(error.message,true));});
 byId('refresh').addEventListener('click', refresh);
 byId('show-node-form').addEventListener('click', () => { byId('node-form').hidden = false; });
+byId('node-provision-reset').addEventListener('click',()=>{
+  if(privateProvisioning||!privateProvisionUnknown||!confirm('已核对个人机器列表和原接入结果，明确准备另一条接入？这不会撤销或重放原请求。'))return;
+  privateProvisionUnknown=false;byId('node-provision-submit').disabled=false;byId('node-provision-reset').hidden=true;byId('node-provision-state').textContent='可准备新的个人接入。';
+});
 byId('cancel-node').addEventListener('click', () => { byId('node-form').hidden = true; });
 byId('node-form').addEventListener('submit', createNode);
 byId('show-forward-form').addEventListener('click', () => editor(null).catch(e => notify(e.message, true)));
@@ -579,6 +689,7 @@ document.addEventListener('click', event => {
     load(resource).catch(error => notify(error.message, true));
   } else action(kind, target.dataset.id);
 });
+updateAccountNavigation();
 display('overview');
 
 }

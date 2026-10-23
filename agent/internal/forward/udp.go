@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tunex/vnext/agent/internal/contracts"
+	"github.com/tunex/vnext/agent/internal/executionhost"
 	"github.com/tunex/vnext/agent/internal/payloadstats"
 )
 
@@ -75,6 +76,7 @@ type UDP struct {
 	queues        atomic.Uint64
 	amplified     atomic.Uint64
 	payload       *payloadstats.Counters
+	payloadGate   executionhost.PayloadGate
 }
 
 type udpAssociation struct {
@@ -97,17 +99,26 @@ func validateUDPAssignment(assignment contracts.Assignment) error {
 }
 
 func newUDP(slot *udpListenerSlot, assignment contracts.Assignment, maximum uint64, permits chan struct{}, timeout, idle time.Duration) *UDP {
+	return newUDPWithPayload(slot, assignment, maximum, permits, timeout, idle, nil)
+}
+func newUDPWithPayload(slot *udpListenerSlot, assignment contracts.Assignment, maximum uint64, permits chan struct{}, timeout, idle time.Duration, gate executionhost.PayloadGate) *UDP {
 	ctx, cancel := context.WithCancel(context.Background())
 	config := assignment.Driver.Config
 	config.AllowedDestinationCidrs = append([]string(nil), config.AllowedDestinationCidrs...)
 	return &UDP{slot: slot, binding: assignment.Listener, config: config, ctx: ctx, cancel: cancel,
-		sessions: make(map[netip.AddrPort]*udpAssociation), maximum: maximum, permits: permits, timeout: timeout, idle: idle, payload: payloadstats.New()}
+		sessions: make(map[netip.AddrPort]*udpAssociation), maximum: maximum, permits: permits, timeout: timeout, idle: idle, payload: payloadstats.New(), payloadGate: gate}
 }
 
 func StartUDP(assignment contracts.Assignment, policy contracts.Policy) (*UDP, error) {
 	return StartUDPAuthorized(assignment, policy, nil)
 }
 func StartUDPAuthorized(assignment contracts.Assignment, policy contracts.Policy, authorize func() error) (*UDP, error) {
+	return StartUDPAuthorizedMetered(assignment, policy, authorize, nil)
+}
+
+// StartUDPAuthorizedMetered binds one gate to both directions before listening.
+// Every nonempty datagram requires an entire atomic reservation.
+func StartUDPAuthorizedMetered(assignment contracts.Assignment, policy contracts.Policy, authorize func() error, gate executionhost.PayloadGate) (*UDP, error) {
 	if authorize != nil {
 		if err := authorize(); err != nil {
 			return nil, err
@@ -123,19 +134,22 @@ func StartUDPAuthorized(assignment contracts.Assignment, policy contracts.Policy
 	if err != nil {
 		return nil, err
 	}
+	slot := &udpListenerSlot{done: make(chan struct{})}
+	stream := newUDPWithPayload(slot, assignment, min(policy.MaxUdpSessionsPerAssignment, MaxUDPSessions), udpNodePermits, time.Duration(min(policy.ConnectTimeoutSeconds, 10))*time.Second, time.Duration(policy.UdpIdleTimeoutSeconds)*time.Second, gate)
+	stream.authorization.Set(authorize)
 	listener, err := net.ListenUDP("udp", address)
 	if err != nil {
+		stream.cancel()
 		return nil, err
 	}
 	if authorize != nil {
 		if err := authorize(); err != nil {
 			listener.Close()
+			stream.cancel()
 			return nil, err
 		}
 	}
-	slot := &udpListenerSlot{listener: listener, done: make(chan struct{})}
-	stream := newUDP(slot, assignment, min(policy.MaxUdpSessionsPerAssignment, MaxUDPSessions), udpNodePermits, time.Duration(min(policy.ConnectTimeoutSeconds, 10))*time.Second, time.Duration(policy.UdpIdleTimeoutSeconds)*time.Second)
-	stream.authorization.Set(authorize)
+	slot.listener = listener
 	slot.current = stream
 	go slot.receive()
 	return stream, nil
@@ -153,6 +167,9 @@ func (stream *UDP) ReplaceAuthorized(assignment contracts.Assignment, authorize 
 		if err := authorize(); err != nil {
 			return nil, err
 		}
+	}
+	if stream.payloadGate != nil {
+		return nil, fmt.Errorf("UNSUPPORTED_CAPABILITY: metered UDP replacement requires a new bound host")
 	}
 	if err := validateUDPAssignment(assignment); err != nil {
 		return nil, err
@@ -308,6 +325,9 @@ func (association *udpAssociation) run() {
 		case <-readerDone:
 			return
 		case packet := <-association.packets:
+			if _, err := reservePayload(association.ctx, stream.payloadGate, stream.authorization.Allow, len(packet), true); err != nil {
+				return
+			}
 			stream.mutex.Lock()
 			if association.ctx.Err() != nil || stream.authorization.Allow() != nil {
 				stream.mutex.Unlock()
@@ -365,6 +385,22 @@ func (association *udpAssociation) replies() {
 		if n > MaxUDPDatagramBytes {
 			stream.datagrams.Add(1)
 			continue
+		}
+		// A rate wait holds no listener/session lock: Close must be able to
+		// cancel it, and unsolicited replies must not consume payload credit.
+		stream.mutex.Lock()
+		if association.ctx.Err() != nil || stream.authorization.Allow() != nil {
+			stream.mutex.Unlock()
+			return
+		}
+		allowed := max(n, 64) <= association.credit
+		stream.mutex.Unlock()
+		if !allowed {
+			stream.amplified.Add(1)
+			continue
+		}
+		if _, err := reservePayload(association.ctx, stream.payloadGate, stream.authorization.Allow, n, true); err != nil {
+			return
 		}
 		stream.slot.mutex.Lock()
 		if stream.slot.current != stream || association.ctx.Err() != nil || stream.authorization.Allow() != nil {

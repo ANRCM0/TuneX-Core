@@ -32,7 +32,7 @@ export type AccessNodeCatalogOriginalDeclarations=[
 
 function fixture(){
     const tx:Tx={original:Symbol('one original transaction')},events:string[]=[],calls:unknown[][]=[],error=new Error('original effect error');
-    const input={role:'viewer' as const,expectedRevision:0},grant={nodeId:'node-a',actorId:'subject-a',revision:4,allowed:false,changed:true};
+    const input={role:'viewer' as const,expectedRevision:0},grant={nodeId:'node-a',actorId:'subject-a',revision:4,allowed:false,allowedRoles:null,portLimits:null,changed:true};
     const member={actorId:'subject-a',revision:3,role:'viewer',active:true,changed:true};
     const facts:AuthorizedNodeFacts={nodeId:'node-a',scopeId:'scope-a',capabilities:['adp.3','native.direct.v1','tcp'],allowedPorts:[32001],allowedListenerAddresses:['127.0.0.1'],allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false,egressPolicyRevision:7};
     const change:Node.NodeManagementChange={nodeId:'node-a',kind:'revoke',facts},result:Identity.AccessExecutionResult={operationIds:['operation-a'],maximumAuthorization:10000};
@@ -64,7 +64,7 @@ function fixture(){
 
 test('92/93/94 canonical and legacy class/version/constructor/method contracts retain exact public identities and effects getter refusal order',()=>{
     assert.equal(Identity.AccessCommands,LegacyAccess.AccessCommands);assert.equal(Node.NodeManagementCommands,LegacyNode.NodeManagementCommands);assert.equal(Catalog.NativeDrivers,LegacyCatalog.NativeDrivers);
-    assert.equal(Identity.ACCESS_COMMAND_INTERFACE_VERSION,1);assert.equal(Node.NODE_MANAGEMENT_INTERFACE_VERSION,1);assert.equal(Catalog.NATIVE_DRIVER_QUERY_INTERFACE_VERSION,1);
+    assert.equal(Identity.ACCESS_COMMAND_INTERFACE_VERSION,3);assert.equal(Node.NODE_MANAGEMENT_INTERFACE_VERSION,2);assert.equal(Catalog.NATIVE_DRIVER_QUERY_INTERFACE_VERSION,1);
     assert.deepEqual([Identity.AccessCommands.length,Node.NodeManagementCommands.length,Catalog.NativeDrivers.length],[5,5,2]);
     for(const [Class,methods] of [[Identity.AccessCommands,['changeMember','changeNodeGrant']],[Node.NodeManagementCommands,['change']],[Catalog.NativeDrivers,['list']]] as const){
         assert.deepEqual(Object.getOwnPropertyNames(Class.prototype),['constructor',...methods]);
@@ -105,8 +105,8 @@ test('92/93 exact truthy authorization cutoff projection preserves zero null neg
 test('92 Node grant response uses original command subject and allowed while effects receive exact raw owner grant',async()=>{
     for(const changed of [false,true]){
         const f=fixture();f.grant.changed=changed;f.grant.allowed=true;f.grant.nodeId='provider-node';f.grant.actorId='provider-subject';const response=await f.grantCall();
-        assert.deepEqual(f.events,['begin','owner','claim','grant','grant-effects','respond','commit']);assert.deepEqual(f.calls.find(call=>call[0]==='grant'),['grant','owner-a','scope-a','node-a','subject-a',1,false]);assert.equal(f.calls.find(call=>call[0]==='grant-effects')![2],f.grant);
-        assert.deepEqual(response,{status:changed?202:200,body:{nodeId:'node-a',actorId:'subject-a',revision:4,allowed:false,operationIds:['operation-a'],latestAuthorizationUntil:nativeIsoTime(15000)}});
+        assert.deepEqual(f.events,['begin','owner','claim','grant','grant-effects','respond','commit']);assert.deepEqual(f.calls.find(call=>call[0]==='grant'),['grant','owner-a','scope-a','node-a','subject-a',1,false,null,undefined]);assert.equal(f.calls.find(call=>call[0]==='grant-effects')![2],f.grant);
+        assert.deepEqual(response,{status:changed?202:200,body:{nodeId:'node-a',actorId:'subject-a',revision:4,allowed:false,allowedRoles:null,portLimits:null,operationIds:['operation-a'],latestAuthorizationUntil:nativeIsoTime(15000)}});
     }
 });
 

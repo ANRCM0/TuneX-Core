@@ -22,6 +22,7 @@ type Host[Policy, Identity any] struct {
 	SessionEpoch uint64
 	Policy       Policy
 	PeerIdentity func() (Identity, time.Time, error)
+	Payload      PayloadGate
 }
 
 func (host Host[Policy, Identity]) RequirePeerIdentity() (Identity, time.Time, error) {

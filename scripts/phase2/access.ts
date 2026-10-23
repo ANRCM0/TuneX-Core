@@ -96,9 +96,12 @@ try {
     assert.equal(targetStatus.runId, nativeRoot);
     const portStatus = JSON.parse((await linux(fixture, ['--mode', 'port'])).stdout);
     assert.equal(portStatus.platform, 'linux');
-    const provision = await call('POST', `/api/v1/scopes/${scope}/nodes`, { allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [portStatus.port], egressPolicyRevision: 1, allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false });
+    const provision = await call('POST', `/api/v1/scopes/${scope}/shared-nodes`, { allowedListenerAddresses: ['127.0.0.1'], allowedPorts: [portStatus.port], egressPolicyRevision: 1, allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false });
     assert.equal(provision.status, 201);
     const nodeId = provision.body.nodeId as string;
+    const ownerUse = await call('PUT', `/api/v1/scopes/${scope}/nodes/${nodeId}/grants/${owner}`,
+        { expectedRevision: 1, allowed: true, allowedRoles: ['ingress'] }, token, 'owner-node-use');
+    assert.equal(ownerUse.status, 202); assert.equal(ownerUse.body.revision, 2);
     const args = ['--control', `https://${host}:${control.port}`, '--node', nodeId, '--ca', linuxPath(caCert), '--state', `${nativeRoot}/state`, '--journal-key', `${nativeRoot}/secrets/journal.key`];
     try {
         await linux('/usr/bin/env', [`TUNEX_ENROLLMENT_TOKEN=${provision.body.enrollmentToken}`, binary, ...args, '--enroll']);
@@ -127,8 +130,8 @@ try {
     assert.ok(!JSON.stringify(added.body).includes(memberToken));
     const rejected = (await call('POST', `/api/v1/scopes/${scope}/forwards`, spec, memberToken, 'viewer-create'));
     assert.equal(rejected.status, 403);
-    assert.equal((await call('GET', `/api/v1/scopes/${scope}/nodes/${nodeId}`, undefined, memberToken)).status, 200);
-    passed('Membership: viewer can query its scope but cannot accept Forward intent; retries do not expose bearer secrets');
+    assert.equal((await call('GET', `/api/v1/scopes/${scope}/nodes/${nodeId}`, undefined, memberToken)).status, 404);
+    passed('Membership: viewer cannot discover an ungranted shared Node or accept Forward intent; retries do not expose bearer secrets');
     passed('Membership CAS: concurrent account acceptance has one winner and existing bearer credentials cannot be replaced');
     await control.db.pool.query("CREATE TRIGGER access_failure BEFORE INSERT ON access_events FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Injected access acceptance failure'");
     const rollbackToken = newToken();
@@ -151,23 +154,29 @@ try {
     assert.equal(stale.body.code, 'REVISION_CONFLICT');
     const noGrant = await call('POST', `/api/v1/scopes/${scope}/forwards`, spec, memberToken, 'without-node-grant');
     assert.equal(noGrant.status, 404);
-    const selfEscalation = await call('PUT', `/api/v1/scopes/${scope}/nodes/${nodeId}/grants/${member}`, { expectedRevision: 1, allowed: true }, memberToken, 'self-escalation');
+    const selfEscalation = await call('PUT', `/api/v1/scopes/${scope}/nodes/${nodeId}/grants/${member}`, { expectedRevision: 2, allowed: true }, memberToken, 'self-escalation');
     assert.equal(selfEscalation.status, 403);
     const foreignScope = 'foreign-access-scope', foreignActor = 'foreign-access-owner', foreignToken = newToken();
     await control.control.identity.bootstrap(foreignScope, foreignActor, foreignToken);
     assert.equal((await call('GET', `/api/v1/scopes/${scope}/members`, undefined, foreignToken)).status, 404);
     assert.equal((await call('GET', `/api/v1/scopes/${scope}/nodes/${nodeId}/grants`, undefined, foreignToken)).status, 404);
-    assert.equal((await call('PUT',`/api/v1/scopes/${scope}/nodes/${nodeId}/grants/${foreignActor}`,{expectedRevision:1,allowed:true},token,'foreign-subject')).status,404);
+    assert.equal((await call('PUT',`/api/v1/scopes/${scope}/nodes/${nodeId}/grants/${foreignActor}`,{expectedRevision:2,allowed:true},token,'foreign-subject')).status,404);
     passed('Access isolation: scope owner remains protected; manager cannot self-grant Node use or bypass grant checks');
     const grantPath = `/api/v1/scopes/${scope}/nodes/${nodeId}/grants/${member}`;
-    const grant = await call('PUT', grantPath, { expectedRevision: 1, allowed: true }, token, 'grant-node');
+    const grant = await call('PUT', grantPath, { expectedRevision: 2, allowed: true, allowedRoles: ['ingress'] }, token, 'grant-node');
     assert.equal(grant.status, 202);
-    assert.equal(grant.body.revision, 2);
-    assert.deepEqual(await call('PUT', grantPath, { expectedRevision: 1, allowed: true }, token, 'grant-node'), grant);
-    const altered = await call('PUT', grantPath, { expectedRevision: 1, allowed: false }, token, 'grant-node');
+    assert.equal(grant.body.revision, 3);
+    assert.deepEqual(await call('PUT', grantPath, { expectedRevision: 2, allowed: true, allowedRoles: ['ingress'] }, token, 'grant-node'), grant);
+    const sharedView = await call('GET', `/api/v1/scopes/${scope}/nodes/${nodeId}`, undefined, memberToken);
+    assert.equal(sharedView.status, 200); assert.equal(sharedView.body.detail, 'basic');
+    assert.deepEqual(Object.keys(sharedView.body).sort(), ['allowedRoles', 'capabilities', 'detail', 'nodeId', 'portLimits',
+        'resourceRevision', 'resourceSource', 'revoked', 'scopeId'].sort());
+    assert.equal(sharedView.body.resourceSource, 'admin-shared'); assert.deepEqual(sharedView.body.allowedRoles, ['ingress']);
+    assert.equal(Object.hasOwn(sharedView.body, 'policy'), false); assert.equal(Object.hasOwn(sharedView.body, 'credentials'), false);
+    const altered = await call('PUT', grantPath, { expectedRevision: 2, allowed: false }, token, 'grant-node');
     assert.equal(altered.status, 409);
     assert.equal(altered.body.code, 'IDEMPOTENCY_CONFLICT');
-    assert.equal((await call('PUT',grantPath,{expectedRevision:1,allowed:false},token,'stale-grant')).body.code,'REVISION_CONFLICT');
+    assert.equal((await call('PUT',grantPath,{expectedRevision:2,allowed:false},token,'stale-grant')).body.code,'REVISION_CONFLICT');
     const created = await call('POST', `/api/v1/scopes/${scope}/forwards`, spec, memberToken, 'member-create');
     assert.equal(created.status, 202, JSON.stringify(created.body));
     const forwardId = created.body.forwardId as string;
@@ -199,7 +208,7 @@ try {
     const ownerCreated = await call('POST', `/api/v1/scopes/${scope}/forwards`, { ...spec, ingress: { nodeId, listen: { address: '127.0.0.1', port: ownerPort } } }, token, 'owner-forward');
     assert.equal(ownerCreated.status, 202);
     await until(async () => (await call('GET', `/api/v1/scopes/${scope}/operations/${ownerCreated.body.operationId}`)).body.status === 'succeeded');
-    const withdrawn = await call('PUT', grantPath, { expectedRevision: 2, allowed: false }, token, 'withdraw-node');
+    const withdrawn = await call('PUT', grantPath, { expectedRevision: 3, allowed: false }, token, 'withdraw-node');
     assert.equal(withdrawn.status, 202);
     assert.equal(withdrawn.body.operationIds.length, 1);
     assert.ok(withdrawn.body.latestAuthorizationUntil);
@@ -214,6 +223,7 @@ try {
     ;
     assert.equal(stopped, true);
     assert.equal((await call('POST', `/api/v1/scopes/${scope}/forwards`, spec, memberToken, 'after-node-withdraw')).status, 404);
+    assert.equal((await call('GET', `/api/v1/scopes/${scope}/nodes/${nodeId}`, undefined, memberToken)).status, 404);
     const policyChange = await call('PUT', `/api/v1/scopes/${scope}/nodes/${nodeId}/policy`, { expectedRevision: 2, policy: { ...expandedPolicy, egressPolicyRevision: 3, allowedDestinationCidrs: ['127.0.0.0/9'] } }, token, 'owner-policy');
     assert.equal(policyChange.status, 202);
     await until(async () => { const [rows] = await control!.db.pool.query<any[]>('SELECT body FROM snapshots WHERE node_id=? ORDER BY generation DESC LIMIT 1', [nodeId]); return !rows[0].body.assignments.some((a: any) => a.forwardId === forwardId) && rows[0].body.assignments.some((a: any) => a.forwardId === ownerCreated.body.forwardId); });
@@ -223,7 +233,7 @@ try {
     assert.equal((await call('GET', resourcePath)).body.desired.revision, 1);
     passed('Grant withdrawal: old execution is removed; owner policy Operation cannot silently take over member authority');
     passed('Shared Node isolation: withdrawing one actor preserves another explicitly authorized Forward and both protocols');
-    const restoredGrant = await call('PUT', grantPath, { expectedRevision: 3, allowed: true }, token, 'restore-node');
+    const restoredGrant = await call('PUT', grantPath, { expectedRevision: 4, allowed: true, allowedRoles: ['ingress'] }, token, 'restore-node');
     assert.equal(restoredGrant.status, 202);
     await until(async () => (await call('GET', `/api/v1/scopes/${scope}/operations/${restoredGrant.body.operationIds[0]}`)).body.status === 'succeeded');
     const again = JSON.parse((await linux(fixture, ['--mode', 'probe', '--port', String(portStatus.port)])).stdout);
@@ -266,10 +276,10 @@ try {
     const cliNoop = await execute(process.execPath, ['apps/control/src/client.ts', 'member', scope, member, join(directory, 'member.json'), 'cli-member-noop'], { env: cliEnvironment });
     assert.equal(JSON.parse(cliNoop.stdout).revision, 5);
     const grants = await execute(process.execPath, ['apps/control/src/client.ts', 'node-grants', scope, nodeId], { env: cliEnvironment });
-    assert.equal(JSON.parse(grants.stdout).revision, 4);
-    await writeFile(join(directory, 'grant.json'), JSON.stringify({ expectedRevision: 4, allowed: false }));
+    assert.equal(JSON.parse(grants.stdout).revision, 5);
+    await writeFile(join(directory, 'grant.json'), JSON.stringify({ expectedRevision: 5, allowed: false }));
     const cliGrant = await execute(process.execPath, ['apps/control/src/client.ts', 'node-grant', scope, nodeId, member, join(directory, 'grant.json'), 'cli-grant-withdraw'], { env: cliEnvironment });
-    assert.equal(JSON.parse(cliGrant.stdout).revision, 5);
+    assert.equal(JSON.parse(cliGrant.stdout).revision, 6);
     passed('Access CLI: member list/no-op and Node grant query/withdraw use trusted HTTPS and stable request keys');
     const [audit] = await control.db.pool.query<any[]>('SELECT details FROM access_events WHERE scope_id=?', [scope]);
     const [replays] = await control.db.pool.query<any[]>('SELECT response FROM idempotency WHERE scope_id=?', [scope]);

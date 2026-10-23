@@ -13,6 +13,8 @@ import type { NodeCertificateAuthority } from '../src/infrastructure/pki.ts';
 import type { AuthorityStore } from '../src/infrastructure/authority.ts';
 import { Identity, tokenHash } from '../src/modules/identity.ts';
 import { Nodes } from '../src/modules/nodes.ts';
+import { ResourceAccess } from '../src/modules/resource-access-owner/public.ts';
+import { MySqlResourceAccessStore } from '../src/infrastructure/mysql-resource-access.ts';
 import { pathRequirements, parsePathTemplate } from '../src/modules/path-template-contract.ts';
 import type { RuntimeController } from '../src/modules/runtime/controller.ts';
 
@@ -50,9 +52,9 @@ test('path templates use real native reference authorization, transactional CAS/
             for (const id of config.nodes) {
                 const facts = { nodeId: id, scopeId: 'scope-a', capabilities: pathRequirements(parsePathTemplate(config)), allowedPorts: [32001],
                     allowedListenerAddresses: ['127.0.0.1'], egressPolicyRevision: 1, allowedDestinationCidrs: ['127.0.0.0/8'], allowMetadataTargets: false };
-                await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts) VALUES(?,?,?,?,?,?)',
+                await connection.execute('INSERT INTO nodes(id,scope_id,enrollment_hash,enrollment_until,credential_until,facts,resource_source,owner_actor_id,resource_revision) VALUES(?,?,?,?,?,?,\'admin-shared\',NULL,1)',
                     [id, 'scope-a', createHash('sha256').update(id).digest('hex'), now, now + 3600000, JSON.stringify(facts)]);
-                for (const actor of ['owner', 'manager']) await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)', [id, actor]);
+                for (const actor of ['owner', 'manager']) await connection.execute('INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)', [id, actor, JSON.stringify([id.startsWith('ingress')?'ingress':id==='middle'?'transit':'egress']), JSON.stringify({allowedPorts:id==='ingress'?[32001]:[32002,32003],maxBindings:8})]);
                 if (id !== 'ingress') await connection.execute('INSERT INTO node_relay_endpoints(node_id,revision,config,created_by,updated_at) VALUES(?,1,?,?,?)',
                     [id, JSON.stringify({ listenAddress: '127.0.0.1', advertisedHost: '127.0.0.1', allowedTcpPorts: [32002, 32003] }), 'owner', now]);
             }
@@ -62,7 +64,7 @@ test('path templates use real native reference authorization, transactional CAS/
             await connection.execute('INSERT INTO transport_profile_grants(profile_id,actor_id) VALUES(?,?)', ['profile', 'manager']);
             const spec = { enabled: false, protocols: ['tcp'], ingress: { nodeId: 'ingress', listen: { address: '127.0.0.1', port: 32001 } },
                 target: { host: 'private-target.invalid', port: 80 }, path: { via: ['middle', 'egress'] }, transport: config.transport };
-            await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec) VALUES(?,?,1,?)', ['unbound-source', 'scope-a', JSON.stringify(spec)]);
+            await connection.execute('INSERT INTO forwards(id,scope_id,revision,spec,owner_actor_id) VALUES(?,?,1,?,?)', ['unbound-source', 'scope-a', JSON.stringify(spec), 'manager']);
             async function call(method: string, path: string, input?: unknown, expected = 200, actor = 'manager', key: string = randomUUID()) {
                 const response = await app.request('/api/v1/scopes/scope-a/path-templates' + path, { method,
                     headers: { authorization: 'Bearer ' + tokens[actor], 'content-type': 'application/json', 'idempotency-key': key },
@@ -81,7 +83,7 @@ test('path templates use real native reference authorization, transactional CAS/
             await connection.execute('DELETE FROM node_grants WHERE node_id=? AND actor_id=?', ['middle', 'owner']);
             const beforeOwner = await inventory(connection); await call('PUT', '/owner-no-implicit-grant', input, 404, 'owner');
             assert.equal(await inventory(connection), beforeOwner);
-            await connection.execute('INSERT INTO node_grants(node_id,actor_id) VALUES(?,?)', ['middle', 'owner']);
+            await connection.execute('INSERT INTO node_grants(node_id,actor_id,allowed_roles,port_limits) VALUES(?,?,?,?)', ['middle', 'owner',JSON.stringify(['transit']),JSON.stringify({allowedPorts:[32002,32003],maxBindings:8})]);
             await connection.execute('UPDATE node_relay_endpoints SET revision=2 WHERE node_id=?', ['middle']);
             const beforeStale = await inventory(connection); await call('PUT', '/stale-endpoint', input, 409);
             assert.equal(await inventory(connection), beforeStale);
@@ -115,13 +117,14 @@ test('path templates use real native reference authorization, transactional CAS/
             assert.equal((await call('GET', '/race')).revision, 2);
             const archive = await call('DELETE', '/saved', { expectedRevision: 2 }, 202, 'manager', 'archive'); assert.equal(archive.archived, true);
             assert.deepEqual(await call('DELETE', '/saved', { expectedRevision: 2 }, 202, 'manager', 'archive'), archive);
-            assert.equal((await call('GET', '/saved?revision=1', undefined, 200, 'viewer')).archived, true);
+            await call('GET', '/saved?revision=1', undefined, 404, 'viewer');
+            assert.equal((await call('GET', '/saved?revision=1')).archived, true);
             await call('PUT', '/saved', { expectedRevision: 2, config }, 409);
 
             // Fill to 127 metadata identifiers, then exercise the final quota slot with actual concurrent transactions.
             for (let i = 0; i < 125; i++) {
                 const id = 'page-' + String(i).padStart(3, '0');
-                await connection.execute('INSERT INTO path_templates(scope_id,template_id,current_revision) VALUES(?,?,1)', ['scope-a', id]);
+                await connection.execute('INSERT INTO path_templates(scope_id,template_id,current_revision,owner_actor_id) VALUES(?,?,1,?)', ['scope-a', id, 'manager']);
                 await connection.execute('INSERT INTO path_template_revisions(scope_id,template_id,revision,config,profile_digest,config_digest,created_by,created_at) SELECT scope_id,?,revision,config,profile_digest,config_digest,created_by,created_at FROM path_template_revisions WHERE scope_id=? AND template_id=? AND revision=1', [id, 'scope-a', 'saved']);
             }
             async function quota(id: string) {
@@ -143,9 +146,9 @@ test('path templates use real native reference authorization, transactional CAS/
             const readUrl = new URL(url); readUrl.username = user; readUrl.password = password; reader = new MySqlUnitOfWork(readUrl.toString());
             await assert.rejects(reader.pool.query('UPDATE path_templates SET archived=TRUE'));
             const readIdentity = new Identity(reader), readApp = createApp({ identity: readIdentity,
-                pathTemplateQueries: new PathTemplateQueries(reader, readIdentity, new MySqlPathTemplates()) } as unknown as ControlApplication,
+                pathTemplateQueries: new PathTemplateQueries(reader, readIdentity, new ResourceAccess(readIdentity,new MySqlResourceAccessStore()), new MySqlPathTemplates()) } as unknown as ControlApplication,
                 {} as RuntimeController, { allow: async () => undefined } as unknown as AuthorityStore);
-            async function get(path: string, status = 200, actor = 'viewer') {
+            async function get(path: string, status = 200, actor = 'manager') {
                 const response = await readApp.request('/api/v1/scopes/scope-a/path-templates' + path, { headers: { authorization: 'Bearer ' + tokens[actor] } });
                 const data = await response.json() as any; assert.equal(response.status, status, JSON.stringify(data)); return data;
             }

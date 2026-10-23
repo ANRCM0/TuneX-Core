@@ -5,7 +5,9 @@ import { RuntimeLedgerHost } from '../../framework/public.ts';
 import type { RuntimeLedgerAuthorization, RuntimeResourceAccess } from '../../framework/public.ts';
 import type { NativeRuntimeFamily, NativeSnapshotAssignmentCollector as SnapshotAssignmentCollector } from '../../compatibility/public.ts';
 import { MySqlRuntimeLedgerStore } from '../../infrastructure/mysql-runtime-ledger.ts';
-import { createMySqlRuntimeResources } from '../../infrastructure/mysql-runtime-resources.ts';
+import { createMySqlRuntimeResources, MySqlRuntimeResourceStore } from '../../infrastructure/mysql-runtime-resources.ts';
+import { MySqlNodeAuthorityStore } from '../../infrastructure/mysql-node-authority.ts';
+import { NodePortLimitPolicy } from '../node-owner/public.ts';
 import type { Transaction } from '../../infrastructure/mysql.ts';
 import { nativeLedgerCompiler } from '../../compatibility/public.ts';
 import type { ForwardOperationCommands, ForwardResourceHost } from '../forward-owner/public.ts';
@@ -18,7 +20,7 @@ export class RuntimeLedger extends RuntimeLedgerHost<Transaction,NativeRuntimeFa
         assignmentSources:SnapshotAssignmentCollector<Transaction>,resources?:RuntimeResourceAccess<Transaction>) {
         const selectedPolicy={...(policy??DEFAULT_POLICY)};
         super({policy:selectedPolicy,authorization,assignments:assignmentSources,
-            resources:resources??createMySqlRuntimeResources(selectedPolicy.maxAssignmentsPerNode),
+            resources:resources??createMySqlRuntimeResources(new NodePortLimitPolicy(new MySqlNodeAuthorityStore(),new MySqlRuntimeResourceStore()),selectedPolicy.maxAssignmentsPerNode),
             store:new MySqlRuntimeLedgerStore(),now:Date.now,newID:randomUUID,
             compiler:nativeLedgerCompiler,
         });

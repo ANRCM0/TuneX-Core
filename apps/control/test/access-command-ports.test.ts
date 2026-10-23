@@ -21,12 +21,12 @@ function fixture(initial: { role?: string; allowed?: boolean } = {}) {
             target: { host: '127.0.0.1', port: 80 },
             ...(id === 'relay' ? { path: { via: ['node-middle', 'node-z'] }, transport: { profileId: 'profile-a', configRevision: 1 } } : {}) },
     }));
-    const records = new Map(forwards.map(f => [f.id, { ...f, deleting: false, recoverySuspended: false }]));
+    const records = new Map(forwards.map(f => [f.id, { ...f, ownerActorId: 'member-a', deleting: false, recoverySuspended: false }]));
     const authorizers = new Map(forwards.map(f => [f.id, 'member-a']));
     const until = new Map([['node-middle', 10000], ['node-a', 20000], ['node-z', 30000], ['node-old', 50000]]);
     const options = { owner: true, executable: true, failure: '', onOwner: () => {} };
     const memberInputs: MemberChangeInput[] = [];
-    let state = { role: initial.role ?? 'manager', allowed: initial.allowed ?? true, memberRevision: 1, grantRevision: 1, audit: 0,
+    let state = { role: initial.role ?? 'manager', allowed: initial.allowed ?? true, memberRevision: 1, grantRevision: 1, audit: 0, allowedRoles:null as readonly ('ingress'|'transit'|'egress')[]|null, portLimits:null as {allowedPorts:readonly number[]|null;maxBindings:number|null}|null,
         operations: [] as { forwardId: string; revision: number; kind: string; request: RequestIdentity }[],
         responses: new Map<string, { digest: string; response?: CommandResponse }>() };
     function record(current: Tx, event: string) {
@@ -56,12 +56,13 @@ function fixture(initial: { role?: string; allowed?: boolean } = {}) {
         },
     };
     const nodes: NodeGrantWriter<Tx> = {
-        changeGrant: async (current, actor, scope, nodeId, subject, expectedRevision, allowed) => {
+        changeGrant: async (current, actor, scope, nodeId, subject, expectedRevision, allowed, allowedRoles, portLimits) => {
             record(current, 'grant'); assert.deepEqual([actor, scope, nodeId, subject], ['owner-a', 'scope-a', 'node-middle', 'member-a']);
             if (expectedRevision !== state.grantRevision) throw new Error('REVISION_CONFLICT');
-            const changed = allowed !== state.allowed;
+            const changed = allowed !== state.allowed || allowedRoles!==undefined&&JSON.stringify(allowedRoles)!==JSON.stringify(state.allowedRoles) || portLimits!==undefined&&JSON.stringify(portLimits)!==JSON.stringify(state.portLimits);
+            if(allowedRoles!==undefined)state.allowedRoles=allowedRoles;if(portLimits!==undefined)state.portLimits=portLimits;
             if (changed) { state.allowed = allowed; state.grantRevision++; state.audit++; }
-            return { nodeId, actorId: subject, revision: state.grantRevision, allowed, changed };
+            return { nodeId, actorId: subject, revision: state.grantRevision, allowed, allowedRoles:state.allowedRoles,portLimits:state.portLimits, changed };
         },
     };
     const idempotency: IdempotentRequests<Tx> = {
@@ -159,7 +160,7 @@ test('Node Grant withdrawal includes intermediate and historical nodes without t
     assert.ok(!f.events.some(e => e.startsWith('transition:') || e.startsWith('capacity:')));
     assert.ok(f.state().operations.every(o => o.kind === 'revoke'));
     assert.equal(f.state().operations[0]!.request.digest, digest({ method: 'PUT',
-        path: '/api/v1/scopes/scope-a/nodes/node-middle/grants/member-a', input: { expectedRevision: 1, allowed: false } }));
+        path: '/api/v1/scopes/scope-a/nodes/node-middle/grants/member-a', input: { expectedRevision: 1, allowed: false, allowedRoles: null } }));
 });
 
 test('Node Grant restoration preserves host transition failures and never transitions disabled or unrelated intents', async () => {
@@ -267,3 +268,5 @@ test('non-HTTP access calls cannot bypass IDs, counters, role, token, boolean or
     for (const call of calls) await assert.rejects(call, { code: 'INVALID_CONFIG' });
     assert.deepEqual(f.events, []);
 });
+
+test('grant purpose and port limits are forwarded atomically and participate in idempotency',async()=>{const f=fixture(),roles=['transit'] as const,limits={allowedPorts:[32001],maxBindings:2};const result=await f.commands.changeNodeGrant('owner-a','scope-a','node-middle','member-a','bounded',1,true,roles,limits);assert.deepEqual(result.body.allowedRoles,roles);assert.deepEqual(result.body.portLimits,limits);assert.equal(result.body.revision,2);assert.equal(f.state().audit,1);await assert.rejects(f.commands.changeNodeGrant('owner-a','scope-a','node-middle','member-a','bounded',1,true,roles,{...limits,maxBindings:3}),/IDEMPOTENCY_CONFLICT/);assert.equal(f.state().audit,1);});
