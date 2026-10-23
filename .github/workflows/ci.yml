@@ -405,7 +405,7 @@ jobs:
             .artifacts/relay/**/console-tunnel-*.png
   multihop:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: ${{ matrix.nodes == 8 && 45 || 35 }}
     strategy:
       fail-fast: false
       matrix:

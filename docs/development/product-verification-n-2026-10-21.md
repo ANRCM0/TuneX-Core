@@ -269,6 +269,23 @@ its before/after sessions. No certificate/time injection, expiry extension,
 history reset or permissive production behavior is introduced. This repair is
 pending its next exact-source Actions run.
 
+The same documentation-head run completed with eight successful jobs, one failed
+Relay job and one cancelled 8-Node job. MySQL again passed all 411 invocations
+without skips; all 147 contracts database skips matched its passed test names.
+The 8-Node browser completed successfully. Its following namespace step continued
+through real partition/loss/recovery and every intermediate restart, then the
+runner cancelled the job at its 35-minute overall ceiling. GitHub's annotation
+explicitly reports that job timeout, not a scenario assertion failure. The
+remaining namespace checks cannot be counted as passed for this run.
+
+The CI follow-up assigns only the 8-Node job a 45-minute overall budget; the
+3/4-Node jobs retain 35 minutes. This accommodates two sequential full lifecycle
+scenarios on a shared runner. Every scenario assertion, inner observation and
+no-progress deadline, actual lease/credential limit and protected-history check
+remains. This is an acceptance execution budget, not a relaxed production
+deadline or performance acceptance. It must be verified with the recovery fix
+on the next pushed candidate; no cancelled step is relabelled as successful.
+
 ## Acceptance Scope And Remaining Gates
 
 The existing baseline workflow now imports the public shared resource provider
