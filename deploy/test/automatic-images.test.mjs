@@ -4,6 +4,7 @@ import {test} from 'node:test';
 
 const publishing=readFileSync(new URL('../../.github/workflows/images.yml',import.meta.url),'utf8');
 const container=readFileSync(new URL('../../.github/workflows/container.yml',import.meta.url),'utf8');
+const recovery=readFileSync(new URL('../../.github/workflows/promote-release.yml',import.meta.url),'utf8');
 
 test('only pushes to main or pushed v* tags enter automatic publication',()=>{
  assert.match(publishing,/on:\n  push:\n    branches: \[main\]\n    tags:\n      - 'v\*'/);
@@ -55,8 +56,9 @@ test('development images retain per-commit tags and only current main can move d
 test('stable releases alone can promote the newest numeric version to latest',()=>{
  const promotion=publishing.slice(publishing.indexOf('      - name: Move latest aliases'));
  assert.match(promotion,/if: env\.TUNEX_CHANNEL == 'release'/);
- assert.match(promotion,/git fetch --tags origin/);
- assert.match(promotion,/git tag --list 'v\*' \| node deploy\/image-tags\.mjs/);
+ assert.match(promotion,/git ls-remote --tags --refs origin 'refs\/tags\/v\*'/);
+ assert.match(promotion,/\| node deploy\/image-tags\.mjs/);
+ assert.doesNotMatch(promotion,/git fetch|git tag --list/);
  assert.ok(promotion.indexOf('[ "$latest_tag" != "$TUNEX_IMAGE_TAG" ]')<promotion.indexOf('docker push'));
  assert.match(promotion,/test "\$latest_digest" = "\$version_digest"/);
  assert.match(publishing,/group: tunex-image-publish-.*'dev' \|\| 'release'/);
@@ -66,4 +68,22 @@ test('publication has source labels, SBOMs and no automatic deployment',()=>{
  assert.equal((publishing.match(/anchore\/sbom-action@v0\.20\.7/g)||[]).length,2);
  assert.match(publishing,/TUNEX_SOURCE_REVISION="\$GITHUB_SHA"/);
  assert.doesNotMatch(publishing,/docker compose (up|down)|kubectl|ssh .*deploy/);
+});
+
+test('manual recovery can only promote previously scanned version images with exact source checks',()=>{
+ assert.match(recovery,/workflow_dispatch:/);
+ assert.match(recovery,/if: github\.ref == 'refs\/heads\/main'/);
+ assert.match(recovery,/group: tunex-image-publish-release/);
+ assert.match(recovery,/\.head_sha == \$sha and \.head_branch == \$tag/);
+ assert.match(recovery,/\.path == "\.github\/workflows\/images\.yml"/);
+ assert.match(recovery,/Block both images on missing scans or fixable CRITICAL vulnerabilities/);
+ assert.match(recovery,/Publish both images to GHCR/);
+ assert.match(recovery,/head_sha=\$RELEASE_SHA/);
+ assert.match(recovery,/node deploy\/ci-prerequisites\.mjs "\$RELEASE_SHA" "\$workflow"/);
+ assert.match(recovery,/org\.opencontainers\.image\.revision/);
+ assert.match(recovery,/test "\$latest_tag" = "\$RELEASE_VERSION"/);
+ assert.match(recovery,/test "\$latest_digest" = "\$version_digest"/);
+ assert.ok(recovery.lastIndexOf('node deploy/ci-prerequisites.mjs')<recovery.indexOf('docker push'));
+ assert.ok(recovery.indexOf('org.opencontainers.image.revision')<recovery.indexOf('docker push'));
+ assert.doesNotMatch(recovery,/docker build |docker push .*RELEASE_VERSION|git fetch --tags/);
 });

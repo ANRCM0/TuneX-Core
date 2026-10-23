@@ -247,8 +247,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --tags origin
-          latest_tag="$(git tag --list 'v*' | node deploy/image-tags.mjs)"
+          # Read remote names without replacing checkout's local release tag.
+          latest_tag="$(git ls-remote --tags --refs origin 'refs/tags/v*' \
+            | awk '{sub(/^refs\/tags\//,"",$2); print $2}' \
+            | node deploy/image-tags.mjs)"
           if [ "$latest_tag" != "$TUNEX_IMAGE_TAG" ]; then
             echo "Keeping immutable $TUNEX_IMAGE_TAG images; newer stable tag $latest_tag owns :latest"
             exit 0

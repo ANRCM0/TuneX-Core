@@ -1,0 +1,101 @@
+name: Recover latest aliases for a published release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing stable version, for example v0.1.0
+        required: true
+        type: string
+      publish_run_id:
+        description: Original images.yml run that successfully scanned and pushed both version images
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: tunex-image-publish-release
+  cancel-in-progress: false
+jobs:
+  promote:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      PUBLISH_RUN_ID: ${{ inputs.publish_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Verify original release source and successful publication gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$PUBLISH_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          release_sha="$(git rev-parse "$RELEASE_VERSION^{commit}")"
+          git merge-base --is-ancestor "$release_sha" origin/main
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PUBLISH_RUN_ID" \
+            | jq -e --arg sha "$release_sha" --arg tag "$RELEASE_VERSION" \
+              '.head_sha == $sha and .head_branch == $tag and .event == "push" and
+               .path == ".github/workflows/images.yml" and .status == "completed" and
+               (.conclusion == "success" or .conclusion == "failure")'
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PUBLISH_RUN_ID/jobs?per_page=100" \
+            | jq -e '.total_count == 2 and
+              any(.jobs[]; .name == "prerequisites" and .conclusion == "success") and
+              any(.jobs[]; .name == "publish" and
+                ([.steps[] | select(.conclusion == "success") | .name] as $steps |
+                  ["Confirm publishing checkout matches the verified source",
+                   "Build both exact-commit images",
+                   "Block both images on missing scans or fixable CRITICAL vulnerabilities",
+                   "Publish both images to GHCR"] | all(. as $required | $steps | index($required) != null)))'
+          echo "RELEASE_SHA=$release_sha" >> "$GITHUB_ENV"
+
+      - name: Authenticate to GHCR
+        shell: bash
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Verify both existing version images before moving either alias
+        shell: bash
+        run: |
+          set -euo pipefail
+          for component in control agent; do
+            image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tunex-$component:$RELEASE_VERSION"
+            docker pull "$image"
+            test "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")" = "$RELEASE_SHA"
+            test "$(docker image inspect -f '{{.Config.User}}' "$image")" = '10001:10001'
+          done
+
+      - name: Promote only the newest stable release and verify registry digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for workflow in ci.yml container.yml; do
+            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&event=push&head_sha=$RELEASE_SHA&per_page=100" \
+              | node deploy/ci-prerequisites.mjs "$RELEASE_SHA" "$workflow")"
+            [ "$state" = success ]
+          done
+          latest_tag="$(git ls-remote --tags --refs origin 'refs/tags/v*' \
+            | awk '{sub(/^refs\/tags\//,"",$2); print $2}' \
+            | node deploy/image-tags.mjs)"
+          test "$latest_tag" = "$RELEASE_VERSION"
+          for component in control agent; do
+            base="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/tunex-$component"
+            version_digest="$(docker buildx imagetools inspect "$base:$RELEASE_VERSION" | awk '$1=="Digest:" {print $2;exit}')"
+            [[ "$version_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            docker tag "$base:$RELEASE_VERSION" "$base:latest"
+            docker push "$base:latest"
+            latest_digest="$(docker buildx imagetools inspect "$base:latest" | awk '$1=="Digest:" {print $2;exit}')"
+            test "$latest_digest" = "$version_digest"
+            echo "- \`$base:latest\` = \`$base@$latest_digest\` ($RELEASE_VERSION, source $RELEASE_SHA)" >> "$GITHUB_STEP_SUMMARY"
+          done
