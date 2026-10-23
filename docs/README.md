@@ -2,7 +2,9 @@
 
 本目录维护当前开发需要的环境、架构、公共契约、协议、决策、集成方式与验收资料。
 当前状态以[实施进度](development/progress.md)与
-[准确修订验证记录](development/foundation-verification-2026-10-19.md)为准。
+[N 准确修订验证记录](development/product-verification-n-2026-10-21.md)为准。
+N 已经 PR #114 合并为 `9a5f719`；历史地基 B 的接受仍见
+[B 验证记录](development/foundation-verification-2026-10-19.md)。
 
 ## 开发与验收
 
@@ -50,9 +52,9 @@ decisions 与 changes 保留仍约束当前源码的设计与兼容变更。
 | --- | --- |
 | [Core](spec/core-v1.md) 与 [Forward](spec/forward-v1.md) | 纯领域与最小转发语义 |
 | [Control API](spec/control-api-v1.md) 与 [Runtime/Agent](spec/runtime-agent-v1.md) | 公共命令、Operation、部署状态与恢复 |
-| [产品资源访问](spec/product-resource-access-v1.md) | N 源码候选：私有／共享、用途、个人端口额度、读取隔离与显式存量分类；未验收 |
-| [共享资源带宽／流量](spec/shared-resource-payload-limits-v1.md) | FR-0032：每用户 × 共享机器的双向 payload、显式周期、保守预扣与恢复边界；源码未验收 |
-| [共享额度公共示例](../examples/shared-resource-limits/README.md) | 仅消费公共端口的政策注入、原事务与显式周期命令示例；未执行 |
+| [产品资源访问](spec/product-resource-access-v1.md) | N：私有／共享、用途、个人端口额度、读取隔离与显式存量分类；配置内验证已通过 |
+| [共享资源带宽／流量](spec/shared-resource-payload-limits-v1.md) | FR-0032：每用户 × 共享机器的双向 payload、显式周期、保守预扣与恢复边界；准确修订结果见 N 验证记录 |
+| [共享额度公共示例](../examples/shared-resource-limits/README.md) | 仅消费公共端口的政策注入、原事务与显式周期命令示例；N Actions 加载检查通过，不授予部署或执行权限 |
 | [ADP/3](protocol/agent-deployment-v3.md) 与 [执行扩展](protocol/agent-deployment-execution-v1.md) | 当前在线协议及版本化多跳执行 |
 | [ADP/3 在线切换](development/adp3-cutover.md) | 当前 Direct 在线协议、旧 ADP/2 拒绝与状态边界 |
 | [模块边界](architecture/module-boundaries.md) | 原 owner、公共调用与事务归属 |

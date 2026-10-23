@@ -1,7 +1,11 @@
 # Shared Resource Payload Limits v1
 
-Date: 2026-10-21. FR-0032 source candidate, integrated but unverified.
-This specification describes authored behavior, not accepted runtime evidence.
+Date: 2026-10-21; verification status updated 2026-10-23.
+FR-0032 passed the configured N candidate Actions scope and was merged through
+PR #114 at `9a5f719`. Exact source identities and executed cases are recorded in
+[N verification](../development/product-verification-n-2026-10-21.md).
+This specification defines behavior; independent hosts, load, installation and
+release acceptance remain separate from that configured functional evidence.
 
 ## Accounting And Units
 
@@ -149,14 +153,15 @@ and audit alongside original Runtime rows; preserve AuthorityStore/key and Agent
 Journal/key under the existing recovery procedure. Database restoration alone
 does not establish safe rollback or recover missing protected history.
 
-## Source Consumers And Planned Acceptance
+## Source Consumers And Verification Scope
 
 The [public example](../../examples/shared-resource-limits/README.md) consumes only
 public owner/framework interfaces and does not execute itself. Authored source
 cases cover policy CAS/replay/history, original transaction, publication/reuse,
 offline refusal, TS/Go wire/digest, precharge/concurrency/restart, native TCP/UDP
 and all Relay roles, inspection/downgrade, HTTP, audit and UI unknown outcomes.
-All are unexecuted. Later authorized exact-source Actions must cover real MySQL
-races/rollback, sockets, cancellation, filesystem durability, native platforms
-and complete personal/governance workflows. Physical hosts, long-run load,
-deployment usability, release and production readiness keep separate gates.
+Configured N Actions exercised these consumers through MySQL race/rollback,
+native socket, Journal/restart, HTTP, Web and browser cases; exact results and
+platform scope are in the verification record. That evidence is not a blanket
+filesystem-durability or cross-platform certificate. Physical hosts, long-run
+load, deployment usability, release and production readiness keep separate gates.
