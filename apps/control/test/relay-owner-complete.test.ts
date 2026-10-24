@@ -5,8 +5,8 @@ import { createConnection } from 'mysql2/promise';
 import { DEFAULT_POLICY } from '@tunex/contracts/shared';
 import type { RuntimeSnapshot } from '@tunex/contracts/runtime';
 import type { Observation } from '@tunex/contracts/execution-observation';
-import { RuntimeRelayHost, RuntimeLedgerHost } from '../src/framework/public.ts';
-import type { RuntimeOperation, RuntimeRelayDeployment, RuntimeLedgerOptions, RuntimeRelayOptions } from '../src/framework/public.ts';
+import { RuntimeRelayHost, RuntimeLedgerHost, RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION } from '../src/framework/public.ts';
+import type { RuntimeOperation, RuntimeRelayDeployment, RuntimeLedgerOptions, RuntimeRelayOptions, RelayForwardAssignmentReader } from '../src/framework/public.ts';
 import { nativeRelayCompiler, nativeLedgerCompiler } from '../src/compatibility/public.ts';
 import type { NativeRuntimeFamily } from '../src/compatibility/public.ts';
 import { RuntimeLedger } from '../src/modules/runtime/ledger.ts';
@@ -82,6 +82,51 @@ function fixture(){
     return {host,input,plan,tx,events,forward,op,record,state,failure,snapshot,assignment,observation,snapshots,runtimes,store,ledger,forwards,nodes};
 }
 const names=(f:ReturnType<typeof fixture>)=>f.events.map(e=>e.name);
+
+test('P Relay Forward read shares original node projections while authorizing one current plan on the caller transaction',async()=>{
+    assert.equal(RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION,1);
+    for(const stage of ['preparing','egress_active','ingress_active','active','withdrawn'] as const){
+        const f=fixture();f.record.stage=stage;f.record.prepared_count=1;f.record.activated_count=1;
+        const reader:RelayForwardAssignmentReader<Tx,NativeRuntimeFamily>=f.host;
+        const result=await reader.assignmentsForForward(f.tx,f.forward.id);
+        assert.equal(names(f).filter(name=>name==='operation').length,1);
+        assert.equal(names(f).includes('forNode'),false);
+        if(stage==='withdrawn'){assert.deepEqual(result,[]);continue;}
+        assert.deepEqual(result.map(part=>part.nodeId),f.plan.nodes.map(node=>node.nodeId));
+        assert.equal(names(f).filter(name=>name==='sessionSafe').length,f.plan.nodes.length);
+        for(const part of result){
+            assert.deepEqual(part.assignments,await f.host.assignments(f.tx,part.nodeId));
+            assert.notEqual(part.assignments,f.plan.nodes.find(node=>node.nodeId===part.nodeId)!.assignments);
+        }
+        assert.equal(names(f).some(name=>['accept','touch','withdraw','succeed','fail'].includes(name)),false);
+    }
+});
+
+test('P Relay Forward read preserves current authority refusal, per-node session safety and original failures',async()=>{
+    for(const mode of ['missing','deleted','suspended','stale-revision','revoke','failed','changed-pins','foreign-record','corrupt-plan']){
+        const f=fixture();
+        if(mode==='missing')f.state.missing=true;
+        if(mode==='deleted')f.forward.deleting=true;
+        if(mode==='suspended')f.forward.recoverySuspended=true;
+        if(mode==='stale-revision')f.record.target_revision++;
+        if(mode==='revoke')f.op.kind='revoke';
+        if(mode==='failed')f.op.status='failed';
+        if(mode==='changed-pins')f.state.currentPins=false;
+        if(mode==='foreign-record')f.record.forward_id='other-forward';
+        if(mode==='corrupt-plan')f.record.body='{}';
+        if(['stale-revision','foreign-record','corrupt-plan'].includes(mode))await assert.rejects(()=>f.host.assignmentsForForward(f.tx,f.forward.id));
+        else assert.deepEqual(await f.host.assignmentsForForward(f.tx,f.forward.id),[]);
+    }
+    const unsafe=fixture(),denied=unsafe.plan.nodes[1]!.nodeId,original=unsafe.ledger.sessionAuthoritySafe;
+    unsafe.ledger.sessionAuthoritySafe=async function(...args){const accepted=await original.apply(this,args);return args[1]===denied?false:accepted;};
+    const grouped=await unsafe.host.assignmentsForForward(unsafe.tx,unsafe.forward.id);
+    assert.deepEqual(grouped.find(part=>part.nodeId===denied)!.assignments,[]);
+    assert.ok(grouped.filter(part=>part.nodeId!==denied).every(part=>part.assignments.length>0));
+    for(const name of ['latest','operation','forward','authorizer','authorizedNode','facts','profile','endpoint','sessionSafe']){
+        const f=fixture();f.state.fail=name;
+        await assert.rejects(()=>f.host.assignmentsForForward(f.tx,f.forward.id),error=>error===f.failure);
+    }
+});
 
 test('9 Relay ledger command providers sample original one one two one clock boundaries preserve receiver error and caller Tx',async()=>{
     const tx={},trace:unknown[][]=[],error={code:'AUTHENTICATION_FAILED',retryable:false,detail:{unchanged:true}};

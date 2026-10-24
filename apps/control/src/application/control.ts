@@ -200,7 +200,7 @@ export class ControlApplication implements RelayPlanApi {
         });
         const probeObservationServices=new ProbeObservationServices(identity,new MySqlObservationServiceStore(observationServiceStorageValues));
         this.probePlans=new ForwardProbePlans(db,identity,this.readAccess,this.forwarding,nodes,new MySqlProbeReader(),
-            observationPolicy.maxClockSkewSeconds*1000,probeObservationServices,probeObservationServices,new ForwardPathProbePlans(nodes,{assignments:(tx,node)=>this.relay.assignments(tx,node)},new MySqlProbeReader(),probeObservationServices,observationPolicy.maxClockSkewSeconds*1000));
+            observationPolicy.maxClockSkewSeconds*1000,probeObservationServices,probeObservationServices,new ForwardPathProbePlans(nodes,{assignments:(tx,node)=>this.relay.assignments(tx,node),forForward:(tx,id)=>this.relay.assignmentsForForward(tx,id)},new MySqlProbeReader(),probeObservationServices,observationPolicy.maxClockSkewSeconds*1000));
         this.probeNegotiation=new ProbeNegotiator(db,new MySqlProbeMachineReader());
         this.probeInstances=new ProbeInstances(db,new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues));
         this.probeRegistry=new ProbeInstanceRegistry(this.probeInstances);
@@ -209,7 +209,7 @@ export class ControlApplication implements RelayPlanApi {
         this.probeServiceRegistry=new ProbeServiceRegistry(db,new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues),probeTypes);
         this.probeEchoRegistry=new ProbeEchoRegistry(db,new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues),probeTypes);
         const permitPlans=new ForwardProbePlans(db,identity,this.readAccess,new MySqlProbePermitIntents(),nodes,new MySqlProbeReader(true),
-            observationPolicy.maxClockSkewSeconds*1000,probeObservationServices,probeObservationServices,new ForwardPathProbePlans(nodes,{assignments:(tx,node)=>this.relay.assignments(tx,node)},new MySqlProbeReader(true),probeObservationServices,observationPolicy.maxClockSkewSeconds*1000));
+            observationPolicy.maxClockSkewSeconds*1000,probeObservationServices,probeObservationServices,new ForwardPathProbePlans(nodes,{assignments:(tx,node)=>this.relay.assignments(tx,node),forForward:(tx,id)=>this.relay.assignmentsForForward(tx,id)},new MySqlProbeReader(true),probeObservationServices,observationPolicy.maxClockSkewSeconds*1000));
         this.probePathObservations=new ProbePathObservations(identity,this.readAccess,new MySqlProbeHistoryStore(probeRunStorageValues),permitPlans);
         this.probePermits=new ProbePermits(db,identity,this.readAccess,permitPlans,
             new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues),new MySqlProbePermitStore(probePermitStorageValues),Date.now,new ProbeRunHistoryRecorder(new MySqlProbeHistoryStore(probeRunStorageValues)),probeTypes);

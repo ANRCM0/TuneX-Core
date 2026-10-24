@@ -22,7 +22,7 @@ function fixture(count=2,protocol:'tcp'|'udp'='tcp') {
     const relay:any={async assignments(actual:any,node:string){assert.equal(actual,tx);return assignments.get(node);}},reader:any={async read(actual:any,_scope:string,node:string){assert.equal(actual,tx);return heads.get(node);}};
     const service:any={async resolveEcho(actual:any){assert.equal(actual,tx);return context;}};
     const planner=new ForwardPathProbePlans(nodes,relay,reader,service,0);
-    return {route,calls,heads,assignments,forward,context,deny:(node:string)=>{deny=node;},disable:()=>{capable=false;},denyLocal:()=>{localAllowed=false;},
+    return {route,calls,heads,assignments,forward,context,relay,tx,deny:(node:string)=>{deny=node;},disable:()=>{capable=false;},denyLocal:()=>{localAllowed=false;},
         plan:()=>planner.authorize(tx,'actor',forward,protocol==='tcp'?'tcp-path-echo':'udp-path-echo',1000,{} as any)};
 }
 
@@ -31,6 +31,27 @@ test('P4 path planner consumes original route and same transaction for every Rel
         const f=fixture(count,protocol),plan=await f.plan();assert.deepEqual(f.calls,f.route);
         assert.equal(plan.point,'agent-local-forward-ingress');assert.equal(plan.measurement,protocol+'-path-echo-v1');
         assert.equal(plan.binding.forwardRevision,3);assert.equal(plan.executable,false);assert.equal(plan.health,'unknown');
+    }
+});
+
+test('P4 path planner consumes one explicit original-owner Forward read and rejects incomplete grouped providers',async()=>{
+    for(const mode of ['valid','missing','duplicate','foreign','changed-assignment','failure']){
+        const f=fixture(3),failure=Error('original grouped read failure');let reads=0;
+        f.relay.assignments=async()=>assert.fail('new provider must not scan unrelated per-node deployments');
+        f.relay.forForward=async(tx:unknown,id:string)=>{
+            assert.equal(tx,f.tx);assert.equal(id,f.forward.id);assert.equal(++reads,1);
+            if(mode==='failure')throw failure;
+            const result=f.route.map(nodeId=>({nodeId,assignments:structuredClone(f.assignments.get(nodeId)!)}));
+            if(mode==='missing')result.pop();
+            if(mode==='duplicate')result[1]!.nodeId=result[0]!.nodeId;
+            if(mode==='foreign')result[1]!.nodeId='foreign';
+            if(mode==='changed-assignment')result[1]!.assignments[0].bindingFence++;
+            return result;
+        };
+        if(mode==='valid'){const plan=await f.plan();assert.equal(plan.binding.forwardId,f.forward.id);assert.deepEqual(f.calls,f.route);}
+        else if(mode==='failure')await assert.rejects(f.plan(),error=>error===failure);
+        else await assert.rejects(f.plan(),{code:'PROBE_UNAVAILABLE'});
+        assert.equal(reads,1);
     }
 });
 test('P4 path planner rejects missing opt-in and downstream authorization before returning a plan',async()=>{

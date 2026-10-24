@@ -169,11 +169,67 @@ server-side nonempty poll responses but no claim. The next candidate adds only
 opt-in diagnostic stage names at local v4 poll refusal, preserving failure
 identity, limits and authorization. These observations are not a path pass.
 
-## Seventh Candidate In Progress
+## Seventh And Eighth Candidate Findings
 
 Head `ac99932f08e5dda84b83184084f57e55723adee9`, tree
 `c76e4b105df1d356900b1d4d86971aca14279cb8`: baseline `40047203942`, packaging
-`40047203910`. Both require final conclusions and artifact review.
+`40047203910`. Packaging passed; baseline was cancelled after the three-node
+and Direct fixture failures. Temporary opt-in Agent stage logs narrowed the
+nonempty three-node poll refusal to its existing deadline checks, without
+changing error identity or limits. Direct keeps five matrix rows as well as
+capabilityVersion 1; both fixture assertions now match that original contract.
+
+Head `714830f56bf06751e746e2bffbbb532f150b0735`, tree
+`2d73e1ec0a2b83f21bf8e0d7f69e275259170d8f`: baseline `40047738714`, packaging
+`40047738592`. Packaging and Probe/Relay job `120733322522` passed before
+baseline cancellation. The P Console artifact passed; Direct and Relay each
+completed TCP and UDP signed original-permit/Agent/Forward/responder/result
+round trips on their first independent command per protocol. Each responder
+received exactly one request; the expired same-key replay caused none.
+
+Direct's actual accepted-report-bound Journal sample was fresh, used `1024`
+bytes and retained `1047552` of the `1048576` byte limit, with the conservative
+precharge/upper-bound-at-sample labels. The API and real Chromium usage view
+passed. These are hosted-runner process results, not external reachability,
+physical-host, billing accuracy or long-run proof.
+
+The fixture now observes one real empty poll and issues a new explicit command
+before its next original one-second discovery round. The two-second permit,
+clock-skew subtraction, once-only claims and result windows remain unchanged.
+Three-node Echo still failed with six issued/unconsumed permits, so it is not
+accepted. Its next diagnostic records only numeric remaining/freshness/elapsed
+timing; the earlier verbose stage instrumentation was removed.
+
+## Ninth Candidate Findings And FR-0041
+
+Head `7f95504190e8b9b979465019a8ea802f388b36a8`, tree
+`f01bb65cfcd48a681cf99757cbc9a2199a36699b`: baseline `40048385560`, packaging
+`40048385271`. Packaging, contracts, Probe/Relay, Windows, unsupported platform,
+deployment tools, Relay isolation and four-node jobs passed. Three-node Echo
+failed, so the candidate is not accepted; remaining jobs were still running at
+the corrective-source snapshot.
+
+Three-node public timing metadata shows permit lifetimes of 1569-1736ms and
+server-side nonempty discovery with only 1042-1298ms remaining on early offers.
+The old node-scoped Relay read revalidates every related Forward's whole path
+for each of the planner's nodes. This duplicates complete path authorization
+and SQL reads inside the original 200ms transport/250ms observation windows.
+No deadline or authority bypass is introduced to make this scenario pass.
+
+[FR-0041](../changes/FR-0041-relay-forward-assignment-read.md) records the additive
+original-owner Forward read and optional native Probe binding before source
+implementation. The old entrypoint retains its original projection via one
+private shared helper; each new call authorizes one original plan and still
+checks every node's original session and deployment stage. No cross-call cache
+or unrelated Forward scan is added. Public owner/provider and legacy-parity
+cases are authored. Temporary numeric Agent diagnostics are removed after
+their evidence is captured; fixture outcome metadata remains redacted.
+
+After dependency installation, local TypeScript checking, source/type/private
+boundary classification and Web syntax checking passed on the corrective
+worktree; generated parity remains separately recorded when complete. No local
+functional, database, network, container or browser test ran. The successor
+requires a new exact-source Actions run, including the three-node round trip.
 
 ## Acceptance Limits
 

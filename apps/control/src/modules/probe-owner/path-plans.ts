@@ -9,7 +9,10 @@ import type { ProbeEchoServiceResolver, ProbeServiceReference } from './service-
 interface PathNodes<Tx> {
     authorizedRelayNode(tx:Tx,actor:string,scope:string,node:string,role:NodeUseRole,forward?:ForwardValue):Promise<AuthorizedNodeFacts>;
 }
-export interface ProbePathAssignments<Tx> {assignments(tx:Tx,node:string):Promise<readonly RuntimeAssignment[]>}
+export interface ProbePathAssignments<Tx> {
+    assignments(tx:Tx,node:string):Promise<readonly RuntimeAssignment[]>;
+    forForward?(tx:Tx,forwardId:string):Promise<readonly {readonly nodeId:string;readonly assignments:readonly RuntimeAssignment[]}[]>;
+}
 function unavailable():never {throw new ControlError('PROBE_UNAVAILABLE',409,'Current complete active forwarding path required');}
 
 /** Reads the original Relay owner; no duplicate route compiler or authority issuer. */
@@ -31,6 +34,7 @@ export class ForwardPathProbePlans<Tx> implements ProbePathPlans<Tx> {
         const context=await this.services.resolveEcho(tx,actor,forward.scopeId,service,protocol);
         if(context.config.version!==2||context.config.endpoint.address!==forward.spec.target.host||context.config.endpoint.port!==forward.spec.target.port)unavailable();
         let binding:ProbeBinding|undefined,expires=Math.min(now+2000,context.config.validUntil-this.skew),deployment:number|undefined;
+        let grouped:Awaited<ReturnType<NonNullable<ProbePathAssignments<Tx>['forForward']>>>|undefined;
         for(const [index,node] of route.entries()) {
             const role=index===0?'ingress':index===route.length-1?'egress':'transit';
             const facts=await this.nodes.authorizedRelayNode(tx,actor,forward.scopeId,node,role,forward);
@@ -41,7 +45,12 @@ export class ForwardPathProbePlans<Tx> implements ProbePathPlans<Tx> {
                 !targetAllowed(forward.spec.ingress.listen.address,{...facts,allowMetadataTargets:false})))
                 throw new ControlError('AUTHORIZATION_DENIED',403,'Path Echo requires a concrete ingress permitted by its original network policy');
             if(index===route.length-1&&!targetAllowed(context.config.endpoint.address,{...facts,allowMetadataTargets:false}))unavailable();
-            const expected=(await this.relay.assignments(tx,node)).filter(a=>a.forwardId===forward.id&&a.protocol===protocol);
+            if(index===0&&this.relay.forForward){
+                grouped=await this.relay.forForward(tx,forward.id);
+                if(grouped.length!==route.length||new Set(grouped.map(part=>part.nodeId)).size!==route.length||grouped.some(part=>!route.includes(part.nodeId)))unavailable();
+            }
+            const expected=(grouped?grouped.find(part=>part.nodeId===node)!.assignments:await this.relay.assignments(tx,node))
+                .filter(a=>a.forwardId===forward.id&&a.protocol===protocol);
             const current=await this.published.read(tx,forward.scopeId,node);
             if(!current||!current.bootId||current.snapshot.nodeId!==node||current.snapshot.sessionEpoch!==current.sessionEpoch||expected.length!==1)unavailable();
             const snapshot=current!.snapshot,candidates=snapshot.assignments.filter(a=>a.forwardId===forward.id&&a.protocol===protocol),assignment=candidates[0];

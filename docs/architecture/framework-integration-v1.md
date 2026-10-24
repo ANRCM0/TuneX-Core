@@ -351,3 +351,16 @@ browser-native-leaf-inventory-v1.md (relative to docs/).188 manual map is author
 consumer/default/asset/version/removal/candidate/example and all later gates remain
 open. No checks/tests/tool expansion/format/generation/build/CI/experiments/Git
 writes/delegation ran; source identity/declaration/private layout changed explicitly.
+
+### P Relay Forward Read Extension
+
+FR-0041 adds the separately versioned `RelayForwardAssignmentReader1` public
+contract. `RuntimeRelayHost.assignmentsForForward(tx,forwardId)` reads only the
+latest deployment of one Forward, runs the original publishable-plan authority
+once, and projects each node with the same session and stage gates as legacy
+`assignments(tx,nodeId,includeAccepted)`. The legacy method and RuntimeRelay7
+remain available. Native Probe composition injects the new optional grouped
+provider; all requester grants and exact published bindings are still checked in
+the same caller transaction. The FR includes a public composition example and
+the contract tests exercise it. This is a P acceptance candidate, not a new
+parallel-module or release gate.

@@ -9,10 +9,10 @@ import type { RuntimeRelayNodes, RuntimeRelayTransport, RuntimeRelayEndpointReso
   RuntimeRelayStore, RuntimeRelayObservations, RuntimeRelayCompiler, RuntimeRelayOptions,
   RuntimeRelayDeployment as Deployment, RuntimeRelayNodeFacts as RelayNodeExecutionFacts,
   RuntimeRelayPlan as RelayPreparedPlan, RuntimeMultihopInput as MultihopPlanInput } from './runtime-relay-ports.ts';
-import type { RelayAssignmentReader } from './runtime-assignment-ports.ts';
+import type { RelayAssignmentReader, RelayForwardAssignmentReader, SnapshotContribution } from './runtime-assignment-ports.ts';
 
 
-export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> implements RelayAssignmentReader<Tx,F> {
+export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> implements RelayAssignmentReader<Tx,F>, RelayForwardAssignmentReader<Tx,F> {
   private readonly nodes:RuntimeRelayNodes<Tx>; private readonly forwarding:RuntimeLedgerForwards<Tx>; private readonly transport:RuntimeRelayTransport<Tx,F>;
   private readonly endpoints:RuntimeRelayEndpointResolver<Tx>; private readonly ledger:RuntimeRelayLedger<Tx,F>; private readonly policy:Policy;
   private readonly store:RuntimeRelayStore<Tx,F>; private readonly observations:RuntimeRelayObservations<Tx>;
@@ -192,18 +192,30 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
     const records=await this.store.forNode(tx,nodeId);
     const result:RuntimeAssignment<F>[]=[];
     for(const record of records){const plan=this.plan(record);if(!await this.publishablePlan(tx,record,plan,includeAccepted))continue;
-      const node=plan.nodes.find(node=>node.nodeId===nodeId);if(!node)throw new Error('Missing Relay node plan');
-      if(plan.path){
-        if(!includeAccepted&&!await this.ledger.sessionAuthoritySafe(tx,nodeId,node.sessionEpoch))continue;
-        const index=plan.path.indexOf(nodeId),count=plan.path.length;
-        if(!includeAccepted&&record.stage==='preparing'&&index<count-Math.min(count,record.prepared_count+1))continue;
-        const active=record.stage==='active'||record.stage!=='preparing'&&index>=count-record.activated_count;
-        for(const assignment of node.assignments)result.push({...assignment,phase:active?'active':'prepared'});
-        continue;
-      }
-      for(const assignment of node.assignments){const active=record.stage==='ingress_active'||record.stage==='active'||record.stage==='egress_active'&&assignment.role==='relay-egress';result.push({...assignment,phase:active?'active':'prepared'});}
+      result.push(...await this.nodeAssignments(tx,nodeId,record,plan,includeAccepted));
     }
     return result;
+  }
+  async assignmentsForForward(tx:Tx,forwardId:string):Promise<readonly SnapshotContribution<F>[]>{
+    const record=await this.latest(tx,forwardId);
+    if(!record)return [];
+    if(record.forward_id!==forwardId)throw new ControlError('INTEGRITY_FAILURE',409,'Relay Forward read differs');
+    const plan=this.plan(record);
+    if(!await this.publishablePlan(tx,record,plan))return [];
+    const result:SnapshotContribution<F>[]=[];
+    for(const node of plan.nodes)result.push({nodeId:node.nodeId,assignments:await this.nodeAssignments(tx,node.nodeId,record,plan,false)});
+    return result;
+  }
+  private async nodeAssignments(tx:Tx,nodeId:string,record:Deployment,plan:RelayPreparedPlan<F>,includeAccepted:boolean):Promise<RuntimeAssignment<F>[]>{
+    const node=plan.nodes.find(node=>node.nodeId===nodeId);if(!node)throw new Error('Missing Relay node plan');
+    if(plan.path){
+      if(!includeAccepted&&!await this.ledger.sessionAuthoritySafe(tx,nodeId,node.sessionEpoch))return [];
+      const index=plan.path.indexOf(nodeId),count=plan.path.length;
+      if(!includeAccepted&&record.stage==='preparing'&&index<count-Math.min(count,record.prepared_count+1))return [];
+      const active=record.stage==='active'||record.stage!=='preparing'&&index>=count-record.activated_count;
+      return node.assignments.map(assignment=>({...assignment,phase:active?'active' as const:'prepared' as const}));
+    }
+    return node.assignments.map(assignment=>{const active=record.stage==='ingress_active'||record.stage==='active'||record.stage==='egress_active'&&assignment.role==='relay-egress';return {...assignment,phase:active?'active' as const:'prepared' as const};});
   }
   async authorizationBound(tx:Tx,assignments:readonly RuntimeAssignment<F>[]):Promise<number>{
     let bound=Number.MAX_SAFE_INTEGER;
