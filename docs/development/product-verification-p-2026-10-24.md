@@ -89,6 +89,9 @@ Timers are cleared on query completion and sampling is enabled only during the
 controlled Echo case. Metadata reads do not change authorization or lock modes;
 their timing overhead is not a performance improvement or capacity proof. The
 diagnostic must identify the blocking owner before a production repair is chosen.
+An operation label is emitted only when the same connection-borrow identity
+exists before and after the metadata query; released/reused connections are
+reported as unobserved, never attributed using a later borrow's owner label.
 
 ## Latest Complete Verification - 245d438
 

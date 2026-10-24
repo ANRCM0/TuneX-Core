@@ -87,7 +87,7 @@ try{
     // Keep only public outcome metadata; never persist credential, nonce or service material.
     type SqlTiming={poolWaitMs:number;statements:number;sqlMs:number;slow:{table:string;operation:string;lock:string;durationMs:number}[]};
     const sqlContext=new AsyncLocalStorage<SqlTiming>(),instrumented=new WeakSet<object>();
-    const owners=new Map<number,string>(),ownerContext=new AsyncLocalStorage<string>();let lockSamples=0;
+    const owners=new Map<number,{owner:string}>(),ownerContext=new AsyncLocalStorage<string>();let lockSamples=0;
     const owned=(target:object,prefix:string,names:string[])=>{
       const methods=target as Record<string,(...args:any[])=>Promise<any>>;
       for(const name of names){const original=methods[name]!;methods[name]=(...args:any[])=>ownerContext.run(prefix+'-'+name,()=>original.apply(target,args));}
@@ -95,6 +95,7 @@ try{
     owned(control.runtime,'runtime',['hello','snapshot','report','tick']);
     owned(control.control.nodes,'node',['relayCredential']);
     const lockOwners=async()=>{
+      const observedOwners=new Map(owners);
       const [waits]=await admin.query<any[]>(`SELECT r.OBJECT_NAME requested_table,r.INDEX_NAME requested_index,r.LOCK_MODE requested_mode,
           b.OBJECT_NAME blocking_table,b.INDEX_NAME blocking_index,b.LOCK_MODE blocking_mode,
           rt.PROCESSLIST_ID requested_connection,bt.PROCESSLIST_ID blocking_connection
@@ -107,15 +108,18 @@ try{
       const tables=['runtime_nodes','nodes','node_credentials','node_grants','forwards','relay_deployments','scope_members','scopes',
         'snapshots','port_slots','probe_permits','probe_instances','probe_type_qualifications','probe_permit_budget'];
       const mode=(value:unknown)=>typeof value==='string'&&/^[A-Z_,]{1,40}$/.test(value)?value:'other';
-      const value=(row:any,prefix:string)=>({owner:owners.get(Number(row[prefix+'_connection']))??'other',
-        table:tables.includes(row[prefix+'_table'])?row[prefix+'_table']:'other',
-        index:row[prefix+'_index']==='PRIMARY'?'PRIMARY':'other',mode:mode(row[prefix+'_mode'])});
+      const value=(row:any,prefix:string)=>{
+        const id=Number(row[prefix+'_connection']),observed=observedOwners.get(id);
+        return {owner:observed&&owners.get(id)===observed?observed.owner:'unobserved',
+          table:tables.includes(row[prefix+'_table'])?row[prefix+'_table']:'other',
+          index:row[prefix+'_index']==='PRIMARY'?'PRIMARY':'other',mode:mode(row[prefix+'_mode'])};
+      };
       if(waits.length)appendEcho({stage:'lock-wait',waits:waits.map(row=>({request:value(row,'requested'),blocker:value(row,'blocking')}))});
     };
     const pool=control.db.pool,connect=pool.getConnection.bind(pool);
     pool.getConnection=async()=>{
       const started=Date.now(),connection=await connect(),timing=sqlContext.getStore();
-      owners.set(connection.threadId,ownerContext.getStore()??'other');
+      owners.set(connection.threadId,{owner:ownerContext.getStore()??'other'});
       if(timing)timing.poolWaitMs+=Date.now()-started;
       if(!instrumented.has(connection)){
         instrumented.add(connection);
