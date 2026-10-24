@@ -41,7 +41,7 @@ export function schemaMarkers(migration: string, sql: string): SchemaMarker[] {
     for (const match of sql.matchAll(/ALTER TABLE ([a-z_]+)([^;]+);/g)) {
         for (const column of match[2]!.matchAll(/ADD COLUMN ([a-z_]+)/g))
             markers.push({ migration, table: match[1]!, column: column[1]! });
-        for (const column of match[2]!.matchAll(/MODIFY ([a-z_]+) (ENUM\([^)]*\))/g))
+        for (const column of match[2]!.matchAll(/MODIFY (?:COLUMN )?([a-z_]+) (ENUM\([^)]*\))/g))
             markers.push({ migration, table: match[1]!, column: column[1]!, enumType: column[2]!.toLowerCase() });
     }
     if (!markers.length) throw new Error('UNREVIEWED_MIGRATION_FILE');

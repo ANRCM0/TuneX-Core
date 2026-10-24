@@ -33,6 +33,16 @@ func Multihop() executiondriver.Driver {
 	}
 }
 
+// PathProbeIngress reads an existing native Relay listener after host authorization.
+// Legacy Direct Probe hooks and capability declarations retain their original meaning.
+func PathProbeIngress(instance executiondriver.Instance, protocol string) (executiondriver.ProbeTarget, error) {
+    engine, ok := instance.(*relay.Engine)
+    if !ok { return executiondriver.ProbeTarget{}, fmt.Errorf("UNSUPPORTED_CAPABILITY: Native ingress required") }
+    value, err := engine.ObserveIngress(protocol)
+    if err != nil { return executiondriver.ProbeTarget{}, err }
+    return executiondriver.ProbeTarget{Address:value.Address,Port:value.Port,Check:value.Check}, nil
+}
+
 func Maximum(host executiondriver.Host, assignment adp3.Assignment) int {
 	maximum := host.Policy.MaxTcpConnectionsPerAssignment
 	if assignment.Protocol == "udp" {

@@ -19,8 +19,8 @@ export function notificationAttemptId(deliveryId:string,fence:number):string { r
 export function parseNotificationPayload(input:unknown):NotificationPayload {
     const v=object(input,['notificationVersion','deliveryId','scopeId','event']), e=object(v.event,['id','policyId','configRevision','episode','kind','rule','target','reason','occurredAt']), t=object(e.target,['kind','id']);
     if (v.notificationVersion!==1||!isId(v.deliveryId)||!isId(v.scopeId)||!isId(e.id)||!isId(e.policyId)||!isCounter(e.configRevision)||!isCounter(e.episode)||
-        !['firing','recovered','invalidated'].includes(e.kind as string)||!['forward-operation-failed','node-report-stale','node-credential-expiring'].includes(e.rule as string)||
-        !isId(t.id)||(e.rule==='forward-operation-failed'?t.kind!=='forward':t.kind!=='node')||!STATION_ALERT_REASONS.includes(e.reason as StationAlertReason)||!time(e.occurredAt))
+        !['firing','recovered','invalidated'].includes(e.kind as string)||!['forward-operation-failed','node-report-stale','node-credential-expiring','shared-usage-high','shared-period-ending','recent-path-probe-degraded'].includes(e.rule as string)||
+        !isId(t.id)||(['forward-operation-failed','recent-path-probe-degraded'].includes(e.rule as string)?t.kind!=='forward':t.kind!=='node')||!STATION_ALERT_REASONS.includes(e.reason as StationAlertReason)||!time(e.occurredAt))
         invalid('Invalid bounded notification payload');
     return deepFreeze({notificationVersion:1,deliveryId:v.deliveryId,scopeId:v.scopeId,event:{id:e.id,policyId:e.policyId,configRevision:e.configRevision,
         episode:e.episode,kind:e.kind,rule:e.rule,target:{kind:t.kind,id:t.id},reason:e.reason,occurredAt:e.occurredAt}} as NotificationPayload);

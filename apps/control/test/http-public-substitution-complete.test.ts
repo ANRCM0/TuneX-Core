@@ -45,6 +45,10 @@ function provider(factory=createControlApp){
             rotate:refuse('nodes.rotate'),relayCredential:refuse('nodes.relayCredential'),
         },
         resourceLimits:{get:refuse('resourceLimits.get'),set:refuse('resourceLimits.set')},
+        resourceUsage:{handle:refuse('resourceUsage.handle')},
+        probeEchoRegistry:{handle:refuse('probeEchoRegistry.handle')},
+        probeEcho:{poll:refuse('probeEcho.poll'),claim:refuse('probeEcho.claim'),status:refuse('probeEcho.status'),result:refuse('probeEcho.result')},
+        accountCredentials:{get:refuse('accountCredentials.get'),rotate:refuse('accountCredentials.rotate')},
         transport:{publish:refuse('transport.publish'),get:refuse('transport.get'),async list(...args){called('transport.list',this,args);return {profiles:[],executionSupported:false};},grants:refuse('transport.grants')},
         relayEndpoints:{change:refuse('relayEndpoints.change'),get:refuse('relayEndpoints.get')},
         details:{
@@ -257,5 +261,22 @@ test('23 complete inherited NodeApi credential methods retain actual machine rou
         assert.equal(response.status,409);assert.equal((await response.json()).code,'SUBSTITUTE_REFUSED');
         assert.deepEqual(f.calls.map(call=>[call.owner,call.args]),[['nodes.machine',['fingerprint-a']],[owner,['node-a','fingerprint-a',2,'request-a','csr-a']]]);
         assert.equal(f.calls[1]?.receiver,f.control.nodes);assert.deepEqual(f.trace,['request','allow','nodes.machine',owner,'drain']);
+    }
+});
+
+test('P3/P4 optional usage and Echo machine extensions retain authenticated Node arguments and original request lifetime',async()=>{
+    const factory=await machineFactory(()=> 'fingerprint-a');
+    const input={protocolVersion:3,probeVersion:4,nodeId:'node-a',bootId:'boot-a',sessionEpoch:2,
+        instanceId:'1'.repeat(64),instanceGeneration:1,requestId:'2'.repeat(64)};
+    for(const [path,owner,receiver] of [
+        ['resource-usage','resourceUsage.handle','resourceUsage'],
+        ['probe/echo/instance','probeEchoRegistry.handle','probeEchoRegistry'],
+        ['probe/echo/poll','probeEcho.poll','probeEcho'],['probe/echo/claim','probeEcho.claim','probeEcho'],
+        ['probe/echo/status','probeEcho.status','probeEcho'],['probe/echo/result','probeEcho.result','probeEcho'],
+    ] as const) {
+        const f=provider(factory),response=await f.app.request('/agent/v3/'+path,{method:'POST',headers:{'x-tunex-session-epoch':'2'},body:JSON.stringify(input)});
+        assert.equal(response.status,409,path);assert.equal((await response.json()).code,'SUBSTITUTE_REFUSED');
+        assert.deepEqual(f.calls.map(call=>[call.owner,call.args]),[['nodes.machine',['fingerprint-a']],[owner,['node-a','fingerprint-a',2,Object.assign(Object.create(null),input)]]]);
+        assert.equal(f.calls[1]!.receiver,f.control[receiver]);assert.deepEqual(f.trace,['request','allow','nodes.machine',owner,'drain']);
     }
 });

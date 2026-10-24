@@ -35,7 +35,7 @@ import { MySqlForwardDiagnosticReadStore } from './infrastructure/mysql-forward-
 import { AuditEvents } from './modules/audit-owner/public.ts';
 import { MySqlAuditReadStore } from './infrastructure/mysql-audit-read-store.ts';
 import { AuditReadModels, auditStoragePolicy } from './modules/audit-owner/public.ts';
-import { StationAlerts } from './modules/station-alert-owner/public.ts';
+import { StationAlerts, StationResourceFacts, StationPathFacts } from './modules/station-alert-owner/public.ts';
 import { MySqlStationAlertStorage } from './infrastructure/mysql-station-alert-storage.ts';
 import { MySqlStationAlertFactStore } from './infrastructure/mysql-station-alert-fact-store.ts';
 import { stationAlertStorageValues, stationAlertFactValues } from './modules/station-alert-owner/public.ts';
@@ -60,8 +60,11 @@ import { observationServiceStorageValues } from './modules/observation-service-o
 import { BackgroundTasks } from './framework/public.ts';
 import { nativeBackgroundTaskEffects } from './compatibility/public.ts';
 import { RequestLifecycle } from './framework/public.ts';
+import type { RuntimeRelay } from './framework/public.ts';
+import type { NativeRuntimeFamily } from './compatibility/public.ts';
+import type { Transaction } from './infrastructure/mysql.ts';
 
-export interface ServerOptions { databaseUrl:string; caCert:string; caKey:string; serverCert:string; serverKey:string; openssl:string; stateDirectory:string; port:number; host?:string; worker?:boolean;credentialOverlapSeconds?:number;relayCredentialSeconds?:number;policy?:Policy;initializeAuthority?:boolean;multihopEnabled?:boolean;probeExecutionEnabled?:boolean;probeScheduleEnabled?:boolean;probeIngressEnabled?:boolean;probeServicesEnabled?:boolean;telemetryEnabled?:boolean;forwardTelemetryEnabled?:boolean;hostTelemetryEnabled?:boolean;probeTelemetryEnabled?:boolean;telemetryRollupsEnabled?:boolean;stationAlertsEnabled?:boolean;notificationSecretsDirectory?:string|undefined;webhookDeliveryEnabled?:boolean }
+export interface ServerOptions { databaseUrl:string; caCert:string; caKey:string; serverCert:string; serverKey:string; openssl:string; stateDirectory:string; port:number; host?:string; worker?:boolean;credentialOverlapSeconds?:number;relayCredentialSeconds?:number;policy?:Policy;initializeAuthority?:boolean;multihopEnabled?:boolean;probeExecutionEnabled?:boolean;probeScheduleEnabled?:boolean;probeIngressEnabled?:boolean;probeServicesEnabled?:boolean;probeEchoEnabled?:boolean;probePathEchoEnabled?:boolean;telemetryEnabled?:boolean;forwardTelemetryEnabled?:boolean;hostTelemetryEnabled?:boolean;probeTelemetryEnabled?:boolean;telemetryRollupsEnabled?:boolean;stationAlertsEnabled?:boolean;notificationSecretsDirectory?:string|undefined;webhookDeliveryEnabled?:boolean }
 export async function startControl(options:ServerOptions):Promise<{ port:number; db:MySqlUnitOfWork; control:ControlApplication; runtime:RuntimeController;authority:AuthorityStore; close:()=>Promise<void> }> {
   const policy=checkControlServerPreflight(options,DEFAULT_POLICY);
   const db=new MySqlUnitOfWork(options.databaseUrl); await db.migrate();
@@ -72,7 +75,7 @@ export async function startControl(options:ServerOptions):Promise<{ port:number;
   const identity=new Identity(db), ca=new NodeCertificateAuthority(options.openssl,options.caCert,options.caKey,options.stateDirectory);
   const portLimits=new NodePortLimitPolicy(new MySqlNodeAuthorityStore(),new MySqlRuntimeResourceStore());
   const resources=createMySqlRuntimeResources(portLimits,policy.maxAssignmentsPerNode);
-  const nodes=new Nodes(db,identity,ca,options.credentialOverlapSeconds??120,options.relayCredentialSeconds??86400,resources,portLimits), control=new ControlApplication(db,identity,nodes,options.policy,options.multihopEnabled===true,options.probeExecutionEnabled===true,options.probeIngressEnabled===true,options.probeServicesEnabled===true,resources);
+  const nodes=new Nodes(db,identity,ca,options.credentialOverlapSeconds??120,options.relayCredentialSeconds??86400,resources,portLimits), control=new ControlApplication(db,identity,nodes,options.policy,options.multihopEnabled===true,options.probeExecutionEnabled===true,options.probeIngressEnabled===true,options.probeServicesEnabled===true,resources,options.probeEchoEnabled===true,options.probePathEchoEnabled===true);
   const telemetryDb=new MySqlTelemetryDatabase(options.databaseUrl);telemetryDb.guard=()=>authority.allow();
   const rollupStore=new MySqlTelemetryRollupStorage(telemetryRollupStorageValues),recorder=options.telemetryRollupsEnabled===true?rollupStore:undefined;
   const nodeTelemetryStore=new MySqlTelemetryStore(),forwardTelemetryStore=new MySqlForwardTelemetryStore();
@@ -106,12 +109,20 @@ export async function startControl(options:ServerOptions):Promise<{ port:number;
   const notificationDeliveries=new NotificationDeliveries({db:telemetryDb,auth:identity,store:new MySqlNotificationOutboxStore(notificationOutboxStorageValues),endpoints:notificationStore,
     policies:stationStore,secrets:notificationSecrets,sender:new ControlledNotificationHttps(),authorityBinding:notificationBinding,
     enabled:options.webhookDeliveryEnabled===true,clockSkewMs:policy.maxClockSkewSeconds*1000});
-  const stationAlerts=new StationAlerts(telemetryDb,identity,control.idempotency,stationStore,new MySqlStationAlertFactStore(stationAlertFactValues),
+  const stationAlerts=new StationAlerts(telemetryDb,identity,control.idempotency,stationStore,
+    new StationPathFacts(new StationResourceFacts(new MySqlStationAlertFactStore(stationAlertFactValues),control.resourceLimits),control.probePathObservations),
     options.stationAlertsEnabled===true,Date.now,policy.maxClockSkewSeconds*1000,notificationDeliveries);
   const notificationEndpoints=new NotificationEndpoints(telemetryDb,identity,control.idempotency,notificationStore,stationStore,
     notificationSecrets,notificationBinding,Date.now,notificationDeliveries.enabled);
   const requests=new RequestLifecycle();
-  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy,authority,control.relay,control.resourceLimits), app=createControlApp({control,runtime,authority,requests,
+  const runtimeRelay:RuntimeRelay<Transaction,NativeRuntimeFamily>={
+    relatedNodeIDs:(tx,node)=>control.relay.relatedNodeIDs(tx,node),
+    advanceForNode:(tx,node)=>control.relay.progressForNode(tx,node),
+    authorizationBound:(tx,assignments)=>control.relay.authorizationBound(tx,assignments),
+    pendingNodeIDs:tx=>control.relay.pendingNodeIDs(tx),
+    executionError:(tx,snapshot,assignment,observation)=>control.relay.executionError(tx,snapshot,assignment,observation),
+  };
+  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy,authority,runtimeRelay,control.resourceLimits), app=createControlApp({control,runtime,authority,requests,
     services:{telemetry,forwardTelemetry,authenticateObservation:header=>telemetryDb.transaction(tx=>identity.authenticateIn(tx,header)),
       hostTelemetry,probeTelemetry,telemetryRollups,diagnostics,audit,stationAlerts,notificationEndpoints,notificationDeliveries,probeRuns,probePlans,observationServices}});
   const workers=options.worker!==false,backoff={initialMs:30000,maxMs:300000};

@@ -22,9 +22,9 @@ export { MACHINE_SESSION_LOCK_INTERFACE_VERSION } from './machine-session-lock-p
 export type { LockedMachineSession, MachineSessionLockReader } from './machine-session-lock-ports.ts';
 export { TRANSIT_DELIVERY_STORAGE_INTERFACE_VERSION } from './transit-delivery-storage-ports.ts';
 export type { TransitDeliveryMachineRow, TransitStoredStage, TransitDeliveryOutboxRow, TransitDeliveryJournalRow, TransitDeliveryJournalStatus, TransitDeliveryReceiptRow, TransitDeliveryStorage } from './transit-delivery-storage-ports.ts';
-export { PROBE_PERMIT_STORAGE_INTERFACE_VERSION } from './probe-permit-storage-ports.ts';
+export { PROBE_PERMIT_STORAGE_INTERFACE_VERSION, PROBE_PERMIT_OBSERVATION_INTERFACE_VERSION } from './probe-permit-storage-ports.ts';
 export type { ProbePermitStoredRecord, ProbePermitStoredInput, ProbePermitResultInput, ProbePermitStoredResult,
-    ProbePermitStorageValues, ProbePermitStorage } from './probe-permit-storage-ports.ts';
+    ProbePermitStorageValues, ProbePermitStorage, ProbePermitBudget, ProbePermitObservationStorage } from './probe-permit-storage-ports.ts';
 export { PROBE_REGISTRATION_STORAGE_INTERFACE_VERSION } from './probe-registration-store-ports.ts';
 export type { ProbeInstanceStoredRecord, ProbeInstanceStorageValues, ProbeInstanceStorage,
     ProbeQualificationStoredRecord, ProbeQualificationStorageValues, ProbeQualificationStorage } from './probe-registration-store-ports.ts';
@@ -84,10 +84,11 @@ export type { RuntimeOperation, RuntimeRetirementKey, RuntimeRetirement, Runtime
     RuntimeQuarantineSnapshot, RuntimeAcceptedOperation, RuntimeLedgerStore, RuntimeLedgerForwards, RuntimeLedgerAuthorization,
     RuntimeLedgerCompiler, RuntimeLedgerOptions } from './runtime-ledger-ports.ts';
 export type { SnapshotAssignmentContext, SnapshotContribution, AssignmentDriverDeclaration, SnapshotAssignmentSource,
-    SnapshotAssignmentCollector, RelayAssignmentReader } from './runtime-assignment-ports.ts';
+    SnapshotAssignmentCollector, RelayAssignmentReader, RelayForwardAssignmentReader, RelayNodeAssignmentReader } from './runtime-assignment-ports.ts';
+export { RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION, RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION } from './runtime-assignment-ports.ts';
 export { RuntimeRelayHost } from './runtime-relay.ts';
-export { RUNTIME_RELAY_INTERFACE_VERSION } from './runtime-relay-ports.ts';
-export type { RuntimeRelayProfile, RuntimeRelayEndpointConfig, RuntimeRelayEndpoint, RuntimeRelayNodeFacts,
+export { RUNTIME_RELAY_INTERFACE_VERSION, RELAY_PROGRESS_INTERFACE_VERSION } from './runtime-relay-ports.ts';
+export type { RelayProgressCoordinator, RuntimeRelayProfile, RuntimeRelayEndpointConfig, RuntimeRelayEndpoint, RuntimeRelayNodeFacts,
     RuntimeAssignmentNetworkPolicy, RuntimeRelayAssignmentPolicy, RuntimeMultihopAssignmentPolicy,
     RuntimeRelayPlan, RuntimeMultihopInput, RuntimeRelayPlanInput, RuntimeRelayDeployment, RuntimeRelayNodeView,
     RuntimeRelayIsolation, RuntimeRelayStore, RuntimeRelayObservations, RuntimeRelayNodes, RuntimeRelayTransport,
@@ -160,3 +161,8 @@ export { RUNTIME_PORT_POLICY_INTERFACE_VERSION } from './runtime-port-policy-por
 export type { RuntimePortUsageStore, RuntimePortReservationPolicy } from './runtime-port-policy-ports.ts';
 export { RESOURCE_LIMIT_INTERFACE_VERSION } from './resource-limit-ports.ts';
 export type { RuntimePayloadPolicy, OfflinePayloadPolicy, SharedResourceLimitRecord, SharedResourceLimitReceipt, SharedResourceLimitStore } from './resource-limit-ports.ts';
+export { ACCOUNT_CREDENTIAL_STORE_INTERFACE_VERSION } from './identity-credential-ports.ts';
+export type { AccountCredentialRecord, AccountCredentialSummary, AccountCredentialStore } from './identity-credential-ports.ts';
+export { RESOURCE_USAGE_STORE_INTERFACE_VERSION } from './resource-usage-ports.ts';
+export type { ResourceUsageSample, ResourceUsageReportReference, ResourceUsageReceipt,
+    ResourceUsageStore, ResourceUsageReader, ResourceUsageConsumption } from './resource-usage-ports.ts';

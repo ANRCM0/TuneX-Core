@@ -94,7 +94,7 @@ func (runner *Runner) executeConsumedProbe(ctx context.Context, receipt *probeCl
 	execution := &probeExecution{watch: watch, body: body, reportUntil: reportUntil,
 		validityUntil: reportUntil.Add(owned.receivedAt.Sub(owned.requestedAt) + time.Millisecond)}
 	if owned.echo {
-		echoBody, err := probeEchoResult(owned, body, result)
+		echoBody, err := probeV4ResultWith(runner.scheduler(), owned, body, result)
 		if err != nil {
 			return nil, err
 		}
@@ -190,7 +190,7 @@ func projectProbeResultWith(schedule runtimeplatform.Scheduler, source runtimepl
 			ForwardRevision: b.ForwardRevision, DeploymentGeneration: b.DeploymentGeneration,
 			BindingFence: b.BindingFence, ConfigDigest: b.ConfigDigest, EgressPolicyRevision: b.EgressPolicyRevision},
 		MeasuredAt: measured, ValidUntil: valid, Elapsed: result.Elapsed,
-		Point: result.Point, Status: result.Status, Code: result.Code}, !receipt.typed && !receipt.services)
+		Point: result.Point, Status: result.Status, Code: result.Code}, !receipt.typed && !receipt.services && !receipt.echo)
 	if err != nil {
 		return proberesult.Request{}, time.Time{}, err
 	}

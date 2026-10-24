@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -13,12 +14,15 @@ import { DEFAULT_POLICY } from '@tunex/contracts';
 import { host, linuxPath, linux, spawnLinux, linuxBinary, topology, viaWSL } from './native-linux.ts';
 import { NetworkLab } from './network-lab.ts';
 import { verifyMultihopConsole } from './multihop-console.ts';
+import { verifyControlledEcho } from './product-p-observation.ts';
+import { verifyPathAlertOutbox } from './product-p-path-alert.ts';
 
 const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
 const count=Number(process.env.TUNEX_MULTIHOP_NODES??'3');
 const browserConsole=process.env.TUNEX_MULTIHOP_BROWSER==='1';
 if(browserConsole&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'||process.argv.includes('--isolated')))throw Error('Multi-hop browser acceptance requires non-isolated Linux Actions');
 const lab=process.argv.includes('--isolated')?new NetworkLab(count):undefined;
+const productP=process.env.TUNEX_PRODUCT_P_ACCEPTANCE==='1'&&!lab&&count===3;
 if(!databaseUrl||![3,4,8].includes(count))throw Error('Disposable MySQL URL and TUNEX_MULTIHOP_NODES=3,4,8 required');
 await mkdir('.artifacts/multihop',{recursive:true});const directory=await mkdtemp(resolve(`.artifacts/multihop/${count}-nodes-`));
 const caKey=join(directory,'ca.key'),caCert=join(directory,'ca.pem'),serverKey=join(directory,'server.key'),serverCert=join(directory,'server.pem');
@@ -30,15 +34,19 @@ const admin=await createConnection(databaseUrl),database=`tunex_multihop_${rando
 const url=new URL(databaseUrl);url.pathname='/'+database;
 const token=newToken(),scope='multihop-scope',owner='multihop-owner',ca=await readFile(caCert),checks:string[]=[],deploymentHistory:unknown[]=[];
 const binary=linuxBinary('tunex-agent'),fixture=linuxBinary('network-fixture'),nativeRoot=`/tmp/tunex-multihop-${randomUUID()}`;
-const policy={...DEFAULT_POLICY,pollIntervalSeconds:1,leaseSeconds:45,renewalLeadSeconds:18,observationFreshnessSeconds:10,drainTimeoutSeconds:3,udpIdleTimeoutSeconds:2};
-const options={databaseUrl:url.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,multihopEnabled:true};
+const policy={...DEFAULT_POLICY,maxClockSkewSeconds:productP?1:DEFAULT_POLICY.maxClockSkewSeconds,pollIntervalSeconds:1,leaseSeconds:45,renewalLeadSeconds:18,observationFreshnessSeconds:10,drainTimeoutSeconds:3,udpIdleTimeoutSeconds:2};
+const options={databaseUrl:url.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,multihopEnabled:true,
+    probeExecutionEnabled:productP,probeIngressEnabled:productP,probeServicesEnabled:productP,probeEchoEnabled:productP,probePathEchoEnabled:productP};
 let control:Awaited<ReturnType<typeof startControl>>|undefined,target:ChildProcess|undefined,targetPID:number|undefined,releaseReady:(()=>void)|undefined,proxy:ChildProcess|undefined,proxyPID:number|undefined,controlURL='';
 const agents:{nodeId:string;root:string;args:string[];process:ChildProcess;errors:string;exitedAt?:string}[]=[];
 let completedEvidence:Record<string,unknown>|undefined;
 let consoleEvidence:unknown;
+const echoTrace:Record<string,unknown>[]=[];
+const appendEcho=(sample:Record<string,unknown>)=>{echoTrace.push(sample);if(echoTrace.length>100)echoTrace.shift();};
+let captureEchoLocks=false;
 function pass(text:string){checks.push(text);console.log('PASS '+text);}
 async function until(action:()=>Promise<boolean>,label:string,timeout=120000){const start=Date.now();while(Date.now()-start<timeout){if(await action())return;await new Promise(r=>setTimeout(r,150));}throw Error('Multi-hop acceptance timed out: '+label);}
-async function call(method:string,path:string,input?:unknown,key=randomUUID()):Promise<{status:number;body:any}>{
+async function call(method:string,path:string,input?:unknown,key:string=randomUUID()):Promise<{status:number;body:any}>{
   const body=input===undefined?undefined:JSON.stringify(input);return new Promise((resolve,reject)=>{
     const req=request({hostname:host,port:control!.port,path:`/api/v1/scopes/${scope}/`+path,method,ca,agent:false,timeout:15000,
       headers:{authorization:`Bearer ${token}`,'content-type':'application/json','idempotency-key':key,...(body!==undefined?{'content-length':String(Buffer.byteLength(body))}:{})}},res=>{const parts:Buffer[]=[];res.on('data',b=>parts.push(b));res.on('end',()=>{try{resolve({status:res.statusCode!,body:JSON.parse(Buffer.concat(parts).toString())});}catch(e){reject(e);}});});
@@ -75,6 +83,88 @@ try{
   if(lab){await lab.open();await writeFile(join(directory,'server.ext'),`subjectAltName=IP:${host},IP:${lab.gateway}\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\n`);await execute(openssl,['x509','-req','-in',join(directory,'server.csr'),'-CA',caCert,'-CAkey',caKey,'-set_serial','1','-out',serverCert,'-days','1','-extfile',join(directory,'server.ext')]);}
   const synchronization=JSON.parse((await linux(linuxBinary('time-proof'),['--check'])).stdout);assert.equal(synchronization.synchronized,true);
   control=await startControl(options);await control.control.identity.bootstrap(scope,owner,token);
+  if(productP) {
+    // Keep only public outcome metadata; never persist credential, nonce or service material.
+    type SqlTiming={poolWaitMs:number;statements:number;sqlMs:number;slow:{table:string;operation:string;lock:string;durationMs:number}[]};
+    const sqlContext=new AsyncLocalStorage<SqlTiming>(),instrumented=new WeakSet<object>();
+    const owners=new Map<number,{owner:string}>(),ownerContext=new AsyncLocalStorage<string>();let lockSamples=0;
+    const owned=(target:object,prefix:string,names:string[])=>{
+      const methods=target as Record<string,(...args:any[])=>Promise<any>>;
+      for(const name of names){const original=methods[name]!;methods[name]=(...args:any[])=>ownerContext.run(prefix+'-'+name,()=>original.apply(target,args));}
+    };
+    owned(control.runtime,'runtime',['hello','snapshot','report','tick']);
+    owned(control.control.nodes,'node',['relayCredential']);
+    const lockOwners=async()=>{
+      const observedOwners=new Map(owners);
+      const [waits]=await admin.query<any[]>(`SELECT r.OBJECT_NAME requested_table,r.INDEX_NAME requested_index,r.LOCK_MODE requested_mode,
+          b.OBJECT_NAME blocking_table,b.INDEX_NAME blocking_index,b.LOCK_MODE blocking_mode,
+          rt.PROCESSLIST_ID requested_connection,bt.PROCESSLIST_ID blocking_connection
+        FROM performance_schema.data_lock_waits w
+        JOIN performance_schema.data_locks r ON r.ENGINE=w.ENGINE AND r.ENGINE_LOCK_ID=w.REQUESTING_ENGINE_LOCK_ID
+        JOIN performance_schema.data_locks b ON b.ENGINE=w.ENGINE AND b.ENGINE_LOCK_ID=w.BLOCKING_ENGINE_LOCK_ID
+        LEFT JOIN performance_schema.threads rt ON rt.THREAD_ID=w.REQUESTING_THREAD_ID
+        LEFT JOIN performance_schema.threads bt ON bt.THREAD_ID=w.BLOCKING_THREAD_ID
+        WHERE r.OBJECT_SCHEMA=? LIMIT 12`,[database]);
+      const tables=['runtime_nodes','nodes','node_credentials','node_grants','forwards','relay_deployments','scope_members','scopes',
+        'snapshots','port_slots','probe_permits','probe_instances','probe_type_qualifications','probe_permit_budget'];
+      const mode=(value:unknown)=>typeof value==='string'&&/^[A-Z_,]{1,40}$/.test(value)?value:'other';
+      const value=(row:any,prefix:string)=>{
+        const id=Number(row[prefix+'_connection']),observed=observedOwners.get(id);
+        return {owner:observed&&owners.get(id)===observed?observed.owner:'unobserved',
+          table:tables.includes(row[prefix+'_table'])?row[prefix+'_table']:'other',
+          index:row[prefix+'_index']==='PRIMARY'?'PRIMARY':'other',mode:mode(row[prefix+'_mode'])};
+      };
+      if(waits.length)appendEcho({stage:'lock-wait',waits:waits.map(row=>({request:value(row,'requested'),blocker:value(row,'blocking')}))});
+    };
+    const pool=control.db.pool,connect=pool.getConnection.bind(pool);
+    pool.getConnection=async()=>{
+      const started=Date.now(),connection=await connect(),timing=sqlContext.getStore();
+      owners.set(connection.threadId,{owner:ownerContext.getStore()??'other'});
+      if(timing)timing.poolWaitMs+=Date.now()-started;
+      if(!instrumented.has(connection)){
+        instrumented.add(connection);
+        const release=connection.release.bind(connection);
+        connection.release=()=>{owners.delete(connection.threadId);release();};
+        const methods=connection as unknown as Record<'query'|'execute'|'beginTransaction'|'commit'|'rollback',(...args:any[])=>Promise<any>>;
+        for(const method of ['query','execute','beginTransaction','commit','rollback'] as const){
+          const original=methods[method].bind(connection);
+          methods[method]=async(...args:any[])=>{
+            const timing=sqlContext.getStore();if(!timing)return original(...args);
+            const started=Date.now();
+            const sample=captureEchoLocks&&(method==='query'||method==='execute')?setTimeout(()=>{
+              if(captureEchoLocks&&lockSamples<32){lockSamples++;void lockOwners().catch(()=>appendEcho({stage:'lock-wait-unavailable'}));}
+            },75):undefined;
+            try{return await original(...args);}
+            finally{
+              if(sample)clearTimeout(sample);
+              const durationMs=Date.now()-started,sql=typeof args[0]==='string'?args[0]:'';
+              timing.statements++;timing.sqlMs+=durationMs;
+              timing.slow.push({table:/\b(probe_permit_budget|probe_permits|probe_instances|probe_type_qualifications|runtime_nodes|nodes|node_credentials|forwards|relay_deployments|scope_members|scopes|snapshots|port_slots)\b/.exec(sql)?.[1]??'other',
+                operation:method==='beginTransaction'?'BEGIN':method==='commit'?'COMMIT':method==='rollback'?'ROLLBACK':
+                  /^\s*(SELECT|INSERT|UPDATE|DELETE|SET)\b/i.exec(sql)?.[1]?.toUpperCase()??'other',
+                lock:/FOR UPDATE/i.test(sql)?'exclusive':/FOR SHARE/i.test(sql)?'shared':'none',durationMs});
+              timing.slow.sort((a,b)=>b.durationMs-a.durationMs);timing.slow.length=Math.min(5,timing.slow.length);
+            }
+          };
+        }
+      }
+      return connection;
+    };
+    const registry=control.control.probeEchoRegistry,handle=registry.handle.bind(registry);
+    registry.handle=async(...args)=>{try{const result=await handle(...args);appendEcho({stage:'qualification',node:args[0],action:result.action,qualified:result.qualified});return result;}
+      catch(error){appendEcho({stage:'qualification',node:args[0],code:(error as {code?:string}).code??'error'});throw error;}};
+    const echo=control.control.probeEcho;
+    const trace=<T>(stage:string,invoke:(node:string,fingerprint:string,epoch:number,input:unknown)=>Promise<T>)=>async(...args:Parameters<typeof invoke>):Promise<T>=>{
+      const started=Date.now(),sql:SqlTiming={poolWaitMs:0,statements:0,sqlMs:0,slow:[]};
+      try{const result=await ownerContext.run('probe-'+stage,()=>sqlContext.run(sql,()=>invoke(...args))),durationMs=Date.now()-started;
+        const offer=stage==='poll'?(result as {offer:{issuedAt:string;expiresAt:string}|null}).offer:null;
+        if(stage!=='poll'||offer||durationMs>=200)appendEcho({stage,node:args[0],outcome:'accepted',durationMs,sql,
+          ...(offer?{ageMs:Date.now()-Date.parse(offer.issuedAt),remainingMs:Date.parse(offer.expiresAt)-Date.now(),lifetimeMs:Date.parse(offer.expiresAt)-Date.parse(offer.issuedAt)}:{})});return result;}
+      catch(error){appendEcho({stage,node:args[0],code:(error as {code?:string}).code??'error',durationMs:Date.now()-started,sql});throw error;}
+    };
+    echo.poll=trace('poll',echo.poll.bind(echo));echo.claim=trace('claim',echo.claim.bind(echo));
+    echo.status=trace('status',echo.status.bind(echo));echo.result=trace('result',echo.result.bind(echo));
+  }
   controlURL=`https://${host}:${control.port}`;
   if(lab){proxy=spawnLinux(fixture,['--mode','tcp-proxy','--host',lab.gateway,'--upstream-host',host,'--upstream-port',String(control.port),'--run-id',nativeRoot+'/proxy']);const status=await ready(proxy);proxyPID=status.pid;controlURL=`https://${lab.gateway}:${status.port}`;}
   const targetArgs=['--mode','target','--run-id',nativeRoot,'--target-connection-seconds','120'];
@@ -83,12 +173,14 @@ try{
   const usedPorts=new Set<number>([targetStatus.port]);
   async function distinctPort(){for(let attempt=0;attempt<128;attempt++){const next=await port();if(!usedPorts.has(next)){usedPorts.add(next);return next;}}throw Error('Distinct fixture port selection exhausted');}
   const listenPort=await distinctPort(),copyPort=browserConsole?await distinctPort():undefined,batchPort=browserConsole?await distinctPort():undefined;
+  const echoPort=productP?await distinctPort():undefined;
   const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:5,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:128};
   assert.equal((await call('PUT','transport-profiles/multihop-profile',{expectedRevision:0,config:profile})).status,202);
   for(let i=0;i<count;i++){
-    const node=await call('POST','shared-nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:i===0&&copyPort!==undefined?[listenPort,copyPort,batchPort!]:[listenPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
+    const node=await call('POST','shared-nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:[...(i===0&&copyPort!==undefined?[listenPort,copyPort,batchPort!]:[listenPort]),...(echoPort===undefined?[]:[echoPort])],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
     const useGrant=await call('PUT',`nodes/${node.body.nodeId}/grants/${owner}`,{expectedRevision:1,allowed:true,allowedRoles:['ingress','transit','egress']});assert.equal(useGrant.status,202);assert.equal(useGrant.body.revision,2);
     const root=nativeRoot+'/node-'+i;const args:string[]=['--control',controlURL,'--node',node.body.nodeId,'--ca',linuxPath(caCert),'--state',root+'/state','--journal-key',root+'/secrets/journal.key','--relay','--multihop','--diagnostics'];
+    if(productP)args.push('--probe-registration','--probe-execution','--probe-ingress','--probe-services','--probe-echo','--probe-path-echo');
     try{const enroll=[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll'];if(lab)await lab.run(lab.namespaces[i]!,'/usr/bin/env',enroll);else await linux('env',enroll);}catch{throw Error('Multi-hop enrollment failed; token redacted');}
     const process=lab?lab.spawn(lab.namespaces[i]!,binary,args):spawnLinux(binary,args);const entry:typeof agents[number]={nodeId:node.body.nodeId,root,args,process,errors:''};observeAgent(entry);agents.push(entry);
     await until(async()=>{const [r]=await control!.db.pool.query<any[]>('SELECT session_epoch,(SELECT COUNT(*) FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE) peers FROM runtime_nodes WHERE node_id=?',[entry.nodeId,entry.nodeId]);return r[0]?.session_epoch>0&&r[0]?.peers>0;},'current Node session and peer credential');
@@ -119,6 +211,10 @@ try{
   const traffic=await probe(listenPort);assert.equal(traffic.tcp,true);assert.equal(traffic.udp,true);
   const [slots]=await control.db.pool.query<any[]>('SELECT node_id,protocol,port,fence FROM port_slots WHERE owner_id=?',[id]);assert.equal(slots.length,2*count);
   pass('Exact bidirectional TCP and UDP data crosses the fully activated path with two exclusive resources per Node');
+  if(productP){captureEchoLocks=true;try{for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress.nodeId,mode:'multihop',directory,listenPort:echoPort!,spec,call,diagnostics:()=>echoTrace.slice(-100),discovery:control.control.probeEcho,
+      responseDelayMs:15,pathAlerts:forward=>verifyPathAlertOutbox({db:control!.db,auth:control!.control.identity,samples:control!.control.probePathObservations,actor:owner,scope,forward,directory}),
+      qualified:async()=>{const [result]=await control!.db.pool.query<any[]>("SELECT COUNT(*) n FROM probe_type_qualifications q JOIN runtime_nodes r ON r.node_id=q.node_id AND r.session_epoch=q.session_epoch WHERE q.node_id=? AND q.state='qualified' AND q.echo_version=1 AND q.expires_at>?",[ingress.nodeId,Date.now()+2000]);return result[0].n===1;}
+  }))pass('P multihop '+check);}finally{captureEchoLocks=false;}}
   const [generation]=await control.db.pool.query<any[]>('SELECT node_id,snapshot_generation FROM runtime_nodes');
   await until(async()=>{const [r]=await control!.db.pool.query<any[]>('SELECT node_id,snapshot_generation FROM runtime_nodes');return r.every(n=>n.snapshot_generation>generation.find(p=>p.node_id===n.node_id).snapshot_generation);},'whole-Node lease renewal');
   assert.equal((await call('GET',resource+'/deployment')).body.deployment.generation,initial.generation);assert.equal((await probe(listenPort)).udp,true);
@@ -199,7 +295,7 @@ try{
     // Keep only timing and instance identifiers, never wire bodies, credentials,
     // driver configuration or key material, in uploaded failure evidence.
     const readBody=(body:any)=>typeof body==='string'?JSON.parse(body):body;
-    const [storedSnapshots]=await control.db.pool.query<any[]>('SELECT s.node_id,s.generation,s.session_epoch,s.body FROM snapshots s JOIN runtime_nodes n ON n.node_id=s.node_id WHERE s.generation>=GREATEST(n.snapshot_generation-7,0) ORDER BY s.node_id,s.generation');
+    const [storedSnapshots]=await control.db.pool.query<any[]>('SELECT s.node_id,s.generation,s.session_epoch,s.body FROM snapshots s JOIN runtime_nodes n ON n.node_id=s.node_id WHERE s.generation>=GREATEST(CAST(n.snapshot_generation AS SIGNED)-7,0) ORDER BY s.node_id,s.generation');
     const snapshots=storedSnapshots.map(row=>{const body=readBody(row.body);return {nodeId:row.node_id,generation:row.generation,sessionEpoch:row.session_epoch,
       issuedAt:body.issuedAt,validUntil:body.validUntil,assignments:body.assignments.map((assignment:any)=>({forwardId:assignment.forwardId,
         assignmentId:assignment.assignmentId,deploymentGeneration:assignment.deploymentGeneration,bindingFence:assignment.bindingFence,phase:assignment.phase,role:assignment.role,protocol:assignment.protocol}))};});
@@ -209,7 +305,7 @@ try{
       authorizationUntil:body.authorizationUntil,nodes:body.nodes.map((node:any)=>({nodeId:node.nodeId,sessionEpoch:node.sessionEpoch}))};});
     const measurements=await diagnostics().catch(()=>undefined);
     await writeFile(join(directory,'failure.json'),JSON.stringify({passed:false,capturedAt:new Date().toISOString(),policy,
-      error:error instanceof Error?error.message:'Multi-hop acceptance failed',checks,operations,runtime,snapshots,deployments,measurements,
+      error:error instanceof Error?error.message:'Multi-hop acceptance failed',checks,operations,runtime,snapshots,deployments,measurements,echoTrace:echoTrace.slice(-100),
       agents:agents.map(a=>({nodeId:a.nodeId,errors:a.errors,exitCode:a.process.exitCode,exitedAt:a.exitedAt??null}))},null,2));
   }
   throw error;

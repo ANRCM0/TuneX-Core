@@ -1,4 +1,6 @@
-export const PROBE_HISTORY_MODULE_INTERFACE_VERSION=1 as const;
+export const PROBE_HISTORY_MODULE_INTERFACE_VERSION=3 as const;
+export { ProbePathObservations } from './path-observations.ts';
+export type { ProbePathObservation, ProbePathObservationReader } from './path-observations.ts';
 export { PROBE_HISTORY_API_INTERFACE_VERSION } from './api.ts';
 export type * from './api.ts';
 export type * from './contracts.ts';

@@ -127,6 +127,24 @@ belongs in GitHub Actions. Record the exact tested source revision. Historical
 passes do not validate current changes. Independent physical-host gates remain
 unverified when hosts are unavailable; do not replace them with same-host evidence.
 
+On 2026-10-24 the human requested a plan, persistent goal and implementation for
+the identified product gaps. The serial P source stage is recorded in
+`docs/development/product-readiness-stage-p-2026-10-24.md`. It covers installation
+guidance, membership/account UX, online shared-resource usage, controlled Probe
+and alert extensions, daily/batch operation UX and deployment/load acceptance
+preparation. Record concrete FRs before changing frozen contracts. This stage
+does not reuse N's bounded test, commit/push, merge or release authorization, and
+does not authorize delegation. Actual physical-host/load/long-run results require
+their own environment and execution evidence.
+
 Never revert unrelated existing changes. If unexpected concurrent changes appear,
 stop and ask how to proceed. Do not delegate to sub-agents unless the user or an
 applicable instruction explicitly authorizes delegation.
+
+On 2026-10-24 the human selected GitHub and instructed "使用action进行测试和验收"
+for the prepared P candidate. This opens P Actions verification and necessary
+failure repairs, including saving/pushing the candidate testing branch and
+creating a draft PR so Actions can test the exact source. Keep functional,
+MySQL, network, container and browser execution in Actions. This does not
+authorize merge, image publication, release or delegation. Independent-host,
+load and long-run acceptance remains unavailable pending actual environments.

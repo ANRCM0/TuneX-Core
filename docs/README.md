@@ -2,7 +2,10 @@
 
 本目录维护当前开发需要的环境、架构、公共契约、协议、决策、集成方式与验收资料。
 当前状态以[实施进度](development/progress.md)与
-[N 准确修订验证记录](development/product-verification-n-2026-10-21.md)为准。
+[P 准确修订验证记录](development/product-verification-p-2026-10-24.md)为准；
+[N 验证记录](development/product-verification-n-2026-10-21.md)保留历史修订证据。
+当前新增源码工作为 [P 产品完善阶段](development/product-readiness-stage-p-2026-10-24.md)，
+与历史 N 验证分别记账。
 N 已经 PR #114 合并为 `9a5f719`；历史地基 B 的接受仍见
 [B 验证记录](development/foundation-verification-2026-10-19.md)。
 
@@ -10,6 +13,10 @@ N 已经 PR #114 合并为 `9a5f719`；历史地基 B 的接受仍见
 
 | 文档 | 用途 |
 | --- | --- |
+| [P：产品易用性与运行闭环](development/product-readiness-stage-p-2026-10-24.md) | 当前串行完善方案、P1–P6 实施顺序、公共接口与 PP-01–16 验收矩阵；源码与执行分别记账 |
+| [P 准确修订验证](development/product-verification-p-2026-10-24.md) | `aae0632f` 的 10 作业 baseline、容器打包、150 跳过项与 native SQL 对账、实际往返和剩余环境范围；未合并或发布 |
+| [P 部署与质量验收](development/product-p-deployment-acceptance.md) | 安装、保留状态升级、原维护／恢复、独立主机故障、负载与 24／72 小时长稳；准备完成，执行未取得 |
+| [受控路径 Echo](spec/controlled-path-echo-v1.md) | Direct 与 Relay／多跳的测量位置、显式协商、完整原 owner 链路、兼容和证据边界 |
 | [开发入口](development/getting-started.md) | 工具、依赖、源码入口与本地／Actions 验证分工 |
 | [实施进度](development/progress.md) | 当前实现、合并源码、准确证据与剩余门槛 |
 | [开发执行方案](development/development-plan.md) | 地基接受、产品切片、负载／人工切换和独立能力的顺序 |
@@ -53,6 +60,7 @@ decisions 与 changes 保留仍约束当前源码的设计与兼容变更。
 | [Core](spec/core-v1.md) 与 [Forward](spec/forward-v1.md) | 纯领域与最小转发语义 |
 | [Control API](spec/control-api-v1.md) 与 [Runtime/Agent](spec/runtime-agent-v1.md) | 公共命令、Operation、部署状态与恢复 |
 | [产品资源访问](spec/product-resource-access-v1.md) | N：私有／共享、用途、个人端口额度、读取隔离与显式存量分类；配置内验证已通过 |
+| [账号本人凭据](spec/account-credentials-v1.md) | P2：本人 Token 轮换、事务内复核、未知结果核对与账号审计；准确修订契约／MySQL／浏览器结果见 P 验证记录 |
 | [共享资源带宽／流量](spec/shared-resource-payload-limits-v1.md) | FR-0032：每用户 × 共享机器的双向 payload、显式周期、保守预扣与恢复边界；准确修订结果见 N 验证记录 |
 | [共享额度公共示例](../examples/shared-resource-limits/README.md) | 仅消费公共端口的政策注入、原事务与显式周期命令示例；N Actions 加载检查通过，不授予部署或执行权限 |
 | [ADP/3](protocol/agent-deployment-v3.md) 与 [执行扩展](protocol/agent-deployment-execution-v1.md) | 当前在线协议及版本化多跳执行 |

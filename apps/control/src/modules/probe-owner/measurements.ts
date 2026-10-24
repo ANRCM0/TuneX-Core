@@ -1,10 +1,14 @@
 import { PROBE_INGRESS_MEASUREMENT, PROBE_SERVICE_MEASUREMENT, PROBE_TCP_ECHO_MEASUREMENT, PROBE_UDP_ECHO_MEASUREMENT } from './measurement-contracts.ts';
 import type { ProbeMeasurement, ProbeMeasurementDescription } from './measurement-contracts.ts';
 export { PROBE_EGRESS_MEASUREMENT, PROBE_INGRESS_MEASUREMENT, PROBE_SERVICE_MEASUREMENT, PROBE_TCP_ECHO_MEASUREMENT, PROBE_UDP_ECHO_MEASUREMENT,
-    PROBE_TYPED_MEASUREMENTS, PROBE_SERVICE_MEASUREMENTS, PROBE_ECHO_MEASUREMENTS } from './measurement-contracts.ts';
+    PROBE_TYPED_MEASUREMENTS, PROBE_SERVICE_MEASUREMENTS, PROBE_ECHO_MEASUREMENTS, PROBE_PATH_MEASUREMENTS } from './measurement-contracts.ts';
 export type { ProbeMeasurement, ProbeMeasurementDescription, ProbeTypeQualification, ProbeTypeQualifications } from './measurement-contracts.ts';
-export const isEchoMeasurement = (value:unknown) => value===PROBE_TCP_ECHO_MEASUREMENT||value===PROBE_UDP_ECHO_MEASUREMENT;
+export const isPathMeasurement = (value:unknown) => value==='tcp-path-echo-v1'||value==='udp-path-echo-v1';
+export const isEchoMeasurement = (value:unknown) => value===PROBE_TCP_ECHO_MEASUREMENT||value===PROBE_UDP_ECHO_MEASUREMENT||isPathMeasurement(value);
 export function probeMeasurement(measurement:ProbeMeasurement):ProbeMeasurementDescription {
+    if(measurement==='tcp-path-echo-v1'||measurement==='udp-path-echo-v1')return {measurement,
+        taskKind:measurement==='tcp-path-echo-v1'?'tcp-path-echo':'udp-path-echo',point:'agent-local-forward-ingress',
+        capability:measurement==='tcp-path-echo-v1'?'probe.tcp-path-echo.v1':'probe.udp-path-echo.v1'};
     if(measurement===PROBE_TCP_ECHO_MEASUREMENT||measurement===PROBE_UDP_ECHO_MEASUREMENT) {
         const tcp=measurement===PROBE_TCP_ECHO_MEASUREMENT;
         return {measurement,taskKind:tcp?'tcp-ingress-echo' as const:'udp-ingress-echo' as const,
@@ -18,7 +22,11 @@ export function probeMeasurement(measurement:ProbeMeasurement):ProbeMeasurementD
 }
 export function probeEchoMeasurement(measurement:typeof PROBE_TCP_ECHO_MEASUREMENT|typeof PROBE_UDP_ECHO_MEASUREMENT):
     Extract<ProbeMeasurementDescription,{measurement:'tcp-ingress-echo-v1'|'udp-ingress-echo-v1'}>&{businessProtocol:'tcp'|'udp'};
+export function probeEchoMeasurement(measurement:'tcp-path-echo-v1'|'udp-path-echo-v1'):
+    Extract<ProbeMeasurementDescription,{measurement:'tcp-path-echo-v1'|'udp-path-echo-v1'}>&{businessProtocol:'tcp'|'udp'};
+export function probeEchoMeasurement(measurement:typeof PROBE_TCP_ECHO_MEASUREMENT|typeof PROBE_UDP_ECHO_MEASUREMENT|'tcp-path-echo-v1'|'udp-path-echo-v1'):
+    Extract<ProbeMeasurementDescription,{measurement:'tcp-ingress-echo-v1'|'udp-ingress-echo-v1'|'tcp-path-echo-v1'|'udp-path-echo-v1'}>&{businessProtocol:'tcp'|'udp'};
 export function probeEchoMeasurement(measurement:ProbeMeasurement):ProbeMeasurementDescription&{businessProtocol:'tcp'|'udp'};
 export function probeEchoMeasurement(measurement:ProbeMeasurement) {
-    return {...probeMeasurement(measurement),businessProtocol:measurement===PROBE_UDP_ECHO_MEASUREMENT?'udp' as const:'tcp' as const};
+    return {...probeMeasurement(measurement),businessProtocol:measurement===PROBE_UDP_ECHO_MEASUREMENT||measurement==='udp-path-echo-v1'?'udp' as const:'tcp' as const};
 }

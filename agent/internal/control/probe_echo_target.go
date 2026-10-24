@@ -48,7 +48,7 @@ func (runner *Runner) probeEchoTargetLocked(binding probe.Binding, measurement s
 		return probe.Target{}, probe.ErrDenied
 	}
 	protocol := "tcp"
-	if measurement == probe.MeasurementIngressUDPEcho {
+	if probeecho.IsUDP(measurement) {
 		protocol = "udp"
 	}
 	allowed := false
@@ -61,12 +61,16 @@ func (runner *Runner) probeEchoTargetLocked(binding probe.Binding, measurement s
 		return probe.Target{}, probe.ErrDenied
 	}
 	// The original business target remains immutable. The client will dial only its actual ingress below.
-	target, err := runner.probeBusinessTargetLocked(binding, protocol)
+	var target probe.Target
+    if probeecho.IsPath(measurement) {
+        if !runner.options.ProbePathEcho { return probe.Target{}, probe.ErrDenied }
+        target, err = runner.probePathTargetLocked(binding, protocol, declared.Config.Endpoint.Address, int(declared.Config.Endpoint.Port))
+    } else { target, err = runner.probeBusinessTargetLocked(binding, protocol) }
 	if err != nil || target.Host != declared.Config.Endpoint.Address || uint64(target.Port) != declared.Config.Endpoint.Port ||
 		!observationtrust.AddressAllowed(target.Host) {
 		return probe.Target{}, probe.ErrDenied
 	}
-	if !nativeexecution.ProbeEchoBusinessDestinationAllowed(target.Host, target.AllowedDestinationCIDRs) {
+	if !probeecho.IsPath(measurement) && !nativeexecution.ProbeEchoBusinessDestinationAllowed(target.Host, target.AllowedDestinationCIDRs) {
 		return probe.Target{}, probe.ErrDenied
 	}
 	for _, current := range runner.instances {
@@ -77,14 +81,17 @@ func (runner *Runner) probeEchoTargetLocked(binding probe.Binding, measurement s
 		if err != nil {
 			return probe.Target{}, probe.ErrDenied
 		}
-		observe := driver.probeIngress
-		if protocol == "udp" {
-			observe = driver.probeUDPIngress
+		var observed executionProbeTarget
+		if probeecho.IsPath(measurement) {
+			value, observeErr := nativeexecution.PathProbeIngress(current.stream, protocol)
+			err = observeErr
+			observed = executionProbeTarget{address: value.Address, port: value.Port, check: value.Check}
+		} else {
+			observe := driver.probeIngress
+			if protocol == "udp" { observe = driver.probeUDPIngress }
+			if observe == nil { return probe.Target{}, probe.ErrDenied }
+			observed, err = observe(current.stream)
 		}
-		if observe == nil {
-			return probe.Target{}, probe.ErrDenied
-		}
-		observed, err := observe(current.stream)
 		if err != nil || observed.check == nil || observed.check() != nil {
 			return probe.Target{}, probe.ErrDenied
 		}

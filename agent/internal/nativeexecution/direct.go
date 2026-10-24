@@ -10,7 +10,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/forward"
 )
 
-const InterfaceVersion uint64 = 2
+const InterfaceVersion uint64 = 3
 
 func Direct() executiondriver.Driver {
 	return executiondriver.Driver{

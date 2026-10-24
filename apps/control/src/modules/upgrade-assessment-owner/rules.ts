@@ -34,6 +34,11 @@ const controlSchemaCeiling: Record<CompatibilityProfile, string> = {
     'adp3-product-resource-access-v1': '0039-',
     'adp3-shared-node-port-limits-v1': '0040-',
     'adp3-shared-resource-limits-v1': '0041-',
+    'adp3-account-credentials-v1': '0042-',
+    'adp3-resource-usage-v1': '0043-',
+    'adp3-resource-alerts-v1': '0044-',
+    'adp3-path-echo-v1': '0045-',
+    'adp3-path-sample-alert-v1': '0046-',
 };
 profiles.add('adp3-typed-probes-v1');
 profiles.add('adp3-observation-services-v1');
@@ -43,6 +48,11 @@ profiles.add('adp3-probe-plan-json-integers-v1');
 profiles.add('adp3-product-resource-access-v1');
 profiles.add('adp3-shared-node-port-limits-v1');
 profiles.add('adp3-shared-resource-limits-v1');
+profiles.add('adp3-account-credentials-v1');
+profiles.add('adp3-resource-usage-v1');
+profiles.add('adp3-resource-alerts-v1');
+profiles.add('adp3-path-echo-v1');
+profiles.add('adp3-path-sample-alert-v1');
 const supportsMultihop=(profile:CompatibilityProfile)=>profile==='adp3-multihop-v1'||profile==='adp3-shared-resource-limits-v1';
 const invalid = (): never => { throw new Error('INVALID_UPGRADE_PLAN'); };
 function object(value: unknown, keys: string[]): Record<string, unknown> {

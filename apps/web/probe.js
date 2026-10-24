@@ -2,9 +2,10 @@ const validId = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:
 const validTime = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
 const closed = (value, keys) => value !== null && typeof value === 'object' && !Array.isArray(value) &&
   Object.keys(value).sort().join(',') === [...keys].sort().join(',');
-const echoKind=kind=>kind==='tcp-ingress-echo'||kind==='udp-ingress-echo';
+const pathKind=kind=>kind==='tcp-path-echo'||kind==='udp-path-echo';
+const echoKind=kind=>pathKind(kind)||kind==='tcp-ingress-echo'||kind==='udp-ingress-echo';
 const serviceKind=kind=>kind==='tcp-ingress-tls'||echoKind(kind);
-const descriptor = ingress => echoKind(ingress)?{measurement:ingress+'-v1',taskKind:ingress,point:'agent-local-direct-ingress',capability:'probe.'+ingress+'.v1',businessProtocol:ingress.startsWith('udp')?'udp':'tcp'}:ingress === 'tcp-ingress-tls' ? { measurement:'tcp-ingress-tls-v1',taskKind:'tcp-ingress-tls',
+const descriptor = ingress => echoKind(ingress)?{measurement:ingress+'-v1',taskKind:ingress,point:pathKind(ingress)?'agent-local-forward-ingress':'agent-local-direct-ingress',capability:'probe.'+ingress+'.v1',businessProtocol:ingress.startsWith('udp')?'udp':'tcp'}:ingress === 'tcp-ingress-tls' ? { measurement:'tcp-ingress-tls-v1',taskKind:'tcp-ingress-tls',
   point:'agent-local-direct-ingress',capability:'probe.tcp-ingress-tls.v1' } : ingress ? { measurement:'tcp-ingress-connect-v1',taskKind:'tcp-ingress-connect',
   point:'agent-local-direct-ingress',capability:'probe.tcp-ingress-connect.v1' } :
   { measurement:'tcp-connect-v1',taskKind:'tcp-connect',point:'agent-direct-egress',capability:'probe.tcp-connect.v1' };
@@ -25,25 +26,27 @@ const rawBase64=(value,length)=>{try{return typeof value==='string'&&atob(value)
 const challenge=value=>closed(value,['nonce','invocationDigest'])&&rawBase64(value.nonce,32)&&hash(value.invocationDigest);
 const echoEvidence=value=>closed(value,['algorithm','requestDigest','signature','verified'])&&value.algorithm==='Ed25519'&&hash(value.requestDigest)&&rawBase64(value.signature,64)&&value.verified===true;
 const supportKinds = ['tcp-connect','tcp-ingress-connect','tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo'];
+const commandKinds = [...supportKinds,'tcp-path-echo','udp-path-echo'];
 function supportView(value, forward, scope) {
+  const kinds=value?.capabilityVersion===2?[...supportKinds,'tcp-path-echo','udp-path-echo']:supportKinds;
   const path = '/api/v1/scopes/' + encodeURIComponent(scope) + '/forwards/' + encodeURIComponent(forward) + '/diagnostics';
   if (!closed(value, ['capabilityVersion','scopeId','forwardId','forwardRevision','mode','readOnly','networkCheck','executionAuthorized','endToEnd','health','consistency','items','diagnostics']) ||
-      value.capabilityVersion !== 1 || value.scopeId !== scope || value.forwardId !== forward || !positive(value.forwardRevision) ||
+      ![1,2].includes(value.capabilityVersion) || value.scopeId !== scope || value.forwardId !== forward || !positive(value.forwardRevision) ||
       !['direct','relay','multihop'].includes(value.mode) || value.readOnly !== true || value.networkCheck !== 'not-performed' ||
       value.executionAuthorized !== false || value.endToEnd !== false || value.health !== 'unknown' || value.consistency !== 'read-committed-not-global-snapshot' ||
-      !Array.isArray(value.items) || value.items.length !== supportKinds.length ||
+      !Array.isArray(value.items) || value.items.length !== kinds.length ||
       !closed(value.diagnostics, ['apiPath','source','readOnly','networkCheck','health','description']) || value.diagnostics.apiPath !== path ||
       value.diagnostics.source !== 'persisted-control-and-agent-state' || value.diagnostics.readOnly !== true ||
       value.diagnostics.networkCheck !== 'not-performed' || value.diagnostics.health !== 'unknown' || typeof value.diagnostics.description !== 'string')
     throw Error('Invalid read-only Probe support response.');
   const seen = new Set();
   for (const item of value.items) {
-    if (!supportKinds.includes(item?.taskKind) || seen.has(item.taskKind)) throw Error('Invalid Probe support measurement.');
+    if (!kinds.includes(item?.taskKind) || seen.has(item.taskKind)) throw Error('Invalid Probe support measurement.');
     seen.add(item.taskKind);
     const { businessProtocol, ...expected } = descriptor(serviceKind(item.taskKind) ? item.taskKind : item.taskKind === 'tcp-ingress-connect');
     const preflight = item.preflight;
     if (!closed(item, [...Object.keys(expected),'protocol','endToEnd','health','transportSupport','issuance','issuanceReason','preflight']) ||
-        !Object.entries(expected).every(([key, entry]) => item[key] === entry) || item.protocol !== (item.taskKind === 'udp-ingress-echo' ? 'udp' : 'tcp') ||
+        !Object.entries(expected).every(([key, entry]) => item[key] === entry) || item.protocol !== (item.taskKind.startsWith('udp') ? 'udp' : 'tcp') ||
         item.endToEnd !== false || item.health !== 'unknown' || !['supported','unsupported'].includes(item.transportSupport) ||
         !['enabled','disabled','not-dispatchable'].includes(item.issuance) || typeof item.issuanceReason !== 'string' ||
         !closed(preflight, ['state','reason','expiresAt']) || !['available','unavailable','unsupported','requires-controlled-service'].includes(preflight.state) ||
@@ -51,8 +54,7 @@ function supportView(value, forward, scope) {
         typeof preflight.reason.message !== 'string' || (preflight.state === 'available' ? !validTime(preflight.expiresAt) : preflight.expiresAt !== null) ||
         (preflight.state === 'available') !== (preflight.reason.code === 'PREFLIGHT_AVAILABLE') ||
         (preflight.state === 'requires-controlled-service') !== (preflight.reason.code === 'CONTROLLED_SERVICE_REQUIRED') ||
-        item.transportSupport === 'unsupported' && preflight.state !== 'unsupported' ||
-        echoKind(item.taskKind) && item.issuance !== 'not-dispatchable') throw Error('Invalid Probe support classification.');
+        item.transportSupport === 'unsupported' && preflight.state !== 'unsupported') throw Error('Invalid Probe support classification.');
   }
   return value;
 }
@@ -179,10 +181,10 @@ function receiptView(value, id, scope) {
 export function initProbeConsole({ request, notify, byId, display, getScope = () => '', delay = pause, confirm = globalThis.confirm }) {
   const el = name => byId('probe-' + name);
   const serviceInputs = ['service-id','service-revision','service-config-revision','service-digest'];
-  let selected = null, attempt = null, receipt = null, enabled = false, ingressEnabled = false, servicesEnabled = false, busy = false;
+  let selected = null, attempt = null, receipt = null, enabled = false, ingressEnabled = false, servicesEnabled = false, echoEnabled = false, pathEchoEnabled = false, busy = false;
   let supportForward = null, supportVersion = 0;
   const support = createSupportPanel();
-  const issuanceEnabled = () => el('kind').value === 'tcp-ingress-tls' ? servicesEnabled : el('kind').value === 'tcp-ingress-connect' ? ingressEnabled : enabled;
+  const issuanceEnabled = () => pathKind(el('kind').value) ? pathEchoEnabled : echoKind(el('kind').value) ? echoEnabled : el('kind').value === 'tcp-ingress-tls' ? servicesEnabled : el('kind').value === 'tcp-ingress-connect' ? ingressEnabled : enabled;
   let epoch = 0, readVersion = 0, capVersion = 0, session = new AbortController(), watching = null;
   function createSupportPanel() {
     const anchor = el('capability'), doc = anchor.ownerDocument ?? globalThis.document;
@@ -215,9 +217,9 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
     const switches = { enabled: '原命令开关已开启', disabled: '原命令开关已关闭', 'not-dispatchable': '现有命令不可派发' };
     const modes = { direct: 'Direct', relay: 'Relay', multihop: '多跳' };
     support.state.textContent = modes[value.mode] + ' · 当前读取 revision ' + value.forwardRevision + '；列表选择 revision ' + supportForward.revision + '。分次授权读取，不是同时刻执行证明。';
-    for (const kind of supportKinds) {
+    for (const kind of value.capabilityVersion===2?commandKinds:supportKinds) {
       const item = value.items.find(entry => entry.taskKind === kind), row = support.make('tr');
-      const point = item.point === 'agent-direct-egress' ? 'Agent 到原目标' : 'Agent 本机 Direct 入口';
+      const point = item.point === 'agent-direct-egress' ? 'Agent 到原目标' : item.point === 'agent-local-forward-ingress' ? 'Agent 本机完整转发入口' : 'Agent 本机 Direct 入口';
       const name = support.make('td'); name.append(support.make('strong', item.measurement), support.make('p', point, 'hint'));
       const issuance = support.make('td'); issuance.append(support.make('strong', switches[item.issuance]), support.make('p', item.issuanceReason, 'hint'));
       const preflight = support.make('td'), expired = item.preflight.state === 'available' && Date.parse(item.preflight.expiresAt) <= Date.now();
@@ -244,11 +246,11 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   }
   function message(text) { el('state').textContent = text; }
   function sync() {
-    el('issue').disabled = busy || !selected || (!attempt && !issuanceEnabled()) || Boolean(attempt?.acceptance);
+    el('issue').disabled = busy || !selected || (!attempt && (!issuanceEnabled() || Boolean(selected.path)!==pathKind(el('kind').value))) || Boolean(attempt?.acceptance);
     el('issue').textContent = attempt && !attempt.acceptance ? 'Replay Same Acceptance' : 'Issue One Task';
     el('timeout').disabled = busy || Boolean(attempt);
     el('kind').disabled = busy || Boolean(attempt);
-    for (const name of serviceInputs) el(name).disabled = busy || Boolean(attempt) || el('kind').value !== 'tcp-ingress-tls';
+    for (const name of serviceInputs) el(name).disabled = busy || Boolean(attempt) || !serviceKind(el('kind').value);
     el('consent').disabled = busy || Boolean(attempt);
     el('prepare').disabled = busy || !selected;
     el('query').disabled = busy || Boolean(watching);
@@ -265,7 +267,7 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   }
   function clear() {
     epoch++; capVersion++; readVersion++; session.abort(); session = new AbortController();
-    stop(); selected = attempt = receipt = null; enabled = ingressEnabled = servicesEnabled = busy = false;
+    stop(); selected = attempt = receipt = null; enabled = ingressEnabled = servicesEnabled = echoEnabled = pathEchoEnabled = busy = false;
     supportForward = null; resetSupport();
     el('selected').textContent = 'Select a Direct TCP Forward from the Forward list.';
     el('capability').textContent = 'Issuance policy: unknown / default off.';
@@ -280,15 +282,17 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   async function capabilities() {
     const version = epoch, sequence = ++capVersion;
     const supportRead = readSupport();
-    enabled = ingressEnabled = servicesEnabled = false; sync();
+    enabled = ingressEnabled = servicesEnabled = echoEnabled = pathEchoEnabled = false; sync();
     try {
       const result = await request('GET', 'execution-capabilities', undefined, undefined, { signal: session.signal, timeoutMs: 3000 });
       if (version !== epoch || sequence !== capVersion) return;
       enabled = result.probeIssuanceEnabled === true;
       ingressEnabled = enabled && result.probeIngressIssuanceEnabled === true;
       servicesEnabled = ingressEnabled && result.probeServicesIssuanceEnabled === true;
+      echoEnabled = servicesEnabled && result.probeEchoIssuanceEnabled === true;
+      pathEchoEnabled = echoEnabled && result.probePathEchoIssuanceEnabled === true;
       el('capability').textContent = 'Control egress issuance=' + enabled + '; local-ingress issuance=' + ingressEnabled +
-        '; controlled TLS issuance=' + servicesEnabled + '. Configuration is not Agent opt-in, trust, delivery or liveness proof. Receipt reads and revocation remain separate.';
+        '; controlled TLS issuance=' + servicesEnabled + '; controlled Echo issuance=' + echoEnabled + '; path Echo issuance=' + pathEchoEnabled + '. Configuration is not Agent opt-in, trust, delivery or liveness proof. Receipt reads and revocation remain separate.';
     } catch (error) { if (version === epoch && sequence === capVersion) { el('capability').textContent = 'Issuance policy: unknown; new tasks disabled.'; notify(error.message, true); } }
     if (version === epoch && sequence === capVersion) sync();
     await supportRead;
@@ -296,8 +300,12 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   async function open(forward) {
     if (busy || !abandon()) return;
     if (!validId(forward?.id) || !Number.isSafeInteger(forward.revision) || forward.revision < 1 ||
-        forward.spec?.path || !forward.spec?.protocols?.includes('tcp')) throw Error('Select a Direct TCP Forward.');
-    clear(); selected = Object.freeze({ id: forward.id, revision: forward.revision }); supportForward = selected;
+        !forward.spec?.protocols?.some(value => value === 'tcp' || value === 'udp')) throw Error('Select a TCP or UDP Forward.');
+    if(Boolean(forward.spec.path)!==Boolean(forward.spec.transport)||forward.spec.path&&
+        (!Array.isArray(forward.spec.path.via)||forward.spec.path.via.length<1||forward.spec.path.via.length>7||!forward.spec.path.via.every(validId)))
+      throw Error('Select a Forward with a complete supported path and transport.');
+    clear(); selected = Object.freeze({ id: forward.id, revision: forward.revision, path:Boolean(forward.spec.path?.via?.length),protocols:Object.freeze([...forward.spec.protocols]) }); supportForward = selected;
+    el('kind').value=selected.path?(selected.protocols.includes('tcp')?'tcp-path-echo':'udp-path-echo'):(selected.protocols.includes('tcp')?'tcp-connect':'udp-ingress-echo');
     el('selected').textContent = 'Forward ' + selected.id + ' / selected revision ' + selected.revision + ' (server rechecks current authority).';
     display('probes'); await capabilities();
   }
@@ -343,14 +351,16 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
     try {
       if (!attempt) {
         const raw = el('timeout').value;
-        if (!issuanceEnabled() || !['tcp-connect','tcp-ingress-connect','tcp-ingress-tls'].includes(el('kind').value) || !el('consent').checked || !/^[1-9][0-9]*$/.test(raw) || Number(raw) < 100 || Number(raw) > 2000)
+        if (!issuanceEnabled() || !commandKinds.includes(el('kind').value) || Boolean(selected.path)!==pathKind(el('kind').value) ||
+            !selected.protocols.includes(el('kind').value.startsWith('udp') ? 'udp' : 'tcp') ||
+            !el('consent').checked || !/^[1-9][0-9]*$/.test(raw) || Number(raw) < 100 || Number(raw) > 2000)
           throw Error('Explicit consent, enabled Control policy and a 100..2000 ms integer timeout are required.');
         let service;
-        if (el('kind').value === 'tcp-ingress-tls') {
+        if (serviceKind(el('kind').value)) {
           const revision = el('service-revision').value, configRevision = el('service-config-revision').value;
           service = Object.freeze({serviceId:el('service-id').value.trim(),revision:Number(revision),configRevision:Number(configRevision),configDigest:el('service-digest').value.trim()});
           if (!/^[1-9][0-9]*$/.test(revision) || !/^[1-9][0-9]*$/.test(configRevision) || !serviceReference(service) || !validId(getScope()))
-            throw Error('TLS needs the exact current service ID, metadata CAS, config revision and digest from the manager registry; no latest lookup or certificate input.');
+            throw Error('Controlled Probe needs the exact current service ID, metadata CAS, config revision and digest from the manager registry.');
         }
         attempt = { key: crypto.randomUUID(), resource: 'forwards/' + encodeURIComponent(selected.id) + '/probes',
           scope:getScope(), body: Object.freeze({ version: 1, kind: el('kind').value, expectedRevision: selected.revision, timeoutMs: Number(raw),...(service ? {service} : {}) }), acceptance: null };

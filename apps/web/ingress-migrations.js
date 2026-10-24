@@ -1,3 +1,4 @@
+import { batchProgress } from './task-workflow.js';
 const id = value => typeof value === 'string' && value.length <= 128 && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value) && !/\s/.test(value);
 const uint = value => Number.isSafeInteger(value) && value >= 0;
 const positive = value => uint(value) && value > 0;
@@ -274,7 +275,7 @@ export function initIngressMigrations({ request, byId, notify, getScope, documen
   }
   function renderBatch(data) {
     loaded = clone(data); const token = epoch; renderChanges(data.plan);
-    el('record').textContent = '入口迁移 ' + data.batchId + ' / CAS r' + data.revision + '\n创建者 ' + data.createdBy + ' / ' + data.createdAt + '\nplanDigest=' + data.planDigest +
+    el('record').textContent = batchProgress(data).text + '\n\n入口迁移 ' + data.batchId + ' / CAS r' + data.revision + '\n创建者 ' + data.createdBy + ' / ' + data.createdAt + '\nplanDigest=' + data.planDigest +
       '\ncancelled=' + data.cancelled + ' / recoveryInvalidated=' + data.recoveryInvalidated + '\n历史来源与定义差异不是全局当前成员状态；接受也不是已生效或健康。\n' +
       JSON.stringify({ sourceGroup: data.plan.sourceGroup, targetGroup: data.plan.targetGroup, sources: data.plan.sources, operations: data.operations }, null, 2);
     for (const item of data.items) {

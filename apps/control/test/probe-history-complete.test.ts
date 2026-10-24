@@ -335,7 +335,7 @@ test('186 real permit owner failure/late clock/commit rollback retains original 
     }
 });
 
-test('186 inspect keeps original native service selection per family; staged v4 controlled ingestion remains unavailable before mutation', async () => {
+test('186 inspect keeps native service selection per family; unqualified v4 ingestion remains unavailable before mutation', async () => {
     for (const measurement of measurements) {
         const value = permit(measurement), f = ownerHarness(value);
         const receipt = await f.host.inspect('owner', 'scope-a', value.id);
@@ -349,7 +349,7 @@ test('186 inspect keeps original native service selection per family; staged v4 
             const input = request(value, 4); native.nativeProbeResultRequest(input);
             await assert.rejects(f.host.receiveResult(base.nodeId, fingerprint, base.sessionEpoch, input as ProbeResultRequest), { code: 'PROBE_PERMIT_UNAVAILABLE' });
             assert.equal(f.current, before); assert.equal(f.savedResult, undefined);
-            assert.deepEqual(f.events, ['begin', 'budget', 'clock', 'plan', 'rollback']);
+            assert.deepEqual(f.events, ['begin', 'budget', 'clock', 'plan', 'instance', 'machine', 'clock', 'qualification', 'rollback']);
         }
     }
 });

@@ -20,18 +20,21 @@ export interface ProbeEchoChallenge {readonly nonce:string;readonly invocationDi
 export interface ProbeEchoProof {readonly algorithm:'Ed25519';readonly requestDigest:string;readonly signature:string;readonly verified:true}
 export interface ProbeEchoInvocation {
     readonly domain:'tunex.probe.echo.invocation.v1';readonly probeVersion:4;
-    readonly measurement:'tcp-ingress-echo-v1'|'udp-ingress-echo-v1';readonly permitId:string;readonly binding:ProbeClaimBinding;
+    readonly measurement:'tcp-ingress-echo-v1'|'udp-ingress-echo-v1'|'tcp-path-echo-v1'|'udp-path-echo-v1';readonly permitId:string;readonly binding:ProbeClaimBinding;
     readonly instanceId:string;readonly instanceGeneration:number;readonly timeoutMs:number;readonly issuedAt:string;readonly expiresAt:string;
     readonly service:ProbeServiceSelection;readonly nonce:string;
 }
 export type ProbeEchoMeasurementDescriptor=(ProbeServicesMeasurementDescriptor&{readonly businessProtocol:'tcp'})|
     {readonly measurement:'tcp-ingress-echo-v1';readonly taskKind:'tcp-ingress-echo';readonly point:'agent-local-direct-ingress';readonly capability:'probe.tcp-ingress-echo.v1';readonly businessProtocol:'tcp'}|
-    {readonly measurement:'udp-ingress-echo-v1';readonly taskKind:'udp-ingress-echo';readonly point:'agent-local-direct-ingress';readonly capability:'probe.udp-ingress-echo.v1';readonly businessProtocol:'udp'};
+    {readonly measurement:'udp-ingress-echo-v1';readonly taskKind:'udp-ingress-echo';readonly point:'agent-local-direct-ingress';readonly capability:'probe.udp-ingress-echo.v1';readonly businessProtocol:'udp'}|
+    {readonly measurement:'tcp-path-echo-v1';readonly taskKind:'tcp-path-echo';readonly point:'agent-local-forward-ingress';readonly capability:'probe.tcp-path-echo.v1';readonly businessProtocol:'tcp'}|
+    {readonly measurement:'udp-path-echo-v1';readonly taskKind:'udp-path-echo';readonly point:'agent-local-forward-ingress';readonly capability:'probe.udp-path-echo.v1';readonly businessProtocol:'udp'};
 export interface ProbeEchoIdentity {
     readonly protocolVersion:3;readonly probeVersion:4;readonly nodeId:string;readonly bootId:string;readonly sessionEpoch:number;
     readonly instanceId:string;readonly instanceGeneration:number;readonly requestId:string;
 }
-type Measurements=readonly ['tcp-connect-v1','tcp-ingress-connect-v1','tcp-ingress-tls-v1','tcp-ingress-echo-v1','udp-ingress-echo-v1'];
+type LegacyMeasurements=readonly ['tcp-connect-v1','tcp-ingress-connect-v1','tcp-ingress-tls-v1','tcp-ingress-echo-v1','udp-ingress-echo-v1'];
+type Measurements=LegacyMeasurements|readonly [...LegacyMeasurements,'tcp-path-echo-v1','udp-path-echo-v1'];
 type Typed=ProbeEchoIdentity&ProbeEchoMeasurementDescriptor;
 type SelectionChallenge={readonly service:ProbeServiceSelection|null;readonly challenge:ProbeEchoChallenge|null};
 type Permit={readonly permitId:string;readonly binding:ProbeClaimBinding;readonly timeoutMs:number;readonly issuedAt:string;readonly expiresAt:string};
@@ -73,7 +76,7 @@ const validators=Object.fromEntries(['ServiceConfig','ServiceContext','Challenge
     'PollRequest','PollResponse','ClaimRequest','ClaimResponse','StatusRequest','StatusResponse','ResultRequest','ResultResponse']
     .map(name=>[name,ajv.compile({$ref:`${schema.$id}#/$defs/${name}`})]));
 const time=(value:string)=>Date.parse(value);
-const isEcho=(value:string)=>value==='tcp-ingress-echo-v1'||value==='udp-ingress-echo-v1';
+const isEcho=(value:string)=>['tcp-ingress-echo-v1','udp-ingress-echo-v1','tcp-path-echo-v1','udp-path-echo-v1'].includes(value);
 function invalid():never {throw new Error('INVALID_CONFIG: Controlled echo Probe v4 contract rejected');}
 function checked<T>(name:string,input:unknown,maximum:number):T {
     if(!input||typeof input!=='object'||Array.isArray(input)||![Object.prototype,null].includes(Object.getPrototypeOf(input)))invalid();
@@ -120,7 +123,7 @@ export function probeEchoInvocationDigest(input:ProbeEchoInvocation):string {
 export function probeEchoRequestFrame(input:ProbeEchoInvocation,challenge:ProbeEchoChallenge):Buffer {
     const value=parseProbeEchoChallenge(challenge);
     if(input.nonce!==value.nonce||probeEchoInvocationDigest(input)!==value.invocationDigest)invalid();
-    const frame=Buffer.alloc(256);frame.write('TNXECHOQ',0,'ascii');frame[8]=1;frame[9]=input.measurement==='tcp-ingress-echo-v1'?1:2;
+    const frame=Buffer.alloc(256);frame.write('TNXECHOQ',0,'ascii');frame[8]=1;frame[9]=(input.measurement==='tcp-ingress-echo-v1'||input.measurement==='tcp-path-echo-v1')?1:2;
     frame.writeBigUInt64BE(BigInt(time(input.expiresAt)),16);rawBase64(value.nonce,32).copy(frame,24);
     Buffer.from(input.service.contextDigest.slice(7),'hex').copy(frame,56);Buffer.from(value.invocationDigest.slice(7),'hex').copy(frame,88);
     return frame;
@@ -130,7 +133,7 @@ export function verifyProbeEchoProof(context:ProbeEchoServiceContext,input:Probe
     try {
         const current=parseProbeEchoServiceContext(context),value=checked<ProbeEchoProof>('EchoProof',proof,512),config=current.config;
         if(config.version!==2||digest(probeSelection(current))!==digest(input.service)||
-            !config.endpoint.protocols.some(protocol=>protocol===(input.measurement==='tcp-ingress-echo-v1'?'tcp':'udp'))||
+            !config.endpoint.protocols.some(protocol=>protocol===((input.measurement==='tcp-ingress-echo-v1'||input.measurement==='tcp-path-echo-v1')?'tcp':'udp'))||
             time(input.issuedAt)<config.validFrom||time(input.expiresAt)>config.validUntil)return false;
         const request=probeEchoRequestFrame(input,challenge),hash=createHash('sha256').update(request).digest();
         if(value.requestDigest!==`sha256:${hash.toString('hex')}`)return false;
@@ -165,7 +168,7 @@ export function parseProbeEcho<K extends keyof Messages>(name:K,raw:string):Mess
             if(start<0||end<=start||end-start>30000||server<start||server>=end)invalid();}
     }else if(value.kind==='probe-echo-poll-ack'){
         const observed=time(value.observedAt),server=time(value.serverTime);if(observed<0||server<observed||server-observed>250)invalid();
-        if(value.offer){const offer=value.offer;binding(value,offer);
+        if(value.offer){const offer=value.offer; if(offer&&!value.measurements.some(measurement=>measurement===offer.measurement))invalid();binding(value,offer);
             const selection=offer.serviceContext===null?null:probeEchoServiceSelection(offer.serviceContext);service(offer.measurement,selection,offer.challenge);
             if(time(offer.issuedAt)>observed||server>=time(offer.expiresAt))invalid();
             if(offer.serviceContext!==null){const config=offer.serviceContext.config;
@@ -184,7 +187,7 @@ export function parseProbeEcho<K extends keyof Messages>(name:K,raw:string):Mess
         if(isEcho(value.measurement)){
             if(value.tls!==null||!(value.status==='echoed'&&value.code==='nonce-echo-verified'&&value.echo!==null&&value.requestBytes===256&&value.responseBytes===256||
                 value.status==='unverified'&&value.code==='nonce-echo-rejected'&&value.echo===null&&value.requestBytes===256||
-                value.measurement==='tcp-ingress-echo-v1'&&value.status==='unreachable'&&value.code==='tcp-connect-failed'&&value.echo===null&&value.requestBytes===0&&value.responseBytes===0))invalid();
+                (value.measurement==='tcp-ingress-echo-v1'||value.measurement==='tcp-path-echo-v1')&&value.status==='unreachable'&&value.code==='tcp-connect-failed'&&value.echo===null&&value.requestBytes===0&&value.responseBytes===0))invalid();
             if(value.echo!==null){rawBase64(value.echo.signature,64);const request=probeEchoRequestFrame(invocation(value,value.service!,value.challenge!),value.challenge!);
                 if(value.echo.requestDigest!==`sha256:${createHash('sha256').update(request).digest('hex')}`)invalid();}
         }else{

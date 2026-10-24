@@ -32,7 +32,7 @@ func validateEchoExecution(input probeecho.Execution, binding Binding, measureme
 		return ErrDenied
 	}
 	protocol := "tcp"
-	if measurement == MeasurementIngressUDPEcho {
+	if probeecho.IsUDP(measurement) {
 		protocol = "udp"
 	}
 	declared := false

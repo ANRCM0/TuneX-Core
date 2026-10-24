@@ -1,4 +1,5 @@
 export const PROBE_PERMIT_STORAGE_INTERFACE_VERSION=1 as const;
+export const PROBE_PERMIT_OBSERVATION_INTERFACE_VERSION=1 as const;
 
 /** Detached storage shape; measurement interpretation stays with the supplied owner. */
 export interface ProbePermitStoredRecord {
@@ -28,9 +29,16 @@ export interface ProbePermitStorageValues<Permit extends ProbePermitStoredRecord
     readonly readResult:(input:ProbePermitResultInput)=>Result;
     readonly checkResult:(record:Result)=>void;
 }
+export interface ProbePermitBudget<Permit extends ProbePermitStoredRecord> {
+    observedAt:number;records:readonly Permit[];withdrawals:readonly {permitId:string;withdrawnAt:number}[];
+}
+/** Non-executing observation; its shared lock still excludes original writers. */
+export interface ProbePermitObservationStorage<Tx,Permit extends ProbePermitStoredRecord> {
+    observe(tx:Tx):Promise<ProbePermitBudget<Permit>>;
+}
 /** One caller-owned transaction and the original shared permit budget lock. */
 export interface ProbePermitStorage<Tx,Permit extends ProbePermitStoredRecord,Result extends ProbePermitStoredResult> {
-    lock(tx:Tx):Promise<{observedAt:number;records:readonly Permit[];withdrawals:readonly {permitId:string;withdrawnAt:number}[]}>;
+    lock(tx:Tx):Promise<ProbePermitBudget<Permit>>;
     clock(tx:Tx,now:number):Promise<void>;
     prune(tx:Tx,expiredBefore:number):Promise<void>;
     insert(tx:Tx,permit:Permit):Promise<void>;

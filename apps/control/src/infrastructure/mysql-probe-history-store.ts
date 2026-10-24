@@ -34,8 +34,8 @@ function binding(value: unknown): unknown {
     } catch { return corrupt(); }
 }
 function record<Record extends ProbeHistoryRecord>(row:Row,values:ProbeHistoryValues<Record>):Record {
-    const echo=row.measurement==='tcp-ingress-echo-v1'||row.measurement==='udp-ingress-echo-v1';
-    if(!['tcp-connect-v1','tcp-ingress-connect-v1','tcp-ingress-tls-v1','tcp-ingress-echo-v1','udp-ingress-echo-v1'].includes(row.measurement as string)||
+    const echo=['tcp-ingress-echo-v1','udp-ingress-echo-v1','tcp-path-echo-v1','udp-path-echo-v1'].includes(row.measurement as string);
+    if(!['tcp-connect-v1','tcp-ingress-connect-v1','tcp-ingress-tls-v1','tcp-ingress-echo-v1','udp-ingress-echo-v1','tcp-path-echo-v1','udp-path-echo-v1'].includes(row.measurement as string)||
         (row.measurement==='tcp-ingress-tls-v1'||echo)!==(row.service_selection!==null)||row.measurement!=='tcp-ingress-tls-v1'&&row.result_tls!==null||
         echo!==(row.echo_challenge!==null)||!echo&&[row.result_echo,row.result_request_bytes,row.result_response_bytes].some(value=>value!==null))corrupt();
     const hasResult = row.result_status!==null;

@@ -244,8 +244,8 @@ func TestProbeWireOwnerCompleteNativeCallsiteEncodingParsingAndDispatchOrder(t *
 	}
 	wireOwnerOrdered(t,wireOwnerCalls(t,"probe_delivery.go","probeDeliveryExchangeBounded"),"Now","WithDeadline","AfterFunc","EncodeProbeRequest","ProbeDelivery","Close","ReadProbeResponseBody","Err","ProbeResponseErrorCode")
 	wireOwnerOrdered(t,wireOwnerCalls(t,"probe_workflow.go","reportProbe"),"CompareAndSwap","reportProbeEcho","reportProbeServices","reportProbeTypes","resultRequest","DecodeProbeResultResponse","ValidateServerTime","resultRequest")
-	wireOwnerOrdered(t,wireOwnerCalls(t,"probe_execution.go","executeConsumedProbe"),"Run","Check","projectProbeResultWith","probeEchoResult","serviceProbeResultWith","typedProbeResult","checkResultAuthority")
-	for _,name:=range []string{"ProbeTypesResult","ProbeServicesResult","ProbeEchoResult","ProjectProbeResult"}{for _,call:=range wireOwnerCalls(t,"../nativeexecution/probe_result_wire.go",name){if call=="Now"||call=="ReadRandom"||call=="Check"||call=="SaveJournal"||call=="Allow"{t.Fatal("pure native result leaf acquired live clock/authority",name,call)}}}
+	wireOwnerOrdered(t,wireOwnerCalls(t,"probe_execution.go","executeConsumedProbe"),"Run","Check","projectProbeResultWith","probeV4ResultWith","serviceProbeResultWith","typedProbeResult","checkResultAuthority")
+	for _,name:=range []string{"ProbeTypesResult","ProbeServicesResult","ProbeEchoResult","ProbeEchoResultWithTLS","probeEchoResult","ProjectProbeResult"}{for _,call:=range wireOwnerCalls(t,"../nativeexecution/probe_result_wire.go",name){if call=="Now"||call=="ReadRandom"||call=="Check"||call=="SaveJournal"||call=="Allow"{t.Fatal("pure native result leaf acquired live clock/authority",name,call)}}}
 }
 
 func wireOwnerServiceContext(t *testing.T,now time.Time)observationtrust.Context{

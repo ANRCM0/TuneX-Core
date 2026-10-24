@@ -35,8 +35,9 @@ test('Probe console defaults off, rejects unsupported selections and requires ex
   await h.api.open(forward); consent(h); await h.api.issue();
   assert.equal(h.calls.filter(c => c[0] === 'POST').length, 0);
   assert.equal(h.el('issue').disabled, true);
-  await assert.rejects(h.api.open({ ...forward, spec: { protocols: ['udp'] } }), /Direct TCP/);
-  await assert.rejects(h.api.open({ ...forward, spec: { protocols: ['tcp'], path: {} } }), /Direct TCP/);
+  await h.api.open({ ...forward, spec: { protocols: ['udp'] } });assert.equal(h.el('kind').value,'udp-ingress-echo');
+  assert.equal(h.el('issue').disabled,true);
+  await assert.rejects(h.api.open({ ...forward, spec: { protocols: ['tcp'], path: {} } }), /complete supported path/);
   const enabled = harness(); await enabled.api.open(forward); await enabled.api.issue();
   assert.equal(enabled.calls.filter(c => c[0] === 'POST').length, 0);
 });
@@ -161,6 +162,25 @@ function echoReceipt(protocol = 'tcp', state = 'consumed', outcome = 'echoed') {
     applicationPayloadBytes: outcome === 'echoed' ? 512 : outcome === 'unreachable' ? 0 : 256 });
   return receipt({ ...description, service, state, result: state === 'consumed' ? report : null });
 }
+
+test('P4 path selection issues only its explicit controlled TCP/UDP kind and preserves the distinct receipt point',async()=>{
+  for(const protocol of ['tcp','udp']) {
+    const retained=echoReceipt(protocol),kind=protocol+'-path-echo',description={measurement:kind+'-v1',taskKind:kind,
+      point:'agent-local-forward-ingress',capability:'probe.'+kind+'.v1'};
+    Object.assign(retained,description);Object.assign(retained.result.body,description);
+    const h=harness(async(method,path)=>method==='GET'&&path==='execution-capabilities'?{
+      probeIssuanceEnabled:true,probeIngressIssuanceEnabled:true,probeServicesIssuanceEnabled:true,probeEchoIssuanceEnabled:true,probePathEchoIssuanceEnabled:true,
+    }:method==='POST'?{...acceptance,probeVersion:4,...description,businessProtocol:protocol,service:retained.service,challenge:retained.result.body.challenge}:retained,()=>true,'scope-a');
+    await h.api.open({...forward,spec:{protocols:[protocol],path:{via:['egress']},transport:{profileId:'profile',configRevision:1}}});
+    assert.equal(h.el('kind').value,kind);consent(h);
+    h.el('service-id').value='echo-service';h.el('service-revision').value='1';h.el('service-config-revision').value='1';h.el('service-digest').value=retained.service.configDigest;
+    await h.api.issue();const writes=h.calls.filter(call=>call[0]==='POST');assert.equal(writes.length,1);assert.equal(writes[0][2].kind,kind);
+    h.el('id').value='probe-a';await h.api.query();const view=JSON.parse(h.el('receipt').textContent);
+    assert.equal(view.point,'agent-local-forward-ingress');assert.equal(view.health,'unknown');
+    const bad=structuredClone(retained);bad.result.body.point='agent-local-direct-ingress';
+    const refused=harness(async()=>bad,()=>true,'scope-a');refused.el('id').value='probe-a';await refused.api.query();assert.equal(refused.el('receipt').textContent,'');
+  }
+});
 
 test('TCP and UDP Echo receipts display stored evidence with unknown health across terminal and pending states', async () => {
   for (const protocol of ['tcp', 'udp']) for (const state of ['issued', 'consumed', 'revoked', 'quarantined']) {

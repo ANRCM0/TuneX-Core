@@ -351,3 +351,86 @@ browser-native-leaf-inventory-v1.md (relative to docs/).188 manual map is author
 consumer/default/asset/version/removal/candidate/example and all later gates remain
 open. No checks/tests/tool expansion/format/generation/build/CI/experiments/Git
 writes/delegation ran; source identity/declaration/private layout changed explicitly.
+
+### P Relay Forward Read Extension
+
+FR-0041 adds the separately versioned `RelayForwardAssignmentReader1` public
+contract. `RuntimeRelayHost.assignmentsForForward(tx,forwardId)` reads only the
+latest deployment of one Forward, runs the original publishable-plan authority
+once, and projects each node with the same session and stage gates as legacy
+`assignments(tx,nodeId,includeAccepted)`. The legacy method and RuntimeRelay7
+remain available. Native Probe composition injects the new optional grouped
+provider; all requester grants and exact published bindings are still checked in
+the same caller transaction. The FR includes a public composition example and
+the contract tests exercise it. This is a P acceptance candidate, not a new
+parallel-module or release gate.
+
+FR-0042 adds `ProbePermitObservationStorage1` beside the unchanged mutation
+storage. Original offer/status may consume its optional shared-lock snapshot;
+native composition delegates to the one original lower store. Normal mutations
+continue acquiring the original exclusive budget lock and recovery keeps its
+original startup admission/SQL. The shared reader retains all original bounded
+projections, clock and corruption checks; old providers and overridden legacy
+locks keep their original exclusive path. No new authority, schema or lifetime
+is introduced. Concurrent readers/writer exclusion is covered by an authored
+real MySQL case in the existing Actions invocation.
+
+### P Node Snapshot Read Successor
+
+FR-0043 adds `RelayNodeAssignmentReader1` and
+`RuntimeRelayHost.assignmentsForNode(tx,nodeId,includeAccepted=false)`.
+The native call chain is original Runtime transaction -> RuntimeLedger ->
+SnapshotAssignmentRegistry -> RelayAssignmentSource -> explicit new-reader
+callback -> original Relay owner forNode walk -> original publishable-plan and
+Node projection helpers. Each multihop plan consumes one locked input for
+resource and immutable-plan checks; two-node Relay retains its original flow.
+The unchanged `modules/runtime/relay-coordinator.ts` compatibility constructor
+still assembles the original host and native providers. Existing inherited or
+instance canExecute overrides retain the legacy dispatch/provider path instead
+of being bypassed by the optimized entrypoint.
+An existing assignments override is captured once and called with its original
+receiver and arguments before optimized reads. The original native Snapshot
+failure/resource-conflict rollback cases remain unchanged; an override or
+getter error never triggers fallback to the optimized reader.
+The original `assignments` entrypoint, constructor, RuntimeRelay7, Snapshot
+context/source/driver declarations and includeAccepted/session/stage behavior
+remain available. No authorization input survives the caller transaction.
+
+The native composition fake explicitly migrates its deferred method expectation
+and retains the original receiver and argument/transaction checks. The public
+example and new/legacy parity, input refusal, once-only read and error/no-cache
+cases pass on `245d438` in baseline `40062014210`; packaging `40062014243`
+also passes. The unchanged native Snapshot rollback/conflict cases pass.
+Actual PR test merge `2a66270` has the identical source tree. The current
+three-node sample still needs three independent TCP commands and the next UDP
+command after an unavailable-permit refusal; a shared JOIN wait reaches 746ms
+with zero connection acquisition wait. Input-count acceptance does not establish
+improved latency or first-command reliability. Independent deployment/load and
+physical-host requirements remain open. See
+[FR-0043](../changes/FR-0043-relay-node-snapshot-assignment-read.md).
+
+### P Original Relay Progress Successor
+
+FR-0044 adds RelayProgressCoordinator1.progressForNode to the original Relay
+host. Existing RuntimeHost4 -> original sorted related-Node locks -> native
+RuntimeRelay adapter -> progressForNode -> original advance/refresh/withdrawal/
+complete walk remains on the same transaction and ledger. One locked multihop
+input is reused per deployment/call; current credential/peer/plan time guards
+are re-evaluated. Inputs never cross calls or transactions.
+
+The old advance/advanceForNode methods and canExecute overrides retain their
+legacy dispatch. RuntimeController's optional Relay argument widens from the
+native Coordinator class to the existing public RuntimeRelay port, keeping all
+old calls and argument positions. The existing server selects the new method
+explicitly and defers all five adapter methods to the same original host.
+No Proxy, competing authority, source copy, new root or database table is added.
+
+Public type/counter/example, old/new state writes, provider counts, current facts,
+expiry/error/override and native binding cases pass on `69dcaa7`, tree
+`62cd28b39e8e7e37cce2745c4781827186cac403`. Baseline `40069707791` has all
+ten jobs successful and packaging `40069707745` passes. Unchanged native
+Snapshot/Runtime rollback and actual signed-path-to-Station/outbox cases also
+pass. Acceptance is limited to the cases in the P verification record; original
+RuntimeHost4/old entries remain and the constructor type widening above is explicit.
+See [FR-0044](../changes/FR-0044-relay-locked-progress-input.md). Its reduced input
+count does not prove improved latency or physical-host/load/long-run acceptance.

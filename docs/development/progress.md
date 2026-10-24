@@ -1,6 +1,49 @@
 # TuneX 当前实施进度
 
-更新：2026-10-23（Asia/Shanghai）。
+更新：2026-10-24（Asia/Shanghai）。
+
+## P 候选（69dcaa7 准确修订病例范围通过）
+
+当前后继已补实际路径样本 -> Station/outbox SQL 病例，并修复最近路径通知将
+Forward 误判为 Node 的私有解析缺陷；整条后继已在准确源码完整 Actions 通过。锁等待产物进一步
+确认原 Runtime tick/report/snapshot 的排他锁阻塞 Probe。FR-0044 已先记提案，
+新增原 Relay owner 的显式推进入口，在原事务内复用单次锁定输入，保留旧入口、
+覆盖转接和当前时间拒绝；原 server 通过既有公共 RuntimeRelay 端口选择它。
+新旧写入／输入次数、调用间刷新、到期／错误／覆盖及原生公共绑定病例通过；
+旧 RuntimeHost4 不变，原构造可选 Relay 类型显式扩宽为既有公共端口。
+
+[P 方案与持续目标](product-readiness-stage-p-2026-10-24.md)已在独立
+`source/p-product-readiness-20261024` 工作树实施：安装计划、所有者成员页、本人
+凭据轮换、原 Journal 用量投影、Direct／Relay／多跳受控 Echo、额度／周期／最近
+路径样本告警、任务入口／有限刷新与原批次进度。FR-0033–0044、0042–0046 迁移、
+契约／HTTP／SQL／Go／Web 病例及[部署质量手册](product-p-deployment-acceptance.md)
+已撰写。唯一 Runtime ledger、Agent authority／Journal 与原事务 owners 保持。
+
+准确验证源码为 `69dcaa710ee0298adde0656674b99c5cb6e1f2b8`，实际 PR 测试合并
+`62b0b98` 与其 tree 相同。baseline `40069707791` 的 10 个作业及 packaging
+`40069707745` 全部通过。契约主运行 2157 通过、150 数据库条件跳过，150 项均与
+同候选 native MySQL 通过记录逐名匹配，缺失／原生跳过／失败为 0；Web 231 项与部署工具 30 项通过。真实成员／
+凭据／有限刷新、Journal 用量投影、Direct/Relay/三节点签名 TCP/UDP Echo，以及
+3/4/8 节点原生转发／浏览器／同机 namespace 故障通过。三节点 TCP 首条成功；
+UDP 前三条新许可各到达响应端一次但未形成可接受结果，第四条独立新命令成功，
+不能据此宣称首发可靠性或生产延迟保证。
+真实额度 Station -> Notification outbox 的写后失败回滚、同事件去重和撤权后零
+发送病例也已在该修订的完整 native SQL 作业通过。新增实际 47ms 签名 UDP 样本
+经原历史／重授权到 Station schema3/outbox 的写后回滚、去重、陈旧 unknown 保留
+firing 事件及策略停用零发送四项检查通过。陈旧使用病例时钟推进，不是实际长稳；
+策略停用与成员撤权分开证明，外部投递未验。分项诊断仍有 236ms status／222ms
+result 调用，连接获取耗时为 0ms；不能从输入读取减少推定延迟改善。
+FR-0043 原 owner Node reader 的新旧投影、输入次数、旧方法覆盖及错误传播病例
+已通过，FR-0044 原 owner 三遍完整输入／四遍 Node facts 降为各一遍的独立入口
+病例通过，原有 Snapshot 读取失败／资源冲突回滚病例保持原样并通过。
+完整范围、扫描 HIGH 观察项及早期失败见 [P 验证记录](product-verification-p-2026-10-24.md)。
+候选已推送至草稿 PR #118，未合并、未发布镜像／标签；后续仅文档提交不继承
+准确 head 的功能通过声明。整体目标保持 active。以下 N／B／C／D 仍保留历史证据。
+
+2026-10-24 用户确认独立主机和长稳环境“暂无，先完成源码与验收准备”。本轮源码、
+安装工具、病例、手册与输入模板已交付，真实环境执行单独保留为待办。其后用户明确
+要求“使用action进行测试和验收”，已完成上述有界验证与必要修复。没有独立主机、
+负载或规定时长证据，PP-13–16 的相关接受要求仍未满足；不复用同机短测关闭它们。
 
 ## N 产品开发阶段（配置内验证通过，已合并主线）
 

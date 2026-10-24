@@ -69,8 +69,19 @@ test('Relay/multihop readonly selection stays outside original Direct TCP comman
     assert.equal(h.el('support-rows').children.length, 5);
     assert.match(h.el('support-rows').textContent, /不支持此观测/);
     assert.equal(h.el('issue').disabled, true); assert.equal(h.calls.filter(call => call[0] === 'POST').length, 0);
-    await assert.rejects(h.api.open({ ...forward, spec: { protocols: ['tcp'], path: { via: ['node-b'] } } }), /Direct TCP/);
+    await assert.rejects(h.api.open({ ...forward, spec: { protocols: ['tcp'], path: { via: ['node-b'] } } }), /complete supported path/);
   }
+});
+
+test('P4 extended path matrix keeps original five refusal rows and two explicit controlled-service rows without dispatch',async()=>{
+  const candidate=view('forward-a','scope-a','multihop');candidate.capabilityVersion=2;
+  for(const protocol of ['tcp','udp'])candidate.items.push({measurement:protocol+'-path-echo-v1',taskKind:protocol+'-path-echo',
+    point:'agent-local-forward-ingress',capability:'probe.'+protocol+'-path-echo.v1',protocol,endToEnd:false,health:'unknown',
+    transportSupport:'supported',issuance:'disabled',issuanceReason:'Path switch off.',preflight:{state:'requires-controlled-service',
+      reason:{code:'CONTROLLED_SERVICE_REQUIRED',message:'Exact controlled final service required.'},expiresAt:null}});
+  const h=harness(async()=>candidate);await h.api.openCapabilities(forward);
+  assert.equal(h.el('support-rows').children.length,7);assert.match(h.el('support-rows').textContent,/Agent 本机完整转发入口/);
+  assert.equal(h.calls.some(call=>call[0]==='POST'),false);assert.equal(h.el('issue').disabled,true);
 });
 
 test('only explicit matrix refresh and existing capability refresh read support, with no polling or POST', async () => {

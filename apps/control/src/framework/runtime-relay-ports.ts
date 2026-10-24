@@ -8,6 +8,11 @@ import type { RuntimeLedgerForwards, RuntimeOperation } from './runtime-ledger-p
 import type { RelayResource, ReservedRelayResource, RuntimeSlotKey } from './runtime-resource-ports.ts';
 
 export const RUNTIME_RELAY_INTERFACE_VERSION=7 as const;
+export const RELAY_PROGRESS_INTERFACE_VERSION=1 as const;
+
+export interface RelayProgressCoordinator<Tx> {
+    progressForNode(tx:Tx,nodeId:string):Promise<void>;
+}
 
 export interface RuntimeAssignmentNetworkPolicy {
     readonly egressPolicyRevision:number;

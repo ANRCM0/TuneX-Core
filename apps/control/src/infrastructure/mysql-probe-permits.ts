@@ -9,6 +9,7 @@ const store=new MySqlProbePermitStore(probePermitStorageValues);
 /** Legacy stateless entry; all SQL and recovery have one lower implementation. */
 export class MySqlProbePermits implements ProbePermitStore<Transaction> {
     async lock(tx:Transaction) {return store.lock(tx);}
+    async observe(tx:Transaction) {return this.lock===originalLegacyPermitLock?store.observe(tx):this.lock(tx);}
     async clock(tx:Transaction,now:number):Promise<void> {return store.clock(tx,now);}
     async prune(tx:Transaction,expiredBefore:number):Promise<void> {return store.prune(tx,expiredBefore);}
     async insert(tx:Transaction,permit:ProbePermitRecord):Promise<void> {return store.insert(tx,permit);}
@@ -18,3 +19,4 @@ export class MySqlProbePermits implements ProbePermitStore<Transaction> {
     async recordResult(tx:Transaction,record:ProbeResultRecord):Promise<void> {return store.recordResult(tx,record);}
     static async quarantineRecovery(tx:Transaction):Promise<void> {return MySqlProbePermitStore.quarantineRecovery(tx);}
 }
+const originalLegacyPermitLock=MySqlProbePermits.prototype.lock;

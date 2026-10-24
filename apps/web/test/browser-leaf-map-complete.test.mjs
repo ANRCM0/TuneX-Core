@@ -37,7 +37,8 @@ test('all twenty-two documented browser leaves retain exact old exports real con
       assert.deepEqual(sourceReferences(path, source), ['./rule-command-owner/public.js', './browser-native/public.js']);
     } else {
       assert.equal(classification.layer, 'L2', path); assert.equal(classification.scope, path, 'classification must name this native leaf');
-      const representationImports={ 'path-groups.js':['./template-reference.js'],'ingress-groups.js':['./template-reference.js'] };
+      const representationImports={ 'path-groups.js':['./template-reference.js'],'ingress-groups.js':['./template-reference.js'],
+        'path-publications.js':['./task-workflow.js'],'ingress-migrations.js':['./task-workflow.js'] };
       assert.deepEqual(sourceReferences(path, source), representationImports[file]??[], path + ' declared representation dependencies');
     }
   }
@@ -45,6 +46,20 @@ test('all twenty-two documented browser leaves retain exact old exports real con
     assert.equal(classifySource(path, inventory).layer, 'L3');
   assert.equal(classifySource('apps/web/browser-native/rule-console.js', inventory).layer, 'L2');
   assert.equal(classifySource('apps/web/unclassified-native-leaf.js', inventory), undefined, 'no browser folder exemption');
+});
+
+test('P native presentation additions have explicit scopes exports and composition consumers',async()=>{
+  const inventory=JSON.parse(await readFile(new URL('../../../docs/architecture/foundation-boundaries-v1.json',import.meta.url),'utf8'));
+  const source=await readFile(new URL('../browser-native/control-console.js',import.meta.url),'utf8');
+  for(const [file,names] of [
+    ['member-console.js',['initMemberConsole','memberCommand','memberListView','memberReceipt']],
+    ['account-credentials.js',['accountCredentialView','initAccountCredentials','requestAccountCredentials']],
+    ['task-workflow.js',['batchProgress','createBoundedPageReads','workflowSteps']],
+  ]) {
+    const module=await import(new URL('../'+file,import.meta.url).href);
+    assert.deepEqual(Object.keys(module).sort(),names.sort());assert.ok(source.includes('../'+file));
+    const classification=classifySource('apps/web/'+file,inventory);assert.equal(classification.layer,'L2');assert.equal(classification.scope,'apps/web/'+file);
+  }
 });
 
 class Element {

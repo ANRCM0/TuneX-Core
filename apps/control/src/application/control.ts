@@ -6,9 +6,15 @@ import { randomUUID } from 'node:crypto';
 import type { Forward } from '@tunex/core';
 import type { Policy } from '@tunex/contracts/policy';
 import { ControlError } from '../framework/public.ts';
+import { IdentityCredentials } from '../modules/identity-owner/public.ts';
+import { MySqlAccountCredentialStore } from '../infrastructure/mysql-account-credentials.ts';
+import { nativeNodeSecrets } from '../infrastructure/identity-secrets.ts';
+import { nativeIdentityCodec } from '../compatibility/public.ts';
 import { ResourceAccess } from '../modules/resource-access-owner/public.ts';
 import { MySqlResourceAccessStore } from '../infrastructure/mysql-resource-access.ts';
-import { SharedResourceLimits } from '../modules/resource-limit-owner/public.ts';
+import { SharedResourceLimits, ResourceUsage } from '../modules/resource-limit-owner/public.ts';
+import { MySqlResourceUsageStore } from '../infrastructure/mysql-resource-usage.ts';
+import { ProbeEcho, ProbeEchoRegistry, ForwardPathProbePlans } from '../modules/probe-owner/public.ts';
 import { MySqlSharedResourceLimitStore } from '../infrastructure/mysql-resource-limits.ts';
 import { MySqlNodeAuthorityStore } from '../infrastructure/mysql-node-authority.ts';
 import { MySqlRuntimeResourceStore } from '../infrastructure/mysql-runtime-resources.ts';
@@ -62,7 +68,7 @@ import { ProbeResults } from '../modules/probe-owner/public.ts';
 import { MySqlProbePermitStore } from '../infrastructure/mysql-probe-permit-store.ts';
 import { probePermitStorageValues } from '../modules/probe-owner/public.ts';
 import { MySqlProbePermitIntents } from '../infrastructure/mysql-probe-permit-intents.ts';
-import { ProbeRunHistoryRecorder } from '../modules/probe-history-owner/public.ts';
+import { ProbeRunHistoryRecorder, ProbePathObservations } from '../modules/probe-history-owner/public.ts';
 import { MySqlProbeHistoryStore } from '../infrastructure/mysql-probe-history-store.ts';
 import { probeRunStorageValues } from '../modules/probe-history-owner/public.ts';
 import { MySqlProbeQualificationStore } from '../infrastructure/mysql-probe-qualification-store.ts';
@@ -118,6 +124,7 @@ export class ControlApplication implements RelayPlanApi {
     readonly idempotency:IdempotencyService<Transaction,Accepted> = new Idempotency();
     readonly db: MySqlUnitOfWork;
     readonly identity: IdentityOwner<Transaction>;
+    readonly accountCredentials: IdentityCredentials<Transaction>;
     readonly nodes: Nodes;
     readonly relay: RelayCoordinator;
     readonly relayPlans: RelayPlans<Transaction>;
@@ -141,6 +148,8 @@ export class ControlApplication implements RelayPlanApi {
     readonly probePlans: ForwardProbePlans<Transaction>;
     readonly probeCapabilities: ForwardProbeCapabilities<Transaction>;
     readonly probeTypeRegistry:ProbeTypeRegistry<Transaction>;
+    readonly probeEchoRegistry:ProbeEchoRegistry<Transaction>;
+    readonly probeEcho:ProbeEcho<Transaction>;
     readonly probeTypes:ProbeTypes<Transaction>;
     readonly probeServiceRegistry:ProbeServiceRegistry<Transaction>;
     readonly probeServices:ProbeServices<Transaction>;
@@ -148,6 +157,7 @@ export class ControlApplication implements RelayPlanApi {
     readonly probeInstances: ProbeInstances<Transaction>;
     readonly probeRegistry: ProbeInstanceRegistry<Transaction>;
     readonly probePermits: ProbePermits<Transaction>;
+    readonly probePathObservations:ProbePathObservations<Transaction>;
     readonly probeClaims: ProbeClaims<Transaction>;
     readonly probeDelivery: ProbeDelivery<Transaction>;
     readonly probeResults: ProbeResults<Transaction>;
@@ -158,17 +168,23 @@ export class ControlApplication implements RelayPlanApi {
     readonly forwards: ForwardCommands<Transaction>;
     readonly readAccess: ResourceAccess<Transaction>;
     readonly resourceLimits:SharedResourceLimits<Transaction>;
+    readonly resourceUsage:ResourceUsage<Transaction>;
     constructor(db: MySqlUnitOfWork, identity: IdentityOwner<Transaction>, nodes: Nodes, policy?: Policy, multihopEnabled=false, probeExecutionEnabled=false,probeIngressEnabled=false,probeServicesEnabled=false,
-        resources?:RuntimeResourceAccess<Transaction>) {
+        resources?:RuntimeResourceAccess<Transaction>,probeEchoEnabled=false,probePathEchoEnabled=false) {
         this.db=db;this.identity=identity;this.nodes=nodes;
+        this.accountCredentials=new IdentityCredentials({db,identity,store:new MySqlAccountCredentialStore(),
+            secrets:nativeNodeSecrets,codec:nativeIdentityCodec,now:nativeWallClockNow});
         this.readAccess=new ResourceAccess(identity,new MySqlResourceAccessStore());
         const payloadResources=new MySqlRuntimeResourceStore();
+        this.resourceUsage=new ResourceUsage({db,nodes:new MySqlNodeAuthorityStore(),store:new MySqlResourceUsageStore(),
+            now:nativeWallClockNow,freshnessMs:(policy??DEFAULT_POLICY).observationFreshnessSeconds*1000,
+            codec:{digest:nativeValueDigest,parseTime:nativeParseTime,formatTime:nativeIsoTime}});
         this.resourceLimits=new SharedResourceLimits({db,identity,nodes:new MySqlNodeAuthorityStore(),owners:payloadResources,
             runtime:resources??{
                 initializeNode:(tx,node)=>payloadResources.initializeNode(tx,node),
                 maximumAuthorization:(tx,node)=>payloadResources.maximumAuthorization(tx,node),
                 lockNode:async(tx,node)=>{if(!await payloadResources.lockNode(tx,node))throw new ControlError('NOT_FOUND',404,'Runtime Node not found');},
-            },store:new MySqlSharedResourceLimitStore(),now:nativeWallClockNow,
+            },store:new MySqlSharedResourceLimitStore(),usage:this.resourceUsage,now:nativeWallClockNow,
             codec:{digest:nativeValueDigest,formatTime:nativeIsoTime,parseTime:nativeParseTime,newID:randomUUID}});
         this.queries=new ConsoleQueries(db,identity,new ConsoleReadModels(
             new MySqlManagementReadStore({now:nativeReadProjectionValues.now,validateFilters:validateConsoleFilters}),nativeReadProjectionValues),this.readAccess);
@@ -184,27 +200,32 @@ export class ControlApplication implements RelayPlanApi {
         });
         const probeObservationServices=new ProbeObservationServices(identity,new MySqlObservationServiceStore(observationServiceStorageValues));
         this.probePlans=new ForwardProbePlans(db,identity,this.readAccess,this.forwarding,nodes,new MySqlProbeReader(),
-            observationPolicy.maxClockSkewSeconds*1000,probeObservationServices);
+            observationPolicy.maxClockSkewSeconds*1000,probeObservationServices,probeObservationServices,new ForwardPathProbePlans(nodes,{assignments:(tx,node)=>this.relay.assignments(tx,node),forForward:(tx,id)=>this.relay.assignmentsForForward(tx,id)},new MySqlProbeReader(),probeObservationServices,observationPolicy.maxClockSkewSeconds*1000));
         this.probeNegotiation=new ProbeNegotiator(db,new MySqlProbeMachineReader());
         this.probeInstances=new ProbeInstances(db,new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues));
         this.probeRegistry=new ProbeInstanceRegistry(this.probeInstances);
         const probeTypes=new MySqlProbeQualificationStore(probeQualificationStorageValues);
         this.probeTypeRegistry=new ProbeTypeRegistry(db,new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues),probeTypes);
         this.probeServiceRegistry=new ProbeServiceRegistry(db,new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues),probeTypes);
-        this.probePermits=new ProbePermits(db,identity,this.readAccess,
-            new ForwardProbePlans(db,identity,this.readAccess,new MySqlProbePermitIntents(),nodes,new MySqlProbeReader(true),
-                observationPolicy.maxClockSkewSeconds*1000,probeObservationServices),
-            new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues),new MySqlProbePermitStore(probePermitStorageValues),Date.now,new ProbeRunHistoryRecorder(new MySqlProbeHistoryStore(probeRunStorageValues)),probeTypes);
+        this.probeEchoRegistry=new ProbeEchoRegistry(db,new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues),probeTypes);
+        const permitPlans=new ForwardProbePlans(db,identity,this.readAccess,new MySqlProbePermitIntents(),nodes,new MySqlProbeReader(true),
+            observationPolicy.maxClockSkewSeconds*1000,probeObservationServices,probeObservationServices,new ForwardPathProbePlans(nodes,{assignments:(tx,node)=>this.relay.assignments(tx,node),forForward:(tx,id)=>this.relay.assignmentsForForward(tx,id)},new MySqlProbeReader(true),probeObservationServices,observationPolicy.maxClockSkewSeconds*1000));
+        this.probePathObservations=new ProbePathObservations(identity,this.readAccess,new MySqlProbeHistoryStore(probeRunStorageValues),permitPlans);
+        const permitMachines=new MySqlProbeMachineReader(),permitInstances=new MySqlProbeInstanceStore(probeInstanceStorageValues),
+            permitStore=new MySqlProbePermitStore(probePermitStorageValues);
+        this.probePermits=new ProbePermits(db,identity,this.readAccess,permitPlans,
+            permitMachines,permitInstances,permitStore,Date.now,new ProbeRunHistoryRecorder(new MySqlProbeHistoryStore(probeRunStorageValues)),probeTypes,permitStore);
         this.probeClaims=new ProbeClaims(this.probePermits);
         this.probeDelivery=new ProbeDelivery(this.probePermits);
         this.probeResults=new ProbeResults(this.probePermits);
         this.probeTypes=new ProbeTypes(this.probePermits);
         this.probeServices=new ProbeServices(this.probePermits);
-        this.probes=new ForwardProbes(db,identity,this.idempotency,this.probePermits,probeExecutionEnabled,probeIngressEnabled,probeServicesEnabled);
+        this.probeEcho=new ProbeEcho(this.probePermits);
+        this.probes=new ForwardProbes(db,identity,this.idempotency,this.probePermits,probeExecutionEnabled,probeIngressEnabled,probeServicesEnabled,probeEchoEnabled,probePathEchoEnabled);
         this.probeCapabilities=new ForwardProbeCapabilities(db,identity,this.readAccess,this.forwarding,this.probePlans,this.probes);
         // Sources are declared now and read only after the complete host/Relay assembly returns.
         const assignments=new SnapshotAssignmentRegistry<Transaction>([
-            new RelayAssignmentSource({assignments:(tx,nodeId,includeAccepted)=>this.relay.assignments(tx,nodeId,includeAccepted)}),
+            new RelayAssignmentSource({assignments:(tx,nodeId,includeAccepted)=>this.relay.assignmentsForNode(tx,nodeId,includeAccepted)}),
         ]);
         this.ledger=new RuntimeLedger(policy,nodes,assignments,resources);
         this.transport=new Transport(db,identity,this.idempotency,this.forwarding);
@@ -268,7 +289,8 @@ export class ControlApplication implements RelayPlanApi {
             }));
         this.details=new ControlQueries(db,identity,this.forwarding,new RuntimeStatusQueries(new MySqlRuntimeStatusStore(),nativeRuntimeStatusCodec,observationPolicy),this.ledger,this.relay,{
             multihopEnabled:this.relay.multihopEnabled,maxPathNodes:8,executionExtension:1,probeIssuanceEnabled:this.probes.enabled,
-            probeIngressIssuanceEnabled:this.probes.ingressEnabled,probeServicesIssuanceEnabled:this.probes.servicesEnabled},this.readAccess);
+            probeIngressIssuanceEnabled:this.probes.ingressEnabled,probeServicesIssuanceEnabled:this.probes.servicesEnabled,
+            probeEchoIssuanceEnabled:this.probes.echoEnabled,probePathEchoIssuanceEnabled:this.probes.pathEchoEnabled},this.readAccess);
     }
     async planRelay(actorId:string,scopeId:string,input:unknown){
         return this.relayPlans.planRelay(actorId,scopeId,input);

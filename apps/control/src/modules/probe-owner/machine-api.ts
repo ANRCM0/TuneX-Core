@@ -9,7 +9,7 @@ import type {
     ProbeServicesStatusRequest, ProbeServicesStatusResponse, ProbeServicesResultRequest, ProbeServicesResultResponse,
 } from '../../compatibility/public.ts';
 
-export const PROBE_MACHINE_API_INTERFACE_VERSION=1 as const;
+export const PROBE_MACHINE_API_INTERFACE_VERSION=3 as const;
 
 export interface ProbeNegotiationApi {
     hello(nodeId:string,fingerprint:string,epoch:number,input:ProbeNegotiationRequest):Promise<ProbeNegotiationResponse>;

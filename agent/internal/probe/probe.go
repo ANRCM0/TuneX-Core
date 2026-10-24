@@ -90,7 +90,7 @@ const MeasurementIngressUDPEcho = "udp-ingress-echo-v1"
 
 func validMeasurement(value string) bool {
 	return value == "" || value == MeasurementEgress || value == MeasurementIngress || value == MeasurementIngressTLS ||
-		value == MeasurementIngressTCPEcho || value == MeasurementIngressUDPEcho
+		probeecho.IsEcho(value)
 }
 
 func sameMeasurement(a, b string) bool {
@@ -303,7 +303,7 @@ func (executor *Executor) run(parent context.Context, permit Permit, timeout tim
 	// Numeric literal only and exactly one connection. Only the service kind may send TLS handshake records.
 	attempt := invocation.begin()
 	defer attempt.finish("unknown")
-	network := destination.Network(permit.Measurement == MeasurementIngressUDPEcho)
+	network := destination.Network(probeecho.IsUDP(permit.Measurement))
 	connection, dialErr := executor.dial(work, network, destination.Address())
 	if connection != nil && trust == nil && !echo {
 		_ = connection.Close()
@@ -322,7 +322,7 @@ func (executor *Executor) run(parent context.Context, permit Permit, timeout tim
 	var proof *probeecho.Proof
 	var requestBytes, responseBytes uint64
 	if dialErr != nil {
-		if permit.Measurement == MeasurementIngressUDPEcho {
+		if probeecho.IsUDP(permit.Measurement) {
 			return Result{}, ErrDenied
 		}
 		if trust != nil || echo {
@@ -371,7 +371,8 @@ func (executor *Executor) run(parent context.Context, permit Permit, timeout tim
 	if permit.Measurement == MeasurementIngress || permit.Measurement == MeasurementIngressTLS || echo {
 		point = "agent-local-direct-ingress"
 	}
-	return Result{Binding: permit.Binding, Measurement: permit.Measurement, Point: point, Status: status, Code: code,
+	if probeecho.IsPath(permit.Measurement) { point = "agent-local-forward-ingress" }
+    return Result{Binding: permit.Binding, Measurement: permit.Measurement, Point: point, Status: status, Code: code,
 		Service: permit.Service, TLS: verification,
 		Echo: proof, EchoInput: permit.Echo, RequestBytes: requestBytes, ResponseBytes: responseBytes,
 		ApplicationHealth: "unknown", IndependentProbe: true, MeasuredAt: now,

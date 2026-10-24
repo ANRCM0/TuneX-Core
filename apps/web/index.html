@@ -22,6 +22,7 @@
       <button class="nav" data-view="probes" type="button">◎ <span>受限探测</span></button>
       <button class="nav" data-view="operations" type="button">◷ <span>执行记录</span></button>
       <button class="nav" data-governance hidden data-view="resources" type="button">◇ <span>资源管理</span></button>
+      <button class="nav" data-governance hidden data-view="members" type="button">◇ <span>成员管理</span></button>
       <button class="nav" data-governance hidden data-view="audit" type="button">◇ <span>管理审计</span></button>
       <button class="nav" data-governance hidden data-view="alerts" type="button">⚑ <span>站内事件</span></button>
       <button class="nav" data-governance hidden data-view="notifications" type="button">↗ <span>通知端点</span></button>
@@ -34,6 +35,11 @@
       <div><p class="eyebrow">TUNEX / VNEXT</p><h1 id="page-title">运行概览</h1></div>
       <div class="toolbar"><span id="connection-indicator" class="state-tag">未连接</span><button id="refresh" type="button" class="secondary" disabled>刷新数据</button></div>
     </header>
+    <section class="read-session" aria-label="有界只读刷新">
+      <button id="read-session-start" type="button" class="secondary">当前页读取六轮</button>
+      <button id="read-session-stop" type="button" class="secondary" disabled>停止读取</button>
+      <span id="read-session-state" class="hint" role="status" aria-live="polite">手动启用；每十秒一轮。切页、切换账号或隐藏页面即停止。</span>
+    </section>
     <section class="connect-card" aria-label="连接控制面">
       <form id="connection-form" class="connection-form">
         <label>Bearer Token <input id="token" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="当前标签页内存保存，不写入本地存储" required></label>
@@ -45,6 +51,18 @@
         <label>工作空间 <select id="scope" disabled><option value="">登录后选择可进入的工作空间</option></select></label>
         <button id="scope-more" type="button" class="secondary" hidden>读取下一页工作空间</button>
         <p id="scope-status" class="hint" role="status"></p>
+        <details id="credential-panel" class="panel">
+          <summary>我的账号凭据</summary>
+          <p class="hint">只管理本人账号的全局 Bearer Token，影响此账号全部工作空间登录。工作空间所有者不能在成员命令中替换别人的现有凭据。</p>
+          <button id="credential-read" type="button" class="secondary" disabled>读取我的凭据信息</button>
+          <p id="credential-metadata" class="hint"></p>
+          <label>新 Bearer Token<input id="credential-next" type="password" autocomplete="off" spellcheck="false" minlength="32" maxlength="128" placeholder="先准备并安全保存新 Token" disabled></label>
+          <div class="actions"><button id="credential-generate" type="button" class="secondary" disabled>生成随机新 Token</button><button id="credential-reveal" type="button" class="secondary" disabled>显示新 Token</button></div>
+          <label class="check"><input id="credential-saved" type="checkbox" disabled>我已在安全位置保存新 Token，并理解其他客户端需要更新</label>
+          <div class="actions"><button id="credential-rotate" type="button" disabled>轮换本人账号 Token</button><button id="credential-verify-new" type="button" class="secondary" disabled>用新 Token 核对原变更</button><button id="credential-replay-old" type="button" class="secondary" disabled>用原 Token 重放原变更</button><button id="credential-abandon" type="button" class="secondary" disabled>清除本地轮换记忆</button></div>
+          <p id="credential-state" class="hint" role="status" aria-live="polite"></p>
+          <p class="hint">结果不确定时保留原／新 Token，按按钮明确核对同一变更。关闭或退出会清除本地秘密，但不取消远端请求。丢失全部凭据时联系部署管理员，按原受保护恢复流程处理；不要清空数据库、Authority 或 Journal。</p>
+        </details>
       </div>
       <p class="hint">使用现有 Bearer Token 登录后选择工作空间。凭据仅保存在当前标签页内存，刷新或关闭页面后重新登录。</p>
     </section>
@@ -57,6 +75,10 @@
         <div class="metric"><span>待执行 / 执行中操作</span><strong id="metric-running">—</strong><small>当前可见范围 · 非已生效状态</small></div>
         <div class="metric"><span>历史失败操作</span><strong id="metric-failed">—</strong><small>当前可见范围 · 非当前故障节点数</small></div>
       </div>
+      <section class="panel" aria-labelledby="workflow-guide-title"><div class="panel-head"><h2 id="workflow-guide-title">从接入到日常维护</h2></div>
+        <p class="hint">按当前可见资源安排下一步；每个入口只打开原操作页面，部署和业务验证分别确认。</p>
+        <ol id="workflow-guide" class="workflow-guide"></ol>
+      </section>
       <section class="panel"><div class="panel-head"><h2>运行状态说明</h2></div>
         <div class="explain-grid"><div><b>Desired</b><p>用户希望系统如何转发；Revision 代表配置版本。</p></div><div><b>Operation</b><p>Control 是否已经接收、执行或完成部署动作。</p></div><div><b>Applied</b><p>Agent 实际应用且仍新鲜的部署观察结果。</p></div><div><b>Health</b><p>Agent 上报的运行状况；不等于独立端到端探测。</p></div></div>
       </section>
@@ -120,6 +142,33 @@ unset TUNEX_ENROLLMENT_TOKEN</code></pre>
       </form>
       <div class="panel table-wrap"><table><thead><tr><th>Node ID</th><th>授权状态</th><th>Agent 报告</th><th>支持能力</th><th>操作</th></tr></thead><tbody id="node-rows"><tr><td colspan="5" class="empty">连接后加载节点</td></tr></tbody></table></div>
       <div id="nodes-pagination" class="pagination"></div>
+    </section>
+
+    <section id="view-members" class="view" hidden>
+      <div class="panel-head section-actions"><div><h2>工作空间成员</h2><p class="hint">所有者管理本工作空间成员。账号可加入多个工作空间，成员操作不会替换已有账号的全局 Token。</p></div><button id="member-refresh" type="button" class="secondary">读取成员</button></div>
+      <p id="member-summary" class="hint" role="status"></p>
+      <div class="panel table-wrap"><table><thead><tr><th>账号</th><th>角色</th><th>成员修订</th><th>操作</th></tr></thead><tbody id="member-rows"><tr><td colspan="4" class="empty">先读取当前工作空间成员</td></tr></tbody></table></div>
+      <div class="pagination"><button id="member-prev" type="button" class="secondary" disabled>上一页</button><span id="member-page">尚未读取</span><button id="member-next" type="button" class="secondary" disabled>下一页</button></div>
+      <form id="member-form" class="panel editor">
+        <h3>加入或修改成员</h3>
+        <div class="form-grid">
+          <label>账号标识<input id="member-actor" maxlength="128" autocomplete="off" spellcheck="false" placeholder="已有账号或新账号标识" required></label>
+          <label>成员角色<select id="member-role"><option value="viewer">只读成员</option><option value="manager">成员管理者（可自助创建和修改资源）</option><option value="removed">移除此工作空间成员</option></select></label>
+          <label>账号来源<select id="member-account-mode"><option value="existing">加入已有账号，沿用其 Token</option><option value="new">明确创建新账号并设置初始 Token</option></select></label>
+        </div>
+        <p id="member-revision" class="hint"></p>
+        <p class="hint">成员管理者可在自己的归属和授权范围内管理转发；治理入口仍仅对工作空间所有者开放。成员身份不会自动授予共享机器用途。</p>
+        <section id="member-token-panel" class="panel" hidden>
+          <h3>新账号初始凭据</h3>
+          <label>初始 Bearer Token<input id="member-token" type="password" autocomplete="off" spellcheck="false" minlength="32" maxlength="128" placeholder="生成随机 Token，或输入已安全准备的 Token" disabled></label>
+          <div class="actions"><button id="member-generate" type="button" class="secondary" disabled>生成随机 Token</button><button id="member-reveal" type="button" class="secondary" disabled>显示初始 Token</button></div>
+          <label class="check"><input id="member-token-saved" type="checkbox" disabled>我已将初始 Token 保存到安全位置并准备通过安全渠道交付给账号本人</label>
+          <p class="hint">只用于明确的新账号，不存入本地存储或回执。提交后输入会清空；已有账号不能通过此表单重设凭据。</p>
+        </section>
+        <div class="actions"><button id="member-save" type="submit" disabled>保存成员变更</button><button id="member-replay" type="button" class="secondary" disabled>仅重放原成员命令</button><button id="member-abandon" type="button" class="secondary" disabled>清除本地待处理信息</button></div>
+        <p id="member-state" class="hint" role="status" aria-live="polite"></p>
+        <pre id="member-receipt" class="plan-output" aria-label="成员命令回执，不包含 Token"></pre>
+      </form>
     </section>
 
     <section id="view-resources" class="view" hidden>
@@ -486,10 +535,10 @@ unset TUNEX_ENROLLMENT_TOKEN</code></pre>
         <h3 id="probe-command-title">一次性管理命令</h3>
         <p id="probe-selected" class="mono"></p>
         <p id="probe-capability" class="hint" role="status"></p>
-        <p class="hint">在转发列表点击“TCP 探测”选择固定 Forward / Revision。Control 会重新核对授权、当前绑定、已登记实例和目标策略；开启配置不代表 Agent 已开启或一定执行。明确选择 TCP connect 或经原 Direct 规则抵达受控服务的 TLS 握手，均不验证应用响应或 Relay 全路径。</p>
+        <p class="hint">在转发列表点击“受控探测”选择固定 Forward / Revision。Control 会重新核对授权、当前绑定、已登记实例和目标策略；开启配置不代表 Agent 已开启或一定执行。可选择 TCP 连接、TLS 握手或 TCP/UDP 受控 nonce 往返；只证明指定 Direct 观测位置，不代表外部入口、普通应用或 Relay 全路径健康。</p>
         <form id="probe-form">
-          <div class="query-controls"><label>明确观测类型<select id="probe-kind"><option value="tcp-connect">目标连接 / agent-direct-egress</option><option value="tcp-ingress-connect">本机入口连接 / agent-local-direct-ingress</option><option value="tcp-ingress-tls">经本机入口到受控服务的 TLS 握手</option></select></label><label>连接超时上限（毫秒）<input id="probe-timeout" name="timeoutMs" type="number" min="100" max="2000" step="1" value="500" required></label></div>
-          <div class="form-grid"><label>TLS 服务 ID（仅精确引用）<input id="probe-service-id" maxlength="64" autocomplete="off" disabled></label><label>当前服务 metadata CAS<input id="probe-service-revision" inputmode="numeric" autocomplete="off" disabled></label><label>当前服务 config revision 1–64<input id="probe-service-config-revision" inputmode="numeric" autocomplete="off" disabled></label><label>当前 configDigest sha256<input id="probe-service-digest" maxlength="71" autocomplete="off" spellcheck="false" disabled></label></div>
+          <div class="query-controls"><label>明确观测类型<select id="probe-kind"><option value="tcp-connect">目标连接 / agent-direct-egress</option><option value="tcp-ingress-connect">本机入口连接 / agent-local-direct-ingress</option><option value="tcp-ingress-tls">经本机入口到受控服务的 TLS 握手</option><option value="tcp-ingress-echo">经本机 Direct 入口的 TCP 受控往返</option><option value="udp-ingress-echo">经本机 Direct 入口的 UDP 受控往返</option><option value="tcp-path-echo">经本机 Relay／多跳入口的 TCP 受控往返</option><option value="udp-path-echo">经本机 Relay／多跳入口的 UDP 受控往返</option></select></label><label>连接超时上限（毫秒）<input id="probe-timeout" name="timeoutMs" type="number" min="100" max="2000" step="1" value="500" required></label></div>
+          <div class="form-grid"><label>受控服务 ID（仅精确引用）<input id="probe-service-id" maxlength="64" autocomplete="off" disabled></label><label>当前服务 metadata CAS<input id="probe-service-revision" inputmode="numeric" autocomplete="off" disabled></label><label>当前服务 config revision 1–64<input id="probe-service-config-revision" inputmode="numeric" autocomplete="off" disabled></label><label>当前 configDigest sha256<input id="probe-service-digest" maxlength="71" autocomplete="off" spellcheck="false" disabled></label></div>
           <p class="hint">TLS 需要先手动读取观测服务当前 head 和配置摘要，再明确填写四字段引用；不会自动选择 latest 或复制私钥。原 Forward 数字 target 必须精确等于声明 endpoint，实际只拨当前 ingress listener，经原 TCP 规则抵达服务。TLS1.3、精确 SNI/叶 pin/服务 URI、ALPN tunex-observation/1；不是公开 CA 链、外部可达或应用健康证明。TLS 记录会成为原业务转发 payload 并计数，零 TLS 应用数据不等于零转发字节。</p>
           <label class="check"><input id="probe-consent" type="checkbox">我确认按所选观测点发起一次零应用数据 TCP 连接。入口类型仅同网络命名空间的具体 numeric listener，须满足原 destination CIDR；可能触发原业务 listener 的下游拨号及计数，不证明外部可达或应用健康。</label>
           <div class="actions"><button id="probe-issue" type="submit" disabled>Issue One Task</button><button id="probe-prepare" type="button" class="secondary" disabled>准备另一次显式命令</button></div>
@@ -631,8 +680,8 @@ unset TUNEX_ENROLLMENT_TOKEN</code></pre>
       <div class="panel-head section-actions"><div><h2>站内事件 · 固定告警政策</h2><p class="hint">D3-B 首片仅站内事件与固定政策，不是完整 D3。Viewer 可手动读取事件，政策读取和管理命令需 manager，API 每次重新核验；页面不推断角色。</p></div><button id="station-alert-clear" type="button" class="secondary">清除本地面板 / 放弃原命令</button></div>
       <section class="panel"><p class="hint">observer 默认关闭，部署须明确启用 TUNEX_STATION_ALERTS=1；独立循环每次只处理一个到期政策、每政策至少间隔 30 秒，不保证即时观察或捕获中间历史。所有 GET 都不评价目标、补抓历史或创建事件；导航和全局刷新不自动读取。本片无 webhook、outbox、外发、自动执行或自动恢复。</p><div class="actions"><button id="station-alert-replay" type="button" class="secondary" disabled>仅重放原 URL / body / key</button><button id="station-alert-cancel-read" type="button" class="secondary" disabled>取消本地读取</button></div><p id="station-alert-state" class="hint" role="status" aria-live="polite"></p><p id="station-alert-meta" class="hint"></p><pre id="station-alert-receipt" class="plan-output" aria-label="独立命令回执或有界历史窗口与丢失量"></pre></section>
       <section class="panel"><div class="panel-head"><h3>管理政策 · 明确 CAS</h3><button id="station-alert-policies-read" type="button" class="secondary">manager 手动读取政策列表</button></div>
-        <div class="form-grid"><label>政策 ID<input id="station-alert-policy-id" maxlength="128" autocomplete="off"></label><label>明确 CAS（创建填 0）<input id="station-alert-expected" type="number" min="0" value="0"></label><label>固定规则<select id="station-alert-rule"><option value="forward-operation-failed">Forward 最近 Operation 失败</option><option value="node-report-stale">Node 已建立新鲜基线后报告过期</option><option value="node-credential-expiring">Node 凭据临近到期</option></select></label><label>精确目标 ID（规则决定 Node / Forward）<input id="station-alert-target-id" maxlength="128" autocomplete="off"></label><label>阈值秒数<input id="station-alert-threshold" type="number" min="0" max="604800" value="0"></label><label class="check"><input id="station-alert-enabled" type="checkbox">明确启用政策（不代表观察器已开）</label></div>
-        <p class="hint">仅三种固定规则，无自由表达式。Forward Operation 失败阈值固定 0；Node 报告过期 30–3600 秒；凭据临期 60–604800 秒。仅配置变更、接管或挂起后重新发布才增加 configRevision 并清除条件基线；同配置/同管理者且未挂起为 no-op，不无故重置。不把旧观察直接当新权限，停用或恢复隔离不表示健康。</p>
+        <div class="form-grid"><label>政策 ID<input id="station-alert-policy-id" maxlength="128" autocomplete="off"></label><label>明确 CAS（创建填 0）<input id="station-alert-expected" type="number" min="0" value="0"></label><label>固定规则<select id="station-alert-rule"><option value="forward-operation-failed">Forward 最近 Operation 失败</option><option value="node-report-stale">Node 已建立新鲜基线后报告过期</option><option value="node-credential-expiring">Node 凭据临近到期</option><option value="shared-usage-high">共享成员流量接近上限</option><option value="shared-period-ending">共享成员周期即将结束</option><option value="recent-path-probe-degraded">最近受控路径样本异常</option></select></label><label>精确目标 ID（规则决定 Node / Forward）<input id="station-alert-target-id" maxlength="128" autocomplete="off"></label><label>额度告警的精确成员 ID<input id="station-alert-subject" maxlength="128" autocomplete="off"></label><label>路径样本类型（仅样本规则）<select id="station-alert-path-measurement"><option value="tcp-path-echo-v1">TCP 受控路径往返</option><option value="udp-path-echo-v1">UDP 受控路径往返</option></select></label><label>样本最大年龄（秒，30–300）<input id="station-alert-sample-age" type="number" min="30" max="300" step="1" value="120"></label><label>样本耗时上限（毫秒，1–2000）<input id="station-alert-sample-elapsed" type="number" min="1" max="2000" step="1" value="250"></label><label>预扣百分比阈值 1–100（仅流量告警）<input id="station-alert-percent" type="number" min="1" max="100" value="80"></label><label>阈值秒数（流量告警填 0）<input id="station-alert-threshold" type="number" min="0" max="604800" value="0"></label><label class="check"><input id="station-alert-enabled" type="checkbox">明确启用政策（不代表观察器已开）</label></div>
+        <p class="hint">固定规则，无自由表达式。额度与最近路径样本规则分别使用明确成员／测量类型与阈值；样本规则的通用秒数填 0。Forward Operation 失败阈值固定 0；Node 报告过期 30–3600 秒；凭据临期 60–604800 秒。仅配置变更、接管或挂起后重新发布才增加 configRevision 并清除条件基线；同配置/同管理者且未挂起为 no-op，不无故重置。不把旧观察直接当新权限，停用或恢复隔离不表示健康。</p>
         <div class="actions"><button id="station-alert-policy-read" type="button" class="secondary">manager 手动读取这一政策</button><button id="station-alert-publish" type="button">明确发布 / 接管 / 恢复挂起政策</button></div>
         <div class="query-controls"><label>静默截止 UTC（未来最多七天）<input id="station-alert-silence-until" maxlength="24" autocomplete="off" spellcheck="false" placeholder="2026-10-19T00:00:00.000Z"></label><button id="station-alert-silence" type="button" class="secondary" disabled>明确设置静默</button><button id="station-alert-unsilence" type="button" class="secondary" disabled>明确解除静默</button></div>
         <p class="hint">静默须先读取精确政策 CAS，只抑制通知语义，不清除条件或基线；静默期间事件仍保存并带 silenced 标记，没有事后补发。政策详情中的审计最多 16 条，truncated 不代表总数或完整历史；kind=acknowledge 的 audit.revision 是该事件 CAS，不是政策 CAS。</p>
@@ -645,7 +694,7 @@ unset TUNEX_ENROLLMENT_TOKEN</code></pre>
         <div class="table-wrap inner-table"><table><thead><tr><th>时间 UTC / Asia Shanghai / ID</th><th>政策 / 修订 / Episode</th><th>事件与目标</th><th>证据 / 开始时证据</th><th>静默 / 确认 / 恢复标记</th><th>仅载入 ID</th></tr></thead><tbody id="station-alert-events"></tbody></table></div>
       </section>
       <section class="panel"><h3>单条事件 · 读取后才可明确确认</h3><div class="query-controls"><label>事件 ID<input id="station-alert-event-id" maxlength="128" autocomplete="off"></label><button id="station-alert-event-read" type="button" class="secondary">Viewer 手动读取事件</button><button id="station-alert-acknowledge" type="button" disabled>manager 仅确认看过</button></div><pre id="station-alert-event-output" class="plan-output" aria-label="原站内事件证据，不是目标健康"></pre>
-        <p class="hint">ack 只表示看过，不恢复条件、取消 Operation 或承认健康。clear/recovered 仅是固定规则的条件语义，不是业务健康；instance-changed 产生 invalidated，不伪造 recovered。Node 无报告保持 unknown，报告过期规则须先建立 fresh baseline；Operation 恢复须新的明确成功，不改写旧 failed。</p><p class="hint">未知管理结果会锁住面板其他读写，只允许原 URL/body/key 明确重放。写入明确返回后也需手动重读新 CAS。放弃本地记忆、断开或关闭页面不取消远程变更；无自动续跑/重试、Probe、外发或事件导出。</p>
+        <p class="hint">路径样本规则只判断最近一次受控往返的记录结果与耗时，不是实时健康、丢包率或容量；不会自动探测。缺测／过期／路径改变均不证明恢复。ack 只表示看过，不恢复条件、取消 Operation 或承认健康。clear/recovered 仅是固定规则的条件语义，不是业务健康；instance-changed 产生 invalidated，不伪造 recovered。Node 无报告保持 unknown，报告过期规则须先建立 fresh baseline；Operation 恢复须新的明确成功，不改写旧 failed。</p><p class="hint">未知管理结果会锁住面板其他读写，只允许原 URL/body/key 明确重放。写入明确返回后也需手动重读新 CAS。放弃本地记忆、断开或关闭页面不取消远程变更；无自动续跑/重试、Probe、外发或事件导出。</p>
       </section>
     </section>
     <section id="view-audit" class="view" hidden>

@@ -1,5 +1,72 @@
 # N2 Personal Console Source Candidate
 
+## P Integrated Successor (2026-10-24)
+
+P source `aae0632f` passed the Actions-covered contracts and selected actual
+browser/native flows; exact runs, database reconciliation and remaining limits
+are in the [P verification record](../../docs/development/product-verification-p-2026-10-24.md).
+The following N paragraphs describe their historical slice; P's current behavior
+and independent-environment gates remain in the P ledger and verification record.
+The established blue/white layout, request owner and original mutation owners stay.
+
+- resource-limit-console reads the original quota owner plus optional authenticated
+  Journal usage projection. It distinguishes policy, current/future period,
+  unknown/stale/policy-outdated samples, exact conservative consumed bytes and
+  remaining-at-sample, without using telemetry as debit authority.
+- probe supports explicit Direct TCP/UDP controlled Echo and distinct path Echo
+  through the Agent-local Relay/multihop ingress. Capability DTO1 retains Direct's
+  five rows; DTO2 adds two path rows. Configuration does not prove actual opt-in,
+  current permit, external reachability, business health or throughput. Browser
+  displays stored proof metadata without claiming independent proof verification.
+- Station retains config1 rules, config2 quota/period rules and config3 recent
+  path sample conditions. The last uses an explicit historical sample age and
+  elapsed threshold, current original-issuer/path revalidation and newer-sample
+  recovery. It does not issue Probe work or calculate loss rate from one sample.
+- task-workflow exports navigation-only workflowSteps, explicit finite visible
+  page createBoundedPageReads and detached batchProgress. Current-page reads run
+  at most six rounds ten seconds apart, without overlap; page/account/visibility/
+  error/cancel stops and fences late responses. Batch progress separates command
+  acceptance, observed Operation results, missing observations, cleanup/recovery
+  and original compensation attempts; it executes none of those commands.
+
+The original native console composes all P leaves. Fixed asset mappings include
+member-console.js, account-credentials.js and task-workflow.js; Path/Ingress leaves
+import only the detached progress helper. Scope/account clear calls original
+module clear methods and invalidates optional read guards. One-time credentials
+stay only in current-page memory. HTTP byte/security-header, Web lifecycle,
+command/receipt, extended descriptor and source import cases are authored.
+No P syntax/type/boundary/parity, browser or other execution has occurred.
+
+## P2 Member Console Addition (2026-10-24)
+
+P2 adds the fixed native `member-console.js` asset under FR-0033. The native
+console imports `initMemberConsole` and exposes an owner-only members view. It
+uses the original request owner, `GET members` and `PUT members/:actor`, with
+the read member CAS and one fixed request key/body. Initial secrets are for
+explicit new accounts only; existing global credentials cannot be replaced by
+Scope membership commands. Unknown writes lock new preparation and allow only
+explicit original replay. Leaving clears the input; account/Scope reset clears
+pending secret memory and discards late reads. Receipts contain no token.
+
+The original all-members response is displayed in 25-row local pages with a
+10000-record UI safety ceiling; this is not server pagination or capacity proof.
+`test/member-console-flow.test.mjs` authors detached view/command/receipt, owner
+denial, late read and fixed uncertain-write replay cases. The original complete
+Web asset/headers test discovers the new leaf. No P check/test has been executed.
+
+The remaining N2 paragraphs retain their historical source-handoff scope.
+
+P2/FR-0034 additionally serves `account-credentials.js` with the original fixed
+asset headers. Native console composes its unscoped `/api/v1/me/credentials`
+requests from the current authenticated account, including accounts without a
+selected workspace. It never supplies an actor override. Current-tab password
+fields, an explicit saved-secret acknowledgement and fixed old/new verification
+handle uncertain writes without automatic retry. A matching confirmed response
+updates the existing in-memory bearer and clears local scoped contexts; it does
+not cancel remote commands. Parent account/Scope clear invalidates late results.
+Backend and UI are both source candidates; the authored Web/HTTP/MySQL cases
+and public asset/version consumers remain unexecuted.
+
 Source only, 2026-10-21. No syntax/type/static/boundary checks, tests, browser,
 network, formatter, build, CI, commit or push were executed for this candidate.
 The existing blue/white console design and original command owners remain.

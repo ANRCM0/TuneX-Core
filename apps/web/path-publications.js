@@ -1,3 +1,4 @@
+import { batchProgress } from './task-workflow.js';
 const id = value => typeof value === 'string' && value.length <= 128 && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value) && !/\s/.test(value);
 const uint = value => Number.isSafeInteger(value) && value >= 0;
 const positive = value => uint(value) && value > 0;
@@ -180,7 +181,7 @@ export function initPathPublications({ request, byId, notify, getScope, document
   }
   function renderBatch(data) {
     loaded = clone(data); const token = epoch;
-    el('record').textContent = '持久批次 ' + data.batchId + ' / CAS r' + data.revision + '\ncreator=' + data.createdBy + ' / ' + data.createdAt +
+    el('record').textContent = batchProgress(data).text + '\n\n持久批次 ' + data.batchId + ' / CAS r' + data.revision + '\ncreator=' + data.createdBy + ' / ' + data.createdAt +
       '\nplanDigest=' + data.planDigest + '\ncancelled=' + data.cancelled + ' / recoveryInvalidated=' + data.recoveryInvalidated +
       '\n每条 Forward 独立接受；Operation 接受不代表成功、健康或零停机。当前读不是全库快照。\n' + JSON.stringify({ group: data.plan.group, operations: data.operations }, null, 2);
     for (const item of data.items) {

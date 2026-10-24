@@ -105,7 +105,10 @@ func (runner *Runner) executionCapabilities() []string {
 	if !slices.Contains(capabilities, sharedPayloadCapability) {
 		capabilities = append(capabilities, sharedPayloadCapability)
 	}
-	return capabilities
+	if runner.options.ProbePathEcho && slices.Contains(capabilities,"native.relay.v1") && slices.Contains(capabilities,"probe.udp-ingress-echo.v1") {
+        capabilities = append(capabilities, "probe.tcp-path-echo.v1", "probe.udp-path-echo.v1")
+    }
+    return capabilities
 }
 
 // Called by the existing 100ms authority watch, independently of traffic/polling.

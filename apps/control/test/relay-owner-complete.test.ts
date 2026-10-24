@@ -5,8 +5,8 @@ import { createConnection } from 'mysql2/promise';
 import { DEFAULT_POLICY } from '@tunex/contracts/shared';
 import type { RuntimeSnapshot } from '@tunex/contracts/runtime';
 import type { Observation } from '@tunex/contracts/execution-observation';
-import { RuntimeRelayHost, RuntimeLedgerHost } from '../src/framework/public.ts';
-import type { RuntimeOperation, RuntimeRelayDeployment, RuntimeLedgerOptions, RuntimeRelayOptions } from '../src/framework/public.ts';
+import { RuntimeRelayHost, RuntimeLedgerHost, ControlError, RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION, RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION, RELAY_PROGRESS_INTERFACE_VERSION } from '../src/framework/public.ts';
+import type { RuntimeOperation, RuntimeRelayDeployment, RuntimeLedgerOptions, RuntimeRelayOptions, RelayForwardAssignmentReader, RelayNodeAssignmentReader, RelayProgressCoordinator } from '../src/framework/public.ts';
 import { nativeRelayCompiler, nativeLedgerCompiler } from '../src/compatibility/public.ts';
 import type { NativeRuntimeFamily } from '../src/compatibility/public.ts';
 import { RuntimeLedger } from '../src/modules/runtime/ledger.ts';
@@ -40,6 +40,7 @@ function fixture(){
         async activate(this:unknown,...args:unknown[]){called(this,store,'activate',args);},
         async quarantine(this:unknown,...args:unknown[]){called(this,store,'quarantine',args);},
         async forNode(this:unknown,...args:unknown[]){called(this,store,'forNode',args);return [record];},
+        async forwardIDsForNode(this:unknown,...args:unknown[]){called(this,store,'forwardIDs',args);return [{forward_id:forward.id}];},
     };
     const ledger={async latest(this:unknown,...args:unknown[]){called(this,ledger,'operation',args);return op;},
         async accept(this:unknown,...args:unknown[]){called(this,ledger,'accept',args);return 'incident-operation';},
@@ -82,6 +83,221 @@ function fixture(){
     return {host,input,plan,tx,events,forward,op,record,state,failure,snapshot,assignment,observation,snapshots,runtimes,store,ledger,forwards,nodes};
 }
 const names=(f:ReturnType<typeof fixture>)=>f.events.map(e=>e.name);
+
+test('P Relay progress keeps original state writes with one locked input instead of three complete inputs and four Node fact passes',async()=>{
+    assert.equal(RELAY_PROGRESS_INTERFACE_VERSION,1);
+    const effects=new Set(['touch','withdraw','setStage','setPreparation','incrementActivation','activate','succeed','clear','retain','release','accept']);
+    for(const stage of ['preparing','egress_active','ingress_active','active','withdrawn'] as const) {
+        const next=fixture(),old=fixture();next.record.stage=stage;old.record.stage=stage;
+        const port:RelayProgressCoordinator<Tx>=next.host;
+        await port.progressForNode(next.tx,next.plan.nodes[0]!.nodeId);await old.host.advance(old.tx,old.forward.id);
+        const writes=(f:ReturnType<typeof fixture>)=>f.events.filter(event=>effects.has(event.name)).map(event=>[event.name,...event.args.slice(1)]);
+        assert.deepEqual(writes(next),writes(old));
+        assert.equal(names(next).filter(name=>name==='profile').length,1);
+        assert.equal(names(old).filter(name=>name==='profile').length,3);
+        assert.equal(names(next).filter(name=>name==='authorizedNode').length,next.plan.nodes.length);
+        assert.equal(names(old).filter(name=>name==='authorizedNode').length,4*old.plan.nodes.length);
+    }
+});
+
+test('P Relay progress reads authority again on another call, preserves original provider errors and refuses expiry during progress',async()=>{
+    const f=fixture(),node=f.plan.nodes[0]!.nodeId;
+    await f.host.progressForNode(f.tx,node);const first=names(f).filter(name=>name==='profile').length;
+    for(const endpoint of f.input.endpoints)for(const port of endpoint.config.allowedTcpPorts)f.state.deniedPorts.add(port);
+    await f.host.progressForNode(f.tx,node);
+    assert.ok(names(f).includes('withdraw'));assert.equal(names(f).filter(name=>name==='profile').length,first+1);
+    const failed=fixture();failed.state.fail='profile';
+    await assert.rejects(failed.host.progressForNode(failed.tx,node),error=>error===failed.failure);
+    assert.equal(names(failed).filter(name=>name==='profile').length,1);assert.equal(names(failed).includes('withdraw'),false);
+    const expiring=fixture(),authorizer=expiring.forwards.authorizer;let reads=0;
+    expiring.forwards.authorizer=async function(this:unknown,...args:unknown[]){
+        const actor=await authorizer.apply(this,args);
+        if(++reads===2)expiring.state.now=Math.max(...expiring.input.nodes.map(value=>value.credentialUntil))+1;
+        return actor;
+    };
+    await expiring.host.progressForNode(expiring.tx,node);
+    assert.ok(names(expiring).includes('withdraw'));assert.equal(names(expiring).filter(name=>name==='profile').length,1);
+    const during=fixture(),peers=during.nodes.relayCredentialFacts;let peerReads=0;
+    during.nodes.relayCredentialFacts=async function(this:unknown,...args:unknown[]){
+        const value=await peers.apply(this,args);
+        if(++peerReads===during.input.nodes.length)during.state.now=Math.max(...during.input.nodes.map(value=>value.credentialUntil))+1;
+        return value;
+    };
+    await assert.rejects(during.host.progressForNode(during.tx,node),{code:'AUTHORIZATION_DENIED'});
+    assert.equal(names(during).includes('retain'),false);
+    const endpoint=fixture();endpoint.input.endpoints[0]!.revision++;
+    await endpoint.host.progressForNode(endpoint.tx,node);assert.ok(names(endpoint).includes('withdraw'));
+    for(const change of ['pins','session'] as const){
+        const refresh=fixture();if(change==='pins')refresh.state.currentPins=false;else refresh.input.nodes[0]!.sessionEpoch++;
+        let accepts=0;
+        refresh.host.acceptPlan=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args){
+            assert.equal(this,refresh.host);assert.deepEqual(args,[refresh.tx,'actor-a',refresh.forward]);accepts++;throw refresh.failure;
+        };
+        await assert.rejects(refresh.host.progressForNode(refresh.tx,node),error=>error===refresh.failure);
+        assert.equal(accepts,1);assert.equal(names(refresh).includes('withdraw'),false);
+    }
+    const invalid=fixture();await assert.rejects(invalid.host.progressForNode(invalid.tx,''),{code:'INVALID_CONFIG'});assert.deepEqual(invalid.events,[]);
+});
+
+test('P Relay progress retains node/advance/authorization overrides with original receivers, transactions and errors',async()=>{
+    const node=fixture().plan.nodes[0]!.nodeId;
+    const overridden=fixture();let calls=0;
+    overridden.host.advanceForNode=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args){
+        assert.equal(this,overridden.host);assert.deepEqual(args,[overridden.tx,node]);calls++;throw overridden.failure;
+    };
+    await assert.rejects(overridden.host.progressForNode(overridden.tx,node),error=>error===overridden.failure);
+    assert.equal(calls,1);assert.deepEqual(overridden.events,[]);
+    const forward=fixture();forward.host.advance=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args){
+        assert.equal(this,forward.host);assert.deepEqual(args,[forward.tx,forward.forward.id]);throw forward.failure;
+    };
+    await assert.rejects(forward.host.progressForNode(forward.tx,node),error=>error===forward.failure);
+    assert.deepEqual(names(forward),['forwardIDs']);
+    const custom=fixture(),execute=custom.host.canExecute;let checks=0;
+    custom.host.canExecute=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args){checks++;return execute.apply(this,args);};
+    await custom.host.progressForNode(custom.tx,node);
+    assert.equal(checks,2);assert.equal(names(custom).filter(name=>name==='profile').length,3);
+    assert.equal(names(custom).filter(name=>name==='authorizedNode').length,4*custom.plan.nodes.length);
+});
+
+test('P Relay Node Snapshot read retains legacy projections but consumes one locked multihop input per plan',async()=>{
+    assert.equal(RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION,1);
+    for(const stage of ['preparing','egress_active','ingress_active','active','withdrawn'] as const)
+        for(const includeAccepted of [false,true])for(const status of ['running','accepted','succeeded'] as const){
+            const current=fixture(),legacy=fixture(),node=current.plan.nodes[0]!.nodeId;
+            for(const f of [current,legacy]){f.record.stage=stage;f.record.prepared_count=1;f.record.activated_count=1;f.op.status=status;}
+            const reader:RelayNodeAssignmentReader<Tx,NativeRuntimeFamily>=current.host;
+            const actual=await reader.assignmentsForNode(current.tx,node,includeAccepted);
+            const expected=await legacy.host.assignments(legacy.tx,node,includeAccepted);
+            assert.deepEqual(actual,expected);
+            const reads=stage==='withdrawn'||status==='accepted'&&!includeAccepted?0:current.plan.nodes.length;
+            assert.equal(names(current).filter(name=>name==='authorizedNode').length,reads);
+            assert.equal(names(legacy).filter(name=>name==='authorizedNode').length,2*reads);
+            assert.equal(names(current).filter(name=>name==='forNode').length,1);
+            assert.equal(names(current).includes('latest'),false);
+            assert.equal(names(current).some(name=>['accept','touch','withdraw','succeed','fail'].includes(name)),false);
+        }
+    for(const includeAccepted of [false,true])for(const nodeIndex of [0,1,2]){
+        const current=fixture(),legacy=fixture(),node=current.plan.nodes[nodeIndex]!.nodeId;
+        for(const f of [current,legacy]){f.record.stage='preparing';f.record.prepared_count=1;f.record.activated_count=1;}
+        assert.deepEqual(await current.host.assignmentsForNode(current.tx,node,includeAccepted),await legacy.host.assignments(legacy.tx,node,includeAccepted));
+    }
+    const fresh=fixture(),node=fresh.plan.nodes[0]!.nodeId;
+    assert.ok((await fresh.host.assignmentsForNode(fresh.tx,node)).length>0);
+    fresh.state.currentPins=false;
+    assert.deepEqual(await fresh.host.assignmentsForNode(fresh.tx,node),[],'another call must read current authority again');
+    const customized=fixture(),original=customized.host.canExecute;let calls=0;
+    customized.host.canExecute=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args:Parameters<typeof original>){
+        assert.equal(this,customized.host);calls++;return original.apply(this,args);
+    };
+    assert.ok((await customized.host.assignmentsForNode(customized.tx,node)).length>0);
+    assert.equal(calls,1);assert.equal(names(customized).filter(name=>name==='authorizedNode').length,2*customized.plan.nodes.length);
+    const denied=fixture();denied.host.canExecute=async()=>false;
+    assert.deepEqual(await denied.host.assignmentsForNode(denied.tx,node),[]);
+    const failed=fixture();failed.host.canExecute=async()=>{throw failed.failure;};
+    await assert.rejects(()=>failed.host.assignmentsForNode(failed.tx,node),error=>error===failed.failure);
+});
+
+test('P Relay Node Snapshot read keeps existing assignment override receiver, result and errors with one getter access',async()=>{
+    const f=fixture(),node=f.plan.nodes[0]!.nodeId,result:Awaited<ReturnType<typeof f.host.assignments>>=[];
+    let gets=0,calls=0;
+    Object.defineProperty(f.host,'assignments',{get(){gets++;return async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args:Parameters<typeof f.host.assignments>){
+        assert.equal(this,f.host);assert.deepEqual(args,[f.tx,node,true]);calls++;return result;
+    };}});
+    f.host.canExecute=async()=>assert.fail('a legacy assignment provider owns its existing dispatch');
+    assert.equal(await f.host.assignmentsForNode(f.tx,node,true),result);
+    assert.deepEqual([gets,calls],[1,1]);assert.deepEqual(f.events,[]);
+    const failed=fixture();failed.host.assignments=async()=>{throw failed.failure;};
+    await assert.rejects(()=>failed.host.assignmentsForNode(failed.tx,node),error=>error===failed.failure);assert.deepEqual(failed.events,[]);
+    const getter=fixture();Object.defineProperty(getter.host,'assignments',{get(){throw getter.failure;}});
+    await assert.rejects(()=>getter.host.assignmentsForNode(getter.tx,node),error=>error===getter.failure);assert.deepEqual(getter.events,[]);
+    const wrapped=fixture(),original=wrapped.host.assignments;
+    wrapped.host.assignments=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args:Parameters<typeof original>){
+        assert.equal(this,wrapped.host);return original.apply(this,args);
+    };
+    assert.ok((await wrapped.host.assignmentsForNode(wrapped.tx,node)).length>0);
+    assert.equal(names(wrapped).filter(name=>name==='authorizedNode').length,2*wrapped.plan.nodes.length);
+});
+
+test('P Relay Node Snapshot read rejects unknown inputs, preserves original refusals and never falls back after failure',async()=>{
+    for(const node of ['', 'bad id',null,17]){
+        const f=fixture();await assert.rejects(()=>f.host.assignmentsForNode(f.tx,node as never),{code:'INVALID_CONFIG',status:422});assert.deepEqual(f.events,[]);
+    }
+    for(const flag of ['true',null,0,{}]){
+        const f=fixture();await assert.rejects(()=>f.host.assignmentsForNode(f.tx,f.plan.nodes[0]!.nodeId,flag as never),{code:'INVALID_CONFIG',status:422});assert.deepEqual(f.events,[]);
+    }
+    for(const mode of ['deleted','suspended','revoke','failed','changed-pins','blocked-resource']){
+        const f=fixture();
+        if(mode==='deleted')f.forward.deleting=true;if(mode==='suspended')f.forward.recoverySuspended=true;
+        if(mode==='revoke')f.op.kind='revoke';if(mode==='failed')f.op.status='failed';if(mode==='changed-pins')f.state.currentPins=false;
+        if(mode==='blocked-resource')for(const endpoint of f.input.endpoints)for(const port of endpoint.config.allowedTcpPorts)f.state.deniedPorts.add(port);
+        assert.deepEqual(await f.host.assignmentsForNode(f.tx,f.plan.nodes[0]!.nodeId),[]);
+    }
+    const unsafe=fixture();unsafe.ledger.sessionAuthoritySafe=async()=>false;
+    assert.deepEqual(await unsafe.host.assignmentsForNode(unsafe.tx,unsafe.plan.nodes[0]!.nodeId),[]);
+    const empty=fixture(),read=empty.store.forNode;
+    empty.store.forNode=async function(...args){await read.apply(this,args);return [];};
+    assert.deepEqual(await empty.host.assignmentsForNode(empty.tx,empty.plan.nodes[0]!.nodeId),[]);
+    for(const name of ['forNode','operation','forward','authorizer','authorizedNode','facts','peers','profile','endpoint','sessionSafe']){
+        const f=fixture();f.state.fail=name;
+        await assert.rejects(()=>f.host.assignmentsForNode(f.tx,f.plan.nodes[0]!.nodeId),error=>error===f.failure);
+        assert.equal(names(f).filter(event=>event==='forNode').length,1);
+    }
+    const refused=fixture();refused.nodes.authorizedRelayNode=async()=>{throw new ControlError('AUTHORIZATION_DENIED',403,'withdrawn');};
+    assert.deepEqual(await refused.host.assignmentsForNode(refused.tx,refused.plan.nodes[0]!.nodeId),[]);
+    const deniedPort=fixture(),ports=deniedPort.nodes.reservationPorts;
+    deniedPort.nodes.reservationPorts=async function(...args){await ports.apply(this,args);throw deniedPort.failure;};
+    await assert.rejects(()=>deniedPort.host.assignmentsForNode(deniedPort.tx,deniedPort.plan.nodes[0]!.nodeId),error=>error===deniedPort.failure);
+    for(const mode of ['foreign-record','stale-revision','corrupt-plan']){
+        const f=fixture();if(mode==='foreign-record')f.record.forward_id='other';if(mode==='stale-revision')f.record.target_revision++;if(mode==='corrupt-plan')f.record.body='{}';
+        await assert.rejects(()=>f.host.assignmentsForNode(f.tx,f.plan.nodes[0]!.nodeId),{code:'INTEGRITY_FAILURE'});
+    }
+});
+
+test('P Relay Forward read shares original node projections while authorizing one current plan on the caller transaction',async()=>{
+    assert.equal(RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION,1);
+    for(const stage of ['preparing','egress_active','ingress_active','active','withdrawn'] as const){
+        const f=fixture();f.record.stage=stage;f.record.prepared_count=1;f.record.activated_count=1;
+        const reader:RelayForwardAssignmentReader<Tx,NativeRuntimeFamily>=f.host;
+        const result=await reader.assignmentsForForward(f.tx,f.forward.id);
+        assert.equal(names(f).filter(name=>name==='operation').length,1);
+        assert.equal(names(f).includes('forNode'),false);
+        if(stage==='withdrawn'){assert.deepEqual(result,[]);continue;}
+        assert.equal(names(f).filter(name=>name==='authorizedNode').length,f.plan.nodes.length);
+        assert.deepEqual(result.map(part=>part.nodeId),f.plan.nodes.map(node=>node.nodeId));
+        assert.equal(names(f).filter(name=>name==='sessionSafe').length,f.plan.nodes.length);
+        for(const part of result){
+            assert.deepEqual(part.assignments,await f.host.assignments(f.tx,part.nodeId));
+            assert.notEqual(part.assignments,f.plan.nodes.find(node=>node.nodeId===part.nodeId)!.assignments);
+        }
+        assert.equal(names(f).some(name=>['accept','touch','withdraw','succeed','fail'].includes(name)),false);
+    }
+});
+
+test('P Relay Forward read preserves current authority refusal, per-node session safety and original failures',async()=>{
+    for(const mode of ['missing','deleted','suspended','stale-revision','revoke','failed','changed-pins','foreign-record','corrupt-plan']){
+        const f=fixture();
+        if(mode==='missing')f.state.missing=true;
+        if(mode==='deleted')f.forward.deleting=true;
+        if(mode==='suspended')f.forward.recoverySuspended=true;
+        if(mode==='stale-revision')f.record.target_revision++;
+        if(mode==='revoke')f.op.kind='revoke';
+        if(mode==='failed')f.op.status='failed';
+        if(mode==='changed-pins')f.state.currentPins=false;
+        if(mode==='foreign-record')f.record.forward_id='other-forward';
+        if(mode==='corrupt-plan')f.record.body='{}';
+        if(['stale-revision','foreign-record','corrupt-plan'].includes(mode))await assert.rejects(()=>f.host.assignmentsForForward(f.tx,f.forward.id));
+        else assert.deepEqual(await f.host.assignmentsForForward(f.tx,f.forward.id),[]);
+    }
+    const unsafe=fixture(),denied=unsafe.plan.nodes[1]!.nodeId,original=unsafe.ledger.sessionAuthoritySafe;
+    unsafe.ledger.sessionAuthoritySafe=async function(...args){const accepted=await original.apply(this,args);return args[1]===denied?false:accepted;};
+    const grouped=await unsafe.host.assignmentsForForward(unsafe.tx,unsafe.forward.id);
+    assert.deepEqual(grouped.find(part=>part.nodeId===denied)!.assignments,[]);
+    assert.ok(grouped.filter(part=>part.nodeId!==denied).every(part=>part.assignments.length>0));
+    for(const name of ['latest','operation','forward','authorizer','authorizedNode','facts','profile','endpoint','sessionSafe']){
+        const f=fixture();f.state.fail=name;
+        await assert.rejects(()=>f.host.assignmentsForForward(f.tx,f.forward.id),error=>error===f.failure);
+    }
+});
 
 test('9 Relay ledger command providers sample original one one two one clock boundaries preserve receiver error and caller Tx',async()=>{
     const tx={},trace:unknown[][]=[],error={code:'AUTHENTICATION_FAILED',retryable:false,detail:{unchanged:true}};

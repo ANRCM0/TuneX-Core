@@ -4,9 +4,11 @@ import (
 	"time"
 
 	"github.com/tunex/vnext/agent/internal/nativeexecution"
+	"github.com/tunex/vnext/agent/internal/observationtrust"
 	"github.com/tunex/vnext/agent/internal/probe"
 	"github.com/tunex/vnext/agent/internal/probeecho"
 	"github.com/tunex/vnext/agent/internal/proberesult"
+	"github.com/tunex/vnext/agent/internal/runtimeplatform"
 )
 
 func (runner *Runner) probeEchoStatusExchange(watch *probeAuthorityWatch) error {
@@ -80,11 +82,50 @@ func probeEchoResult(receipt probeClaimReceipt, fields proberesult.Request, resu
 		}
 		copy := *result.Echo
 		proof = &copy
-	} else if fields.Status != "unverified" || fields.Code != "nonce-echo-rejected" && fields.Code != "tcp-connect-failed" {
+	} else if !(fields.Status == "unverified" && fields.Code == "nonce-echo-rejected" ||
+		!probeecho.IsUDP(receipt.measurement) && fields.Status == "unreachable" && fields.Code == "tcp-connect-failed") {
 		return probeecho.ResultRequest{}, probe.ErrDenied
 	}
 	return nativeexecution.ProbeEchoResult(fields, descriptor, typedProbeBinding(receipt.binding), probeEchoSelection(receipt.service, receipt.echoInput),
 		probeEchoChallenge(receipt.echoInput), proof, result.RequestBytes, result.ResponseBytes)
+}
+
+// Version 4 keeps each original observation and evidence shape on its negotiated
+// wire. An Echo-qualified session does not turn connect/TLS work into nonce work.
+func probeV4ResultWith(schedule runtimeplatform.Scheduler, receipt probeClaimReceipt, fields proberesult.Request, result probe.Result) (probeecho.ResultRequest, error) {
+	if probeecho.IsEcho(receipt.measurement) {
+		return probeEchoResult(receipt, fields, result)
+	}
+	if !receipt.echo || receipt.typed || receipt.services || receipt.echoInput != nil || result.Echo != nil ||
+		result.RequestBytes != 0 || result.ResponseBytes != 0 || result.Measurement != receipt.measurement {
+		return probeecho.ResultRequest{}, probe.ErrDenied
+	}
+	descriptor, err := probeecho.DescriptorFor(receipt.measurement)
+	if err != nil || fields.Point != descriptor.Point {
+		return probeecho.ResultRequest{}, probe.ErrDenied
+	}
+	var evidence *probeecho.TLSResult
+	if receipt.measurement == probe.MeasurementIngressTLS {
+		if receipt.service == nil || result.Service == nil || *receipt.service != *result.Service {
+			return probeecho.ResultRequest{}, probe.ErrDenied
+		}
+		trust, err := observationtrust.New(*receipt.service, schedule.Now())
+		if err != nil {
+			return probeecho.ResultRequest{}, probe.ErrDenied
+		}
+		if result.TLS != nil {
+			if !result.TLS.Verified || result.TLS.Version != "TLSv1.3" || result.TLS.ALPN != observationtrust.ALPN ||
+				result.TLS.LeafFingerprint != trust.Fingerprint() || fields.Status != "verified" || fields.Code != "tls-handshake-verified" {
+				return probeecho.ResultRequest{}, probe.ErrDenied
+			}
+			evidence = &probeecho.TLSResult{Version: result.TLS.Version, ALPN: result.TLS.ALPN, LeafFingerprint: result.TLS.LeafFingerprint, Verified: true}
+		} else if fields.Status != "unreachable" && fields.Status != "unverified" {
+			return probeecho.ResultRequest{}, probe.ErrDenied
+		}
+	} else if receipt.service != nil || result.Service != nil || result.TLS != nil {
+		return probeecho.ResultRequest{}, probe.ErrDenied
+	}
+	return nativeexecution.ProbeEchoResultWithTLS(fields, descriptor, typedProbeBinding(receipt.binding), probeServiceSelection(receipt.service), evidence)
 }
 
 func (execution *probeExecution) echoResultRequest() (probeecho.ResultRequest, error) {
@@ -106,6 +147,10 @@ func (execution *probeExecution) echoResultRequest() (probeecho.ResultRequest, e
 	if copy.Echo != nil {
 		value := *copy.Echo
 		copy.Echo = &value
+	}
+	if copy.TLS != nil {
+		value := *copy.TLS
+		copy.TLS = &value
 	}
 	return copy, nil
 }

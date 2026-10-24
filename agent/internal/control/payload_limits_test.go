@@ -45,11 +45,19 @@ func runnerPayloadBucket(now time.Time, assignment string) adp3.ResourceLimitBuc
 	return adp3.ResourceLimitBucket{BucketId: "shared-bucket", ScopeId: "scope", ActorId: "actor", NodeId: "node", Revision: 1, StartsAt: now.Add(-time.Hour).Format("2006-01-02T15:04:05.000Z"), EndsAt: now.Add(time.Hour).Format("2006-01-02T15:04:05.000Z"), BurstBytes: 65536, ByteLimit: &limit, AssignmentIds: []string{assignment}}
 }
 
+type payloadUsageSchedule struct { *timeOwnerSchedule }
+func (s payloadUsageSchedule) WithTimeout(ctx context.Context, duration time.Duration) (context.Context, context.CancelFunc) {
+    if duration != time.Second { panic("usage timeout changed") }
+    return context.WithTimeout(ctx, duration)
+}
+
 func TestRunnerPayloadStartRenewRemoveAndOldDrainUseOriginalJournal(t *testing.T) {
 	r, clock, trace, assignment := newRunnerOwnerPoll(t)
+    r.effects.Schedule = payloadUsageSchedule{clock}
 	bucket := runnerPayloadBucket(clock.now, assignment.AssignmentId)
 	raw := runnerPayloadSnapshot(t, clock.now, 2, []adp3.Assignment{assignment}, &bucket)
 	r.providers.Channel = &timeOwnerChannel{trace: trace, request: func(method, path string, body []byte, epoch bool, session uint64) ([]byte, error) {
+		if method == "POST" && path == "/agent/v3/resource-usage" { return nil, fmt.Errorf("old Control has no usage endpoint") }
 		if method == "POST" && path == "/agent/v3/report" {
 			return json.Marshal(adp3.ReportAck{ProtocolVersion: 3, NodeId: "node", BootId: "boot", SessionEpoch: 2, ReportSequence: r.sequence, Status: "accepted"})
 		}
@@ -186,9 +194,11 @@ func TestRunnerPayloadWatchStopsIdleActiveAndDrainingInstances(t *testing.T) {
 
 func TestRunnerControlOnlyBucketRevisesExistingDrainWithoutActiveAssignments(t *testing.T) {
 	r, clock, trace, assignment := newRunnerOwnerPoll(t)
+    r.effects.Schedule = payloadUsageSchedule{clock}
 	bucket := runnerPayloadBucket(clock.now, assignment.AssignmentId)
 	raw := runnerPayloadSnapshot(t, clock.now, 2, []adp3.Assignment{assignment}, &bucket)
 	r.providers.Channel = &timeOwnerChannel{trace: trace, request: func(method, path string, body []byte, epoch bool, session uint64) ([]byte, error) {
+		if method == "POST" && path == "/agent/v3/resource-usage" { return nil, fmt.Errorf("old Control has no usage endpoint") }
 		if method == "POST" && path == "/agent/v3/report" {
 			return json.Marshal(adp3.ReportAck{ProtocolVersion: 3, NodeId: "node", BootId: "boot", SessionEpoch: 2, ReportSequence: r.sequence, Status: "accepted"})
 		}

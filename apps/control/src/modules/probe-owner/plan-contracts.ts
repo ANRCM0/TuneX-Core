@@ -8,6 +8,10 @@ export interface ProbeIntents<Tx> extends RuntimeForwards<Tx> {}
 export interface ProbeNodes<Tx> {
     authorized(tx: Tx, actor: string, forward: Forward): Promise<AuthorizedNodeFacts>;
 }
+export interface ProbePathPlans<Tx> {
+    authorize(tx:Tx,actor:string,forward:Forward,kind:'tcp-path-echo'|'udp-path-echo',timeoutMs:number,
+        service:import('./service-contracts.ts').ProbeServiceReference):Promise<ForwardProbePlan>;
+}
 export interface PublishedProbeSnapshot extends PublishedRuntimeEvidence {}
 /** Deliberate read projection, never a Snapshot publisher or execution authority issuer. */
 export interface PublishedProbeReader<Tx> extends PublishedRuntimeReader<Tx,PublishedProbeSnapshot> {}
@@ -45,5 +49,8 @@ export type ForwardProbePlan = ForwardProbePlanFacts & (
         readonly capability:'probe.tcp-ingress-tls.v1';readonly serviceContext:ProbeServiceContext} |
     {readonly kind:'tcp-ingress-echo'|'udp-ingress-echo';readonly point:'agent-local-direct-ingress';
         readonly measurement:'tcp-ingress-echo-v1'|'udp-ingress-echo-v1';readonly capability:'probe.tcp-ingress-echo.v1'|'probe.udp-ingress-echo.v1';
+        readonly businessProtocol:'tcp'|'udp';readonly serviceContext:ProbeEchoServiceContext} |
+    {readonly kind:'tcp-path-echo'|'udp-path-echo';readonly point:'agent-local-forward-ingress';
+        readonly measurement:'tcp-path-echo-v1'|'udp-path-echo-v1';readonly capability:'probe.tcp-path-echo.v1'|'probe.udp-path-echo.v1';
         readonly businessProtocol:'tcp'|'udp';readonly serviceContext:ProbeEchoServiceContext}
 );

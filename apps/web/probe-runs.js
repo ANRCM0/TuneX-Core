@@ -30,7 +30,7 @@ const serviceSelection = shape({ scopeId:id,serviceId:id,revision:positive,confi
 const tlsEvidence = shape({version:one('TLSv1.3'),alpn:one('tunex-observation/1'),leafFingerprint:hash,verified:one(true)});
 const tlsResult = shape({status:one('verified','unverified','unreachable'),code:one('tls-handshake-verified','tls-handshake-failed','tcp-connect-failed'),
   elapsedMs:uint,measuredAt:time,validUntil:time,acceptedAt:time,resultDigest:hash,tls:nullable(tlsEvidence)});
-const echoMeasurement = value => value === 'tcp-ingress-echo-v1' || value === 'udp-ingress-echo-v1';
+const echoMeasurement = value => ['tcp-ingress-echo-v1','udp-ingress-echo-v1','tcp-path-echo-v1','udp-path-echo-v1'].includes(value);
 const rawBase64 = (value, length) => { try { return typeof value === 'string' && atob(value).length === length && btoa(atob(value)) === value; } catch { return false; } };
 const echoChallenge = shape({ nonce: value => rawBase64(value, 32), invocationDigest: hash });
 const echoProof = shape({ algorithm: one('Ed25519'), requestDigest: hash, signature: value => rawBase64(value, 64), verified: one(true) });
@@ -51,12 +51,12 @@ function runShape(value) {
   if (!object(value)) return false;
   if (!Object.hasOwn(value,'measurement')) return legacyRunShape(value);
   if (echoMeasurement(value.measurement)) {
-    if (value.kind !== value.measurement.slice(0, -3) || value.businessProtocol !== (value.measurement === 'udp-ingress-echo-v1' ? 'udp' : 'tcp') ||
-        value.point !== 'agent-local-direct-ingress' || !serviceSelection(value.service) || value.service.scopeId !== value.scopeId || !echoChallenge(value.echoChallenge) ||
+    if (value.kind !== value.measurement.slice(0, -3) || value.businessProtocol !== (value.measurement.startsWith('udp') ? 'udp' : 'tcp') ||
+        value.point !== (value.measurement.includes('-path-')?'agent-local-forward-ingress':'agent-local-direct-ingress') || !serviceSelection(value.service) || value.service.scopeId !== value.scopeId || !echoChallenge(value.echoChallenge) ||
         value.result !== null && (!echoResult(value.result) ||
           !(value.result.status === 'echoed' && value.result.code === 'nonce-echo-verified' && value.result.echo !== null && value.result.requestBytes === 256 && value.result.responseBytes === 256 ||
             value.result.status === 'unverified' && value.result.code === 'nonce-echo-rejected' && value.result.echo === null && value.result.requestBytes === 256 ||
-            value.measurement === 'tcp-ingress-echo-v1' && value.result.status === 'unreachable' && value.result.code === 'tcp-connect-failed' && value.result.echo === null && value.result.requestBytes === 0 && value.result.responseBytes === 0)) ||
+            value.measurement.startsWith('tcp') && value.result.status === 'unreachable' && value.result.code === 'tcp-connect-failed' && value.result.echo === null && value.result.requestBytes === 0 && value.result.responseBytes === 0)) ||
         value.applicationPayloadBytes !== (value.result === null ? 0 : value.result.requestBytes + value.result.responseBytes)) return false;
     const { measurement: _, service: __, echoChallenge: ___, ...rest } = value;
     const normalized = value.result === null ? null : Object.fromEntries(Object.entries(value.result).filter(([key]) => !['echo','requestBytes','responseBytes'].includes(key)));

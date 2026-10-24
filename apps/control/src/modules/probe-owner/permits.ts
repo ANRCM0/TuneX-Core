@@ -1,13 +1,13 @@
 import { nativeModuleId as randomUUID, nativeValueDigest as digest, nativeParseTime,
     nativeIsoTime, nativeBase64Fingerprint, nativeWallClockSource,
     nativeProbeResultRequest as resultRequest, probeServiceSelection, probeEchoServiceSelection,
-    verifyProbeEchoProof, nativeProbeEchoInvocation } from '../../compatibility/public.ts';
+    verifyProbeEchoProof, nativeProbeEchoInvocation, nativeProbeEchoNonce, probeEchoInvocationDigest } from '../../compatibility/public.ts';
 import { deepFreeze, isCounter, isId } from '@tunex/core';
 import type { ProbeResultRequest, ProbeTypesResultRequest, ProbeServicesResultRequest, ProbeServiceSelection, ProbeServiceContext } from '../../compatibility/public.ts';
 import type { ProbeEchoResultRequest, ProbeEchoChallenge, ProbeEchoInvocation } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
 import { requireProbeMachine } from './machine-policy.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ProbePermitObservationStorage } from '../../framework/public.ts';
 import type { ProbeMachineReader } from './machine-contracts.ts';
 import type { ProbeBinding } from './plan-contracts.ts';
 import type { CurrentProbeInstances } from './instance-contracts.ts';
@@ -74,14 +74,14 @@ function issueInput(actor: string, scope: string, forward: string, input: unknow
         ...(selectCurrent ? [] : ['instanceId', 'instanceGeneration'])]);
     const timeoutMs = command.timeoutMs === undefined ? 1000 : command.timeoutMs;
     const { expectedRevision, instanceId, instanceGeneration } = command;
-    if (![actor, scope, forward].every(isId) || command.version !== 1 || !['tcp-connect','tcp-ingress-connect','tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo'].includes(command.kind as string) ||
+    if (![actor, scope, forward].every(isId) || command.version !== 1 || !['tcp-connect','tcp-ingress-connect','tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo','tcp-path-echo','udp-path-echo'].includes(command.kind as string) ||
         !isCounter(expectedRevision) || !selectCurrent && (!isCounter(instanceGeneration) || !hex(instanceId)) ||
         typeof timeoutMs !== 'number' || !Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 2000)
         invalid('Valid Probe permit revision, instance and bounded timeout required');
-    const controlled=['tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo'].includes(command.kind as string);
+    const controlled=['tcp-ingress-tls','tcp-ingress-echo','udp-ingress-echo','tcp-path-echo','udp-path-echo'].includes(command.kind as string);
     const service=controlled?parseProbeServiceReference(command.service):undefined;
     if(!controlled&&Object.hasOwn(command,'service'))invalid('Only controlled Probe kinds accept a service reference');
-    return { expectedRevision, instanceId, instanceGeneration, timeoutMs,kind:command.kind as 'tcp-connect'|'tcp-ingress-connect'|'tcp-ingress-tls'|'tcp-ingress-echo'|'udp-ingress-echo',...(service?{service}:{}) };
+    return { expectedRevision, instanceId, instanceGeneration, timeoutMs,kind:command.kind as 'tcp-connect'|'tcp-ingress-connect'|'tcp-ingress-tls'|'tcp-ingress-echo'|'udp-ingress-echo'|'tcp-path-echo'|'udp-path-echo',...(service?{service}:{}) };
 }
 
 /** Online permit authority. Management and machine adapters never bypass this owner. */
@@ -92,17 +92,18 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
     private readonly machines: ProbeMachineReader<Tx>;
     private readonly instances: CurrentProbeInstances<Tx>;
     private readonly store: ProbePermitStore<Tx>;
+    private readonly observations:ProbePermitObservationStorage<Tx,ProbePermitRecord>|undefined;
     private readonly clock: () => number;
     private readonly history: ProbeRunRecorder<Tx> | undefined;
     private readonly types:ProbeTypeQualifications<Tx>|undefined;
     private readonly access:import('../../framework/public.ts').ResourceReadAccess<Tx>;
     constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, access: import('../../framework/public.ts').ResourceReadAccess<Tx>,
         plans: ProbePermitPlans<Tx>, machines: ProbeMachineReader<Tx>,
-        instances: CurrentProbeInstances<Tx>, store: ProbePermitStore<Tx>, clock: () => number = nativeWallClockSource(), history?: ProbeRunRecorder<Tx>,types?:ProbeTypeQualifications<Tx>) {
+        instances: CurrentProbeInstances<Tx>, store: ProbePermitStore<Tx>, clock: () => number = nativeWallClockSource(), history?: ProbeRunRecorder<Tx>,types?:ProbeTypeQualifications<Tx>,observations?:ProbePermitObservationStorage<Tx,ProbePermitRecord>) {
         this.access=access;
 
         this.db = db; this.identity = identity; this.plans = plans; this.machines = machines;
-        this.instances = instances; this.store = store; this.clock = clock; this.history = history;this.types=types;
+        this.instances = instances; this.store = store; this.clock = clock; this.history = history;this.types=types;this.observations=observations;
     }
 
     private async recordHistory(tx: Tx, permit: ProbePermitRecord, kind: ProbeRunCapture['kind'], at: number, result: ProbeRunCapture['result'] = null) {
@@ -125,8 +126,8 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
             throw new ControlError('CLOCK_UNCERTAIN', 503, 'Probe permit clock requires operator review');
         return now;
     }
-    private async budget(tx: Tx) {
-        const current = await this.store.lock(tx);
+    private async budget(tx: Tx, observation=false) {
+        const current = observation&&this.observations?await this.observations.observe(tx):await this.store.lock(tx);
         if (current.records.length > 256 || current.records.some(p => !validProbePermit(p)) ||
             new Set(current.records.map(p => p.id)).size !== current.records.length ||
             current.withdrawals.length > 256 || new Set(current.withdrawals.map(w => w.permitId)).size !== current.withdrawals.length ||
@@ -158,28 +159,34 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
         const machine = await this.machines.read(tx, binding.nodeId, slot.fingerprint);
         return { slot, machine };
     }
-    private async qualified(tx:Tx,slot:Awaited<ReturnType<CurrentProbeInstances<Tx>['readCurrent']>>,now:number,services=false) {
+    private async qualified(tx:Tx,slot:Awaited<ReturnType<CurrentProbeInstances<Tx>['readCurrent']>>,now:number,services=false,echo=false) {
         if(!slot||!this.types)available();
         const value=requireProbeTypeQualification(await this.types.get(tx,slot.nodeId),slot,now);
         if(services&&value.servicesVersion!==1)available();
+        if(echo&&value.echoVersion!==1)available();
         return value;
     }
-    private async authorize(tx: Tx, floor: number, permit: ProbePermitRecord,typed:boolean|'services'=false) {
+    private async authorize(tx: Tx, floor: number, permit: ProbePermitRecord,typed:boolean|'services'|'echo'=false) {
         const classification=probeMeasurement(measurementOf(permit));
         const plan = await this.plans.authorize(tx, permit.actorId, permit.scopeId, permit.binding.forwardId,
             { version: 1, kind: classification.taskKind, expectedRevision: permit.binding.forwardRevision, timeoutMs: permit.timeoutMs,
                 ...(permit.serviceContext?{service:parseProbeServiceReference({serviceId:permit.serviceContext.serviceId,revision:permit.serviceContext.revision,
                     configRevision:permit.serviceContext.configRevision,configDigest:permit.serviceContext.configDigest})}:{}) });
         if (plan.scopeId !== permit.scopeId || plan.kind!==classification.taskKind||plan.point!==classification.point||plan.timeoutMs !== permit.timeoutMs || !sameProbeBinding(plan.binding, permit.binding)) available();
-        if(permit.serviceContext&&(typed!=='services'||plan.kind!=='tcp-ingress-tls'||digest(plan.serviceContext)!==digest(permit.serviceContext)))available();
+        if(isEchoMeasurement(permit.measurement)&&typed!=='echo')available();
+        if(permit.serviceContext&&((typed!=='services'&&typed!=='echo')||!('serviceContext' in plan)||
+            digest(plan.serviceContext)!==digest(permit.serviceContext)))available();
         const { slot, machine } = await this.current(tx, permit.binding, permit.instanceId, permit.instanceGeneration, permit.fingerprint);
         const now = this.now(floor);
         const evidence = requireProbeMachine(machine, permit.binding.nodeId, permit.binding.bootId, permit.binding.sessionEpoch, now);
-        const qualification=typed||permit.measurement!==undefined?await this.qualified(tx,slot,now,typed==='services'||permit.measurement===PROBE_SERVICE_MEASUREMENT):null;
+        const qualification=typed||permit.measurement!==undefined?await this.qualified(tx,slot,now,
+            typed==='services'||typed==='echo'||permit.measurement===PROBE_SERVICE_MEASUREMENT,typed==='echo'):null;
         if(permit.measurement!==undefined&&!evidence.capabilities.includes('probe.tcp-ingress-connect.v1'))
             throw new ControlError('UNSUPPORTED_CAPABILITY',409,'Current ingress Probe capability required');
         if(permit.measurement===PROBE_SERVICE_MEASUREMENT&&!evidence.capabilities.includes('probe.tcp-ingress-tls.v1'))
             throw new ControlError('UNSUPPORTED_CAPABILITY',409,'Current ingress TLS Probe capability required');
+        if(isEchoMeasurement(permit.measurement)&&!evidence.capabilities.includes(
+            probeMeasurement(permit.measurement!).capability))available();
         const upper = Math.min(nativeParseTime(plan.expiresAt), slot.expiresAt, evidence.nodeCredentialUntil,
             evidence.credentialUntil, evidence.retireAfter ?? Infinity,qualification?.expiresAt??Infinity);
         if (permit.issuedAt > now || permit.closedAt !== null && (permit.closedAt < permit.issuedAt || permit.closedAt > now) || permit.expiresAt <= now ||
@@ -218,7 +225,9 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
         const { slot, machine } = await this.current(tx, plan.binding, selectedId, selectedGeneration);
         const now = this.now(budget.now);
         const evidence = requireProbeMachine(machine, plan.binding.nodeId, plan.binding.bootId, plan.binding.sessionEpoch, now);
-        const ingress=kind!=='tcp-connect',tls=kind==='tcp-ingress-tls',qualification=ingress?await this.qualified(tx,slot,now,tls):null;
+        const ingress=kind!=='tcp-connect',tls=kind==='tcp-ingress-tls',echo=kind.endsWith('-echo');
+        const qualification=ingress?await this.qualified(tx,slot,now,tls||echo,echo):null;
+        if(echo&&'measurement' in plan&&!evidence.capabilities.includes(probeMeasurement(plan.measurement).capability))available();
         if(ingress&&!evidence.capabilities.includes('probe.tcp-ingress-connect.v1'))
             throw new ControlError('UNSUPPORTED_CAPABILITY',409,'Current ingress Probe capability required');
         if(tls&&(!evidence.capabilities.includes('probe.tcp-ingress-tls.v1')||plan.kind!=='tcp-ingress-tls'))
@@ -232,10 +241,15 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
         const expiresAt = Math.min(now + 2000, notAfter ?? Infinity, nativeParseTime(plan.expiresAt), slot.expiresAt,
             evidence.nodeCredentialUntil, evidence.credentialUntil, evidence.retireAfter ?? Infinity,qualification?.expiresAt??Infinity);
         if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) available();
-        const record: ProbePermitRecord = { id: randomUUID(), actorId: actor, scopeId: scope, binding: { ...plan.binding },
+        let record: ProbePermitRecord = { id: randomUUID(), actorId: actor, scopeId: scope, binding: { ...plan.binding },
             instanceId: selectedId, instanceGeneration: selectedGeneration, fingerprint: slot.fingerprint, timeoutMs, issuedAt: now, expiresAt,
-            state: 'issued', closedAt: null,...(tls&&plan.kind==='tcp-ingress-tls'?{measurement:PROBE_SERVICE_MEASUREMENT,serviceContext:plan.serviceContext}:
+            state: 'issued', closedAt: null,...(echo&&'serviceContext' in plan?{measurement:plan.measurement,serviceContext:plan.serviceContext}:
+                tls&&plan.kind==='tcp-ingress-tls'?{measurement:PROBE_SERVICE_MEASUREMENT,serviceContext:plan.serviceContext}:
                 ingress?{measurement:PROBE_INGRESS_MEASUREMENT}:{}) };
+        if(echo){
+            const nonce=nativeProbeEchoNonce();
+            record={...record,echoChallenge:{nonce,invocationDigest:probeEchoInvocationDigest(echoInvocation(record,nonce))}};
+        }
         if (!validProbePermit(record)) available();
         await this.finish(tx, now);
         await this.store.insert(tx, record);
@@ -257,7 +271,7 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
                 try {
                     if (!result.body || 'requestId' in result.body) throw new Error('body');
                     const parsed=resultRequest({ ...result.body, requestId: '0'.repeat(64) }),stored=parsed.request;
-                    if (parsed.measurement!==measurementOf(permit)||stored.probeVersion===3&&!serviceMatches(permit,stored.service)||!resultPinMatches(permit,stored)||
+                    if (parsed.measurement!==measurementOf(permit)||(stored.probeVersion===3||stored.probeVersion===4)&&!serviceMatches(permit,stored.service)||!resultPinMatches(permit,stored)||
                         parsed.resultDigest !== result.resultDigest || stored.permitId !== id ||
                         permit.state !== 'consumed' || !sameProbeBinding(stored.binding, permit.binding) ||
                         stored.instanceId !== permit.instanceId || stored.instanceGeneration !== permit.instanceGeneration ||
@@ -281,11 +295,12 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
         });
     }
 
-    async consume(node: string, fingerprint: string, epoch: number, input: unknown,measurement:ProbeMeasurement=PROBE_EGRESS_MEASUREMENT,typed:boolean|'services'=false,service?:ProbeServiceSelection|null) {
+    async consume(node: string, fingerprint: string, epoch: number, input: unknown,measurement:ProbeMeasurement=PROBE_EGRESS_MEASUREMENT,typed:boolean|'services'|'echo'=false,service?:ProbeServiceSelection|null,challenge?:ProbeEchoChallenge|null) {
         const { permitId, bootId, instanceId, instanceGeneration } = machineCommand(node, fingerprint, epoch, input, true);
         return this.db.transaction(async tx => {
             const budget = await this.budget(tx), permit = budget.records.find(p => p.id === permitId);
-            if (!permit || measurementOf(permit)!==measurement||typed==='services'&&!serviceMatches(permit,service)||permit.state !== 'issued' || permit.binding.nodeId !== node || permit.binding.bootId !== bootId ||
+            if (!permit || measurementOf(permit)!==measurement||(typed==='services'||typed==='echo')&&!serviceMatches(permit,service)||
+                typed==='echo'&&!challengeMatches(permit,challenge)||permit.state !== 'issued' || permit.binding.nodeId !== node || permit.binding.bootId !== bootId ||
                 permit.binding.sessionEpoch !== epoch || permit.fingerprint !== fingerprint ||
                 permit.instanceId !== instanceId || permit.instanceGeneration !== instanceGeneration) available();
             const now = await this.authorize(tx, budget.now, permit,typed);
@@ -297,17 +312,18 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
     }
 
     /** Bounded, non-executable discovery. A reply reserves nothing and never mints or renews a permit. */
-    async offer(node: string, fingerprint: string, epoch: number, input: unknown,typed:boolean|'services'=false) {
+    async offer(node: string, fingerprint: string, epoch: number, input: unknown,typed:boolean|'services'|'echo'=false) {
         const { bootId, instanceId, instanceGeneration } = machineCommand(node, fingerprint, epoch, input, false);
         return this.db.transaction(async tx => {
-            const budget = await this.budget(tx);
+            const budget = await this.budget(tx,true);
             const { slot, machine } = await this.registered(tx, { nodeId: node, bootId, sessionEpoch: epoch },
                 instanceId, instanceGeneration, fingerprint);
             let now = this.now(budget.now);
             requireProbeMachine(machine, node, bootId, epoch, now);
-            if(typed)await this.qualified(tx,slot,now,typed==='services');
+            if(typed)await this.qualified(tx,slot,now,typed==='services'||typed==='echo',typed==='echo');
             if (slot.registeredAt > now || slot.expiresAt <= now) available();
-            const candidates = budget.records.filter(p => (typed==='services'||typed===true&&p.measurement!==PROBE_SERVICE_MEASUREMENT||!typed&&p.measurement===undefined)&&p.state === 'issued' && p.expiresAt > now &&
+            const candidates = budget.records.filter(p => (typed==='echo'||!isEchoMeasurement(p.measurement)&&
+                (typed==='services'||typed===true&&p.measurement!==PROBE_SERVICE_MEASUREMENT||!typed&&p.measurement===undefined))&&p.state === 'issued' && p.expiresAt > now &&
                 p.binding.nodeId === node && p.binding.bootId === bootId && p.binding.sessionEpoch === epoch &&
                 p.fingerprint === fingerprint && p.instanceId === instanceId && p.instanceGeneration === instanceGeneration);
             if (candidates.length > 1) throw new ControlError('PROBE_PERMIT_CORRUPT', 503, 'Ambiguous Probe delivery');
@@ -317,17 +333,19 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
                 permitId: permit.id, instanceId, instanceGeneration, binding: { ...permit.binding }, timeoutMs: permit.timeoutMs,
                 issuedAt: permit.issuedAt, expiresAt: permit.expiresAt,
                 ...(typed?probeMeasurement(measurementOf(permit)):{}),
-                ...(typed==='services'?{serviceContext:permit.serviceContext??null}:{}),
+                ...(typed==='services'||typed==='echo'?{serviceContext:permit.serviceContext??null}:{}),
+                ...(typed==='echo'?{echoChallenge:permit.echoChallenge??null}:{}),
             } : null });
         });
     }
 
     /** Current authority observation, not a lease or an executable grant. Must not be cached as continued permission. */
-    async check(node: string, fingerprint: string, epoch: number, input: unknown,measurement:ProbeMeasurement=PROBE_EGRESS_MEASUREMENT,typed:boolean|'services'=false,service?:ProbeServiceSelection|null) {
+    async check(node: string, fingerprint: string, epoch: number, input: unknown,measurement:ProbeMeasurement=PROBE_EGRESS_MEASUREMENT,typed:boolean|'services'|'echo'=false,service?:ProbeServiceSelection|null,challenge?:ProbeEchoChallenge|null) {
         const { permitId, bootId, instanceId, instanceGeneration } = machineCommand(node, fingerprint, epoch, input, true);
         return this.db.transaction(async tx => {
-            const budget = await this.budget(tx), permit = budget.records.find(p => p.id === permitId);
-            if (!permit || measurementOf(permit)!==measurement||typed==='services'&&!serviceMatches(permit,service)||permit.state !== 'consumed' || budget.withdrawals.some(w => w.permitId === permitId) ||
+            const budget = await this.budget(tx,true), permit = budget.records.find(p => p.id === permitId);
+            if (!permit || measurementOf(permit)!==measurement||(typed==='services'||typed==='echo')&&!serviceMatches(permit,service)||
+                typed==='echo'&&!challengeMatches(permit,challenge)||permit.state !== 'consumed' || budget.withdrawals.some(w => w.permitId === permitId) ||
                 permit.binding.nodeId !== node || permit.binding.bootId !== bootId || permit.binding.sessionEpoch !== epoch ||
                 permit.fingerprint !== fingerprint || permit.instanceId !== instanceId || permit.instanceGeneration !== instanceGeneration) available();
             const now = await this.authorize(tx, budget.now, permit,typed);
@@ -336,8 +354,8 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
     }
 
     /** Short-lived reported evidence only. Never consumes, renews, executes or changes health. */
-    async receiveResult(node: string, fingerprint: string, epoch: number, input: ProbeResultRequest|ProbeTypesResultRequest|ProbeServicesResultRequest) {
-        const parsed=resultRequest(input),request=parsed.request,typed=request.probeVersion===3?'services':request.probeVersion===2;
+    async receiveResult(node: string, fingerprint: string, epoch: number, input: ProbeResultRequest|ProbeTypesResultRequest|ProbeServicesResultRequest|ProbeEchoResultRequest) {
+        const parsed=resultRequest(input),request=parsed.request,typed=request.probeVersion===4?'echo':request.probeVersion===3?'services':request.probeVersion===2;
         if (request.nodeId !== node || request.sessionEpoch !== epoch)
             throw new ControlError('SESSION_SUPERSEDED', 409, 'Probe result Node/session differs');
         machineCommand(node, fingerprint, epoch, { permitId: request.permitId, bootId: request.bootId,
@@ -345,7 +363,7 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
         const {resultDigest,body}=parsed;
         return this.db.transaction(async tx => {
             const budget = await this.budget(tx), permit = budget.records.find(p => p.id === request.permitId);
-            if (!permit || measurementOf(permit)!==parsed.measurement||request.probeVersion===3&&!serviceMatches(permit,request.service)||permit.state !== 'consumed' || budget.withdrawals.some(w => w.permitId === request.permitId) ||
+            if (!permit || measurementOf(permit)!==parsed.measurement||(request.probeVersion===3||request.probeVersion===4)&&!serviceMatches(permit,request.service)||permit.state !== 'consumed' || budget.withdrawals.some(w => w.permitId === request.permitId) ||
                 permit.fingerprint !== fingerprint || permit.instanceId !== request.instanceId || permit.instanceGeneration !== request.instanceGeneration ||
                 !sameProbeBinding(permit.binding, request.binding) || permit.timeoutMs !== request.timeoutMs ||
                 nativeIsoTime(permit.issuedAt) !== request.issuedAt || nativeIsoTime(permit.expiresAt) !== request.expiresAt ||
@@ -360,7 +378,7 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
                 try {
                     if (!previous.body || 'requestId' in previous.body) throw new Error('body');
                     const parsedStored=resultRequest({ ...previous.body, requestId: request.requestId }),stored=parsedStored.request;
-                    if (parsedStored.measurement!==measurementOf(permit)||stored.probeVersion===3&&!serviceMatches(permit,stored.service)||!resultPinMatches(permit,stored)||parsedStored.resultDigest !== previous.resultDigest || stored.permitId !== permit.id ||
+                    if (parsedStored.measurement!==measurementOf(permit)||(stored.probeVersion===3||stored.probeVersion===4)&&!serviceMatches(permit,stored.service)||!resultPinMatches(permit,stored)||parsedStored.resultDigest !== previous.resultDigest || stored.permitId !== permit.id ||
                         !Number.isSafeInteger(previous.acceptedAt) || previous.acceptedAt < nativeParseTime(stored.measuredAt) ||
                         previous.acceptedAt >= nativeParseTime(stored.validUntil) || previous.acceptedAt > now)
                         throw new Error('record');

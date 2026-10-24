@@ -51,7 +51,9 @@ test('0041 shared payload profile supports explicit new Agent debit inspection a
     const f=fixture(),catalog=await upgradeSchemaCatalog();
     f.inspection.database.migrations=catalog.files.map(file=>file.name);
     f.inspection.schemaFiles=catalog.files.map(({name,sha256})=>({name,sha256}));
-    for(const release of [f.plan.source,f.plan.target])release.control.profile=release.agent.profile='adp3-shared-resource-limits-v1';
+    for(const release of [f.plan.source,f.plan.target]){
+        release.control.profile='adp3-path-sample-alert-v1';release.agent.profile='adp3-shared-resource-limits-v1';
+    }
     f.plan.journals[0]={...f.plan.journals[0]!,version:2,resourceBudgetVersion:1,resourceBudgetBuckets:1,prechargedBytes:'9007199254740992'};
     f.inspection.database.resourceLimitSnapshots=1;
     const accepted=assessUpgrade(parseUpgradePlan(JSON.stringify(f.plan)),f.inspection);
@@ -226,8 +228,10 @@ test('plan parsing rejects duplicates, unknown fields, unsafe counters, legacy p
 });
 test('known migration footprints cover tables, multi-column DDL and superseded enums', async () => {
     const catalog = await upgradeSchemaCatalog();
-    assert.equal(catalog.files.length, 41);
-    assert.equal(catalog.files.at(-1)?.name, '0041-shared-resource-payload-limits.sql');
+    assert.equal(catalog.files.length, 46);
+    assert.equal(catalog.files.at(-1)?.name, '0046-recent-path-probe-alert.sql');
+    for(const table of ['probe_permits','probe_runs'])assert.ok(catalog.markers.some(m=>
+        m.migration==='0045-controlled-path-echo.sql'&&m.table===table&&m.column==='measurement'&&m.enumType?.includes("'tcp-path-echo-v1'")));
     assert.deepEqual(schemaMarkers('0038-probe-plan-json-integers.sql', catalog.files.find(file => file.name === '0038-probe-plan-json-integers.sql')!.sql), []);
     assert.ok(catalog.markers.some(m => m.migration === '0039-product-resource-access.sql' && m.table === 'nodes' && m.column === 'resource_source'));
     assert.ok(catalog.markers.some(m => m.migration === '0039-product-resource-access.sql' && m.table === 'forward_ownership_events' && m.column === undefined));

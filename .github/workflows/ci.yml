@@ -21,7 +21,7 @@ jobs:
       - name: Verify local certificate fixture tooling
         run: openssl version
       - name: Role-specific deployment preflight regression
-        run: node --test deploy/test/preflight*.test.mjs
+        run: node --test deploy/test/preflight*.test.mjs deploy/test/setup-plan.test.mjs
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -260,7 +260,7 @@ jobs:
         run: node --test apps/control/test/upgrade-mysql-acceptance.test.ts
       - name: Shared resource limits original transaction CAS replay history and rollback
         if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
-        run: node --test apps/control/test/shared-resource-limits-mysql-acceptance.test.ts
+        run: node --test apps/control/test/shared-resource-limits-mysql-acceptance.test.ts apps/control/test/account-credentials-mysql-acceptance.test.ts
       - name: Console scoped filters, independent candidates and full-scope overview with SELECT-only MySQL
         if: ${{ !cancelled() && steps.native-fixture.outcome == 'success' }}
         run: node --test apps/control/test/console-mysql-acceptance.test.ts
@@ -368,6 +368,7 @@ jobs:
     env:
       TUNEX_TEST_DATABASE_URL: mysql://root:ci-disposable-only@127.0.0.1:3306/tunex_probe
       TUNEX_PROBE_BROWSER: '1'
+      TUNEX_PRODUCT_P_ACCEPTANCE: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -400,8 +401,10 @@ jobs:
           name: probe-workflow-acceptance
           path: |
             .artifacts/probe/**/evidence.json
+            .artifacts/probe/**/product-p-*.json
             .artifacts/probe/**/console-probe-*.png
             .artifacts/relay/**/evidence.json
+            .artifacts/relay/**/product-p-*.json
             .artifacts/relay/**/console-tunnel-*.png
   multihop:
     runs-on: ubuntu-latest
@@ -447,6 +450,7 @@ jobs:
         run: npm run test:multihop
         env:
           TUNEX_MULTIHOP_BROWSER: '1'
+          TUNEX_PRODUCT_P_ACCEPTANCE: '1'
       - name: Interior partition, latency and loss in owned network namespaces
         run: npm run test:multihop -- --isolated
       - name: Preserve evidence without enrollment or private key material
@@ -456,6 +460,7 @@ jobs:
           name: multihop-${{ matrix.nodes }}-node-acceptance
           path: |
             .artifacts/multihop/**/evidence.json
+            .artifacts/multihop/**/product-p-*.json
             .artifacts/multihop/**/failure.json
             .artifacts/multihop/**/console-multihop-*.png
   relay-isolation:

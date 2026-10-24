@@ -152,7 +152,7 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
     app.get('/console/', async c => { consoleHeaders(c); return c.html(await nativeControlConsoleAsset('index.html')); });
     app.get('/console/app.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('app.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/model.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('model.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
-    for (const asset of ['account-context.js', 'line-builder.js', 'template-reference.js', 'admin-resource-console.js', 'resource-limit-console.js'] as const)
+    for (const asset of ['account-context.js', 'account-credentials.js', 'task-workflow.js', 'line-builder.js', 'template-reference.js', 'admin-resource-console.js', 'resource-limit-console.js', 'member-console.js'] as const)
         app.get('/console/' + asset, async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset(asset), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/console-model-owner/public.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('console-model-owner/public.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/console-model-owner/service.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('console-model-owner/service.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
@@ -473,6 +473,14 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
         c.get('actor'), scope(c.req.param('scope')), c.req.param('profile'), transportReferenceQuery(nativeControlQueryParams(c.req.url)))));
     app.get('/api/v1/scopes/:scope/transport-profiles/:profile',async c=>{const revision=c.req.query('revision');if(revision!==undefined&&!/^[1-9][0-9]*$/.test(revision))invalid('Canonical Profile revision required');return c.json(await control.transport.get(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),revision===undefined?undefined:Number(revision)));});
     app.put('/api/v1/scopes/:scope/transport-profiles/:profile',async c=>{const input=parseJson(await body(c.req.raw,8192)) as Record<string,unknown>;if(!input||Object.keys(input).sort().join(',')!=='config,expectedRevision'||!isCounter(input.expectedRevision,true))invalid('Profile config and expectedRevision required');const result=await control.transport.publish(c.get('actor'),scope(c.req.param('scope')),c.req.param('profile'),c.req.header('idempotency-key'),input.expectedRevision,input.config);return c.json(result.body,result.status);});
+    app.get('/api/v1/me/credentials', async c => {
+        if(nativeControlQueryString(c.req.url))invalid('Account credential metadata accepts no query parameters');
+        return c.json(await control.accountCredentials.get(c.req.header('authorization')));
+    });
+    app.put('/api/v1/me/credentials', async c => {
+        if(nativeControlQueryString(c.req.url))invalid('Account credential rotation accepts no query parameters');
+        return c.json(await control.accountCredentials.rotate(c.req.header('authorization'),parseJson(await body(c.req.raw,1024))));
+    });
     app.get('/api/v1/scopes/:scope/members', async (c) => c.json(await control.identity.listMembers(c.get('actor'), scope(c.req.param('scope')))));
     app.put('/api/v1/scopes/:scope/members/:actor', async (c) => {
         const input = parseJson(await body(c.req.raw, 32768)) as Record<string, unknown>;
@@ -840,6 +848,18 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
     app.post('/agent/v3/hello', async (c) => c.json(await runtime.hello(c.get('node'), parseRuntimeMessage('HelloRequest', await body(c.req.raw)), c.get('fingerprint'))));
     app.get('/agent/v3/snapshot', async (c) => c.json(await runtime.snapshot(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), c.get('fingerprint'))));
     app.post('/agent/v3/report', async (c) => c.json(await runtime.report(c.get('node'), epoch(c.req.header('x-tunex-session-epoch')), parseRuntimeMessage('ReportRequest', await body(c.req.raw)), c.get('fingerprint'))));
+    app.post('/agent/v3/resource-usage', async c => c.json(await control.resourceUsage.handle(
+        c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),parseJson(await body(c.req.raw,524288),524288))));
+    app.post('/agent/v3/probe/echo/instance',async c=>c.json(await control.probeEchoRegistry.handle(
+        c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),parseJson(await body(c.req.raw,4096),4096))));
+    app.post('/agent/v3/probe/echo/poll',async c=>c.json(await control.probeEcho.poll(
+        c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),parseJson(await body(c.req.raw,4096),4096))));
+    app.post('/agent/v3/probe/echo/claim',async c=>c.json(await control.probeEcho.claim(
+        c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),parseJson(await body(c.req.raw,4096),4096))));
+    app.post('/agent/v3/probe/echo/status',async c=>c.json(await control.probeEcho.status(
+        c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),parseJson(await body(c.req.raw,4096),4096))));
+    app.post('/agent/v3/probe/echo/result',async c=>c.json(await control.probeEcho.result(
+        c.get('node'),c.get('fingerprint'),epoch(c.req.header('x-tunex-session-epoch')),parseJson(await body(c.req.raw,8192),8192))));
     return app;
 }
 

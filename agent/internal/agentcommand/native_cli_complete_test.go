@@ -97,7 +97,7 @@ func cliCompleteHost(p *cliCompletePlatform, construct func(control.Options) (Ru
 }
 
 func TestAgentCLICompleteEveryRunnerOptionAndNativeCancelBeforeLockRelease(t *testing.T) {
-	if InterfaceVersion != 1 || agentcli.InterfaceVersion != 1 {
+	if InterfaceVersion != 2 || agentcli.InterfaceVersion != 2 {
 		t.Fatal("existing command/native public interface versions changed")
 	}
 	for _, enabled := range []bool{false, true} {
@@ -110,6 +110,7 @@ func TestAgentCLICompleteEveryRunnerOptionAndNativeCancelBeforeLockRelease(t *te
 		options.ProbeIngress = enabled
 		options.ProbeServices = enabled
 		options.ProbeEcho = enabled
+        options.ProbePathEcho = enabled
 		options.Diagnostics = enabled
 		options.Telemetry = enabled
 		options.ForwardTelemetry = enabled
@@ -140,7 +141,7 @@ func TestAgentCLICompleteEveryRunnerOptionAndNativeCancelBeforeLockRelease(t *te
 		if enabled {
 			diagnostics = "native-diagnostics"
 		}
-		want := control.Options{URL: options.URL, NodeID: options.NodeID, BootID: "one-boot", CA: options.CA, Certificate: "resolved-cert", PrivateKey: "resolved-private", Journal: "resolved-journal", JournalKey: "resolved-key", Rotate: enabled, Relay: enabled, Multihop: enabled, ProbeRegistration: enabled, ProbeExecution: enabled, ProbeIngress: enabled, ProbeServices: enabled, ProbeEcho: enabled, ImportTransitJournal: options.ImportTransitJournal, TimeProof: options.TimeProof, TimeProofKey: options.TimeProofKey, Diagnostics: diagnostics, Telemetry: enabled, ForwardTelemetry: enabled, HostTelemetry: enabled, ProbeTelemetry: enabled}
+		want := control.Options{URL: options.URL, NodeID: options.NodeID, BootID: "one-boot", CA: options.CA, Certificate: "resolved-cert", PrivateKey: "resolved-private", Journal: "resolved-journal", JournalKey: "resolved-key", Rotate: enabled, Relay: enabled, Multihop: enabled, ProbeRegistration: enabled, ProbeExecution: enabled, ProbeIngress: enabled, ProbeServices: enabled, ProbeEcho: enabled, ProbePathEcho: enabled, ImportTransitJournal: options.ImportTransitJournal, TimeProof: options.TimeProof, TimeProofKey: options.TimeProofKey, Diagnostics: diagnostics, Telemetry: enabled, ForwardTelemetry: enabled, HostTelemetry: enabled, ProbeTelemetry: enabled}
 		if !reflect.DeepEqual(captured, want) {
 			t.Fatalf("complete original Runner projection got %#v want %#v", captured, want)
 		}
@@ -486,7 +487,7 @@ const cliCompleteNativeFixture = `package agentcommand
 import("bytes";"context";"errors";"flag";"fmt";"io";"os";"os/exec";"path/filepath";"reflect";"strings";"syscall";"testing")
 type Native struct{}
 type Paths struct{Root,KeyPath,Certificate,PrivateKey,Journal string}
-type Options struct{URL,NodeID,CA,Directory,JournalKey string;Enroll,Rotate,Relay,Multihop bool;ProbeRegistration,ProbeExecution,ProbeIngress,ProbeServices,ProbeEcho bool;ImportTransitJournal,TimeProof,TimeProofKey string;Diagnostics,Telemetry,ForwardTelemetry,HostTelemetry,ProbeTelemetry,InspectJournal bool}
+type Options struct{URL,NodeID,CA,Directory,JournalKey string;Enroll,Rotate,Relay,Multihop bool;ProbeRegistration,ProbeExecution,ProbeIngress,ProbeServices,ProbeEcho,ProbePathEcho bool;ImportTransitJournal,TimeProof,TimeProofKey string;Diagnostics,Telemetry,ForwardTelemetry,HostTelemetry,ProbeTelemetry,InspectJournal bool}
 type enrollmentOptionsFixture struct{URL,NodeID,CA,Root,KeyPath,CertificatePath,PrivatePath,JournalPath string}
 type controlOptionsFixture struct{marker string}
 type commandRunnerFixture interface{Run(context.Context)error}
@@ -583,6 +584,7 @@ var originalFlagsFixture=[]flagRecordFixture{
  {"probe-execution","bool","Opt in to bounded connect-only Probe tasks; requires --probe-registration",false},
  {"probe-ingress","bool","Opt in to local current Direct TCP ingress connect; requires --probe-registration and --probe-execution; may trigger the original listener's downstream dial",false},
  {"probe-services","bool","Opt in to exact pinned observation TLS handshake through current Direct ingress; requires --probe-ingress, --probe-execution and --probe-registration; TLS records count as real Forward payload",false},
+ {"probe-path-echo","bool","Opt in to controlled full path Echo from local Relay or multihop ingress; requires echo and relay",false},
  {"probe-echo","bool","Opt in to controlled TCP/UDP nonce echo through current Direct ingress; requires services, ingress, execution and registration; real payload and original UDP association idle lifetime apply",false},
  {"multihop","bool","Opt in to execution extension 1 and upgrade the protected journal; requires --relay",false},
  {"import-transit-journal","string","Explicit legacy offline Transit journal to import as retired high-water; requires --multihop",""},
@@ -611,8 +613,8 @@ func TestNativeOriginalEveryPreexistingGlobalFlagStopsAtRegistrationPrefix(t *te
 
 func TestNativeOriginalParsedValuesAreCapturedAndNativeParserStopsAtOperand(t *testing.T){
  originalCommandLine,originalArgs:=flag.CommandLine,os.Args;defer func(){flag.CommandLine=originalCommandLine;os.Args=originalArgs}()
- args:=[]string{"--control=https://control/é","-node","node value","--ca=ca-path","--state=state-path","--journal-key=key-path","--enroll","--rotate","--relay","--multihop","--probe-registration","--probe-execution","--probe-ingress","--probe-services","--probe-echo","--import-transit-journal=transit","--time-proof=proof","--time-proof-key=proof-key","--diagnostics","--telemetry","--forward-telemetry","--host-telemetry","--probe-telemetry","--inspect-journal"}
- resetFlagsFixture(args);captured:=ParseOptions();want:=Options{URL:"https://control/é",NodeID:"node value",CA:"ca-path",Directory:"state-path",JournalKey:"key-path",Enroll:true,Rotate:true,Relay:true,Multihop:true,ProbeRegistration:true,ProbeExecution:true,ProbeIngress:true,ProbeServices:true,ProbeEcho:true,ImportTransitJournal:"transit",TimeProof:"proof",TimeProofKey:"proof-key",Diagnostics:true,Telemetry:true,ForwardTelemetry:true,HostTelemetry:true,ProbeTelemetry:true,InspectJournal:true};sameFixture(t,captured,want);sameFixture(t,flagRecordsFixture,originalFlagsFixture)
+ args:=[]string{"--control=https://control/é","-node","node value","--ca=ca-path","--state=state-path","--journal-key=key-path","--enroll","--rotate","--relay","--multihop","--probe-registration","--probe-execution","--probe-ingress","--probe-services","--probe-echo","--probe-path-echo","--import-transit-journal=transit","--time-proof=proof","--time-proof-key=proof-key","--diagnostics","--telemetry","--forward-telemetry","--host-telemetry","--probe-telemetry","--inspect-journal"}
+ resetFlagsFixture(args);captured:=ParseOptions();want:=Options{URL:"https://control/é",NodeID:"node value",CA:"ca-path",Directory:"state-path",JournalKey:"key-path",Enroll:true,Rotate:true,Relay:true,Multihop:true,ProbeRegistration:true,ProbeExecution:true,ProbeIngress:true,ProbeServices:true,ProbeEcho:true,ProbePathEcho:true,ImportTransitJournal:"transit",TimeProof:"proof",TimeProofKey:"proof-key",Diagnostics:true,Telemetry:true,ForwardTelemetry:true,HostTelemetry:true,ProbeTelemetry:true,InspectJournal:true};sameFixture(t,captured,want);sameFixture(t,flagRecordsFixture,originalFlagsFixture)
  if err:=flag.Set("control","late replacement");err!=nil{t.Fatal(err)};if err:=flag.Set("relay","false");err!=nil{t.Fatal(err)};sameFixture(t,captured,want)
  resetFlagsFixture([]string{"--control=first","--control=last","--relay=false","--node=before","operand","--node=after"});value:=ParseOptions();if value.URL!="last"||value.NodeID!="before"||value.Relay{t.Fatal("native repeat/bool/operand parse changed",value)};sameFixture(t,flag.Args(),[]string{"operand","--node=after"})
  resetFlagsFixture([]string{"--","--control=literal"});if value:=ParseOptions();value!=(Options{}){t.Fatal(value)};sameFixture(t,flag.Args(),[]string{"--control=literal"})

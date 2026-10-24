@@ -2,6 +2,8 @@ import type { ProbeClaimBinding, ProbeServiceContext } from '@tunex/contracts/pr
 import type { ProbeEchoInvocation, ProbeEchoServiceContext } from '@tunex/contracts/staged/probe-echo';
 import { probeEchoServiceSelection } from './native-observability-codecs.ts';
 import { nativeIsoTime } from './native-module-values.ts';
+import { randomBytes } from 'node:crypto';
+export const nativeProbeEchoNonce=():string=>randomBytes(32).toString('base64');
 
 export interface NativeProbeEchoInvocationSource {
     readonly id:string; readonly measurement?:string; readonly binding:ProbeClaimBinding;

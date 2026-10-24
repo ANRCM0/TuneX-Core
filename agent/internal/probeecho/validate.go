@@ -85,7 +85,10 @@ func validated[T any](input T, parser func([]byte) (*T, error)) (*T, error) {
 	}
 	return parser(raw)
 }
-func IsEcho(value string) bool { return value == MeasurementTCP || value == MeasurementUDP }
+func IsPath(value string) bool { return value == MeasurementPathTCP || value == MeasurementPathUDP }
+func IsUDP(value string) bool { return value == MeasurementUDP || value == MeasurementPathUDP }
+func IsEcho(value string) bool { return value == MeasurementTCP || value == MeasurementUDP || IsPath(value) }
+func PathMeasurements() []string { return append(Measurements(), MeasurementPathTCP, MeasurementPathUDP) }
 func Measurements() []string {
 	return []string{"tcp-connect-v1", "tcp-ingress-connect-v1", "tcp-ingress-tls-v1", MeasurementTCP, MeasurementUDP}
 }
@@ -102,7 +105,16 @@ func DescriptorFor(measurement string) (Descriptor, error) {
 	case "tcp-ingress-tls-v1":
 		descriptor.TaskKind = "tcp-ingress-tls"
 		descriptor.Capability = "probe.tcp-ingress-tls.v1"
-	case MeasurementTCP:
+	case MeasurementPathTCP:
+        descriptor.TaskKind = "tcp-path-echo"
+        descriptor.Point = "agent-local-forward-ingress"
+        descriptor.Capability = "probe.tcp-path-echo.v1"
+    case MeasurementPathUDP:
+        descriptor.TaskKind = "udp-path-echo"
+        descriptor.Point = "agent-local-forward-ingress"
+        descriptor.Capability = "probe.udp-path-echo.v1"
+        descriptor.BusinessProtocol = "udp"
+    case MeasurementTCP:
 		descriptor.TaskKind = "tcp-ingress-echo"
 		descriptor.Capability = "probe.tcp-ingress-echo.v1"
 	case MeasurementUDP:
@@ -293,6 +305,9 @@ func ParsePollResponse(raw []byte) (*PollResponse, error) {
 	}
 	if value.Offer != nil {
 		offer := value.Offer
+		supported := false
+		for _, measurement := range value.Measurements { if measurement == offer.Measurement { supported = true } }
+		if !supported { return nil, invalid() }
 		var selection *Selection
 		if offer.ServiceContext != nil {
 			context, err := validated(*offer.ServiceContext, ParseServiceContext)
@@ -387,7 +402,7 @@ func ParseResultRequest(raw []byte) (*ResultRequest, error) {
 	if IsEcho(value.Measurement) {
 		if value.TLS != nil || !(value.Status == "echoed" && value.Code == "nonce-echo-verified" && value.Echo != nil && value.RequestBytes == 256 && value.ResponseBytes == 256 ||
 			value.Status == "unverified" && value.Code == "nonce-echo-rejected" && value.Echo == nil && value.RequestBytes == 256 ||
-			value.Measurement == MeasurementTCP && value.Status == "unreachable" && value.Code == "tcp-connect-failed" && value.Echo == nil && value.RequestBytes == 0 && value.ResponseBytes == 0) {
+			(value.Measurement == MeasurementTCP || value.Measurement == MeasurementPathTCP) && value.Status == "unreachable" && value.Code == "tcp-connect-failed" && value.Echo == nil && value.RequestBytes == 0 && value.ResponseBytes == 0) {
 			return nil, invalid()
 		}
 		if value.Echo != nil {

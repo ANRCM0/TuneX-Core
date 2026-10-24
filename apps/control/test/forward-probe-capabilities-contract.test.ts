@@ -57,7 +57,7 @@ function fixture() {
 
 test('capability query exports v1, authorizes before intent and delegates basic preflight to the original planner', async () => {
     const f = fixture(), view = await f.get();
-    assert.equal(FORWARD_PROBE_CAPABILITY_API_INTERFACE_VERSION, 1);
+    assert.equal(FORWARD_PROBE_CAPABILITY_API_INTERFACE_VERSION, 3);
     assert.deepEqual(f.calls, ['transaction', 'scope', 'owned', 'intent', 'tcp-connect', 'tcp-ingress-connect']);
     assert.equal(view.items.length, 5); assert.equal(view.mode, 'direct');
     assert.equal(view.items[0]!.preflight.state, 'available'); assert.equal(view.items[1]!.preflight.state, 'available');
@@ -85,7 +85,9 @@ test('Relay and multihop refuse active execution while profile-only intent retai
     for (const via of [['node-b'], ['node-b', 'node-c']]) {
         const f = fixture(); f.state.forward = { ...f.state.forward, spec: { ...f.state.forward.spec, path: { via }, transport: { profileId: 'profile-a', configRevision: 1 } } };
         const view = await f.get(); assert.equal(view.mode, via.length === 1 ? 'relay' : 'multihop');
-        assert.ok(view.items.every(item => item.transportSupport === 'unsupported' && item.preflight.state === 'unsupported'));
+        assert.equal(view.capabilityVersion,2);assert.equal(view.items.length,7);
+        assert.ok(view.items.slice(0,5).every(item=>item.transportSupport==='unsupported'&&item.preflight.state==='unsupported'));
+        assert.ok(view.items.slice(5).every(item=>item.transportSupport==='supported'&&item.preflight.state==='requires-controlled-service'&&item.issuance==='disabled'));
         assert.deepEqual(f.calls, ['transaction', 'scope', 'owned', 'intent']);
         assert.equal(view.diagnostics.networkCheck, 'not-performed');
     }
@@ -101,7 +103,7 @@ test('issuance switches, controlled-service requirements and echo command suppor
     assert.equal(view.items[0]!.preflight.state, 'available'); assert.equal(view.items[0]!.issuance, 'disabled');
     assert.equal(view.items[2]!.preflight.state, 'requires-controlled-service'); assert.equal(view.items[2]!.issuance, 'disabled');
     for (const item of view.items.slice(3)) {
-        assert.equal(item.preflight.state, 'requires-controlled-service'); assert.equal(item.issuance, 'not-dispatchable');
+        assert.equal(item.preflight.state, 'requires-controlled-service'); assert.equal(item.issuance, 'disabled');
         assert.equal(item.preflight.expiresAt, null);
     }
     assert.equal(f.calls.filter(call => call.startsWith('tcp-')).length, 2);

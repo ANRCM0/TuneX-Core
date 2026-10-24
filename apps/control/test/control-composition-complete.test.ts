@@ -32,7 +32,7 @@ function fixture() {
     constructor(...args: any[]) {
       const target: Instance = { name, args };
       if (name === 'RelayCoordinator') target.multihopEnabled = args[6];
-      if (name === 'ForwardProbes') Object.assign(target, { enabled: args[4], ingressEnabled: args[5], servicesEnabled: args[6] });
+      if (name === 'ForwardProbes') Object.assign(target, { enabled: args[4], ingressEnabled: args[5], servicesEnabled: args[6], echoEnabled: args[7], pathEchoEnabled: args[8] });
       const cache = new Map<PropertyKey, any>();
       const proxy = new Proxy(target, { get(object, key, receiver) {
         if (Reflect.has(object, key)) return Reflect.get(object, key, receiver);
@@ -59,14 +59,15 @@ const plain = (value: unknown) => JSON.parse(JSON.stringify(value));
 test('208 actual Control composition preserves field initializer and every original constructor group before deferred callbacks', () => {
   const f = fixture(), control = f.construct(undefined, false, false, false, false);
   assert.deepEqual(f.built.map(value => value.name), [
-    'Forwarding', 'Idempotency', 'MySqlResourceAccessStore', 'ResourceAccess', 'MySqlRuntimeResourceStore', 'MySqlNodeAuthorityStore', 'MySqlSharedResourceLimitStore', 'SharedResourceLimits', 'MySqlManagementReadStore', 'ConsoleReadModels', 'ConsoleQueries',
+    'Forwarding', 'Idempotency', 'MySqlAccountCredentialStore', 'IdentityCredentials', 'MySqlResourceAccessStore', 'ResourceAccess', 'MySqlRuntimeResourceStore', 'MySqlNodeAuthorityStore', 'MySqlResourceUsageStore', 'ResourceUsage', 'MySqlNodeAuthorityStore', 'MySqlSharedResourceLimitStore', 'SharedResourceLimits', 'MySqlManagementReadStore', 'ConsoleReadModels', 'ConsoleQueries',
     'MySqlTransitMachineReader', 'TransitNegotiationService', 'MySqlTransitDeliveryStore', 'MySqlTransitCoordinationStore', 'TransitCoordinationService', 'TransitPreviewDelivery',
     'NativeDrivers', 'MySqlTunnelMetadataReadStore', 'TunnelReadModels', 'TunnelQueries', 'MySqlNodeObservationReader', 'NodeObservations',
-    'MySqlObservationServiceStore', 'ProbeObservationServices', 'MySqlProbeReader', 'ForwardProbePlans', 'MySqlProbeMachineReader', 'ProbeNegotiator',
+    'MySqlObservationServiceStore', 'ProbeObservationServices', 'MySqlProbeReader', 'MySqlProbeReader', 'ForwardPathProbePlans', 'ForwardProbePlans', 'MySqlProbeMachineReader', 'ProbeNegotiator',
     'MySqlProbeMachineReader', 'MySqlProbeInstanceStore', 'ProbeInstances', 'ProbeInstanceRegistry', 'MySqlProbeQualificationStore',
     'MySqlProbeMachineReader', 'MySqlProbeInstanceStore', 'ProbeTypeRegistry', 'MySqlProbeMachineReader', 'MySqlProbeInstanceStore', 'ProbeServiceRegistry',
-    'MySqlProbePermitIntents', 'MySqlProbeReader', 'ForwardProbePlans', 'MySqlProbeMachineReader', 'MySqlProbeInstanceStore', 'MySqlProbePermitStore',
-    'MySqlProbeHistoryStore', 'ProbeRunHistoryRecorder', 'ProbePermits', 'ProbeClaims', 'ProbeDelivery', 'ProbeResults', 'ProbeTypes', 'ProbeServices', 'ForwardProbes', 'ForwardProbeCapabilities',
+    'MySqlProbeMachineReader', 'MySqlProbeInstanceStore', 'ProbeEchoRegistry',
+    'MySqlProbePermitIntents', 'MySqlProbeReader', 'MySqlProbeReader', 'ForwardPathProbePlans', 'ForwardProbePlans', 'MySqlProbeHistoryStore', 'ProbePathObservations', 'MySqlProbeMachineReader', 'MySqlProbeInstanceStore', 'MySqlProbePermitStore',
+    'MySqlProbeHistoryStore', 'ProbeRunHistoryRecorder', 'ProbePermits', 'ProbeClaims', 'ProbeDelivery', 'ProbeResults', 'ProbeTypes', 'ProbeServices', 'ProbeEcho', 'ForwardProbes', 'ForwardProbeCapabilities',
     'RelayAssignmentSource', 'SnapshotAssignmentRegistry', 'RuntimeLedger', 'Transport', 'MySqlProfileReferenceReadStore', 'TransportReferenceReadModels', 'TransportQueries', 'RelayEndpoints',
     'MySqlPathTemplateStore', 'NativePathReferences', 'PathTemplateCommands', 'PathTemplateQueries', 'MySqlPathBindingStore', 'PathBindings', 'MySqlPathGroupStore', 'MySqlPathGroupBindingStore', 'PathGroups',
     'RelayCoordinator', 'RelayPlans', 'ForwardCommandExecutor', 'ForwardCommands', 'MySqlPathPublicationStore', 'PathPublications', 'MySqlIngressGroupStore', 'IngressGroups',
@@ -83,7 +84,7 @@ test('208 actual Control composition preserves field initializer and every origi
   assert.deepEqual(args('ConsoleQueries'), [f.db, f.identity, f.one('ConsoleReadModels'), control.readAccess]);
   assert.equal(control.readAccess, f.one('ResourceAccess')); assert.equal(control.resourceLimits, f.one('SharedResourceLimits'));
   const payload = args('SharedResourceLimits')[0];
-  assert.equal(payload.db, f.db); assert.equal(payload.identity, f.identity); assert.equal(payload.nodes, f.one('MySqlNodeAuthorityStore'));
+  assert.equal(payload.db, f.db); assert.equal(payload.identity, f.identity); assert.equal(payload.nodes, f.one('MySqlNodeAuthorityStore',1));
   assert.equal(payload.owners, f.one('MySqlRuntimeResourceStore')); assert.equal(payload.runtime, f.resources); assert.equal(payload.store, f.one('MySqlSharedResourceLimitStore'));
   assert.equal(args('MySqlManagementReadStore')[0].now, f.bindings.nativeReadProjectionValues.now);
   assert.equal(args('ConsoleReadModels')[1], f.bindings.nativeReadProjectionValues); assert.equal(args('TunnelReadModels')[1], f.bindings.nativeReadProjectionValues);
@@ -94,9 +95,16 @@ test('208 actual Control composition preserves field initializer and every origi
   assert.equal(args('ProbeTypeRegistry')[3], qualification); assert.equal(args('ProbeServiceRegistry')[3], qualification); assert.equal(args('ProbePermits')[9], qualification);
   assert.equal(args('ForwardProbePlans')[2], control.readAccess); assert.equal(args('ForwardProbePlans', 1)[2], control.readAccess);
   assert.equal(args('ForwardProbePlans')[3], control.forwarding); assert.equal(args('ForwardProbePlans', 1)[3], f.one('MySqlProbePermitIntents'));
-  assert.deepEqual(args('MySqlProbeReader'), []); assert.deepEqual(args('MySqlProbeReader', 1), [true]);
+  assert.deepEqual(args('MySqlProbeReader'), []); assert.deepEqual(args('MySqlProbeReader', 1), []);
+  assert.deepEqual(args('MySqlProbeReader', 2), [true]); assert.deepEqual(args('MySqlProbeReader', 3), [true]);
+  assert.equal(args('ForwardProbePlans')[9],f.one('ForwardPathProbePlans'));
+  assert.equal(args('ForwardProbePlans',1)[9],f.one('ForwardPathProbePlans',1));
+  assert.equal(args('ProbePathObservations')[3],f.one('ForwardProbePlans',1));
+  assert.equal(args('ProbeEcho')[0],control.probePermits);assert.equal(args('ProbeEchoRegistry')[3],qualification);
+  assert.equal(payload.usage,control.resourceUsage);
   assert.equal(args('ForwardProbePlans')[7], f.one('ProbeObservationServices')); assert.equal(args('ForwardProbePlans', 1)[7], f.one('ProbeObservationServices'));
   assert.equal(args('ProbePermits')[2], control.readAccess); assert.equal(args('ProbePermits')[7], Date.now); assert.equal(args('ProbePermits')[8], f.one('ProbeRunHistoryRecorder'));
+  assert.equal(args('ProbePermits').length,11);assert.equal(args('ProbePermits')[10],args('ProbePermits')[6]);
   assert.deepEqual(args('ForwardProbeCapabilities'), [f.db, f.identity, control.readAccess, control.forwarding, control.probePlans, control.probes]);
   assert.equal(args('ForwardCommands')[2], control.readAccess); assert.equal(args('ForwardCommands')[3], control.idempotency); assert.equal(args('ForwardCommands')[4], control.forwarding); assert.equal(args('ForwardCommands')[5], control.ledger);
   assert.equal(args('PathTemplateCommands')[2], control.readAccess); assert.equal(args('PathTemplateCommands')[4], f.one('MySqlPathTemplateStore')); assert.equal(args('PathTemplateQueries')[3], f.one('MySqlPathTemplateStore'));
@@ -104,7 +112,7 @@ test('208 actual Control composition preserves field initializer and every origi
   assert.equal(args('PathBindings')[5], f.one('MySqlPathBindingStore')); assert.equal(args('PathGroups')[10], f.one('MySqlPathBindingStore'));
   assert.deepEqual(args('RelayCoordinator'), [f.nodes, control.forwarding, control.transport, control.relayEndpoints, control.ledger, undefined, false]);
   assert.equal(args('RuntimeStatusQueries')[1], f.bindings.nativeRuntimeStatusCodec); assert.equal(args('RuntimeStatusQueries')[2], DEFAULT_POLICY);
-  assert.deepEqual(plain(args('ControlQueries')[6]), { multihopEnabled: false, maxPathNodes: 8, executionExtension: 1, probeIssuanceEnabled: false, probeIngressIssuanceEnabled: false, probeServicesIssuanceEnabled: false });
+  assert.deepEqual(plain(args('ControlQueries')[6]), { multihopEnabled: false, maxPathNodes: 8, executionExtension: 1, probeIssuanceEnabled: false, probeIngressIssuanceEnabled: false, probeServicesIssuanceEnabled: false, probeEchoIssuanceEnabled:false,probePathEchoIssuanceEnabled:false });
 });
 
 test('208 explicit feature policy and resource bindings reach only their original consumers', () => {
@@ -113,8 +121,8 @@ test('208 explicit feature policy and resource bindings reach only their origina
   assert.deepEqual(plain(f.one('NodeObservations').args[1]), { freshnessMs: 7000, clockSkewMs: 2000 });
   assert.equal(f.one('ForwardProbePlans').args[6], 2000); assert.equal(f.one('ForwardProbePlans', 1).args[6], 2000);
   assert.equal(f.one('RuntimeLedger').args[0], policy); assert.equal(f.one('RelayCoordinator').args[5], policy); assert.equal(f.one('RuntimeStatusQueries').args[2], policy);
-  assert.deepEqual(f.one('ForwardProbes').args.slice(4), [true, true, true]);
-  assert.deepEqual(plain(f.one('ControlQueries').args[6]), { multihopEnabled: true, maxPathNodes: 8, executionExtension: 1, probeIssuanceEnabled: true, probeIngressIssuanceEnabled: true, probeServicesIssuanceEnabled: true });
+  assert.deepEqual(f.one('ForwardProbes').args.slice(4), [true, true, true, false, false]);
+  assert.deepEqual(plain(f.one('ControlQueries').args[6]), { multihopEnabled: true, maxPathNodes: 8, executionExtension: 1, probeIssuanceEnabled: true, probeIngressIssuanceEnabled: true, probeServicesIssuanceEnabled: true, probeEchoIssuanceEnabled:false,probePathEchoIssuanceEnabled:false });
   assert.equal(control.ledger, f.one('ForwardCommandExecutor').args[1]); assert.equal(control.ledger, f.one('ForwardCommands').args[5]);
 });
 
@@ -122,7 +130,7 @@ test('208 deferred Relay and migration origin callbacks select the original late
   const f = fixture(), control = f.construct(undefined, false, false, false, false);
   const source = f.one('RelayAssignmentSource').args[0];
   assert.equal(source.assignments(f.tx, 'node', true), f.token);
-  assert.deepEqual(f.calls.pop(), { owner: control.relay, name: 'RelayCoordinator.assignments', args: [f.tx, 'node', true] });
+  assert.deepEqual(f.calls.pop(), { owner: control.relay, name: 'RelayCoordinator.assignmentsForNode', args: [f.tx, 'node', true] });
   const origin = f.one('IngressMigrations').args[6];
   for (const kind of ['deployment', 'migration', 'other']) {
     const ref = { kind, id: 'original' }, owner = kind === 'deployment' ? control.ingressDeployments : control.ingressMigrations;

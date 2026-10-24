@@ -1,10 +1,11 @@
 const limits = { policiesPerScope: 64, eventsPerScope: 1024, auditPerScope: 256, auditPage: 16, eventPage: 50,
   eventRetentionMs: 2592000000, evaluationIntervalMs: 30000, silenceMaxMs: 604800000, responseBytes: 262144,
   activeRequests: 2, actorKeys: 128, cooldownMs: 1000 };
-const rules = ['forward-operation-failed','node-report-stale','node-credential-expiring'];
+const rules = ['forward-operation-failed','node-report-stale','node-credential-expiring','shared-usage-high','shared-period-ending','recent-path-probe-degraded'];
 const reasons = ['operation-failed','deployment-succeeded','deployment-succeeded-after-failure','operation-in-progress','administrative-state','target-unavailable',
   'recovery-suspended','evidence-unavailable','evidence-invalid','clock-regression','clock-uncertain','report-stale','report-fresh',
-  'fresh-baseline-required','instance-changed','credential-expiring','credential-expired','credential-valid','credential-renewed','recovery-not-proven'];
+  'fresh-baseline-required','instance-changed','credential-expiring','credential-expired','credential-valid','credential-renewed','recovery-not-proven',
+  'usage-high','usage-below-threshold','usage-unknown','period-ending','period-ended','period-valid','period-changed','path-sample-failed','path-sample-slow','path-sample-within-threshold','path-sample-stale','path-binding-changed'];
 const errors = ['AUTHORIZATION_DENIED','EXECUTION_DEADLINE','INTEGRITY_FAILURE','INVALID_CONFIG','UNSUPPORTED_CAPABILITY','RESOURCE_CONFLICT',
   'RESOURCE_LIMIT','PORT_RESERVED','FENCING_REJECTED','LEASE_EXPIRED','SESSION_SUPERSEDED','LISTEN_FAILED','BIND_FAILED','TARGET_DENIED',
   'CONNECT_FAILED','DIAL_FAILED','PEER_UNAVAILABLE','TLS_FAILED','RELAY_HANDSHAKE_FAILED','DRAIN_TIMEOUT','INTERNAL_ERROR','CLOCK_UNCERTAIN',
@@ -30,8 +31,15 @@ async function digest(value) {
   const result = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(value)));
   return 'sha256:' + Array.from(new Uint8Array(result), byte => byte.toString(16).padStart(2, '0')).join('');
 }
-const configShape = shape({ schemaVersion: one(1), rule: one(...rules), target: shape({ kind: one('forward','node'), id }), enabled: bool, thresholdSeconds: uint });
-const configValid = value => configShape(value) && (value.rule === 'forward-operation-failed' ? value.target.kind === 'forward' && value.thresholdSeconds === 0 :
+const configShape = shape({ schemaVersion: one(1), rule: one(...rules.slice(0,3)), target: shape({ kind: one('forward','node'), id }), enabled: bool, thresholdSeconds: uint });
+const resourceConfigShape = shape({schemaVersion:one(2),rule:one('shared-usage-high','shared-period-ending'),target:shape({kind:one('node'),id}),
+  enabled:bool,thresholdSeconds:uint,subjectActorId:id,thresholdPercent:nullable(positive)});
+const pathConfigShape=shape({schemaVersion:one(3),rule:one('recent-path-probe-degraded'),target:shape({kind:one('forward'),id}),enabled:bool,thresholdSeconds:one(0),
+  measurement:one('tcp-path-echo-v1','udp-path-echo-v1'),maxSampleAgeSeconds:positive,maxElapsedMs:positive});
+const configValid = value => pathConfigShape(value)?value.maxSampleAgeSeconds>=30&&value.maxSampleAgeSeconds<=300&&value.maxElapsedMs<=2000:
+  resourceConfigShape(value) ? value.rule === 'shared-usage-high' ? value.thresholdSeconds === 0 &&
+  positive(value.thresholdPercent) && value.thresholdPercent <= 100 : value.thresholdPercent === null && value.thresholdSeconds >= 60 && value.thresholdSeconds <= 604800 :
+  configShape(value) && (value.rule === 'forward-operation-failed' ? value.target.kind === 'forward' && value.thresholdSeconds === 0 :
   value.target.kind === 'node' && (value.rule === 'node-report-stale' ? value.thresholdSeconds >= 30 && value.thresholdSeconds <= 3600 :
     value.thresholdSeconds >= 60 && value.thresholdSeconds <= 604800));
 const operationShape = shape({ kind: one('operation'), targetId: id, forwardRevision: positive, operationId: id, targetRevision: positive,
@@ -41,7 +49,17 @@ const operation = value => operationShape(value) && value.updatedAt >= value.cre
 const report = shape({ kind: one('node-report'), targetId: id, bootId: id, sessionEpoch: positive, reportSequence: positive, snapshotGeneration: positive,
   observedAt: time, receivedAt: time, credentialUntil: time });
 const credential = shape({ kind: one('node-credential'), targetId: id, credentialUntil: time });
-const evidence = value => operation(value) || report(value) || credential(value) || shape({ kind: one('unavailable'), targetId: id })(value);
+const decimal = value => typeof value === 'string' && /^(0|[1-9][0-9]{0,15})$/.test(value) && BigInt(value) <= 9007199254740991n;
+const resourceEvidenceShape = shape({kind:one('resource-limit'),targetId:id,actorId:id,bucketId:id,policyRevision:positive,
+  startsAt:time,endsAt:time,byteLimit:nullable(decimal),usedBytes:nullable(decimal),receivedAt:nullable(time),usageStatus:one('fresh','stale','unknown','policy-outdated')});
+const resourceEvidence = value => resourceEvidenceShape(value) && value.startsAt < value.endsAt &&
+  (value.usageStatus !== 'fresh' || value.usedBytes !== null && value.receivedAt !== null) &&
+  (value.usageStatus !== 'unknown' || value.usedBytes === null && value.receivedAt === null);
+const pathEvidenceShape=shape({kind:one('path-probe'),targetId:id,forwardRevision:positive,bindingDigest:hash,probeId:id,
+  measurement:one('tcp-path-echo-v1','udp-path-echo-v1'),status:one('echoed','unverified','unreachable'),elapsedMs:uint,measuredAt:time,acceptedAt:time,validUntil:time});
+const pathEvidence=value=>pathEvidenceShape(value)&&value.elapsedMs<=2000&&value.measuredAt<=value.acceptedAt&&value.acceptedAt<value.validUntil&&
+  !(value.measurement==='udp-path-echo-v1'&&value.status==='unreachable');
+const evidence = value => operation(value) || report(value) || credential(value) || resourceEvidence(value) || pathEvidence(value) || shape({ kind: one('unavailable'), targetId: id })(value);
 const evaluation = shape({ status: one('clear','firing','unknown'), reason: one(...reasons), instanceKey: nullable(hash), evidence });
 const stateShape = shape({ condition: one('unknown','clear','firing'), episode: uint, instanceKey: nullable(hash), armed: bool,
   openedAt: nullable(time), opening: nullable(evidence), lastFiring: nullable(evidence), last: nullable(evaluation), evaluatedAt: nullable(time) });
@@ -53,7 +71,8 @@ const state = value => stateShape(value) && (value.last === null) === (value.eva
 const policyFields = { policyId: id, revision: positive, configRevision: positive, config: configValid, configDigest: hash, managedBy: id,
   createdAt: time, updatedAt: time, silencedUntil: nullable(time), suspended: one('none','recovery','actor-not-authorized'), nextEvaluateAt: time };
 const boundEvidence = (config, value) => value.targetId === config.target.id && (value.kind === 'unavailable' || value.kind ===
-  (config.rule === 'forward-operation-failed' ? 'operation' : config.rule === 'node-report-stale' ? 'node-report' : 'node-credential'));
+  (config.schemaVersion===3?'path-probe':config.schemaVersion === 2 ? 'resource-limit' : config.rule === 'forward-operation-failed' ? 'operation' : config.rule === 'node-report-stale' ? 'node-report' : 'node-credential') &&
+  (config.schemaVersion !== 2 || value.actorId === config.subjectActorId)&&(config.schemaVersion!==3||value.measurement===config.measurement));
 const policyShape = shape({ ...policyFields, state });
 const policy = value => policyShape(value) && value.updatedAt >= value.createdAt &&
   [value.state.opening,value.state.lastFiring,value.state.last?.evidence].every(item => !item || boundEvidence(value.config, item));
@@ -77,12 +96,12 @@ const bounded = value => new TextEncoder().encode(JSON.stringify(value)).byteLen
 const explicitRejection = error => [400,401,403,404,409,413,422,429].includes(error.httpStatus);
 const stamp = value => value === null ? '未知 / 无记录（不是零）' : new Date(value).toISOString() + '\nAsia/Shanghai: ' +
   new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
-const timeKeys = new Set(['createdAt','updatedAt','silencedUntil','nextEvaluateAt','evaluatedAt','openedAt','observedAt','receivedAt','credentialUntil','occurredAt','acknowledgedAt']);
+const timeKeys = new Set(['createdAt','updatedAt','silencedUntil','nextEvaluateAt','evaluatedAt','openedAt','observedAt','receivedAt','credentialUntil','occurredAt','acknowledgedAt','measuredAt','acceptedAt','validUntil']);
 const show = value => JSON.stringify(value, (key, item) => timeKeys.has(key) && time(item) ? stamp(item) : item, 2);
 
 export function initStationAlerts({ request, notify, byId, getScope, document = globalThis.document, confirm = globalThis.confirm, randomUUID = () => crypto.randomUUID() }) {
   const el = name => byId('station-alert-' + name);
-  const policyInputs = ['policy-id','expected','rule','target-id','enabled','threshold','silence-until'];
+  const policyInputs = ['policy-id','expected','rule','target-id','enabled','threshold','subject','percent','path-measurement','sample-age','sample-elapsed','silence-until'];
   const historyInputs = ['from','to','limit','filter-policy','filter-target','filter-rule','filter-kind','filter-ack'];
   const inputs = [...policyInputs,...historyInputs,'event-id'];
   const reads = ['policies-read','policy-read','events-read','event-read'];
@@ -107,7 +126,7 @@ export function initStationAlerts({ request, notify, byId, getScope, document = 
   function clear() {
     pending = null; sending = false; invalidate();
     for (const name of inputs) if (el(name).type === 'checkbox') el(name).checked = false; else el(name).value = '';
-    const now = Date.now(); el('expected').value = '0'; el('rule').value = 'forward-operation-failed'; el('threshold').value = '0';
+    const now = Date.now(); el('expected').value = '0'; el('rule').value = 'forward-operation-failed'; el('threshold').value = '0';el('percent').value='80';el('path-measurement').value='tcp-path-echo-v1';el('sample-age').value='120';el('sample-elapsed').value='250';
     el('from').value = new Date(now - 86400000).toISOString(); el('to').value = new Date(now).toISOString(); el('limit').value = '25';
     controls(); message('本片仅站内事件/固定政策。Viewer 手动读事件；manager 每次由后端核验写权限。没有自动读取、网络探测或外发。');
   }
@@ -163,6 +182,7 @@ export function initStationAlerts({ request, notify, byId, getScope, document = 
         loadedPolicy = JSON.parse(JSON.stringify(data.policy)); const config = data.policy.config;
         el('expected').value = String(data.policy.revision); el('rule').value = config.rule; el('target-id').value = config.target.id;
         el('enabled').checked = config.enabled; el('threshold').value = String(config.thresholdSeconds);
+        el('subject').value = config.subjectActorId ?? ''; el('percent').value = String(config.thresholdPercent ?? 80);el('path-measurement').value=config.measurement??'tcp-path-echo-v1';el('sample-age').value=String(config.maxSampleAgeSeconds??120);el('sample-elapsed').value=String(config.maxElapsedMs??250);
         el('policy-output').textContent = show({ policy: data.policy, audit: data.audit });
       } else if (kind === 'event') {
         if (!envelope({ event }, scope)(data) || data.event.id !== selectedId || !await hashes([data.event])) throw Error('站内事件或摘要无效');
@@ -215,8 +235,12 @@ export function initStationAlerts({ request, notify, byId, getScope, document = 
     return true;
   }
   function draft() {
-    const config = { schemaVersion: 1, rule: el('rule').value, target: { kind: el('rule').value === 'forward-operation-failed' ? 'forward' : 'node', id: el('target-id').value.trim() },
+    const path=el('rule').value==='recent-path-probe-degraded',resource = ['shared-usage-high','shared-period-ending'].includes(el('rule').value);
+    const config = { schemaVersion: path?3:resource ? 2 : 1, rule: el('rule').value, target: { kind: path||el('rule').value === 'forward-operation-failed' ? 'forward' : 'node', id: el('target-id').value.trim() },
+      ...(resource ? {subjectActorId:el('subject').value.trim(),thresholdPercent:el('rule').value === 'shared-usage-high' ? Number(el('percent').value) : null} : {}),
+      ...(path?{measurement:el('path-measurement').value,maxSampleAgeSeconds:Number(el('sample-age').value),maxElapsedMs:Number(el('sample-elapsed').value)}:{}),
       enabled: el('enabled').checked, thresholdSeconds: Number(el('threshold').value) };
+    if(path&&![el('sample-age').value,el('sample-elapsed').value].every(value=>/^[1-9][0-9]*$/.test(value)))throw Error('样本年龄与耗时阈值必须是明确整数。');
     if (!/^(0|[1-9][0-9]*)$/.test(el('threshold').value) || !configValid(config)) throw Error('固定规则目标/阈值无效；Forward 失败阈值 0，Node 过期报告 30–3600 秒，凭据到期 60–604800 秒');
     const policyId = el('policy-id').value.trim(), revision = el('expected').value;
     if (!id(policyId) || !/^(0|[1-9][0-9]*)$/.test(revision) || !uint(Number(revision))) throw Error('需要政策 ID 与明确 CAS，创建填 0');
@@ -266,7 +290,7 @@ export function initStationAlerts({ request, notify, byId, getScope, document = 
     if (name === 'silence-until') return;
     invalidate(); message('输入已改变，旧资格/历史/游标已清除；请手动重读或明确提交，不自动执行。');
   });
-  el('rule').addEventListener('change', () => { if (!pending && !sending) el('threshold').value = el('rule').value === 'forward-operation-failed' ? '0' : el('rule').value === 'node-report-stale' ? '300' : '86400'; });
+  el('rule').addEventListener('change', () => { if (!pending && !sending) el('threshold').value = ['forward-operation-failed','shared-usage-high','recent-path-probe-degraded'].includes(el('rule').value) ? '0' : el('rule').value === 'node-report-stale' ? '300' : '86400'; });
   for (const [name, kind] of [['policies-read','policies'],['policy-read','policy'],['events-read','events'],['event-read','event']]) el(name).addEventListener('click', () => read(kind));
   el('next').addEventListener('click', () => read('events', true));
   for (const kind of ['publish','silence','unsilence','acknowledge']) el(kind).addEventListener('click', () => command(kind));

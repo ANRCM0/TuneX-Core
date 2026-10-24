@@ -1,5 +1,14 @@
 # Browser Native Leaf Inventory v1
 
+P source additions (2026-10-24, unverified): `member-console.js` exports
+`memberListView`, `memberCommand`, `memberReceipt`, `initMemberConsole`;
+`account-credentials.js` exports `accountCredentialView`, `initAccountCredentials`, `requestAccountCredentials`;
+`task-workflow.js` exports `workflowSteps`, `createBoundedPageReads`, `batchProgress`.
+Each is an explicitly classified L2 presentation leaf. The original native
+console consumes these leaves; Path/Ingress batch leaves consume batchProgress.
+Existing 22-leaf entries retain their historical scope. Fixed HTTP assets and
+new public consumer cases are authored, with behavior/import/parity unexecuted.
+
 Date: 2026-10-19 (Asia/Shanghai).
 Status: manual source classification authored; behavior/boundaries unverified.
 Scope: the22 named leaves previously listed in browserSourceInventory.remainingSources.

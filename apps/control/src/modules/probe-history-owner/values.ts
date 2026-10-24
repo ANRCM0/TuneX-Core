@@ -13,7 +13,7 @@ export const PROBE_RUN_STATES = ['issued','consumed','revoked','quarantined'] as
 export const probeRunTime = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 253402300799999;
 const hash = (value: unknown): value is string => typeof value === 'string' && /^sha256:[a-f0-9]{64}$(?![\s\S])/.test(value);
 const hex = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$(?![\s\S])/.test(value);
-const echoMeasurement = (value: unknown) => value === 'tcp-ingress-echo-v1' || value === 'udp-ingress-echo-v1';
+const echoMeasurement = (value: unknown) => ['tcp-ingress-echo-v1','udp-ingress-echo-v1','tcp-path-echo-v1','udp-path-echo-v1'].includes(value as string);
 const serviceMeasurement = (value: unknown) => value === 'tcp-ingress-tls-v1' || echoMeasurement(value);
 const base64Bytes=nativeCanonicalBase64Bytes;
 function challenge(input:unknown):ProbeEchoChallenge {
@@ -35,11 +35,11 @@ function permit(value: Record<string,unknown>): ProbeRunPermit {
         (value.state==='issued' ? value.closedAt!==null : !probeRunTime(value.closedAt) || value.closedAt<value.issuedAt) ||
         value.state==='consumed'&&typeof value.closedAt==='number'&&value.closedAt>=value.expiresAt)
         invalid('Invalid Probe history permit summary');
-    if(Object.hasOwn(value,'measurement')&&!['tcp-ingress-connect-v1','tcp-ingress-tls-v1','tcp-ingress-echo-v1','udp-ingress-echo-v1'].includes(value.measurement as string))invalid('Invalid Probe history measurement');
+    if(Object.hasOwn(value,'measurement')&&!['tcp-ingress-connect-v1','tcp-ingress-tls-v1','tcp-ingress-echo-v1','udp-ingress-echo-v1','tcp-path-echo-v1','udp-path-echo-v1'].includes(value.measurement as string))invalid('Invalid Probe history measurement');
     const service=serviceMeasurement(value.measurement)?parseProbeServiceSelection(value.service):null;
     if(service!==null&&service.scopeId!==value.scopeId)invalid('Probe history service Scope differs');
     const echo=echoMeasurement(value.measurement)?challenge(value.echoChallenge):null;
-    const result:ProbeRunPermit={ ...(echo!==null?{measurement:value.measurement as 'tcp-ingress-echo-v1'|'udp-ingress-echo-v1',service:service!,echoChallenge:echo}:value.measurement==='tcp-ingress-tls-v1'?{measurement:'tcp-ingress-tls-v1' as const,service:service!}:
+    const result:ProbeRunPermit={ ...(echo!==null?{measurement:value.measurement as 'tcp-ingress-echo-v1'|'udp-ingress-echo-v1'|'tcp-path-echo-v1'|'udp-path-echo-v1',service:service!,echoChallenge:echo}:value.measurement==='tcp-ingress-tls-v1'?{measurement:'tcp-ingress-tls-v1' as const,service:service!}:
         value.measurement==='tcp-ingress-connect-v1'?{measurement:'tcp-ingress-connect-v1' as const}:{}), probeId:value.probeId as string,scopeId:value.scopeId as string,actorId:value.actorId as string,binding:{...value.binding},
         instanceId:value.instanceId,instanceGeneration:value.instanceGeneration,timeoutMs:value.timeoutMs,
         issuedAt:value.issuedAt,expiresAt:value.expiresAt,state:value.state as ProbeRunPermit['state'],closedAt:value.closedAt as number|null };
@@ -56,7 +56,7 @@ export function parseProbeRunResult(input: unknown, owner: ProbeRunPermit): Prob
     const tlsOwner=owner.measurement==='tcp-ingress-tls-v1',echoOwner=echoMeasurement(owner.measurement);
     const value=probeRunObject(input,['status','code','elapsedMs','measuredAt','validUntil','acceptedAt','resultDigest',...(tlsOwner?['tls']:[]),...(echoOwner?['echo','requestBytes','responseBytes']:[])]);
     const expectedCode=value.status==='echoed'?'nonce-echo-verified':value.status==='verified'?'tls-handshake-verified':value.status==='unverified'?(echoOwner?'nonce-echo-rejected':'tls-handshake-failed'):value.status==='connected'?'tcp-connected':'tcp-connect-failed';
-    const statuses=echoOwner?(owner.measurement==='udp-ingress-echo-v1'?['echoed','unverified']:['echoed','unverified','unreachable']):tlsOwner?['verified','unverified','unreachable']:['connected','unreachable'];
+    const statuses=echoOwner?((owner.measurement==='udp-ingress-echo-v1'||owner.measurement==='udp-path-echo-v1')?['echoed','unverified']:['echoed','unverified','unreachable']):tlsOwner?['verified','unverified','unreachable']:['connected','unreachable'];
     if (!statuses.includes(value.status as string) || value.code!==expectedCode ||
         !isCounter(value.elapsedMs,true) || value.elapsedMs>owner.timeoutMs || !probeRunTime(value.measuredAt) || !probeRunTime(value.validUntil) ||
         !probeRunTime(value.acceptedAt) || !hash(value.resultDigest) || owner.state!=='consumed' || owner.closedAt===null ||
@@ -106,7 +106,7 @@ export function probeRunImmutable(value: ProbeRunPermit): string {
 }
 export function publicProbeRun(value: ProbeRunRecord, capturedAt: number) {
     const descriptor=probeMeasurement(value.measurement??'tcp-connect-v1');
-    return deepFreeze({...value,kind:descriptor.taskKind,businessProtocol:value.measurement==='udp-ingress-echo-v1'?'udp':'tcp',point:descriptor.point,independentProbe:false,
+    return deepFreeze({...value,kind:descriptor.taskKind,businessProtocol:(value.measurement==='udp-ingress-echo-v1'||value.measurement==='udp-path-echo-v1')?'udp':'tcp',point:descriptor.point,independentProbe:false,
         applicationPayloadBytes:echoMeasurement(value.measurement)&&value.result!==null?(value.result.requestBytes??0)+(value.result.responseBytes??0):0,health:'unknown',executionAuthorized:false,historical:true,
         permitExpired:value.expiresAt<=capturedAt,resultExpired:value.result===null?null:value.result.validUntil<=capturedAt,
         resultSource:value.result===null?'not-received':'agent-reported',bindingMatchCurrent:'not-evaluated',

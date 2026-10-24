@@ -16,6 +16,8 @@ import { newToken } from '../../apps/control/src/modules/identity.ts';
 import { json, rows, write } from '../../apps/control/src/infrastructure/mysql.ts';
 import { issueFromConsole, verifyDisabledConsole, verifyHistoricalConsole } from './probe-console.ts';
 import { verifyRuleConsole } from './rule-console.ts';
+import { verifyControlledEcho } from './product-p-observation.ts';
+import { verifyProductConsole, verifyProductUsageConsole } from './product-p-console.ts';
 
 if (process.platform !== 'linux' || !process.env.GITHUB_ACTIONS || !process.env.TUNEX_TEST_DATABASE_URL)
     throw new Error('Probe combined acceptance requires disposable MySQL and a native Linux GitHub Actions runner');
@@ -31,6 +33,7 @@ const token = newToken(), actor = 'probe-owner', scope = 'probe-scope', checks: 
 const attempts: { probeId: string; connected: number; resultAccepted: boolean }[] = [];
 const policy = { ...DEFAULT_POLICY, pollIntervalSeconds: 1, leaseSeconds: 60, renewalLeadSeconds: 20, maxClockSkewSeconds: 1 };
 const browserEnabled = process.env.TUNEX_PROBE_BROWSER === '1';
+const productP = process.env.TUNEX_PRODUCT_P_ACCEPTANCE === '1';
 let control: Awaited<ReturnType<typeof startControl>> | undefined, agent: ChildProcess | undefined;
 let createdDatabase = false, ca: Buffer, agentArgs: string[] = [], nodeId = '', forwardId = '';
 let connections = 0, eof = 0, applicationBytes = 0;
@@ -93,7 +96,8 @@ async function ready(afterEpoch = 0) {
     }, 'registered Agent with current active Direct report');
 }
 function startAgent(execution: boolean) {
-    agent = spawn(binary, [...agentArgs, '--probe-registration', ...(execution ? ['--probe-execution'] : [])], { stdio: 'ignore' });
+    agent = spawn(binary, [...agentArgs, '--probe-registration', ...(execution ? ['--probe-execution',
+        ...(productP?['--probe-ingress','--probe-services','--probe-echo']:[])] : [])], { stdio: 'ignore' });
     agent.once('error', () => { console.error('Agent process could not start'); });
 }
 async function stopAgent() {
@@ -140,10 +144,11 @@ try {
         await verifyDisabledConsole({ url: `https://127.0.0.1:${control.port}`, scope, token, directory });
         passed('Real HTTPS Chromium Console keeps credentials out of storage, respects disabled selection, reads native declarations and publishes/previews an unreferenced immutable Profile without deployment');
     }
-    await control.close(); control = undefined; control = await startControl({ ...options, probeExecutionEnabled: true });
+    await control.close(); control = undefined; control = await startControl({ ...options, probeExecutionEnabled: true,
+        probeIngressEnabled:productP,probeServicesEnabled:productP,probeEchoEnabled:productP,probePathEchoEnabled:productP });
     await new Promise<void>(resolve => target.listen(0, '127.0.0.1', resolve));
     const targetPort = (target.address() as { port: number }).port;
-    const reservations = await Promise.all(Array.from({ length: browserEnabled ? 3 : 1 }, async () => {
+    const reservations = await Promise.all(Array.from({ length: (browserEnabled ? 3 : 1)+(productP?1:0) }, async () => {
         const server = createServer(); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve)); return server;
     }));
     const ingressPorts = reservations.map(server => (server.address() as { port: number }).port), ingressPort = ingressPorts[0]!;
@@ -226,6 +231,16 @@ try {
     assert.equal((await call('POST', '/agent/v3/probe/claim', repeat, randomUUID(), machine)).status, 409);
     await cooldown(successful.body.expiresAt); assert.deepEqual((await issue(key)).body, successful.body); assert.equal(connections, stableConnections);
     passed('Real poll/claim/watch/zero-payload connect/report commits one result; lost-client replay and spent mTLS claim cannot reexecute');
+    if(productP){
+        if(browserEnabled)for(const check of await verifyProductConsole({url:`https://127.0.0.1:${control.port}`,scope,token,directory}))passed('P Console '+check);
+        for(const check of await verifyControlledEcho({scopeId:scope,nodeId,mode:'direct',directory,listenPort:ingressPorts.at(-1)!,spec:{},discovery:control.control.probeEcho,
+            ...(browserEnabled?{usage:{actorId:actor,display:()=>verifyProductUsageConsole({url:`https://127.0.0.1:${control!.port}`,scope,token,directory},nodeId,actor)}}:{}),
+            call:(method,path,input,key)=>call(method,`/api/v1/scopes/${scope}/`+path,input,key),
+            tick:async()=>{await control!.runtime.tick();},qualified:async()=>{
+                const result=await rows<{n:number}>(control!.db.pool,"SELECT COUNT(*) n FROM probe_type_qualifications q JOIN runtime_nodes r ON r.node_id=q.node_id AND r.session_epoch=q.session_epoch WHERE q.node_id=? AND q.state='qualified' AND q.echo_version=1 AND q.expires_at>?",[nodeId,Date.now()+2000]);
+                return result[0]!.n===1;
+            }}))passed('P Direct '+check);
+    }
     await ready(); agent!.kill('SIGSTOP');
     try {
         const withdrawn = await issue(); assert.equal(withdrawn.status, 202);

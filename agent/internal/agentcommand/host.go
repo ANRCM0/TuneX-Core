@@ -10,7 +10,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/executionenrollment"
 )
 
-const InterfaceVersion uint64 = 1
+const InterfaceVersion uint64 = 2
 
 type Runner interface{ Run(context.Context) error }
 
@@ -31,13 +31,14 @@ type Host struct {
 }
 
 func (host Host) Run(options agentcli.Options) error {
-	if options.ProbeEcho && (!options.ProbeServices || !options.ProbeIngress || !options.ProbeExecution || !options.ProbeRegistration) {
+	if options.ProbePathEcho && (!options.ProbeEcho || !options.Relay) { return fmt.Errorf("INVALID_CONFIG: Path Echo requires explicit Echo and Relay") }
+    if options.ProbeEcho && (!options.ProbeServices || !options.ProbeIngress || !options.ProbeExecution || !options.ProbeRegistration) {
 		return fmt.Errorf("probe-echo requires probe-services, probe-ingress, probe-execution and probe-registration")
 	}
 	if options.ProbeServices && (!options.ProbeIngress || !options.ProbeExecution || !options.ProbeRegistration) {
 		return fmt.Errorf("probe-services requires probe-ingress, probe-execution and probe-registration")
 	}
-	if options.InspectJournal && (options.Enroll || options.Rotate || options.Multihop || options.ImportTransitJournal != "" || options.Diagnostics || options.Telemetry || options.ForwardTelemetry || options.HostTelemetry || options.ProbeTelemetry || options.ProbeRegistration || options.ProbeExecution || options.ProbeIngress || options.ProbeServices || options.ProbeEcho) {
+	if options.InspectJournal && (options.Enroll || options.Rotate || options.Multihop || options.ImportTransitJournal != "" || options.Diagnostics || options.Telemetry || options.ForwardTelemetry || options.HostTelemetry || options.ProbeTelemetry || options.ProbeRegistration || options.ProbeExecution || options.ProbeIngress || options.ProbeServices || options.ProbeEcho || options.ProbePathEcho) {
 		return fmt.Errorf("Journal inspection cannot be combined with state-changing flags")
 	}
 	if (options.TimeProof == "") != (options.TimeProofKey == "") {
@@ -76,7 +77,7 @@ func (host Host) Run(options agentcli.Options) error {
 		Certificate: paths.Certificate, PrivateKey: paths.PrivateKey, Journal: paths.Journal, JournalKey: paths.KeyPath,
 		Rotate: options.Rotate, Relay: options.Relay, Multihop: options.Multihop,
 		ProbeRegistration: options.ProbeRegistration, ProbeExecution: options.ProbeExecution,
-		ProbeIngress: options.ProbeIngress, ProbeServices: options.ProbeServices, ProbeEcho: options.ProbeEcho,
+		ProbeIngress: options.ProbeIngress, ProbeServices: options.ProbeServices, ProbeEcho: options.ProbeEcho, ProbePathEcho: options.ProbePathEcho,
 		ImportTransitJournal: options.ImportTransitJournal, TimeProof: options.TimeProof, TimeProofKey: options.TimeProofKey,
 		Diagnostics: diagnostics, Telemetry: options.Telemetry, ForwardTelemetry: options.ForwardTelemetry,
 		HostTelemetry: options.HostTelemetry, ProbeTelemetry: options.ProbeTelemetry})

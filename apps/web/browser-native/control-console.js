@@ -1,5 +1,8 @@
 import { initAdminResourceConsole, personalPortUsageView } from '../admin-resource-console.js';
 import { initResourceLimitConsole, personalPayloadLimitView } from '../resource-limit-console.js';
+import { initMemberConsole } from '../member-console.js';
+import { initAccountCredentials } from '../account-credentials.js';
+import { workflowSteps, createBoundedPageReads } from '../task-workflow.js';
 import { readIdentityContext, scopeGovernance } from '../account-context.js';
 import { initLineBuilder } from '../line-builder.js';
 import { summarizeForwardRecord } from '../forward-status.js';
@@ -17,7 +20,10 @@ const byId = id => document.getElementById(id);
 const auth = { scope: '', token: '' };
 let account = null, accountPage = null, accountEpoch = 0, accountController = null;
 let nodeOwnership = 'mine';
-const governanceViews = new Set(['resources','audit','alerts','notifications','observation-services']);
+const governanceViews = new Set(['resources','members','audit','alerts','notifications','observation-services']);
+let memberConsole = null;
+let accountCredentials = null;
+let boundedReads = null;
 const selectedScope = () => account?.scopes.find(item => item.scopeId === auth.scope);
 const governance = () => scopeGovernance(selectedScope());
 const page = { nodes: 1, forwards: 1, operations: 1 };
@@ -78,6 +84,8 @@ function notify(message, failure = false) {
 }
 function display(view) {
   if(governanceViews.has(view)&&!governance())return;
+  if(currentView!==view)boundedReads?.stop('page-changed');
+  if(currentView==='members'&&view!=='members')memberConsole?.leave();
   if(view==='nodes'||view==='available'){
     nodeOwnership=view==='available'?'available':'mine';
     filters.nodes.ownership=nodeOwnership;page.nodes=1;
@@ -87,15 +95,17 @@ function display(view) {
     byId('show-node-form').hidden=view==='available';
   }
   currentView = view;
-  const labels = { overview: '运行概览', nodes: '我的机器', available: '可用资源', forwards: '我的转发', relay: '我的线路', resources:'共享资源管理', probes: '受限 TCP 探测', operations: '执行记录', audit: '管理审计 · 只读查询', alerts: '站内事件 · 固定告警政策', notifications: '通知端点 · 受保护配置' };
+  const labels = { overview: '运行概览', nodes: '我的机器', available: '可用资源', forwards: '我的转发', relay: '我的线路', resources:'共享资源管理', members:'工作空间成员', probes: '受限 TCP 探测', operations: '执行记录', audit: '管理审计 · 只读查询', alerts: '站内事件 · 固定告警政策', notifications: '通知端点 · 受保护配置' };
   byId('page-title').textContent = view === 'observation-services' ? '观测服务 · 仅声明与公有信任' : labels[view] || labels.overview;
   document.querySelectorAll('.view').forEach(node => { node.hidden = node.id !== 'view-' + (view==='available'?'nodes':view); });
   document.querySelectorAll('.nav').forEach(node => { node.classList.toggle('active', node.dataset.view === view); });
 }
-async function load(kind) {
+async function load(kind,guard) {
+  if(!guard||typeof guard.isCurrent!=='function')guard=undefined;
   const version = readVersions[kind] = (readVersions[kind] ?? 0) + 1;
-  const result = await request('GET', listResource(kind, page[kind], filters[kind]));
-  if (version !== readVersions[kind]) return;
+  const result = await request('GET', listResource(kind, page[kind], filters[kind]),undefined,undefined,
+    guard?{signal:guard.signal,timeoutMs:10000}:undefined);
+  if (version !== readVersions[kind] || guard && !guard.isCurrent()) return;
   store[kind] = result.items;
   totals[kind] = result.total;
   if (kind === 'nodes') { renderNodes(); renderForwardPreflight(); renderOps(); }
@@ -103,10 +113,11 @@ async function load(kind) {
   if (kind === 'operations') { renderOperations(); renderOps(); }
   pagination(kind, result);
 }
-async function loadOverview() {
+async function loadOverview(guard) {
+  if(!guard||typeof guard.isCurrent!=='function')guard=undefined;
   const version = readVersions.overview = (readVersions.overview ?? 0) + 1;
-  const result = await request('GET', 'overview');
-  if (version !== readVersions.overview) return;
+  const result = await request('GET', 'overview',undefined,undefined,guard?{signal:guard.signal,timeoutMs:10000}:undefined);
+  if (version !== readVersions.overview || guard && !guard.isCurrent()) return;
   overview = result;
   updateOverview();
 }
@@ -141,6 +152,14 @@ function updateOverview() {
   for (const [id, key] of [['nodes', 'nodes'], ['forwards', 'forwards'], ['running', 'activeOperations'], ['failed', 'failedOperations']])
     byId('metric-' + id).textContent = overview ? String(overview[key]) : '—';
   renderOps();
+  const guide=byId('workflow-guide');
+  if(guide){
+    guide.replaceChildren();
+    for(const step of workflowSteps({connected:!!auth.scope&&!!auth.token,overview})){
+      const item=element('li'),title=element('h3',step.title),description=element('p',step.detail,'hint'),go=button('进入'+step.title,'workflow-page',step.view,'secondary');
+      go.disabled=!step.enabled;item.append(title,description,go);guide.append(item);
+    }
+  }
 }
 function renderOps() {
   const status = byId('ops-status'), failedBox = byId('ops-failed-operations'), staleBox = byId('ops-stale-nodes');
@@ -266,7 +285,7 @@ function renderForwards() {
     group.append(button('Probe 计数', 'probe-telemetry', item.id, 'secondary'));
     group.append(button('聚合历史', 'forward-telemetry-aggregate', item.id, 'secondary'));
     group.append(button('探测支持','forward-probe-capabilities',item.id,'secondary'));
-    if(!a.path && a.protocols.includes('tcp'))group.append(button('TCP 探测', 'forward-probe', item.id, 'secondary'));
+    if(a.protocols.some(protocol=>protocol==='tcp'||protocol==='udp'))group.append(button('受控探测', 'forward-probe', item.id, 'secondary'));
     if(a.path)group.append(button('部署进度', 'forward-deployment', item.id, 'secondary'));
     group.append(button(a.enabled ? '停用' : '启用', 'forward-toggle', item.id, 'secondary'), button('删除', 'forward-delete', item.id, 'secondary'));
     action.append(group);
@@ -398,6 +417,10 @@ function detail(title, data, secret) {
 }
 async function action(kind, id) {
   try {
+    if(kind==='workflow-page'){
+      if(!['nodes','available','forwards','operations'].includes(id))return;
+      connected();display(id);await load(id==='available'?'nodes':id);return;
+    }
     if (kind === 'node-payload-limits') {
       const version=connectionVersion,identity={nodeId:id,scopeId:auth.scope,actorId:account?.actorId};
       const result=await request('GET','nodes/'+encodeURIComponent(id)+'/payload-limits/'+encodeURIComponent(identity.actorId));
@@ -496,6 +519,13 @@ const pathTemplates=initPathTemplates({request,notify,byId,tunnelManagement:true
 const adminResources=initAdminResourceConsole({request,notify,byId,detail,parsePorts,parseCidrs,canGovern:governance,
   onChanged:()=>Promise.all([load('nodes'),load('operations'),loadOverview(),adminResources.refresh()])});
 const resourceLimits=initResourceLimitConsole({request,notify,byId,canGovern:governance,identity:()=>({scopeId:auth.scope})});
+memberConsole=initMemberConsole({request,notify,byId,canGovern:governance});
+accountCredentials=initAccountCredentials({byId,notify,getIdentity:()=>({actorId:account?.actorId,token:auth.token}),
+  onRotated:async(next,actorId)=>{
+    if(account?.actorId!==actorId)throw Error('账号已变化，请使用已保存的新 Token 重新登录。');
+    clearConnectionData();auth.token=next;byId('connection-indicator').textContent='账号凭据已更新';
+    display('overview');if(auth.scope)await refresh();
+  }});
 const lineBuilder=initLineBuilder({request,notify,byId,loadDraft:value=>pathTemplates.loadDraft(value),useDraft:value=>relayConsole.loadPathDraft(value)});
 const pathGroups=initPathGroups({request,notify,byId});
 const pathPublications=initPathPublications({request,notify,byId,getScope:()=>auth.scope});
@@ -509,6 +539,7 @@ const notificationDeliveries=initNotificationDeliveries({request,notify,byId,get
 const observationServices=initObservationServices({request,notify,byId,getScope:()=>auth.scope});
 byId('relay-reload').addEventListener('click',()=>pathTemplates.list().catch(error=>notify(error.message,true)));
 function clearConnectionData() {
+  boundedReads?.stop('account-changed');
   connectionVersion++;
   for (const key of Object.keys(readVersions)) readVersions[key]++;
   privateProvisioning=false;privateProvisionUnknown=false;byId('node-provision-submit').disabled=false;byId('node-provision-reset').hidden=true;byId('node-provision-state').textContent='';
@@ -538,7 +569,7 @@ function clearConnectionData() {
     byId(mode + '-candidate-page').textContent = '尚未查询候选';
     byId(mode + '-candidate-prev').disabled = byId(mode + '-candidate-next').disabled = true;
   }
-  adminResources.clear();resourceLimits.clear();lineBuilder.clear();
+  adminResources.clear();resourceLimits.clear();lineBuilder.clear();memberConsole.clear();accountCredentials.clear();
   relayConsole.clear(); probeConsole.clear(); transportConsole.clear(); ruleConsole.clear(); tunnelConsole.clear(); telemetryConsole.clear(); forwardTelemetryConsole.clear(); hostTelemetryConsole.clear(); probeTelemetryConsole.clear(); telemetryAggregateConsole.clear(); pathTemplates.clear(); pathSwitch.clear(); pathGroups.clear(); pathPublications.clear(); ingressGroups.clear(); ingressMigrations.clear(); fillNodes();
   renderNodes(); renderForwards(); renderOperations(); renderForwardPreflight(); updateOverview();
 }
@@ -634,7 +665,7 @@ byId('connection-form').addEventListener('submit',async event=>{
   const loginEpoch=accountEpoch+1;
   try {
     if(!await accountPageRead(token))return;
-    auth.token=token;byId('connection-indicator').textContent='账号已认证，选择工作空间';
+    auth.token=token;accountCredentials.clear();byId('connection-indicator').textContent='账号已认证，选择工作空间';
     const first=account.scopes.find(scope=>scope.canEnter);
     if(first){byId('scope').value=first.scopeId;await enterScope(first.scopeId);}
   }catch(error){if(loginEpoch===accountEpoch){notify(error.message,true);byId('connection-indicator').textContent='登录未完成';}}
@@ -690,6 +721,19 @@ document.addEventListener('click', event => {
   } else action(kind, target.dataset.id);
 });
 updateAccountNavigation();
+boundedReads=createBoundedPageReads({identity:()=>auth.scope&&auth.token?connectionVersion+':'+auth.scope:null,
+  page:()=>currentView,visible:()=>!document.hidden,
+  read:(view,guard)=>view==='overview'?loadOverview(guard):load(view==='available'?'nodes':view,guard),
+  state:value=>{
+    byId('read-session-stop').disabled=!value.active;
+    byId('read-session-state').textContent=value.active?'只读刷新 '+value.completed+'/6；仅当前页，十秒间隔。':
+      value.reason==='complete'?'六轮读取已结束。':value.reason==='failed'?'读取失败，已停止；数据仍需重新核对。':
+        value.reason==='unsupported'?'请先连接，并进入概览、机器、转发或执行记录页。':'自动读取已停止。';
+  }});
+byId('read-session-start').addEventListener('click',()=>boundedReads.start());
+byId('read-session-stop').addEventListener('click',()=>boundedReads.stop());
+document.addEventListener('visibilitychange',()=>{if(document.hidden)boundedReads.stop('hidden');});
+updateOverview();
 display('overview');
 
 }
