@@ -2,8 +2,11 @@
 
 ## P Integrated Successor (2026-10-24)
 
-P source is authored and unverified. The following N paragraphs describe their
-historical slice; P's current behavior and acceptance gates are in the P ledger.
+P source `aae0632f` passed the Actions-covered contracts and selected actual
+browser/native flows; exact runs, database reconciliation and remaining limits
+are in the [P verification record](../../docs/development/product-verification-p-2026-10-24.md).
+The following N paragraphs describe their historical slice; P's current behavior
+and independent-environment gates remain in the P ledger and verification record.
 The established blue/white layout, request owner and original mutation owners stay.
 
 - resource-limit-console reads the original quota owner plus optional authenticated

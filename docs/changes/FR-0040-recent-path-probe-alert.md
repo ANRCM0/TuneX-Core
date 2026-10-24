@@ -1,7 +1,7 @@
 # FR-0040: Recent Controlled Path Sample Condition
 
 Date: 2026-10-24. Authorized under the P source task and standing source change
-scope. Status: authored/unverified. No test, commit or deployment authorization.
+scope. Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
 
 Layers: L3 Probe history read service and Station condition; L2 SQL enum, native
 composition and browser representation. Consume original ProbeRunStore,
@@ -40,3 +40,12 @@ age boundaries, exact threshold, no recovery from stale/identical samples, new
 binding invalidation, original event/handoff rollback, closed Web fields and no
 POST/network side effect from reading/evaluating. Real SQL/network/browser and
 physical acceptance remain separately unexecuted. No parallel work is started.
+
+## Verification Update - 2026-10-24
+
+The current [P verification record](../development/product-verification-p-2026-10-24.md)
+binds executed contracts, native MySQL and hosted-runner functional evidence to
+`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+wording in this source proposal records its authoring snapshot. Whole-workflow
+conclusions and independent-host/load/long-run limits remain in that record;
+this update does not open merge, publication, release or parallel-feature gates.

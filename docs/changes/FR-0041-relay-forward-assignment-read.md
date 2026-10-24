@@ -1,7 +1,7 @@
 # FR-0041: Bounded Relay Forward Assignment Read
 
 Date: 2026-10-24.
-Status: source implemented; exact-source acceptance pending.
+Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
 Owner and authorization: original RuntimeRelayHost. The human's 2026-10-19
 standing foundation source authorization and 2026-10-24 P Actions/failure-repair
 instruction cover this serial corrective extension. No separate confirmation
@@ -101,3 +101,12 @@ groups and mismatched published assignments are refused rather than falling back
 Decision: implement the additive original-owner read under the above standing
 source and current failure-repair authorization. Do not extend production
 deadlines or move path authorization into a second owner to obtain a pass.
+
+## Verification Update - 2026-10-24
+
+The current [P verification record](../development/product-verification-p-2026-10-24.md)
+binds executed contracts, native MySQL and hosted-runner functional evidence to
+`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+wording in this source proposal records its authoring snapshot. Whole-workflow
+conclusions and independent-host/load/long-run limits remain in that record;
+this update does not open merge, publication, release or parallel-feature gates.

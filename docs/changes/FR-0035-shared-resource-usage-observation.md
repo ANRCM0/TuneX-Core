@@ -1,6 +1,6 @@
 # FR-0035: Shared Resource Usage Observation
 
-Date: 2026-10-24. Status: authorized-under-standing-source-scope, unverified.
+Date: 2026-10-24. Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
 Owner: original resource-limit owner. Authorization: P implementation request and
 2026-10-19 standing source authorization. No verification/publication permission.
 
@@ -62,3 +62,12 @@ Source-authored cases are not passes. Frozen-source boundary/type, HTTP/Go,
 MySQL rollback, old reader, browser and long-running debit/report evidence are
 required separately. Backup/restore must include the new projection but it never
 replaces the authenticated Journal or permits clearing original protected state.
+
+## Verification Update - 2026-10-24
+
+The current [P verification record](../development/product-verification-p-2026-10-24.md)
+binds executed contracts, native MySQL and hosted-runner functional evidence to
+`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+wording in this source proposal records its authoring snapshot. Whole-workflow
+conclusions and independent-host/load/long-run limits remain in that record;
+this update does not open merge, publication, release or parallel-feature gates.

@@ -1,6 +1,6 @@
 # FR-0037: Shared Resource Limit Station Alerts
 
-Date: 2026-10-24. Status: authorized-under-standing-source-scope; unverified.
+Date: 2026-10-24. Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
 Authorization: P implementation and 2026-10-19 standing source scope.
 
 1. L3 resource-limit observation and original Station evaluation/event/outbox;
@@ -50,3 +50,12 @@ must refuse unknown schema/rule instead of silently interpreting it as a v1 rule
 New alert/source availability is not quality/physical/load acceptance. FR-0040
 separately adds a recent controlled path sample condition with original history
 and current-issuer/path revalidation; it is not inferred from quota or node reports.
+
+## Verification Update - 2026-10-24
+
+The current [P verification record](../development/product-verification-p-2026-10-24.md)
+binds executed contracts, native MySQL and hosted-runner functional evidence to
+`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+wording in this source proposal records its authoring snapshot. Whole-workflow
+conclusions and independent-host/load/long-run limits remain in that record;
+this update does not open merge, publication, release or parallel-feature gates.

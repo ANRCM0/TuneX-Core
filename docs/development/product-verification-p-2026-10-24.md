@@ -6,6 +6,115 @@ PR, Actions execution and necessary failure repairs. Merge, image publication,
 release and delegation are outside this task. Independent-host and long-run
 environments remain unavailable under the human's preceding answer.
 
+## Current Decision
+
+The current tested source is `aae0632f20c1ffc333433b67c72beafc29605e2a`,
+tree `9c6efb22ff514d3da22c108377a036c660539da2`. Actions checked out PR test
+merge `686f8b9b5e37fb4b029378722b773db0c562cdaf`, whose tree is identical to
+the candidate and whose parents are base `b729a5b` and that candidate.
+This test merge is not a merge into main.
+
+Baseline run `40052868559` completed successfully on 2026-10-24 at
+02:44:54 UTC (10:44:54 Asia/Shanghai): all ten jobs passed, with no failed,
+cancelled or skipped jobs. Packaging run `40052868553` also passed. The final
+eight-node job includes native/browser main scenarios and separate same-host
+namespace partition, delay/loss, every-intermediate restart, report replay,
+grant withdrawal and safe resource release. Actions-covered cases on this
+frozen source are accepted within the coverage table below. The complete P
+goal is not accepted without its remaining independent-environment evidence.
+
+The complete contract collector, vet and Linux Go race passed. Its principal
+TypeScript run recorded 2299 tests: 2149 passed, 150 database-conditional skips,
+zero failures. Web recorded 231 passes and zero skips/failures. Deployment
+preflight/setup recorded 30 passes and zero skips/failures. All 150 skipped
+names have matching passed test names in the same candidate's native MySQL
+job `120749449908`; missing matches, native skips and failures are all zero.
+The new shared-budget observer concurrency case passed, including both reader
+releases before the original exclusive writer and clock update can proceed.
+
+Downloaded P artifacts confirm actual desktop/mobile membership, self Token
+rotation and old-token refusal, six GET rounds and cancellation on page change.
+Direct and two-node Relay each completed TCP/UDP signed round trips with their
+first independent command per protocol. Each permit reached the responder once,
+and its expired same-key replay did not execute again. Direct's accepted-report
+Journal sample was fresh: used `1024`, remaining `1047552` of `1048576` bytes,
+retaining the conservative-precharge and upper-bound-at-sample labels through
+SQL/API/Chromium.
+
+Three-node TCP's first independent permit was consumed without an accepted
+result or responder arrival; its second independent new command succeeded.
+UDP's first succeeded. All successful results are stored signed original-owner
+results. No consumed permit is retried as new authority. This is functional
+success, not a first-command success-rate, latency or capacity guarantee.
+
+Packaging produced local images, SBOMs, Compose checks and scan reports; it did
+not publish registry images. The downloaded scan reports contain zero CRITICAL
+findings and 11 Control / 17 Agent HIGH observations. These observations remain
+visible; a passing packaging gate does not mean vulnerability-free images.
+
+The detailed earlier attempts below retain failed/superseded evidence. They
+are not combined into a successful successor revision.
+
+## Exact Run And Job Index
+
+All baseline rows refer to run `40052868559` on the source/test merge above.
+
+| Job | Job ID | Current conclusion |
+| --- | --- | --- |
+| deployment-tools | 120749449795 | success |
+| contracts | 120749449831 | success |
+| windows-agent | 120749449747 | success |
+| unsupported-platform | 120749449768 | success |
+| phase1 | 120749449908 | success |
+| probe-workflow | 120749449635 | success |
+| relay-isolation | 120749449777 | success |
+| multihop (3) | 120749449759 | success |
+| multihop (4) | 120749449982 | success |
+| multihop (8) | 120749449800 | success |
+| containers (run 40052868553) | 120749174361 | success |
+
+Baseline artifacts: `probe-workflow-acceptance` (`12544177859`),
+`phase1-acceptance` (`12544349649`), `relay-isolation-acceptance` (`12544142284`),
+`multihop-3-node-acceptance` (`12544019499`) and
+`multihop-4-node-acceptance` (`12544133799`) and
+`multihop-8-node-acceptance` (`12544744070`). Packaging artifacts include
+`tunex-vnext-vulnerability-reports` (`12544535332`), Agent SBOM (`12543689358`)
+and Control SBOM (`12543664379`). These are Actions artifacts, not registry
+publication or independent-host evidence.
+
+Documentation closure is recorded separately from the tested source. Any later
+documentation-only commit does not inherit an exact-head CI pass: the accepted
+execution remains bound to the explicit source/tree/test merge and run IDs here.
+No executable source, schema, public version or source-to-layer path mapping
+changes during that closure. A future changed candidate requires its own
+verification evidence.
+
+## P Requirement Coverage And Limits
+
+This table maps executed cases to the P plan; a green workflow does not broaden
+their assertions or close each requirement's independent environment scope.
+Contract tests, real SQL, selected real browser flows and hosted-runner native
+process/namespace results are distinct evidence.
+
+| P cases | Executed coverage | Remaining limit |
+| --- | --- | --- |
+| PP-01/02 | deployment-tools: 30 preflight/setup-plan cases; packaging: role/container refusal, Compose and protected startup checks | No independent fresh-install/operator campaign |
+| PP-03/04 | account-credentials contract/HTTP/MySQL and member-console Web cases; real desktop/mobile creation, viewer self rotation and old-token refusal; original Identity/Node/Runtime transaction suites | Selected real browser flows; no new authentication or identity authority |
+| PP-05/06 | original Agent Journal/resource usage Go cases, wire/owner contracts, native usage receipt/projection rollback, original shared-resource CAS/history and revoked credential refusal | No long-running debit/report or billing accuracy claim |
+| PP-07 | resource-usage Web/HTTP cases for freshness/unknown/legacy states; actual 1024-byte Journal sample through accepted Report, SQL/API and mobile Chromium | Remaining is an upper bound at sample time, never execution authority |
+| PP-08 | Echo command/qualification/permit/result contracts, original Go owner/executor cases, native permit/claim/instance MySQL and mTLS, actual Direct TCP/UDP signed round trips | Two-second permit and original exchange/result bounds retained; no availability guarantee |
+| PP-09 | actual two-node Relay and three-node signed TCP/UDP Echo; native 3/4/8-node payload/browser main scenarios; same-runner namespace fault cases tracked in the multihop jobs | Signed P Echo is sampled on three nodes, not eight; independent physical hosts remain unavailable |
+| PP-10 | resource/path condition and original-principal/transaction bridge contracts; native resource Station event/handoff rollback/dedup in shared-resource MySQL suite; original Station/notification SQL suites | Recent-path new condition is a contract/bridge proof; no actual external notification destination certification |
+| PP-11 | task-workflow and Web lifecycle cases, selected real desktop/mobile account/usage flows, six actual GET rounds and page-change cancellation | No exhaustive accessibility/device/offline certification from those selected flows |
+| PP-12 | original Path/Ingress/MySQL owner suites, Web batch uncertainty/replay/cancel cases, real Profile batch CAS/lost-response and multihop ordered-copy flows | No cross-rule atomicity, automatic retry or lossless-cutover guarantee |
+| PP-13 | setup/container/upgrade/native recovery cases executed in existing Actions | Independent empty-install/retained-state deployment campaign unavailable |
+| PP-14 | native process and same-host namespace partition/loss/delay/restart/renewal/revocation cases | No reviewed independent-host fault proof |
+| PP-15 | existing hosted-runner bounded capacity/resource samples | No approved topology/load ladder, deployment capacity envelope or 24/72-hour evidence |
+| PP-16 | original native backup/recovery, protected Journal/authority, old-reader and partial-migration refusal cases | Independent deployment/backup/restore operator campaign remains unavailable |
+
+The persistent P goal remains active. This verification task does not authorize
+merge, image publication, release or unrelated parallel feature development.
+
 ## Candidate And Execution
 
 Base: `b729a5be8ef98164d3de515e37e424741ad83608`.
@@ -222,8 +331,10 @@ implementation. The old entrypoint retains its original projection via one
 private shared helper; each new call authorizes one original plan and still
 checks every node's original session and deployment stage. No cross-call cache
 or unrelated Forward scan is added. Public owner/provider and legacy-parity
-cases are authored. Temporary numeric Agent diagnostics are removed after
-their evidence is captured; fixture outcome metadata remains redacted.
+cases are authored. The final candidate retains opt-in numeric Agent timing
+diagnostics for P troubleshooting: only with Diagnostics and ProbePathEcho,
+only at existing refusal paths, without keys, IDs, bodies or extra authority.
+They do not alter deadlines or error handling. Fixture metadata remains redacted.
 
 After dependency installation, local TypeScript checking, source/type/private
 boundary classification and Web syntax checking passed on the corrective

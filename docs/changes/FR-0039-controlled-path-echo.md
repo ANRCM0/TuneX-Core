@@ -1,6 +1,6 @@
 # FR-0039: Controlled Forward Path Echo
 
-Date: 2026-10-24. Status: source-authorized; acceptance unexecuted.
+Date: 2026-10-24. Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
 
 The human's P task and standing foundation source authorization permit this
 serial extension. L2 codecs/native listener adapters and L3 Probe planning consume
@@ -53,3 +53,12 @@ capability3, Control HTTP6/detail4/startup3, Agent CLI2/command2/nativeexecution
 FR-0040 subsequently adds Probe history module3, Station module3/API4 and the
 0046/UpgradeAssessment10 cumulative successor. Earlier slice counters/profile
 ceilings are historical changes, not current accepted interfaces.
+
+## Verification Update - 2026-10-24
+
+The current [P verification record](../development/product-verification-p-2026-10-24.md)
+binds executed contracts, native MySQL and hosted-runner functional evidence to
+`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+wording in this source proposal records its authoring snapshot. Whole-workflow
+conclusions and independent-host/load/long-run limits remain in that record;
+this update does not open merge, publication, release or parallel-feature gates.

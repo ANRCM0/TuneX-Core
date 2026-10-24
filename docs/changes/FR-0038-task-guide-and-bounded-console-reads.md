@@ -1,6 +1,6 @@
 # FR-0038: Task Guide And Bounded Console Reads
 
-Date: 2026-10-24. Status: authorized-under-standing-source-scope; unverified.
+Date: 2026-10-24. Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
 
 1. L2 browser representation/lifecycle only; no L0/L1/Agent/SQL changes.
 2. Consume original console GETs, page selection, account connection version,
@@ -25,3 +25,12 @@ Original source bridge/browser entry still mounts the same console. New native
 asset union includes task-workflow.js, served under the existing CSP. Optional
 refresh guards reject responses after abort even when the underlying GET finishes.
 No tests, builds, formatters, commit/push or remote execution are authorized here.
+
+## Verification Update - 2026-10-24
+
+The current [P verification record](../development/product-verification-p-2026-10-24.md)
+binds executed contracts, native MySQL and hosted-runner functional evidence to
+`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+wording in this source proposal records its authoring snapshot. Whole-workflow
+conclusions and independent-host/load/long-run limits remain in that record;
+this update does not open merge, publication, release or parallel-feature gates.

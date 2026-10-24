@@ -1,7 +1,7 @@
 # FR-0033: Governance Member Console
 
 Date: 2026-10-24.
-Status: authorized-under-standing-source-scope; implemented-unverified.
+Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
 Owner and authorization: P2 browser representation and original Identity/Access
 owners; direct P implementation request on 2026-10-24 and the 2026-10-19 standing
 source authorization. No verification, commit/push or release permission follows.
@@ -71,3 +71,12 @@ planned until exact-source Actions are authorized and executed.
 
 Self-service credential rotation is a separate forthcoming account-owner FR;
 it must not give Scope governance a cross-Scope credential replacement power.
+
+## Verification Update - 2026-10-24
+
+The current [P verification record](../development/product-verification-p-2026-10-24.md)
+binds executed contracts, native MySQL and hosted-runner functional evidence to
+`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+wording in this source proposal records its authoring snapshot. Whole-workflow
+conclusions and independent-host/load/long-run limits remain in that record;
+this update does not open merge, publication, release or parallel-feature gates.

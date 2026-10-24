@@ -1,6 +1,6 @@
 # FR-0036: Controlled Echo Command And Original Permit Owner
 
-Date: 2026-10-24. Status: authorized-under-standing-source-scope; unverified.
+Date: 2026-10-24. Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
 Authorization: P implementation request and 2026-10-19 standing source decision.
 
 1. Layers: L3 Probe command, qualification and original permit lifecycle; L2
@@ -60,3 +60,12 @@ validation on that same negotiated wire; it delegates nonce kinds to the origina
 `ProbeEchoResult` keeps its original signature as the explicit compatibility entry.
 No route downgrade, new authority, extra clock owner or relaxed deadline is added.
 TCP unreachable Echo results also retain their existing closed v4 classification.
+
+## Verification Update - 2026-10-24
+
+The current [P verification record](../development/product-verification-p-2026-10-24.md)
+binds executed contracts, native MySQL and hosted-runner functional evidence to
+`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+wording in this source proposal records its authoring snapshot. Whole-workflow
+conclusions and independent-host/load/long-run limits remain in that record;
+this update does not open merge, publication, release or parallel-feature gates.

@@ -1,7 +1,7 @@
 # FR-0034: Account Self Credential Rotation
 
 Date: 2026-10-24.
-Status: authorized-under-standing-source-scope; implementation in progress, unverified.
+Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
 Owner and authorization: original Identity account owner. The human requested P
 implementation on 2026-10-24; the standing 2026-10-19 source authorization permits
 this concrete additive foundation proposal. Verification and publication are separate.
@@ -98,3 +98,12 @@ saved new token, fixed uncertain command, old/new explicit verification, account
 reset and late responses. Cross-Scope owners cannot rotate someone else's account.
 Do not claim physical immediate revocation of previously accepted operations or
 existing Agent execution merely because the login credential was changed.
+
+## Verification Update - 2026-10-24
+
+The current [P verification record](../development/product-verification-p-2026-10-24.md)
+binds executed contracts, native MySQL and hosted-runner functional evidence to
+`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+wording in this source proposal records its authoring snapshot. Whole-workflow
+conclusions and independent-host/load/long-run limits remain in that record;
+this update does not open merge, publication, release or parallel-feature gates.

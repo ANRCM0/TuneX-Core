@@ -1,7 +1,7 @@
 # P Deployment, Recovery And Load Acceptance
 
-Prepared: 2026-10-24. Status: authored, not executed. This runbook is P6 source
-delivery; it records no passed experiment or production capacity. The parent
+Prepared: 2026-10-24. Status: independent-host/load/long-run campaigns not executed.
+This runbook is P6 source delivery; it records no production capacity. The parent
 ledger is [stage P](product-readiness-stage-p-2026-10-24.md), PP-13 through PP-16.
 
 Environment decision (2026-10-24, Asia/Shanghai): the human confirmed that no
@@ -10,7 +10,8 @@ source and acceptance preparation first. No runner labels, host allocation or
 authorized duration have been supplied. This handoff provides the source,
 scenarios and inventory template; physical-host, load and long-run execution
 remain pending. This decision supplies no P verification, commit/push, merge or
-release authorization.
+release authorization. The later Actions request and actual candidate execution
+are recorded separately in [P verification](product-verification-p-2026-10-24.md).
 
 To resume environment execution, supply reviewed host/runner identities and
 topology, an isolated acceptance database and controlled Responder, permitted
@@ -135,6 +136,11 @@ failed attempt rather than replacing it with a later green sample.
 Acceptance proceeds separately: source review -> authorized local static/type/
 boundary/parity/format/compilation -> exact-source Actions functional/MySQL/
 network/container/browser -> independently reviewed physical hosts -> actual
-duration load/long-run -> release decision. The current candidate has no P
-execution evidence, saved commit, main merge or published image. Preparation
-does not close PP-13 through PP-16 or mark the persistent P goal achieved.
+duration load/long-run -> release decision. The saved P Actions source is
+`aae0632f20c1ffc333433b67c72beafc29605e2a`; executed contracts, native SQL,
+hosted-runner functional/recovery/capacity samples and container packaging are
+recorded separately in the verification record. Those bounded samples are not
+the reviewed topology, offered load, thresholds or 24/72-hour campaigns required
+here. No main merge or published image follows from this task. PP-13 through
+PP-16 retain their independent-environment obligations, and the persistent P
+goal is not achieved by these preparations or the hosted-runner samples.

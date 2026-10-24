@@ -26,7 +26,7 @@ P 集中验证、commit/push、合并或发布授权。
 准确 head／实际 checkout 和作业最终结论。功能、MySQL、网络、容器和浏览器均在
 Actions 执行。此项新授权不包含合并、镜像发布、发行或代理并行，也不改变上述
 实际环境不可用状态。当前执行结果以 [P 验证记录](product-verification-p-2026-10-24.md)
-为准；本文件下方的 authored／未执行描述保留源码交接时点。
+为准；下方源码交接段落中的 authored／未执行描述保留冻结前时点，不能覆盖当前验证记录。
 
 `v0.1.0` 指向 `41351e3333a8f2059b080e4e0a8a5b6ee12b9988`；已发布版本镜像与
 latest 的恢复属于先前任务，不修改旧标签。本阶段基线只比它增加发布恢复工作流。
@@ -43,7 +43,7 @@ latest 的恢复属于先前任务，不修改旧标签。本阶段基线只比�
 4. 契约：成员界面复用既有命令；用量在线投影、受控 Probe 扩展和告警规则分别
    提交契约，不增加第二个额度权威、资源分配器或绕过当前授权的修复命令。
 5. 验收：病例随切片撰写；源码 authored、检查 executed、准确修订 passed、独立
-   环境、主线/镜像/发行分别记录。当前全部 P 执行证据为未执行。
+   环境、主线/镜像/发行分别记录。当前执行证据见准确修订 P 验证记录，不将计划算作通过。
 6. 并发影响：本阶段独立工作树、串行集成共享契约、迁移目录与组合入口；不改动
    原 N 工作树。发现来源不明的并发修改时停止对应编辑并核对。
 
@@ -103,40 +103,43 @@ VPN/L7、第三方执行后端兼容或动态插件运行时。这些需要后�
 
 | 编号 | 所需病例 | 计划执行范围 | 当前 |
 | --- | --- | --- | --- |
-| PP-01 | Control/Agent、initial/existing、缺文件/权限/SAN/旧状态、错误脱敏与建议 | deploy 契约；获授权后 Actions 容器 | planned |
-| PP-02 | 安装计划闭合输入、无秘密/任意命令、固定摘要、端到端不冒充、仅人工执行 | deploy 契约；Actions | planned |
-| PP-03 | 成员 owner/manager/viewer、创建/角色/移除/Token、CAS/原键重放/未知结果 | Identity/Web/MySQL；Actions | planned |
-| PP-04 | 成员变更完整原事务与 Runtime 撤权链、旧读响应隔离、秘密不存储 | owner/SQL/Web；Actions | planned |
-| PP-05 | Journal 预扣跨重启/版本/双向/多规则、上报十进制边界和有界投影 | Go/TS/wire/MySQL；Actions | planned |
-| PP-06 | 用量报告旧会话/重放/乱序/rollback/历史桶/未来周期与读取隔离 | 原 Runtime/额度 owner/MySQL；Actions | planned |
-| PP-07 | 用量 stale/unknown/unsupported、样本时保守预扣剩余额度与个人/管理员页面 | Web/HTTP/浏览器；Actions | authored-unexecuted |
-| PP-08 | Echo 签发/撤销/claim/受控服务/闭合输入，原预算和硬截止不放宽 | Probe/Go/数据库/浏览器；Actions | planned |
-| PP-09 | Relay/多跳真实受控业务往返、TCP/UDP、错误节点/服务/权限/到期 | network namespace；独立主机分别执行 | planned |
-| PP-10 | 额度/周期/最近路径样本条件、未知不恢复、原 handoff/outbox 回滚/去重/撤权 | Station/notification/MySQL；Actions | planned |
-| PP-11 | 安装/创建/状态/故障向导、任务摘要、移动端/键盘/旧响应/离线 | Web/浏览器；Actions | planned |
-| PP-12 | 批次固定意图、部分失败、重读、同键重放、原补偿及恢复隔离 | Path/Ingress/Web/MySQL；Actions | planned |
-| PP-13 | 新环境从空库到首条 Direct/Relay、多跳及保留状态升级/恢复 | 准确镜像/独立 Linux 主机 | planned |
-| PP-14 | 独立多机丢包/延迟/断线/重启/凭据轮换/撤权、真实 TCP/UDP | 独立主机；不能由 namespace 替代 | planned |
-| PP-15 | 节点/规则/连接阶梯、内存/CPU/SQL/延迟、数据库变慢/反复重连 | 明确拓扑/时长/阈值的负载任务 | planned |
-| PP-16 | 原 authority/Journal 备份与恢复、旧读者/部分迁移/丢历史拒绝 | owner/容器/独立主机分别记账 | planned |
+| PP-01 | Control/Agent、initial/existing、缺文件/权限/SAN/旧状态、错误脱敏与建议 | deploy 契约；获授权后 Actions 容器 | 契约／容器病例通过；独立安装待验 |
+| PP-02 | 安装计划闭合输入、无秘密/任意命令、固定摘要、端到端不冒充、仅人工执行 | deploy 契约；Actions | Actions 病例通过 |
+| PP-03 | 成员 owner/manager/viewer、创建/角色/移除/Token、CAS/原键重放/未知结果 | Identity/Web/MySQL；Actions | 契约／SQL／Web 与具名浏览器场景通过 |
+| PP-04 | 成员变更完整原事务与 Runtime 撤权链、旧读响应隔离、秘密不存储 | owner/SQL/Web；Actions | 原 owner／SQL／Web 病例通过 |
+| PP-05 | Journal 预扣跨重启/版本/双向/多规则、上报十进制边界和有界投影 | Go/TS/wire/MySQL；Actions | Go／TS／wire／SQL 病例通过；长稳待验 |
+| PP-06 | 用量报告旧会话/重放/乱序/rollback/历史桶/未来周期与读取隔离 | 原 Runtime/额度 owner/MySQL；Actions | 原 owner／SQL 病例通过 |
+| PP-07 | 用量 stale/unknown/unsupported、样本时保守预扣剩余额度与个人/管理员页面 | Web/HTTP/浏览器；Actions | 具名 Web／HTTP／实际浏览器样本通过 |
+| PP-08 | Echo 签发/撤销/claim/受控服务/闭合输入，原预算和硬截止不放宽 | Probe/Go/数据库/浏览器；Actions | 契约／原生事务／实际签名往返通过 |
+| PP-09 | Relay/多跳真实受控业务往返、TCP/UDP、错误节点/服务/权限/到期 | network namespace；独立主机分别执行 | 同机 Actions 通过；独立主机待验 |
+| PP-10 | 额度/周期/最近路径样本条件、未知不恢复、原 handoff/outbox 回滚/去重/撤权 | Station/notification/MySQL；Actions | 契约／原 SQL handoff 通过；外部投递未验证 |
+| PP-11 | 安装/创建/状态/故障向导、任务摘要、移动端/键盘/旧响应/离线 | Web/浏览器；Actions | 具名 Web／浏览器病例通过，范围见验证记录 |
+| PP-12 | 批次固定意图、部分失败、重读、同键重放、原补偿及恢复隔离 | Path/Ingress/Web/MySQL；Actions | 原批次／SQL／Web／浏览器病例通过 |
+| PP-13 | 新环境从空库到首条 Direct/Relay、多跳及保留状态升级/恢复 | 准确镜像/独立 Linux 主机 | 独立环境 unavailable |
+| PP-14 | 独立多机丢包/延迟/断线/重启/凭据轮换/撤权、真实 TCP/UDP | 独立主机；不能由 namespace 替代 | 独立环境 unavailable |
+| PP-15 | 节点/规则/连接阶梯、内存/CPU/SQL/延迟、数据库变慢/反复重连 | 明确拓扑/时长/阈值的负载任务 | 正式负载／长稳 unavailable |
+| PP-16 | 原 authority/Journal 备份与恢复、旧读者/部分迁移/丢历史拒绝 | owner/容器/独立主机分别记账 | 原 owner／Actions 恢复病例通过；独立部署恢复待验 |
 
 ## 交付状态
 
 | 项目 | 状态 | 准确证据 |
 | --- | --- | --- |
 | 范围、目标、顺序、接受矩阵 | 已记录 | 本文；不是实现/执行证明 |
-| P1 | source-authored-unverified | setup-plan/setup CLI、固定建议、六项契约病例、安装说明；角色预检保持原实现 |
-| P2 | source-authored-unverified | FR-0033 成员页、FR-0034 本人凭据/0042 迁移/HTTP/页面与契约、SQL、Web 病例已撰写；集中验证未执行 |
-| P3 | source-authored-unverified | FR-0035；原 Journal 锁内读取、独立可选用量扩展、0043 同事务投影、当前/未来周期与过期视图；契约/Go/Web/SQL 病例撰写，未执行 |
-| P4 | source-authored-unverified | FR-0036/37/39/40；Direct Echo 与独立 Relay/多跳路径测量、原 permit/history、额度／到期 Station 条件及原事件 handoff；SQL0044/45/46、wire/owner/HTTP/Go/Web 病例已撰写 |
-| P5 | source-authored-unverified | FR-0038；任务式入口、显式最多六轮可见页读取、取消／旧响应隔离、原 Path/Ingress 批次进度摘要与生命周期病例 |
+| P1 | Actions-covered-cases-passed | 部署预检／安装计划 30 项及容器打包通过；独立安装见 PP-13 |
+| P2 | Actions-covered-cases-passed | FR-0033/34 契约、原生 SQL、Web、真实 Chromium 成员／本人凭据场景通过 |
+| P3 | Actions-covered-cases-passed | FR-0035 契约、Go、SQL、Web 与真实 Journal -> 已接受报告 -> SQL/API/Chromium 样本通过；不等于当前余额或长稳 |
+| P4 | Actions-covered-cases-passed | FR-0036/37/39–42 契约、原 MySQL 事务及 Direct/Relay/三节点签名 TCP/UDP 往返通过；不宣称首发成功率、外部通知投递或容量 |
+| P5 | Actions-covered-cases-passed | FR-0038 Web 病例及真实六轮读取、页面切换取消和原批次场景通过；不扩大为全设备／无障碍认证 |
 | P6 准备 | authored-not-executed | [部署／恢复／负载／长稳手册](product-p-deployment-acceptance.md)、原 physical collector 的拒绝默认 inventory 示例；PP-13–16 实际环境门槛仍开放 |
-| 所有 P 检查/功能/集成/安装/负载/长稳执行 | 未执行 | 无 P 验收修订/通过数 |
-| P commit/push、主线整合、镜像、发行 | 未执行 | 不复用 N 的发布证据 |
+| P Actions 验证 | passed-with-bounded-scope | 准确源码 `aae0632f`；baseline `40052868559` 10 作业及 packaging `40052868553` 全通过；150 条数据库条件跳过均匹配 native 通过；详见验证记录 |
+| P commit/push、草稿 PR | 已完成 | 独立测试分支、PR #118；原主工作树保持不变 |
+| P 主线整合、镜像发布、发行 | 未执行 | 当前验证授权不包含这些动作 |
 
 完成标准：每个切片都有可审阅实现、公共契约/旧入口说明、病例和真实状态。
 源码冻结不等于验证通过；P 整体接受还需要相应授权与实际环境证据，不能仅凭
 “写好了验收计划”关闭独立主机或长稳要求。
+
+以下源码交接说明保留作者撰写时点；当前执行结论由上表和准确修订验证记录覆盖。
 
 ### P1 源码交接
 
@@ -229,27 +232,26 @@ HTTP 的账号／Echo／用量 providers 是明确新增结构消费者；对应
 
 ### 审阅与验证边界
 
-候选身份目前是上述基线上的 `source/p-product-readiness-20261024` 未提交工作树；
-本文件和版本表不是不可变 source SHA。P 各病例为 authored，不是 passed。
-旧版本断言、schema catalog ceiling、browser representation imports、Agent CLI flags
-及固定 asset 消费者已作源码迁移，完整类型／语法／边界／parity／格式／编译尚未执行。
-不能以本次源码阅读替代这些检查，也不能以旧 N 的 CI、标签或镜像验证 P。
+候选已保存／推送为 `aae0632f20c1ffc333433b67c72beafc29605e2a`，tree
+`9c6efb22ff514d3da22c108377a036c660539da2`。本轮 Actions 的实际 PR 测试合并
+`686f8b9b5e37fb4b029378722b773db0c562cdaf` 与候选 tree 相同，不是合并主线。
+类型／语法／边界／parity／编译检查与完整 contracts（含 Go race）已通过；其余
+完整作业结论和数据库跳过项对账以验证记录为准，不借用旧 N 的结果。
 
 原 deployment-tools 作业已加入 setup-plan 病例，原 MySQL 作业已加入本人凭据病例；
 同一 shared-resource 文件包含 P 用量与额度事件 SQL 病例。新 owner／wire／Web
-病例进入已有 glob；没有触发 workflow。获授权后先做允许的本地静态／编译，再为
-准确候选保存／Actions 单独取得相应授权。独立主机和规定时长实验继续单独记账。
-持续目标当前为 blocked：源码与验收准备已交付，执行验证待单独授权，独立环境
-暂无可用资源。后续验证、环境与接受条件完成后才能标记整体 achieved。
+病例进入已有 glob；后续明确的 Actions 指令已授权当前验证与必要修复。独立主机、
+负载和规定时长实验继续单独记账。持续目标当前为 active：P 源码与准备已交付，
+本轮 Actions 范围已闭合，独立环境仍不可用。不能将 Actions 或手册交付标成整体 achieved。
 
 源码收口补记：P4 Control 路径预检增加与原 Agent 具体入口检查相符的前置拒绝：
 拒绝通配／metadata／multicast／原 ingress CIDR 不允许的本机地址，并核对已发布
 ingress resource 的协议、地址和端口确实对应意图。原 Agent 校验不放宽；新增
-拒绝和绑定不匹配病例仅撰写，未运行。这修正了“Control 先接受、Agent 必然拒绝”
+拒绝和绑定不匹配病例已在当前 contracts 运行通过。这修正了“Control 先接受、Agent 必然拒绝”
 的预检缺口，不是新增执行权限或独立网络证明。
 
 接受矩阵的 PP-01–12 已有源码／契约病例和场景说明；PP-13–16 已有执行手册和
-输入模板。表内 planned 指未来执行，全部执行证据仍未取得，不等于省略旧行为、
-移动端、MySQL/outbox、namespace 或独立主机的接受义务。当前源码候选审阅完成后
-才进入单独授权的集中验证；发现接口、迁移、旧读者或原 owner 链路失败时先修复，
+输入模板。矩阵原 planned 是冻结前计划；当前准确修订执行结果以验证记录的逐项
+范围为准，独立主机／负载／24–72 小时仍未通过。不省略旧行为、移动端、MySQL/outbox
+或 namespace 的接受义务；接口、迁移、旧读者与原 owner 链路失败均先修复再重跑，
 不删病例、不放宽生产约束、不用历史绿灯替代本候选。
