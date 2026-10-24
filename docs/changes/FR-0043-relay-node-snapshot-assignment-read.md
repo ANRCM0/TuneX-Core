@@ -122,7 +122,7 @@ Source `245d438ace32e1a58c39f00c9dca0a5d1d8cc7d4`, tree
 `2a66270b73595d135d0a86fb0b20e1128b3c43b4` has the identical tree. Public
 type/binding/projection/input-count/override/error cases and the original native
 Snapshot rollback/conflict cases pass. See the full exact-source job/artifact
-index in [P verification](../development/product-verification-p-2026-10-24.md).
+index in [P verification](../testing/verification-status.md).
 
 Keep fe531cb and failed 17a9c2a samples separate. Current signed three-node
 TCP requires three independent commands; UDP first refuses an unavailable

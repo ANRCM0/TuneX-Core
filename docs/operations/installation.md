@@ -1,16 +1,17 @@
-# 安装接入与既有服务操作向导
+# 安装与接入
 
-日期：2026-10-24。P1 源码交付；病例已撰写，检查和运行验收未执行。
+本向导用于稳定阶段的人工安装、接入和保留状态升级。
+准确修订的检查与执行范围见[验收状态](../testing/verification-status.md)。
 
 本向导复用原角色预检、Control bootstrap、Agent enrollment、Compose 与升级评估。
 `deploy/setup.mjs` 只读取本机静态配置并输出计划，不创建文件、连接数据库或网络，
 不执行 Docker/系统命令，不生成或替换任何身份和密钥。输出命令是人工审阅示例。
 
-完整 P 候选的 Control schema profile 为 adp3-path-sample-alert-v1（0046），Agent
+当前 Control schema profile 为 adp3-path-sample-alert-v1（0046），Agent
 沿用原 runtime／multihop／shared-resource Journal profile。新增默认关闭开关和
-最近路径样本语义见受控 Echo 与阶段 P 文档。原升级 plan 示例只是 placeholder；
+最近路径样本语义见受控 Echo 与当前验收记录。原升级 plan 示例只是 placeholder；
 必须以实际源版本、目标镜像 digest、原数据库／authority／Journal 检查结果填写。
-独立主机／恢复／负载／长稳步骤见 product-p-deployment-acceptance.md，尚未执行。
+独立主机／恢复／负载／长稳步骤见[部署验收](../testing/deployment-acceptance.md)。
 
 ## 选择角色与阶段
 

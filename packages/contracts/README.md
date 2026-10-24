@@ -73,4 +73,4 @@ channel. Fixed-time fixtures are not current execution authorization.
 The complete current foundation acceptance is planned/unexecuted. This README
 records source behavior and boundaries, not a new passing parser/compatibility
 result. See the [native leaf map](../../docs/architecture/contracts-package-native-boundaries-v1.md)
-and [foundation readiness](../../docs/development/foundation-readiness.md).
+and [foundation readiness](../../docs/testing/verification-status.md).

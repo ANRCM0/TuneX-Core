@@ -24,10 +24,8 @@ drivers. No new role, phase, protocol, Probe path or echo composition is added.
 Remaining native engine/wire internals and Control/Probe/CLI coupling are separate
 classification work, not certified wholesale by this move.
 
-See docs/development/foundation-readiness.md item 29 and
-docs/architecture/agent-execution-host-v1.md for pending acceptance.
-No code/behavior/platform compatibility is accepted from source
-closure alone; no checks/gofmt/tests/build/network/CI or Git mutation has run here.
+The native execution call chain is documented in
+[execution host](../../../docs/architecture/agent-execution-host-v1.md).
 
 The original native Probe destination/config/digest/policy and observed endpoint
 parsing now also lives here. Those helpers receive no Runner/ticket/Journal/permit;
@@ -68,6 +66,8 @@ balance, authority, Journal or Runtime ledger is owned here.
 Rate waits receive the instance/session cancellation context and recheck original
 authorization after acquiring credit. UDP waits hold no listener/session locks.
 Original idle, peer credential, lease, drain and shutdown limits remain in force.
-The new payload gate/dispatch tests and metered Relay test helpers are authored
-only; no formatter, syntax/type/static check, tests, build, network experiment or
-CI has executed for this change.
+Payload gate/dispatch tests and metered Relay helpers cover these contracts;
+their execution evidence is bound to the recorded source revision.
+
+Exact-source verification and remaining platform limits are recorded in
+[verification status](../../../docs/testing/verification-status.md).

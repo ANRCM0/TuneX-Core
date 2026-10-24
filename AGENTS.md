@@ -71,87 +71,35 @@ The gate is documented interfaces + passing contract acceptance + a usable publi
 example on the frozen source revision. Source closure alone does not open it.
 Once opened, each parallel module task uses an independent branch/worktree and
 module directory, with a public contract, tests and integration instructions.
-Keep foundation changes in a separate approved task; avoid shared composition-file
-edits until integration. Do not commit, switch or discard this existing dirty
-foundation worktree merely to manufacture independent branches.
+Keep foundation changes in a separate authorized task; integrate shared composition
+files serially. Never discard existing work to manufacture independent branches.
 
-## Current Development And Evidence Agreement
+## Stable Maintenance And Evidence
 
-On 2026-10-19 the human subsequently authorized testing and pushing the complete
-A5 candidate, then merging PR #111 and cleaning obsolete documents and historical
-files with a further commit/push. That bounded authorization supersedes the
-source-only restriction below for those tasks. It does not accept the foundation,
-open parallel product development, or authorize a release.
+The human moved the project into stable maintenance on 2026-10-24 and requested
+project-file cleanup including development-process documentation. Current entry:
+docs/maintenance.md. Installation/recovery guides live in docs/operations;
+acceptance requirements and exact-source evidence live in docs/testing.
+Earlier stage plans, agent assignments, run-by-run logs and large assertion
+worksheets are available through Git history, not active task instructions.
 
-The later complete-B task additionally authorized closing the 220-item assertion
-map, the named parallel owner work, static checks, commit/push, exact-source
-Actions and removal of unnecessary temporary records. The bounded B acceptance
-decision is now recorded in docs/development/foundation-verification-2026-10-19.md.
-Future module entry is eligible only for the accepted frozen public contracts or
-a separately verified successor, with its own authorized task, public contract,
-independent branch/worktree, tests and integration instructions. This task does
-not authorize merging PR #112, starting C product work or publishing a release.
+Keep protocol schemas/fixtures, migrations, generated assets, contract tests,
+public examples, source classification, ADRs and FR compatibility obligations.
+Cleanup never authorizes changes to runtime semantics or protected state.
+The stable-stage designation is not independent-host/load/long-run acceptance.
 
-The current human agreement is source development first, concentrated verification
-after freezing. During this phase do necessary source reads/edits; do not run tests,
-type/syntax/static/boundary checks, formatters, generators, builds, acceptance CI,
-network/MySQL/browser experiments, commits or pushes without later authorization.
-Do not expand test/CI tooling as a substitute for the source task. Record required
-acceptance cases and unresolved compatibility in the foundation readiness document.
+Use the human's current scope for edits, verification, commit/push and release.
+When verification is authorized, local execution covers static/type/boundary,
+generated-parity, formatting and compilation/vet. Functional/MySQL/network/
+container/browser evidence belongs in Actions. Record exact tested SHA/tree,
+whole-job conclusions, conditional skips, merge and image publication separately.
+Historical passes do not validate later executable changes. Never fabricate
+physical-host independence or elapsed 24/72-hour evidence from same-host cases.
 
-On 2026-10-21 the human explicitly authorized the new N product development stage,
-with a persistent goal and named parallel agents working through the confirmed
-product priorities. The phase ledger is
-`docs/development/product-development-stage-n-2026-10-21.md`; PR-01 through PR-14
-in the linked product baseline define its scope. This authorizes source changes,
-necessary FR proposals, contract-case authoring and isolated named worktrees.
-Shared foundation contracts, schema catalog and composition roots are integrated
-serially. This does not authorize executing verification, commit/push, merge,
-release or unrelated parallel features; preserve their separate gates.
+The human deploys real machines independently. Host topology/access and secrets
+remain with the operator; do not request access merely to prepare documentation.
+Diagnose shared deployment evidence within the current task authorization.
 
-The human subsequently authorized N verification on 2026-10-21 with
-"好，开始进行测试". This opens the N candidate's verification and necessary failure
-repairs. Local execution remains limited to static/type/boundary/generated-parity
-checks, formatting and compilation/vet; functional, MySQL, network, container and
-browser evidence belongs in Actions. Record the tested source separately from
-the dirty checkout baseline. This testing instruction does not itself authorize
-commit/push, merge or release.
-
-The human then explicitly approved saving and pushing the N candidate to a
-testing branch and running Actions, including necessary failure repairs. This
-bounded authorization permits the candidate commits, pushes and draft PR for N
-verification. It does not authorize merge, image publication or release.
-
-When verification is authorized, functional/MySQL/network/container/browser evidence
-belongs in GitHub Actions. Record the exact tested source revision. Historical
-passes do not validate current changes. Independent physical-host gates remain
-unverified when hosts are unavailable; do not replace them with same-host evidence.
-
-On 2026-10-24 the human requested a plan, persistent goal and implementation for
-the identified product gaps. The serial P source stage is recorded in
-`docs/development/product-readiness-stage-p-2026-10-24.md`. It covers installation
-guidance, membership/account UX, online shared-resource usage, controlled Probe
-and alert extensions, daily/batch operation UX and deployment/load acceptance
-preparation. Record concrete FRs before changing frozen contracts. This stage
-does not reuse N's bounded test, commit/push, merge or release authorization, and
-does not authorize delegation. Actual physical-host/load/long-run results require
-their own environment and execution evidence.
-
-Never revert unrelated existing changes. If unexpected concurrent changes appear,
-stop and ask how to proceed. Do not delegate to sub-agents unless the user or an
-applicable instruction explicitly authorizes delegation.
-
-On 2026-10-24 the human selected GitHub and instructed "使用action进行测试和验收"
-for the prepared P candidate. This opens P Actions verification and necessary
-failure repairs, including saving/pushing the candidate testing branch and
-creating a draft PR so Actions can test the exact source. Keep functional,
-MySQL, network, container and browser execution in Actions. This does not
-authorize merge, image publication, release or delegation. Independent-host,
-load and long-run acceptance remains unavailable pending actual environments.
-
-On 2026-10-24 the human instructed "好的，合并整理一下，准备开始实机测试".
-This authorizes merging PR #118, synchronizing main and consolidating physical-test
-handoff documentation. Record post-merge Actions and automatic development-image
-publication separately from pre-merge verification. Actual host execution still
-requires the real host/runner, topology, resource/fault scope and time inputs;
-do not treat test preparation as independent-host/load/long-run acceptance.
+Never revert unrelated changes. If unexpected concurrent changes appear, stop
+and ask how to proceed. Do not delegate without explicit human or applicable
+instruction authorization. Do not publish a stable tag/release as a cleanup step.

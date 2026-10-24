@@ -11,7 +11,7 @@ The complete named Control, Agent and asset/consumer ledgers there supersede
 older bounded-inventory leftovers below. Actual graph/type/private/asset/default/
 behavior acceptance is tracked separately. The candidate was saved, its configured
 CI passed, and PR #111 merged; see
-[verification](../development/foundation-verification-2026-10-19.md).
+[verification](../testing/verification-status.md).
 The detailed source-only table below records its original classification scope;
 readiness reconciliation and the foundation acceptance gate remain open.
 

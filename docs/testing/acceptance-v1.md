@@ -107,7 +107,7 @@ not satisfy independent physical-host, public-network or long-run release gates.
 
 当前真实网络隔离切片覆盖 OPS-03/04/07/08 及 ADP-07/10 的 Relay 激活、断链、
 旧报告与换路径补偿部分；命令 `npm run test:relay-isolation`。逐项断言、证据位置
-和环境限制见 [Relay network isolation](../development/relay-network-isolation.md)。
+和环境限制见 [Relay network isolation](relay-network-isolation.md)。
 这些部分通过不等于完整阶段、持续负载或发布门槛全部完成。
 
 
@@ -119,7 +119,7 @@ not satisfy independent physical-host, public-network or long-run release gates.
 验证两次自动换钥、持久签发响应重试、更高 generation/fence、旧凭据拒绝、
 实际 overlap/有效授权到期后的新流量，以及保留 journal 的在线过期恢复。
 这些命令覆盖的适用断言及环境限制见
-[Relay capacity](../development/relay-capacity.md) 和
+[Relay capacity](relay-capacity.md) 和
 [Relay rotation](../development/relay-rotation.md)。证据的实际 commit/dirty 字段
 决定被测版本；短期限的有效执行授权不等于已演练生产叶证书完整生命周期。
 完整发布矩阵与远程 CI 结果仍需独立核验。

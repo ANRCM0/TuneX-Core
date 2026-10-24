@@ -1,6 +1,6 @@
 # Runtime Journal Coordination Boundary
 
-Public Go interface 4 (FR-0013 and FR-0032), source candidate and unverified. RuntimeHost coordinates
+Public Go interface 4 (FR-0013 and FR-0032). RuntimeHost coordinates
 the one existing authenticated Runtime Journal through RuntimeStore, SnapshotInput
 and SnapshotCodec. It does not open files, acquire OS locks, compute MACs, parse a
 native wire protocol, read time or create an execution lease.
@@ -24,7 +24,7 @@ state.Journal/RuntimeJournal retain their native field/tag/order contract as dis
 L2 record types. They are no longer aliases of lower facts; use explicit projection.
 Initialization, explicit multihop/import migration, read-only inspection and Runner
 authorization/socket ownership stay with their original owners and entrypoints.
-Acceptance cases are in foundation-readiness items 14-15; none executed here.
+
 
 SnapshotCodec now requires SupportsProtocol(version) and PhysicalSlotKey(protocol,
 port), in addition to DecodePrevious. Old custom codec method sets must migrate;
@@ -83,5 +83,8 @@ in-process mutex serializes Snapshot and payload writers before that OS lock.
 
 The new payloadbudget, executionstate, state and Runner source cases cover
 aggregate bidirectional use, concurrent writers, restart, policy revision changes,
-drain retention, read-only inspection and original authority preservation. They
-are authored only: no tests, checks, formatter or build ran for FR-0032.
+drain retention, read-only inspection and original authority preservation.
+Exact-source execution is recorded separately from these contract obligations.
+
+Exact-source verification and remaining environment limits are recorded in
+[verification status](../../../docs/testing/verification-status.md).

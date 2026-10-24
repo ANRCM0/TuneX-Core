@@ -3,7 +3,7 @@
 FR-0032 public example, loaded by Node in the configured N Actions contracts job.
 That check does not invoke the exported composition/configuration functions.
 Exact source and job evidence are recorded in
-[N verification](../../docs/development/product-verification-n-2026-10-21.md).
+[N verification](../../docs/testing/verification-status.md).
 This example does not prove deployment or grant execution authority.
 `main.ts` has no top-level side effects, database connection, socket, clock or
 authority issuer. It imports only the resource-limit owner's public entrypoint

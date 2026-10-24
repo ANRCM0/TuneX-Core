@@ -3,7 +3,7 @@
 Date: 2026-10-21; verification status updated 2026-10-23.
 FR-0032 passed the configured N candidate Actions scope and was merged through
 PR #114 at `9a5f719`. Exact source identities and executed cases are recorded in
-[N verification](../development/product-verification-n-2026-10-21.md).
+[N verification](../testing/verification-status.md).
 This specification defines behavior; independent hosts, load, installation and
 release acceptance remain separate from that configured functional evidence.
 

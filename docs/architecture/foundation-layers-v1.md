@@ -3,13 +3,13 @@
 Original source handoff: 2026-10-18 (Asia/Shanghai), declared boundary and first
 live extraction; then not accepted. Documentation status clarified: 2026-10-21.
 See [ADR-0048](../decisions/0048-foundation-layer-boundaries.md) and
-[readiness](../development/foundation-readiness.md).
+[readiness](../testing/verification-status.md).
 
 B subsequently accepted the bounded frozen public contract/consumer/compatibility/
 example scope at source `e208a3abf17129b0c2898ba2022c69f60f45445a`, actually tested
 as `c3ce8a67b901f61234b4116190409854818cb6c7`. See the
 [candidate index](foundation-candidate-index-v1.md) and
-[verification record](../development/foundation-verification-2026-10-19.md).
+[verification record](../testing/verification-status.md).
 Dated source-phase/unexecuted statements below preserve their original scope and
 are superseded by that decision for its exact revision. They neither negate B
 acceptance nor certify subsequent changes. Future module work needs its own task,
@@ -22,13 +22,13 @@ default/consumer/asset classification is closed in
 FR-0023-0025 source-separate Agent timing/credential representation and common
 Control cancellation. Earlier paragraphs preserve extraction history; actual
 configured boundary/contract/example checks passed on the saved PR #111 candidate.
-See [verification](../development/foundation-verification-2026-10-19.md).
+See [verification](../testing/verification-status.md).
 Full readiness acceptance and independent physical/release gates remain separate.
 
 ## N Product Source Successor (2026-10-21)
 
 FR-0028–0032 extend current source under the explicitly authorized
-[N stage](../development/product-development-stage-n-2026-10-21.md). L1 gains
+[N stage](../maintenance.md). L1 gains
 owner-independent ResourceReadAccess/claim and Runtime port-policy contracts;
 L3 ResourceAccess, Node, Forward, Path and query owners supply product ownership,
 purposes, personal visibility and shared-Node port decisions. L2 original MySQL

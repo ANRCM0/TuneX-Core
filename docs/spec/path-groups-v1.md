@@ -211,7 +211,7 @@ Control-only `adp3-path-groups-v1` has Schema ceiling 0025. Agent protocol, Jour
 runtime/multihop profiles and flags are unchanged. Older Control ceilings reject
 applied 0025 even with no group usage. All five DDL footprints are compared with
 migration history; partial DDL requires manual review, not fabricated history or
-automatic rebuild. See [upgrade/recovery](../development/upgrade-recovery-development.md).
+automatic rebuild. See [upgrade/recovery](../operations/upgrade-recovery.md).
 
 Full SQL backup retains all five tables with original templates/path bindings,
 Forward revisions and audits. Existing recovery preserves definitions/history/current

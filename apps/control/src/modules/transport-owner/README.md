@@ -21,4 +21,7 @@ effects before commit. Do not replace that atomic owner interaction with a queue
 or nested transaction. resolve locks the authorized immutable revision reference,
 not a silently chosen latest profile. Native compilation/registration is not
 execution authorization. Original errors, SQL/locks, digests, no-op and aliases
-require exact-source acceptance in foundation-readiness item 21, not yet executed.
+retain their original contract and transaction obligations.
+
+Exact-source acceptance and remaining limits are recorded in
+[verification status](../../../../../docs/testing/verification-status.md).

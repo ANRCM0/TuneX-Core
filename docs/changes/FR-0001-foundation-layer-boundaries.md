@@ -140,7 +140,7 @@ public compatibility change requiring a separate proposal and consumer inventory
 
 ## Validation And Remaining Scope
 
-See [readiness](../development/foundation-readiness.md) for planned equivalence,
+See [readiness](../testing/verification-status.md) for planned equivalence,
 contract, import, example and physical/release evidence. No command in that plan
 has been executed for this slice. Existing older tests/checkers need adaptation;
 their historical passes do not prove the new source.

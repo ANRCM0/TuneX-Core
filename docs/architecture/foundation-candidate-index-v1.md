@@ -12,21 +12,21 @@ Current A5 source classification is closed for the named integrated candidate in
 supersedes earlier inventory leftovers for source ownership only; exact saved
 revision and matching machine/functional acceptance were absent at that handoff.
 The human has since authorized B verification and push; see
-[verification record](../development/foundation-verification-2026-10-19.md).
+[verification record](../testing/verification-status.md).
 Existing compatibility constructors/aliases are retained deliberately.
 
 B accepts the current public-version/consumer/default/compatibility scope at
 `e208a3abf17129b0c2898ba2022c69f60f45445a`, actually tested as
 `c3ce8a67b901f61234b4116190409854818cb6c7`. The
-[assertion map](../development/foundation-b-assertion-coverage.md) and
-[verification](../development/foundation-verification-2026-10-19.md) supersede the
+[assertion map](../testing/verification-status.md) and
+[verification](../testing/verification-status.md) supersede the
 dated planned/unexecuted source handoff below for this revision. Future modules
 consume that frozen contract set or a verified successor; independent physical,
 long-run/load, Responder, release and production gates remain separate.
 
 ## N Product Successor (Source Only, 2026-10-21)
 
-The later [N stage](../development/product-development-stage-n-2026-10-21.md)
+The later [N stage](../maintenance.md)
 adds FR-0028 through FR-0032 on the current dirty source. The tables following
 this section retain the frozen B/A5 index and its dated scope. They do not assert
 that N kept the old contract semantics or passed the old acceptance again.
@@ -66,7 +66,7 @@ extend actual native formats; old readers can refuse them. Agent authority/Journ
 and Runtime ledger have no competing successor authority. Five browser representation leaves
 are served through the original asset adapter. Template `loadDraft` and Relay
 `loadPathDraft` are additive returned operations; old initializers remain.
-See the [Web integration](../../apps/web/PRODUCT-INTEGRATION.md) and
+See the [Web integration](../../apps/web/README.md) and
 [Node integration](../../apps/control/src/modules/node-owner/PRODUCT-INTEGRATION.md).
 FR-0032's full owner/compatibility ledger, limits and unexecuted consumer cases are
 in its [change record](../changes/FR-0032-shared-resource-payload-limits.md) and
@@ -103,7 +103,7 @@ The navigation sources are:
 | Agent lower/native/product/default call chains | agent-remaining-source-callchains-v1.md, agent-native-default-bindings-v1.md and agent-native-contracts-auxiliary-v1.md |
 | Browser public/native/product leaves and served paths | browser-native-leaf-inventory-v1.md, console-browser-composition-v1.md and rule-command-owner-native-v1.md |
 | Source changes and compatibility decisions | ../changes/FR-0001-foundation-layer-boundaries.md through FR-0025; each FR has its own scope and remains implemented-unverified |
-| Planned acceptance and unmet gates | ../development/foundation-readiness.md; all current-source cases remain unexecuted |
+| Planned acceptance and unmet gates | ../testing/verification-status.md; execution is bound to the frozen revisions and scope in the verification record |
 
 ## Public Versions: Separate Counters
 

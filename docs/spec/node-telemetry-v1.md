@@ -98,7 +98,7 @@ retention. No 7-day minute or 30-day hourly rollups exist in this slice.
 The existing recovery owner clears checkpoints and flags restored raw points
 historical; new authenticated sessions establish baselines. It does not reset
 Authority/Journal/Fence. Reviewed Schema/profile compatibility is documented in
-[upgrade assessment](../development/upgrade-recovery-development.md).
+[upgrade assessment](../operations/upgrade-recovery.md).
 
 Node rows open a dedicated read-only Console dialog with explicit reload,
 15-minute/1-hour/24-hour windows and 128/256/512-point bounds. It displays process

@@ -63,7 +63,7 @@ claim that an offline or cloned holder already stopped.
 
 ## Commands
 
-Use the trusted TLS/account setup in [Phase 1](phase1.md):
+Use the trusted TLS/account setup in [Phase 1](../development/getting-started.md):
 
 ```sh
 npm run control:cli -- node-get scope-dev node-id

@@ -86,4 +86,4 @@ security review. Product Web, deployment/SBOM/license and release gates remain o
 
 Later same-host evidence now covers held target/path streams, same-client UDP reset,
 partial ingress bind and injected deadline/retry; see
-[Relay switch and faults](relay-switch-faults.md). Other residual gates remain open.
+[Relay switch and faults](../testing/relay-switch-faults.md). Other residual gates remain open.

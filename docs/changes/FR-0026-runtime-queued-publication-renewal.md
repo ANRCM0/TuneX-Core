@@ -92,7 +92,7 @@ Source `e208a3abf17129b0c2898ba2022c69f60f45445a`, actual checkout
 `c3ce8a67b901f61234b4116190409854818cb6c7`: baseline 39341589653 and
 packaging 39341589509 passed. All applicable steps, including this proposal's
 native/transaction/refusal and full integration assertions, are reconciled in
-[verification](../development/foundation-verification-2026-10-19.md). This closes
+[verification](../testing/verification-status.md). This closes
 the earlier pending exact-source acceptance in the declared B scope. The public
 compatibility impact and independent physical/long-run/Responder/release limits
 above remain; PR #112 is not merged by this task.

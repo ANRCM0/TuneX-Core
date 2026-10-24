@@ -65,7 +65,7 @@ replaces the authenticated Journal or permits clearing original protected state.
 
 ## Verification Update - 2026-10-24
 
-The current [P verification record](../development/product-verification-p-2026-10-24.md)
+The current [P verification record](../testing/verification-status.md)
 binds executed contracts, native MySQL and hosted-runner functional evidence to
 `aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
 wording in this source proposal records its authoring snapshot. Whole-workflow

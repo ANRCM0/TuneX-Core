@@ -26,7 +26,7 @@ configuration view). Their consumers are the original Control/Relay/Path/Ingress
 views; no blanket apps/web exemption is declared. Current source imports and
 declarations reside in the boundary inventory. Header/byte-exact asset cases,
 unit/DOM flows and public interfaces are authored only, not executed acceptance.
-See [Web integration](../../apps/web/PRODUCT-INTEGRATION.md) for public operations,
+See [Web integration](../../apps/web/README.md) for public operations,
 late-result clearing and the explicit unavailable consumption contract.
 
 ## Six-Part Source Proposal

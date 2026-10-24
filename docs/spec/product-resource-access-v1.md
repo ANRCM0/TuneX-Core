@@ -3,7 +3,7 @@
 Date: 2026-10-21; verification status updated 2026-10-23.
 FR-0028 through FR-0030 passed the configured N candidate Actions scope and were
 merged through PR #114 at `9a5f719`. Exact candidate/main identities, job results
-and remaining gates are recorded in [N verification](../development/product-verification-n-2026-10-21.md).
+and remaining gates are recorded in [N verification](../testing/verification-status.md).
 This does not change the historical frozen B acceptance. Examples below are
 documentation, not evidence that these particular requests were executed.
 
@@ -121,7 +121,7 @@ unclassified. 0040 adds nullable grant port limits. No migration derives owners
 from grants, Scope ownership or the last execution actor. The reviewed successor
 Control profiles do not change older ceilings or Agent profiles.
 
-The [N ledger](../development/product-development-stage-n-2026-10-21.md) maps
+The [N ledger](../maintenance.md) maps
 PR-01 through PR-14 and PA-01 through PA-12. Public Node authority5, Runtime
 Relay7/resource2/exclusive2, Node module3/management2/usage1 and the caller-aware
 read successors have migrated consumers exercised in the configured N Actions

@@ -50,7 +50,7 @@ preview only. It does not publish a Forward or prove real deployment.
 
 All new interfaces remain source candidates. No checks/tests/example/build/CI have
 executed in this development slice. Required behavioral equivalence, boundary and
-contract cases are in [foundation readiness](../development/foundation-readiness.md).
+contract cases are in [foundation readiness](../testing/verification-status.md).
 The whole-repository layer migration and the parallel gate remain open until their
 listed debt and exact-source acceptance are resolved. Do not label them complete
 because a source map or example file exists.

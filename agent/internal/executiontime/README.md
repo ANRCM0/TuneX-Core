@@ -1,6 +1,6 @@
 # Execution Time Boundary
 
-Public Go interface 2, source candidate and unverified. This package owns the
+Public Go interface 2. This package owns the
 existing Guard/Ticket and synchronization-cache decisions. It reads no OS clock,
 hostname, command output, proof file or protected key. All samples/evidence/host/
 platform identity are supplied through Clock or SynchronizationSources. FR-0023
@@ -21,5 +21,5 @@ same-host/platform binding, wall/uptime divergence latch, credential cutoff,
 non-renewable expired session and drain bounds remain source intent. A sample or
 OS synchronization status does not grant execution without the owner-held Guard.
 
-Acceptance cases are in foundation-readiness item 13. No tests, checks or native
-clock experiments have been executed for this extraction.
+Exact-source verification and remaining environment limits are recorded in
+[verification status](../../../docs/testing/verification-status.md).

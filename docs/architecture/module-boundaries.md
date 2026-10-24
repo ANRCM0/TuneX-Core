@@ -14,7 +14,7 @@ Pure domain/runtime decisions, framework hosts/ports, external adapters and prod
 modules have distinct public dependencies. Runtime invocation of an injected
 provider does not permit a reverse source/type import. Known composition roots
 are explicit. Unclassified legacy source is migration debt, not a broad exception.
-The first live extraction and [DoD readiness](../development/foundation-readiness.md)
+The first live extraction and [DoD readiness](../testing/verification-status.md)
 remain unverified; the earlier ADR-0047 source closure does not open parallel work.
 
 ## Classified Integration Framework v1 Source Closure

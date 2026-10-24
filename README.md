@@ -57,7 +57,7 @@ TUNEX_AUTHORITY_INITIALIZE=1 npm run control
 浏览器和 Agent 均需信任配置的 CA；远程 Agent 应直接连接 Control 的 HTTPS 服务，
 或通过保留端到端 TLS 的四层转发连接。
 
-容器部署可使用[安装接入向导](docs/development/deployment-setup-v1.md)。在实际部署主机
+容器部署可使用[安装接入向导](docs/operations/installation.md)。在实际部署主机
 运行 `deploy/setup.mjs --role control|agent --phase initial|existing`，复用现有预检并
 读取下一步操作和失败处理建议；计划不执行命令，静态通过不代表服务或业务已验证。
 
@@ -137,3 +137,9 @@ docker pull ghcr.io/anrcm0/tunex-agent:latest
 [Agent Compose 模板](deploy/compose.agent.example.yaml)。先配置自建或已确认版本的
 镜像、数据库连接、证书和持久化目录；Agent 使用 Linux host 网络。首次初始化和
 节点注册单独执行，日常服务沿用已有状态。
+
+## 文档与维护
+
+[文档目录](docs/README.md)按安装运维、开发接入、接口协议和测试验收组织。
+当前进入[稳定维护](docs/maintenance.md)，准确修订与剩余实机验收范围见
+[验证状态](docs/testing/verification-status.md)。

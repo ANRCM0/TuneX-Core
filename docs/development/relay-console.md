@@ -1,7 +1,7 @@
 # TuneX VNext · Relay UI + 节点诊断纵向切片
 
 状态：**独立开发分支，未通过完整产品/网络验收；不得用于生产就绪声明。**
-依赖 [Forward-first Web Alpha](forward-first-web.md) 和 VNext ADP/3。与 PR #84 是堆叠开发关系；先合并其基线再合并本批更合适。
+依赖 [Forward-first Web Alpha](../../apps/web/README.md) 和 VNext ADP/3。与 PR #84 是堆叠开发关系；先合并其基线再合并本批更合适。
 
 ## 用户工作流
 
@@ -66,4 +66,4 @@ npm run test:relay-isolation
 
 增加 Relay 纯数据模型约束测试、只读诊断 Scope ACL 与投影安全测试、静态安全响应头回归。代码路径不变更 Go Agent/ADP Schema，主要风险是浏览器与 Control 的配置对齐以及前序 Relay 长时网络 CI。完整两台物理主机、实际浏览器安装部署与目标链路独立探测仍未验收。
 
-遵守 [Relay Control](relay-control.md) 中的严格准备/激活顺序和 [Agent Security](upgrade-recovery-development.md) 中的授权/凭据边界。
+遵守 [Relay Control](relay-control.md) 中的严格准备/激活顺序和 [Agent Security](../operations/upgrade-recovery.md) 中的授权/凭据边界。

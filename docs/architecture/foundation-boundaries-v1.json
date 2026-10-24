@@ -4,11 +4,11 @@
   "currentSourceCandidate": {
     "stage": "P",
     "authorizationDate": "2026-10-24",
-    "record": "docs/development/product-readiness-stage-p-2026-10-24.md",
+    "record": "docs/maintenance.md",
     "status": "Actions-covered-cases-passed-independent-environment-pending",
     "testedSource": "69dcaa710ee0298adde0656674b99c5cb6e1f2b8",
     "testedTree": "62cd28b39e8e7e37cce2745c4781827186cac403",
-    "verificationRecord": "docs/development/product-verification-p-2026-10-24.md",
+    "verificationRecord": "docs/testing/verification-status.md",
     "baselineRun": 40069707791,
     "packagingRun": 40069707745,
     "verifiedNodeReader": {"record":"docs/changes/FR-0043-relay-node-snapshot-assignment-read.md","status":"accepted-in-recorded-P-Actions-case-scope","contract":"RelayNodeAssignmentReader1","nativeBinding":"existing Snapshot Relay source explicitly selects assignmentsForNode"},
@@ -21,7 +21,7 @@
   },
   "verification": {
     "authorizationDate": "2026-10-19",
-    "record": "docs/development/foundation-verification-2026-10-19.md",
+    "record": "docs/testing/verification-status.md",
     "identity": "saved-branch-head-and-Actions-tested-merge-SHA",
     "acceptance": "bounded-current-public-contracts-and-configured-environments",
     "sourceRevision": "e208a3abf17129b0c2898ba2022c69f60f45445a",
@@ -53,7 +53,7 @@
   },
   "nProductSourceInventory": {
     "status": "manual-source-classification-unverified",
-    "record": "docs/development/product-development-stage-n-2026-10-21.md",
+    "record": "docs/maintenance.md",
     "L1": ["apps/control/src/framework/resource-limit-ports.ts", "agent/internal/payloadbudget", "apps/control/src/framework/resource-access-ports.ts", "apps/control/src/framework/runtime-port-policy-ports.ts", "apps/control/src/framework/identity-access-ports.ts"],
     "L2": ["apps/control/src/infrastructure/mysql-resource-limits.ts", "apps/control/migrations/0041-shared-resource-payload-limits.sql", "packages/contracts/src/resource-limits.ts", "apps/web/resource-limit-console.js", "apps/control/src/infrastructure/mysql-resource-access.ts", "apps/control/migrations/0039-product-resource-access.sql", "apps/control/migrations/0040-shared-node-port-limits.sql", "apps/web/account-context.js", "apps/web/line-builder.js", "apps/web/template-reference.js", "apps/web/admin-resource-console.js"],
     "L3": ["apps/control/src/modules/resource-limit-owner/public.ts", "apps/control/src/modules/resource-access-owner/public.ts", "apps/control/src/modules/node-owner/port-limits.ts", "apps/control/src/modules/node-owner/resource-policy.ts", "apps/control/src/modules/probe-owner/capabilities.ts", "apps/control/src/modules/probe-owner/capability-api.ts", "apps/control/src/modules/probe-owner/capability-contracts.ts"],
@@ -1111,6 +1111,6 @@
     "executed": false,
     "boundaryToolingAdapted": false,
     "parallelDevelopmentGateOpen": false,
-    "record": "docs/development/foundation-readiness.md"
+    "record": "docs/testing/verification-status.md"
   }
 }

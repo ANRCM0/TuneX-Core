@@ -43,7 +43,7 @@ physical acceptance remain separately unexecuted. No parallel work is started.
 
 ## Verification Update - 2026-10-24
 
-The current [P verification record](../development/product-verification-p-2026-10-24.md)
+The current [P verification record](../testing/verification-status.md)
 binds executed contracts, native MySQL and hosted-runner functional evidence to
 `69dcaa710ee0298adde0656674b99c5cb6e1f2b8`. Earlier planned/unexecuted
 wording in this source proposal records its authoring snapshot. Whole-workflow

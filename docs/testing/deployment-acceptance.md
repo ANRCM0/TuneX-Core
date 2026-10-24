@@ -1,37 +1,16 @@
-# P Deployment, Recovery And Load Acceptance
+# Deployment, Recovery And Load Acceptance
 
-Prepared: 2026-10-24. Status: independent-host/load/long-run campaigns not executed.
-This runbook is P6 source delivery; it records no production capacity. The parent
-ledger is [stage P](product-readiness-stage-p-2026-10-24.md), PP-13 through PP-16.
+This runbook defines installation, recovery, independent-host fault, load and
+24/72-hour acceptance. The operator deploys independently and reviews the real
+host/runner identities, topology, isolated database, controlled Responder,
+resource/fault limits, thresholds, stop conditions and available duration.
+Access and secrets remain in the deployment environment, not this repository.
 
-The later human merge/preparation instruction has integrated PR #118 as main
-`dc03606fb61a6044a8a0a62c0fc1cd8a3c6e4ca8`. Use the
-[physical-test handoff](product-p-physical-handoff-2026-10-24.md) for exact main
-CI/image workflow identities and the required environment inputs. Post-merge
-CI/image outcomes and actual host execution are still pending at this handoff.
-The earlier authorization statements below retain their original dated scope.
-
-The human subsequently confirmed self-managed deployment ("我自己部署"). The
-operator fills/reviews the environment inputs locally and retains host access;
-no credentials or host allocation must be supplied to this chat for preparation.
-Actual PP-13 through PP-16 outcomes still require their execution evidence.
-
-Environment decision (2026-10-24, Asia/Shanghai): the human confirmed that no
-independent-host or long-run environment is currently available and requested
-source and acceptance preparation first. No runner labels, host allocation or
-authorized duration have been supplied. This handoff provides the source,
-scenarios and inventory template; physical-host, load and long-run execution
-remain pending. This decision supplies no P verification, commit/push, merge or
-release authorization. The later Actions request and actual candidate execution
-are recorded separately in [P verification](product-verification-p-2026-10-24.md).
-
-To resume environment execution, supply reviewed host/runner identities and
-topology, an isolated acceptance database and controlled Responder, permitted
-fault/load scope, resource limits, approved thresholds and stop conditions, and
-an available time window for the baseline and separate 24/72-hour campaigns.
-Then bind the exact candidate and artifacts below. Keep the example inventory
-unreviewed until actual identities and independence have been reviewed; do not
-fabricate environment or timing evidence to complete the template.
+Use [verification status](verification-status.md) for exact source/CI/image
+identities and existing evidence; use [physical testing](../operations/physical-testing.md)
+for the original collector. Source review, hosted-runner functional checks,
+container/image publication, actual deployment and long-run results are separate.
+Independent-host/load/long-run campaigns have no recorded pass in this handoff.
 
 ## Bind The Candidate And Environment
 
@@ -61,7 +40,7 @@ references copied into evidence; the collector does not inspect the running
 Control/Agent container image, attest the remote Control build, prove a clean
 installation or establish physical-host independence. A dirty checkout flag is
 reported, not accepted as clean. Retain separate deployment inspection and
-source/artifact provenance for those requirements before assigning PP-13/14 a
+source/artifact provenance for those requirements before assigning installation/independent-host faults a
 pass. Local image IDs, manifest digests, binary hashes and source archive hashes
 are different identities; do not substitute one for another or invent a registry
 digest when the candidate has only passed local image packaging in Actions.
@@ -116,8 +95,8 @@ does not become successful when a later deployment recovers.
   incident. Preserve original result validUntil and label this historical sample
   condition separately from current path health or a measured failure/loss rate.
 
-Restore follows [the original maintenance workflow](recovery-and-capacity.md)
-and [owner invariants](upgrade-recovery-development.md). Use original `ops status`,
+Restore follows [the original maintenance workflow](../operations/recovery-and-capacity.md)
+and [owner invariants](../operations/upgrade-recovery.md). Use original `ops status`,
 `maintenance`, `backup`, `restore` and explicit `resume`; stop and isolate every
 issuer, retain independent authority/keys, verify real clock proof, restore only
 into a new database, and review recovery quarantine before resuming. Preserve
@@ -128,7 +107,7 @@ re-enrollment or a new authority directory as a compatibility repair.
 
 ## Load And Long-Run Campaign
 
-Reuse the [D1 measurements and decision rules](load-baseline-2026-10-20.md).
+Reuse the [D1 measurements and decision rules](deployment-acceptance.md).
 Before starting, record approved limits and stop conditions for the actual host
 class. The following is a proposed workload, not a certified capacity claim:
 
@@ -161,11 +140,8 @@ failed attempt rather than replacing it with a later green sample.
 Acceptance proceeds separately: source review -> authorized local static/type/
 boundary/parity/format/compilation -> exact-source Actions functional/MySQL/
 network/container/browser -> independently reviewed physical hosts -> actual
-duration load/long-run -> release decision. The saved P Actions source is
-`69dcaa710ee0298adde0656674b99c5cb6e1f2b8`; executed contracts, native SQL,
-hosted-runner functional/recovery/capacity samples and container packaging are
-recorded separately in the verification record. Those bounded samples are not
-the reviewed topology, offered load, thresholds or 24/72-hour campaigns required
-here. No main merge or published image follows from this task. PP-13 through
-PP-16 retain their independent-environment obligations, and the persistent P
-goal is not achieved by these preparations or the hosted-runner samples.
+duration load/long-run -> release decision. Use the [verification record](verification-status.md)
+for exact source/run/image identities. Hosted-runner recovery/capacity samples
+are not the reviewed deployment topology, offered load, thresholds or 24/72-hour
+campaigns required here. Installation, fault, load and recovery retain their
+independent-environment obligations; preparations do not satisfy execution.

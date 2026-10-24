@@ -87,7 +87,7 @@ without substituting a mock callback or broadening transaction retries.
 ## Running
 
 Build the three Linux executables and configure the disposable MySQL URL as described
-in [System time](system-time.md). Linux requires iproute2 `ip`/`ss`, iptables and
+in [System time](../operations/system-time.md). Linux requires iproute2 `ip`/`ss`, iptables and
 permission to create network namespaces: root or passwordless sudo on an isolated
 test runner. Agent production privileges are not validated by this root test lab.
 

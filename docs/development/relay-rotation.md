@@ -39,7 +39,7 @@ journal、高水位、身份和 fence。损坏状态继续拒绝，不能通过�
 
 ## 验收
 
-命令：`npm run test:relay-rotation`。环境与 [Relay 容量](relay-capacity.md) 相同。
+命令：`npm run test:relay-rotation`。环境与 [Relay 容量](../testing/relay-capacity.md) 相同。
 两个 Agent 运行在独立 Linux network namespace、独立非 root UID/GID 下，零
 capabilities、NoNewPrivs、256 FD；Control HTTPS 认证经 opaque TCP proxy 端到端保留。
 

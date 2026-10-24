@@ -7,19 +7,19 @@ its frozen public-interface/configured-Actions scope**.
 A5 saved head `9f1d78d` merged as `373c291`. B is frozen at
 `e208a3abf17129b0c2898ba2022c69f60f45445a`, actual tested PR checkout
 `c3ce8a67b901f61234b4116190409854818cb6c7`. See the
-[verification record](../development/foundation-verification-2026-10-19.md) for
+[verification record](../testing/verification-status.md) for
 the acceptance decision and separate merge/environment/release gates. PR #112
 was later merged as `5a764f7`; future product work still needs its own authorization
 and accepted base.
 
 The no-check/no-commit/unverified statements below are the original A5 source
 handoff. Its later B assertions and execution are now reconciled in the maintained
-[map](../development/foundation-b-assertion-coverage.md); those historical words
+[map](../testing/verification-status.md); those historical words
 do not invalidate that identified evidence or accept any later source change.
 
 ## A5 Exit Scope And Records
 
-The A5 scope, now summarized in development/development-plan.md, was to assign
+The A5 scope, now summarized in ../maintenance.md, was to assign
 remaining source/type references, document actual compatibility consumers and
 defaults/removal conditions, and join the candidate source/version/acceptance
 records. A5 does not authorize running source checks, generating a snapshot,
@@ -35,7 +35,7 @@ that manual source scope for the current working tree:
 | Remaining Control source | foundation-control-source-closure-v1.md: named kernel/framework/native/storage/HTTP leaves,31 product owners and original server/main/bootstrap/CLI/client roots, precise legacy MySQL/API bridges and actual consumers |
 | Agent source and representation ownership | foundation-agent-source-closure-v1.md: named lower/native/Runner/Probe/state/engine/codec/command/auxiliary/test leaves, default/private/serializer consumers, embedded schemas and existing authority owner chains |
 | Packages, Web, support and distributions | foundation-assets-consumers-closure-v1.md plus contract-assets-source-map-v1.md and browser-native-leaf-inventory-v1.md: eleven package exports, native/private leaves,21 schemas/actual loaders/copies/generator roles,22 old Web leaves/new owner-native entries, fixed assets, fixtures, tests, ops, example, locks/config/deploy/workflows |
-| Public versions and acceptance handoff | foundation-candidate-index-v1.md and development/foundation-readiness.md: actual independent source counters, FR-0001-0025, retained bridges/removal conditions and planned cases1-220; all current-source execution remains unverified |
+| Public versions and acceptance handoff | foundation-candidate-index-v1.md and testing/verification-status.md: actual independent source counters, FR-0001-0025, retained bridges/removal conditions and planned cases1-220; execution is bound to the frozen revisions and scope in the verification record |
 
 The leaf/family ledgers use source navigation, direct public/import reads and
 targeted full bodies together with the existing owner/FR records. This does not

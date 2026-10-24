@@ -6,7 +6,7 @@ The semantic specifications remain [Core v1](core-v1.md) and [Forward v1](forwar
 
 Under [ADR-0048](../decisions/0048-foundation-layer-boundaries.md), L0 also has a
 separate minimal runtime decision kernel. That is not an expansion of this domain
-package. The [complete foundation DoD](../development/foundation-readiness.md)
+package. The [complete foundation DoD](../testing/verification-status.md)
 remains unmet; this protected surface alone does not permit upper parallel work.
 
 ## Public package boundary

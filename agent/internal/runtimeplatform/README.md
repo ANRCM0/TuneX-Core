@@ -1,6 +1,6 @@
 # Runtime Platform Effects
 
-Public Go interface 1, source candidate and unverified. Bootstrap and Scheduler
+Public Go interface 1. Bootstrap and Scheduler
 declare effects without a native filesystem, OS clock or wire-reader dependency.
 The platformruntime provider binds the original proof boundary check, configured
 CA, protection key, authenticated Journal load/explicit migration and standard Go
@@ -28,11 +28,13 @@ turn measurements/logs into authorization, and add no retry or fallback.
 Old explicit constructors retain their existing requirements and native local
 effects. Additive NewWithLocalServices requires every explicit service alongside
 the original effects/providers; it rejects nil services before bootstrap I/O. These
-are trusted compiled-in providers, not sandboxed plugins. Acceptance cases are
-foundation-readiness 17-19, unexecuted.
+are trusted compiled-in providers, not sandboxed plugins. Provider/default equivalence and failure handling remain acceptance obligations.
 
 Dialer[Connection] additionally declares a trusted context/network/address effect
 without importing a native network or Probe type. L2 platformruntime owns the
 original default native dialer. Probe effects reuse Scheduler/Entropy and this
 generic port without changing existing Runner provider scope or creating another
 Gate/process budget. See agent-probe-effects-v1.md and unexecuted item 34.
+
+Exact-source verification and remaining environment limits are recorded in
+[verification status](../../../docs/testing/verification-status.md).

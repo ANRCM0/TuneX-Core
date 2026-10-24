@@ -37,7 +37,7 @@ to the injected stderr logger. RequestLifecycle waits for application completion
 
 Contract acceptance still needs successful execution, denied/unknown/invalid input,
 immutability, no physical/store side effects and logger/drain cases listed in
-`docs/development/foundation-readiness.md`. A runnable command in documentation is
+`docs/testing/verification-status.md`. A runnable command in documentation is
 not recorded as a passing test. New module development uses an independent branch
 only after the foundation gate passes; this existing source worktree is preserved.
 

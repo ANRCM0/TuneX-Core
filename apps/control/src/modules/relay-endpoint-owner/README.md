@@ -18,5 +18,6 @@ before; a changed active endpoint still refuses instead of inventing withdrawal.
 get retains Scope -> Node cleanup facts -> shared endpoint read and still reports
 executionSupported false. Source extraction does not turn that view into execution
 support or authority. The original caller owns Runtime, leases and Journal.
-No acceptance has run; foundation-readiness item 21 records the required traces,
-refusal, rollback, digest/format and old/new contract cases.
+
+Exact-source acceptance and remaining limits are recorded in
+[verification status](../../../../../docs/testing/verification-status.md).

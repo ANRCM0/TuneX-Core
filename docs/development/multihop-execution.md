@@ -5,7 +5,7 @@ Date: 2026-10-16. Baseline: `904c5aa1907948b3859652c80575268c796c4895`.
 The implementation follows the six-batch development sequence. Local runtime,
 container, isolated-network and physical-host tests were deliberately deferred
 at the user's request. Compilation and static checks are recorded separately in
-the [current verification status](progress.md). Configured 3/4/8-node topology
+the [current verification status](../maintenance.md). Configured 3/4/8-node topology
 and namespace checks now pass on the identified PR #111 candidate; independent
 physical-host and release gates remain separate. Later source-only notes describe
 their original slice, not the current aggregate evidence.
@@ -85,7 +85,7 @@ The latest Operation and linked failure details remain visible after withdrawal.
 Prepare the pinned Node/Go versions, disposable MySQL 8.4, OpenSSL, Linux or the
 configured WSL distribution, actual OS time synchronization, and built Linux
 Agent/time-proof/network-fixture binaries. Existing setup details are in
-[getting started](getting-started.md) and [Relay isolation](relay-network-isolation.md).
+[getting started](getting-started.md) and [Relay isolation](../testing/relay-network-isolation.md).
 On WSL, set the inspected `TUNEX_WSL_HOST` and `TUNEX_WSL_DISTRO`; do not invent
 an address or use a production database.
 

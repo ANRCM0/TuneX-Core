@@ -2,7 +2,7 @@
 
 Date: 2026-10-18. Status: source candidate; not accepted or verified.
 This document records the L3 public seam, not an additional execution framework.
-The source-only agreement and foundation-readiness.md remain authoritative.
+Current maintenance rules are in AGENTS.md; exact-source evidence and remaining gates are in ../testing/verification-status.md.
 
 ## Public Entry Points
 

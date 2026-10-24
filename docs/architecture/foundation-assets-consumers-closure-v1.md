@@ -16,7 +16,7 @@ P source addition, 2026-10-24: `deploy/setup-plan.mjs` is a fixed, pure deployme
 plan/remediation projection of the original rolePreflight report. `deploy/setup.mjs`
 is its local read-only CLI composition over the original role-specific filesystem
 and certificate checker. `deploy/test/setup-plan.test.mjs` is an authored consumer;
-`docs/development/deployment-setup-v1.md` explains its manual operations and limits.
+`docs/operations/installation.md` explains its manual operations and limits.
 These support leaves are not server/Agent execution providers and do not initialize,
 enroll, start services, contact remote systems or authorize deployment. Original
 `preflight.mjs`/`preflight-role.mjs` entrypoints and results remain unchanged.

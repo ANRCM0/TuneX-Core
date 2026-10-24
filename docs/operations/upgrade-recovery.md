@@ -63,5 +63,5 @@ ports cover ordering and refusal. Packaging tests follow the actual command/nati
 entrypoints. Real SELECT-only MySQL grants, full-database digests, migration markers,
 Journal authentication, backup/restore and runtime fault cases run in Actions.
 Record exact source and case results; historical passes do not validate later
-changes. See [verification](foundation-verification-2026-10-19.md),
+changes. See [verification](../testing/verification-status.md),
 [node security](node-security.md) and [recovery/capacity](recovery-and-capacity.md).

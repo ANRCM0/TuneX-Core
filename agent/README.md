@@ -11,7 +11,7 @@ Source boundaries and extension contracts are documented in
 [execution host](../docs/architecture/agent-execution-host-v1.md) and
 [native default bindings](../docs/architecture/agent-native-default-bindings-v1.md).
 Current evidence and independent remaining gates are in
-[project status](../docs/development/progress.md).
+[project status](../docs/maintenance.md).
 
 ## Development Checks
 
@@ -38,6 +38,6 @@ HTTP, JSON and platform differences belong to their named adapters.
 Authenticated readonly Journal inspection must stop before enrollment, instance
 lock or Runner creation. The observation responder is a separate bounded command
 and has its own deployment/release evidence requirements. Developer invariants:
-[upgrade/recovery](../docs/development/upgrade-recovery-development.md),
-[clock authority](../docs/development/system-time.md) and
-[execution faults](../docs/development/authorization-faults.md).
+[upgrade/recovery](../docs/operations/upgrade-recovery.md),
+[clock authority](../docs/operations/system-time.md) and
+[execution faults](../docs/testing/authorization-faults.md).

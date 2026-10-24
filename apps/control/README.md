@@ -37,5 +37,5 @@ another owner's tables outside a public same-transaction contract.
 Authorized local checks cover types, boundaries and generated asset parity.
 Real MySQL, mTLS, lifecycle, browser, fault and recovery evidence runs in Actions.
 Current saved source, passing checks and pending acceptance are recorded in
-[project status](../../docs/development/progress.md) and
-[verification](../../docs/development/foundation-verification-2026-10-19.md).
+[project status](../../docs/maintenance.md) and
+[verification](../../docs/testing/verification-status.md).

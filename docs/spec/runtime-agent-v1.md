@@ -88,7 +88,7 @@ Agent may continue known valid running assignments while Control is unreachable 
 
 An Agent crash followed by restart must restore durable generation/fence state first, then obtain an online Hello/sessionEpoch and a new full Snapshot before binding any sockets. Offline restart is unsupported in this baseline; an already running process may continue only within its current authorization. Wall-clock rollback, corrupted caches and lost fence persistence fail safe; they do not reset generations to zero.
 
-ADP/2 specifies hard expiry (including existing TCP and UDP), conservative clock accounting, lease renewal, report deduplication and whole-snapshot rejection. See [Node Security & Recovery](../development/upgrade-recovery-development.md) for corrupt state, reinstall and database rollback; never reset a live Node's counters to zero.
+ADP/2 specifies hard expiry (including existing TCP and UDP), conservative clock accounting, lease renewal, report deduplication and whole-snapshot rejection. See [Node Security & Recovery](../operations/upgrade-recovery.md) for corrupt state, reinstall and database rollback; never reset a live Node's counters to zero.
 
 ## 8. Runtime extension contracts
 

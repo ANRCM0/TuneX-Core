@@ -1,6 +1,6 @@
 # Control Channel Boundary
 
-Public Go interface 1, source candidate and unverified. Client/Roots/Certificate are
+Public Go interface 1. Client/Roots/Certificate are
 adapter-owned generic types. The native provider retains the original HTTP client,
 dynamic client-certificate callback, TLS 1.3 minimum, ten-second timeout, redirect
 refusal, JSON content type, optional epoch header and 4194305-byte limited read.
@@ -18,5 +18,7 @@ No one-use claim, permit, freshness or execution decision moves into the channel
 Telemetry clones preserve their independent pools, limits and two-second bounds.
 Request-specific timing uses the injected Scheduler and unchanged owner deadlines.
 
-Required integration/error/shutdown cases are foundation-readiness items 16-18;
-none executed here. Legacy helper entries use the original native defaults.
+Legacy helper entries use the original native defaults.
+
+Exact-source verification and remaining environment limits are recorded in
+[verification status](../../../docs/testing/verification-status.md).

@@ -4,7 +4,7 @@
 
 后续开发优先遵守 [四层边界](foundation-layers-v1.md)、
 [地基变更申请](../templates/foundation-change-request.md) 与
-[DoD/并行门禁](../development/foundation-readiness.md)。现有领域 Core 与新增最小
+[DoD/并行门禁](../testing/verification-status.md)。现有领域 Core 与新增最小
 运行时决策同属 L0，L1 宿主经公开端口调用 L2 provider，L3 只组合公开能力。
 本轮已实现第一批真实拆分与预览样例，尚未集中验证；原较窄框架收口不代表整个
 严格地基已完成，不提前开始产品功能并行开发，也不扩张 Core 或另开执行权威。
@@ -69,7 +69,7 @@ egress-only，新入口不混 series。默认关闭 Control/Agent opt-in 不是 
 本文按用户确定的产品定位设计：管理节点上的隧道与 TCP/UDP 转发，吸收同类开源
 项目的产品特点，并通过适配器接入合适的实现。已有源码不因本文而自动改变协议、
 Schema 或状态所有权；涉及变化的部分按对应功能单独演进。
-开发节奏沿用 [当前约定](../development/next-milestones.md)：先开发，冻结后集中测试与修复。
+开发节奏沿用 [当前约定](../maintenance.md)：先开发，冻结后集中测试与修复。
 
 ## 1. 产品范围与部署结构
 
@@ -423,4 +423,4 @@ Operation 权威。以上是本地未验证源码，其他 D1 观测与健康聚
 - [A5 source closure](foundation-a5-source-closure-v1.md)
 - [原生隧道管理](../spec/native-tunnel-management-v1.md)
 - [路径绑定](../spec/native-path-bindings-v1.md)
-- [四主线方案](../development/development-plan.md)
+- [四主线方案](../maintenance.md)

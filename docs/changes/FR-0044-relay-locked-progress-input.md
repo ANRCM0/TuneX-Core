@@ -128,6 +128,6 @@ and 222ms result calls remain observed. Fewer input reads do not prove latency,
 first-command reliability, physical deployment, reviewed load or 24/72-hour
 acceptance. Old ports/overrides remain, RuntimeHost4 is unchanged, and the explicit
 constructor source-type widening above remains part of the migration contract.
-See the [P verification record](../development/product-verification-p-2026-10-24.md)
+See the [P verification record](../testing/verification-status.md)
 for exact jobs/artifacts, failed predecessors and remaining gates. No merge,
 publication, release or parallel feature gate is opened.

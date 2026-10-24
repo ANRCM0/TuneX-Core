@@ -1,30 +1,13 @@
-# P 实机测试交接
+# 实机测试
 
-日期：2026-10-24（Asia/Shanghai）。状态：已合并，用户自行部署；未取得实机执行证据。
+实机由用户自行部署。主机、拓扑、可用时段和访问配置由操作者在部署环境中填写、
+审阅和保管。共同排障使用脱敏的预检摘要、步骤、错误码和实际结果。
 
-用户已明确“我自己部署”。主机、拓扑、时间窗口和访问配置由用户在部署环境中
-填写、审阅和保管，无需将主机访问权限或秘密交给本任务。以下清单供实际部署
-操作者使用；后续如需共同排障，可提供脱敏的预检摘要、步骤、错误码和证据结果。
-
-## 固定源码与制品
-
-- PR #118 已于 2026-10-24 21:56:37 合并，主线源码为
-  `dc03606fb61a6044a8a0a62c0fc1cd8a3c6e4ca8`。
-- 合并 tree 为 `eb87545328ed79ae560963ff9f2acaa953843c7d`，与 PR head
-  `8bfebae` 相同。功能验证源 `69dcaa7` 之后仅有文档收口。
-- 合并后 baseline `40100306844`、packaging `40100306837`、开发镜像
-  `40100306858` 已启动。packaging 已完成 success；baseline 和镜像发布仍在运行，
-  尚不能记为完整主线通过或镜像已发布。
-- 开发镜像流程只有在该准确 SHA 的两项 CI 全部成功后才会推送
-  `dev-dc03606fb61a6044a8a0a62c0fc1cd8a3c6e4ca8`。这是预期标签，尚不是
-  已发布证明。部署必须从成功发布作业取得 Control/Agent 各自的 registry digest。
-- 文档收口若先推进 main，发布流程会保留该源码的不可变开发标签并跳过滚动
-  `:dev` 别名更新；实机仍使用上述准确源码的 digest，不依赖别名是否移动。
-- 后续文档提交与上述源码、CI、镜像分别记账。实机 collector 从上述干净修订执行，
-  不以滚动的 main、dev、latest 或旧 v0.1.0 镜像代替本候选。
-
-主线最终 CI、扫描及镜像 digest 待作业完成后记录；不得预填成功。
-此前准确源码的范围与失败历史见 [P 验证记录](product-verification-p-2026-10-24.md)。
+准确源码、合并、CI 与镜像结果见[验收状态](../testing/verification-status.md)。
+当前准备的合并源码为 `dc03606fb61a6044a8a0a62c0fc1cd8a3c6e4ca8`，从对应的
+干净 checkout 执行 collector。部署使用成功发布作业取得的 Control／Agent registry
+digest；预期标签、滚动别名和旧稳定标签不能替代本候选的实际来源证据。
+文档整理不改变可执行源码，也不为实际主机实验补发通过。
 
 ## 执行前输入
 
@@ -43,7 +26,7 @@
 ## 顺序与现有入口
 
 1. 核对上述源码对应的主线 CI 最终结论和镜像发布结果，固定不可变 digest。
-2. 依照 [安装接入手册](deployment-setup-v1.md)选择 Control/Agent 与
+2. 依照 [安装接入手册](installation.md)选择 Control/Agent 与
    initial/existing，执行原 setup/preflight。已有状态不重新 bootstrap/enroll。
 3. 验证登录、成员权限、Agent 会话、原 Journal 用量，再依次跑 Direct TCP/UDP、
    两节点 Relay、至少三节点多跳；签名 Echo 与业务 payload 分别保留结果。
@@ -62,7 +45,7 @@ npm run test:multihop-physical -- /secure/tunex/physical-inventory.json
 输入声明，不是运行态镜像证明，机器哈希也不替代物理独立性审阅。
 保留 collector 输出目录及原始证据，另留实际运行镜像与 Control 来源检查。
 
-6. 按 [部署、恢复与负载手册](product-p-deployment-acceptance.md)逐项完成 PP-13–16：
+6. 按 [部署、恢复与负载手册](../testing/deployment-acceptance.md)逐项完成 安装／升级恢复、独立多机故障及负载／长稳：
    新装／保留状态升级恢复、独立多机故障、阶梯负载、单独 24／72 小时长稳。
    每项保留开始／结束、负载、阈值、原始产物和 passed/failed/incomplete/unavailable。
    失败不清历史、不扩大生产截止；缺观测不记为零或健康。

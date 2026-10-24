@@ -130,7 +130,7 @@ Node 总 fd、内存、goroutine、连接和 UDP 数据报大小预算必须在�
 
 见 [验收矩阵](../testing/acceptance-v1.md)。双语言共享 fixture 必须覆盖合法消息、超范围整数、重复字段、摘要不一致、旧 session、时钟跳变、续期不重启、部分 bind 和硬截止断流。
 
-Relay 在 Phase 3 前必须提交自己的 config/wire Schema、身份握手、封装与目标/回包限制、内部端口预留及测试；此处角色与顺序定义不等于 Relay 协议实现完成。恢复旧备份和节点重装遵循 [节点安全与恢复](../development/upgrade-recovery-development.md)。
+Relay 在 Phase 3 前必须提交自己的 config/wire Schema、身份握手、封装与目标/回包限制、内部端口预留及测试；此处角色与顺序定义不等于 Relay 协议实现完成。恢复旧备份和节点重装遵循 [节点安全与恢复](../operations/upgrade-recovery.md)。
 
 ## 12. Fixture 使用与语义校验边界
 

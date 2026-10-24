@@ -195,7 +195,7 @@ Control-only `adp3-path-publications-v1` has Schema ceiling 0026 and catalog 26.
 Old Control ceilings reject applied 0026 even when batches are unused. Agent ADP,
 Journal, runtime/multihop profiles and feature flags are unchanged. Partial DDL
 footprints require manual review, not automatic retry, clear/reset or fake migration
-records. See [upgrade assessment](../development/upgrade-recovery-development.md).
+records. See [upgrade assessment](../operations/upgrade-recovery.md).
 
 Existing full SQL backup retains all three tables with original referenced ledgers.
 In the existing quarantine transaction, each non-invalidated batch gets exactly one

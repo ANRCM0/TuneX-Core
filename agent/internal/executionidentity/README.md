@@ -1,6 +1,6 @@
 # Agent Identity Provider Boundary
 
-Public Go interface 2, source candidate and unverified. The generic Provider uses
+Public Go interface 2. The generic Provider uses
 adapter-owned Certificate/Roots types without importing TLS, filesystem or crypto
 implementations into this package. Request/bundle facts have no JSON tags or native
 serialization guarantee. FR-0024 keeps exact original native field names/order/tags
@@ -24,5 +24,7 @@ decode; this interface does not silently widen or tighten those wire grammars.
 Providers are trusted compiled-in code, not a sandbox or a remote authentication
 plugin. Existing control.New binds native providers; NewWithProviders requires both
 explicit providers without fallback. Legacy package-local Runner construction has
-the old native defaults. Concentrated acceptance is foundation-readiness item 16;
-no checks, tests, native credential operations or network runs executed here.
+the old native defaults.
+
+Exact-source verification and remaining environment limits are recorded in
+[verification status](../../../docs/testing/verification-status.md).

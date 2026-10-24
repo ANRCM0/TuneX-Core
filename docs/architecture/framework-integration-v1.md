@@ -6,12 +6,12 @@ Documentation status clarified: 2026-10-21.
 
 The later [ADR-0048](../decisions/0048-foundation-layer-boundaries.md) adds the
 human's stricter [four-layer scope](foundation-layers-v1.md) and
-[foundation DoD](../development/foundation-readiness.md). B subsequently accepted
+[foundation DoD](../testing/verification-status.md). B subsequently accepted
 the bounded frozen public contract/consumer/compatibility/example scope at source
 `e208a3abf17129b0c2898ba2022c69f60f45445a`, actually tested as
 `c3ce8a67b901f61234b4116190409854818cb6c7`. The
 [candidate index](foundation-candidate-index-v1.md) and
-[verification record](../development/foundation-verification-2026-10-19.md) govern
+[verification record](../testing/verification-status.md) govern
 that later decision. Dated source-only/unexecuted entries below retain their
 historical handoff meaning. They do not negate B acceptance or certify a successor.
 
@@ -27,7 +27,7 @@ Source closure does not approve a release or replace final-source acceptance.
 
 ## N Product Source Integration (2026-10-21)
 
-The authorized [N stage](../development/product-development-stage-n-2026-10-21.md)
+The authorized [N stage](../maintenance.md)
 integrates successors under FR-0028–0032. Consume the explicit successor counters
 in the [candidate index](foundation-candidate-index-v1.md); the following original
 extension table retains its dated contract scope. N has no current acceptance.
@@ -49,7 +49,7 @@ Forward draft. Original previews and commands reauthorize; no UI selection is an
 execution grant. Personal port usage reads only the current account's original
 physical slots. Probe support reads issue no tasks and distinguish an unsupported
 measurement from an authorization/read failure. Detailed entry and acceptance
-instructions are in [Web integration](../../apps/web/PRODUCT-INTEGRATION.md) and
+instructions are in [Web integration](../../apps/web/README.md) and
 [Node integration](../../apps/control/src/modules/node-owner/PRODUCT-INTEGRATION.md).
 
 Payload limits use `RuntimeHostOptions.payloadPolicy` in the same locked Runtime
