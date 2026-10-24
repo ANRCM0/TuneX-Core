@@ -64,11 +64,22 @@ export async function verifyControlledEcho(options:Options) {
     if(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true')throw Error('Product P network acceptance is Actions-only');
     const fixture=await echoFixture(),attempts:Record<string,unknown>[]=[],checks:string[]=[];
     const discovery=options.discovery,originalPoll=discovery.poll;
-    let emptySequence=0,emptyAt=0;
+    let emptySequence=0,emptyStartedAt=0;
+    const pollSamples:Record<string,unknown>[]=[];
+    const samplePoll=(value:Record<string,unknown>)=>{pollSamples.push(value);if(pollSamples.length>64)pollSamples.shift();};
     discovery.poll=async(...args)=>{
-        const result=await originalPoll.apply(discovery,args);
-        if(args[0]===options.nodeId&&result.offer===null){emptySequence++;emptyAt=Date.now();}
-        return result;
+        const started=Date.now();
+        try {
+            const result=await originalPoll.apply(discovery,args),durationMs=Date.now()-started;
+            if(args[0]===options.nodeId){
+                samplePoll({completed:true,durationMs,offered:result.offer!==null});
+                if(result.offer===null&&durationMs<200){emptySequence++;emptyStartedAt=started;}
+            }
+            return result;
+        } catch(error) {
+            if(args[0]===options.nodeId)samplePoll({completed:false,durationMs:Date.now()-started});
+            throw error;
+        }
     };
     let usageSample:unknown=null;
     let forwardId='',created=false,scenarioPassed=false,conclusion:'passed'|'failed'='failed';
@@ -103,12 +114,19 @@ export async function verifyControlledEcho(options:Options) {
             let success=false;
             for(let ordinal=0;ordinal<6;ordinal++) {
                 await wait(options.qualified,'fresh Echo qualification');
-                // Align a new explicit command with the next original one-second
-                // poll. Keep the two-second permit and clock-skew deduction intact.
-                const previous=emptySequence,observeUntil=Date.now()+15000;
-                while(emptySequence===previous&&Date.now()<observeUntil)await sleep(10);
-                assert.ok(emptySequence>previous,'No actual empty Echo poll observed before the next explicit command');
-                await sleep(Math.max(0,emptyAt+650-Date.now()));
+                // A late server completion is not an Agent acknowledgement.
+                // Align from a bounded empty request's entry, retaining the
+                // original poll, permit and exchange limits and all slow samples.
+                const previous=emptySequence,observeUntil=Date.now()+30000;
+                let checked=previous,aligned=false;
+                while(Date.now()<observeUntil){
+                    if(emptySequence>checked&&Date.now()-emptyStartedAt<650){
+                        checked=emptySequence;aligned=await options.qualified();if(aligned)break;
+                    }
+                    await sleep(25);
+                }
+                assert.ok(aligned,'No fresh bounded empty Echo poll observed before the next explicit command');
+                await sleep(Math.max(0,emptyStartedAt+650-Date.now()));
                 const key=randomUUID(),input={version:1,kind,expectedRevision:1,timeoutMs:1000,service};
                 const issued=await call('POST','forwards/'+forwardId+'/probes',input,key);
                 if(issued.status!==202){
@@ -166,7 +184,7 @@ export async function verifyControlledEcho(options:Options) {
         } finally {
             discovery.poll=originalPoll;
             await fixture.close();
-            await writeFile(options.directory+'/product-p-echo-'+options.mode+'.json',JSON.stringify({conclusion,mode:options.mode,checks,attempts,usageSample,diagnostics:options.diagnostics?.(),
+            await writeFile(options.directory+'/product-p-echo-'+options.mode+'.json',JSON.stringify({conclusion,mode:options.mode,checks,attempts,usageSample,pollSamples,diagnostics:options.diagnostics?.(),
                 topology:'native Agent processes and a disposable signed responder on one hosted Actions runner',physicalHosts:false,
                 responder:'test fixture only; no standalone delivery claim'},null,2));
         }

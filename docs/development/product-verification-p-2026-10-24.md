@@ -160,6 +160,26 @@ Actions. The accepted execution above remains bound to `aae0632f`, not these
 new test assertions. Independent environments and actual external delivery
 remain separate requirements.
 
+The follow-up head `9b60b2bf00d0e712d2cb08b1a2628ad56c1d15a7` (tree
+`36e59a928b773864c160f629d922cbc06d23e703`) ran baseline `40056410939`
+and packaging `40056410944`. Packaging and contracts passed; the native shared
+resource SQL step passed before whole-run completion. Three-node job
+`120760259039` failed with three issued/unconsumed TCP permits and then no next
+empty poll inside the fixture's 15-second observation wait. Numeric artifacts
+retain 672-762ms nonempty server operations and original Agent 200ms refusal.
+This candidate is not accepted from those partial passes.
+
+The fixture had used a server's completed empty read as the timing origin even
+when its completion could be later than the original client exchange. The next
+candidate records bounded numeric poll samples (including slow/failed calls),
+aligns only from entry of an actual empty read completed within the original
+200ms bound, and rechecks fresh qualification once per new empty read. Its
+command-free observation wait covers the original 30-second instance cycle;
+the six independent-command limit and every production permit, exchange,
+result, registration and expiry bound are unchanged. This is not an acceptance
+of the failed calls or a heartbeat/load/latency guarantee. The successor needs
+its own exact-source Actions result.
+
 ## First Candidate Findings
 
 Baseline run `40041418761` and container run `40041418834` tested the initial
