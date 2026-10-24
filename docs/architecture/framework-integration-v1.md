@@ -388,6 +388,10 @@ The unchanged `modules/runtime/relay-coordinator.ts` compatibility constructor
 still assembles the original host and native providers. Existing inherited or
 instance canExecute overrides retain the legacy dispatch/provider path instead
 of being bypassed by the optimized entrypoint.
+An existing assignments override is captured once and called with its original
+receiver and arguments before optimized reads. The original native Snapshot
+failure/resource-conflict rollback cases remain unchanged; an override or
+getter error never triggers fallback to the optimized reader.
 The original `assignments` entrypoint, constructor, RuntimeRelay7, Snapshot
 context/source/driver declarations and includeAccepted/session/stage behavior
 remain available. No authorization input survives the caller transaction.

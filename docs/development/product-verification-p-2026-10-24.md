@@ -272,6 +272,20 @@ functional or SQL test ran. This dirty successor requires its own saved source
 and Actions results; neither fe531cb's successful samples nor older acceptance
 validate the new reader or prove that all contention is removed.
 
+The first Node-reader candidate `17a9c2af6801bfb94c41c4ad4ac96b4811151800`
+(tree `43cc3fc1fd4bd6d45e85cce5d03d2c8ebc57e00e`) ran baseline
+`40061168508` and packaging `40061168510`. Packaging/contracts and the
+three-node main signed workflow passed, but native job `120774808817` failed
+the multihop command/Snapshot atomicity/capacity step. It is not accepted.
+Source inspection identified an actual compatibility gap: the existing native
+rollback/conflict cases override the public legacy assignments method, which
+the new entrypoint had bypassed. Keep those native cases unchanged. The FR-0043
+amendment precedes a guard that captures the old method once and delegates any
+override with original receiver/arguments/result/error before optimized reads.
+New owner cases pin one getter access, opaque result identity, wrapped original
+provider counts and unknown getter/override failures. Local type/boundary
+checks pass; the corrected successor still requires exact-source Actions.
+
 ## First Candidate Findings
 
 Baseline run `40041418761` and container run `40041418834` tested the initial

@@ -201,6 +201,8 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
   }
   async assignmentsForNode(tx:Tx,nodeId:string,includeAccepted=false):Promise<RuntimeAssignment<F>[]>{
     if(!isId(nodeId)||typeof includeAccepted!=='boolean')invalid('Valid Relay Node assignment identity and inclusion flag required');
+    const legacy=this.assignments;
+    if(legacy!==originalRelayAssignments)return legacy.call(this,tx,nodeId,includeAccepted);
     // Legacy authorization overrides keep their original dispatch and provider order.
     return this.readNodeAssignments(tx,nodeId,includeAccepted,this.canExecute===originalRelayCanExecute);
   }
@@ -367,3 +369,4 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
   }
 }
 const originalRelayCanExecute=RuntimeRelayHost.prototype.canExecute;
+const originalRelayAssignments=RuntimeRelayHost.prototype.assignments;

@@ -74,6 +74,16 @@ and does not override that method. This guard is not a fallback after an error;
 unknown getter/provider errors still propagate and custom authorization is not
 bypassed. The existing Forward-scoped reader is unchanged by this amendment.
 
+A second compatibility amendment is recorded before implementation after the
+first successor's native atomicity step failed: existing Snapshot consumers
+override the old assignments method to inject original read failures and
+resource conflicts. The new reader must capture that current method once and,
+when it differs from the original host method, delegate to it with the original
+receiver/arguments/result/error before any optimized provider access. Retain
+the existing native rollback/conflict cases unchanged and add explicit override
+and getter/error cases. This is a compatibility dispatch before reads, never
+a fallback after failed optimized I/O. The ordinary native host has no override.
+
 Only the existing native Snapshot source callback selects assignmentsForNode.
 SnapshotAssignmentContext, RelayAssignmentSource, registry driver declarations,
 wire formats and Runtime ledger remain unchanged. Explicitly migrate the native

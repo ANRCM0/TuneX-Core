@@ -121,6 +121,27 @@ test('P Relay Node Snapshot read retains legacy projections but consumes one loc
     await assert.rejects(()=>failed.host.assignmentsForNode(failed.tx,node),error=>error===failed.failure);
 });
 
+test('P Relay Node Snapshot read keeps existing assignment override receiver, result and errors with one getter access',async()=>{
+    const f=fixture(),node=f.plan.nodes[0]!.nodeId,result:Awaited<ReturnType<typeof f.host.assignments>>=[];
+    let gets=0,calls=0;
+    Object.defineProperty(f.host,'assignments',{get(){gets++;return async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args:Parameters<typeof f.host.assignments>){
+        assert.equal(this,f.host);assert.deepEqual(args,[f.tx,node,true]);calls++;return result;
+    };}});
+    f.host.canExecute=async()=>assert.fail('a legacy assignment provider owns its existing dispatch');
+    assert.equal(await f.host.assignmentsForNode(f.tx,node,true),result);
+    assert.deepEqual([gets,calls],[1,1]);assert.deepEqual(f.events,[]);
+    const failed=fixture();failed.host.assignments=async()=>{throw failed.failure;};
+    await assert.rejects(()=>failed.host.assignmentsForNode(failed.tx,node),error=>error===failed.failure);assert.deepEqual(failed.events,[]);
+    const getter=fixture();Object.defineProperty(getter.host,'assignments',{get(){throw getter.failure;}});
+    await assert.rejects(()=>getter.host.assignmentsForNode(getter.tx,node),error=>error===getter.failure);assert.deepEqual(getter.events,[]);
+    const wrapped=fixture(),original=wrapped.host.assignments;
+    wrapped.host.assignments=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args:Parameters<typeof original>){
+        assert.equal(this,wrapped.host);return original.apply(this,args);
+    };
+    assert.ok((await wrapped.host.assignmentsForNode(wrapped.tx,node)).length>0);
+    assert.equal(names(wrapped).filter(name=>name==='authorizedNode').length,2*wrapped.plan.nodes.length);
+});
+
 test('P Relay Node Snapshot read rejects unknown inputs, preserves original refusals and never falls back after failure',async()=>{
     for(const node of ['', 'bad id',null,17]){
         const f=fixture();await assert.rejects(()=>f.host.assignmentsForNode(f.tx,node as never),{code:'INVALID_CONFIG',status:422});assert.deepEqual(f.events,[]);
