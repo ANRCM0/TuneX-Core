@@ -408,3 +408,25 @@ with zero connection acquisition wait. Input-count acceptance does not establish
 improved latency or first-command reliability. Independent deployment/load and
 physical-host requirements remain open. See
 [FR-0043](../changes/FR-0043-relay-node-snapshot-assignment-read.md).
+
+### P Original Relay Progress Successor
+
+FR-0044 adds RelayProgressCoordinator1.progressForNode to the original Relay
+host. Existing RuntimeHost4 -> original sorted related-Node locks -> native
+RuntimeRelay adapter -> progressForNode -> original advance/refresh/withdrawal/
+complete walk remains on the same transaction and ledger. One locked multihop
+input is reused per deployment/call; current credential/peer/plan time guards
+are re-evaluated. Inputs never cross calls or transactions.
+
+The old advance/advanceForNode methods and canExecute overrides retain their
+legacy dispatch. RuntimeController's optional Relay argument widens from the
+native Coordinator class to the existing public RuntimeRelay port, keeping all
+old calls and argument positions. The existing server selects the new method
+explicitly and defers all five adapter methods to the same original host.
+No Proxy, competing authority, source copy, new root or database table is added.
+
+Public type/counter/example, old/new state writes, provider counts, current facts,
+expiry/error/override and native binding cases are authored. Local type/boundary
+checks pass; this successor remains unaccepted until its own full Actions pass.
+See [FR-0044](../changes/FR-0044-relay-locked-progress-input.md). Its reduced input
+count does not prove improved latency or physical-host/load/long-run acceptance.

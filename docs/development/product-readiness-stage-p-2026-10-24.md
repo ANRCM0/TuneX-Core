@@ -126,6 +126,7 @@ VPN/L7、第三方执行后端兼容或动态插件运行时。这些需要后�
 | --- | --- | --- |
 | 最新完整验证 | 有界通过 | `245d438` 的 baseline `40062014210` 10 作业及 packaging `40062014243` 通过，包含 FR-0043 新病例与原 Snapshot 回滚／冲突病例；整体 P 未接受 |
 | PP-10 路径样本 SQL 后继 | 病例完成、待准确修订 Actions | 实际签名样本 -> 原历史读取／重授权 -> Station schema3 -> 原 outbox，覆盖写后回滚、去重、陈旧不恢复、策略停用零发送；不继承上行的功能通过 |
+| FR-0044 原 owner 推进后继 | 源码／病例完成、待准确修订 Actions | 锁等待产物确认 Runtime tick/report/snapshot 的原排他锁阻塞 Probe；新显式入口在原事务内复用输入，旧入口／覆盖保留，时间／权限重新检查，不放宽原锁或截止 |
 | 范围、目标、顺序、接受矩阵 | 已记录 | 本文；不是实现/执行证明 |
 | P1 | Actions-covered-cases-passed | 部署预检／安装计划 30 项及容器打包通过；独立安装见 PP-13 |
 | P2 | Actions-covered-cases-passed | FR-0033/34 契约、原生 SQL、Web、真实 Chromium 成员／本人凭据场景通过 |

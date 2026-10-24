@@ -60,6 +60,9 @@ import { observationServiceStorageValues } from './modules/observation-service-o
 import { BackgroundTasks } from './framework/public.ts';
 import { nativeBackgroundTaskEffects } from './compatibility/public.ts';
 import { RequestLifecycle } from './framework/public.ts';
+import type { RuntimeRelay } from './framework/public.ts';
+import type { NativeRuntimeFamily } from './compatibility/public.ts';
+import type { Transaction } from './infrastructure/mysql.ts';
 
 export interface ServerOptions { databaseUrl:string; caCert:string; caKey:string; serverCert:string; serverKey:string; openssl:string; stateDirectory:string; port:number; host?:string; worker?:boolean;credentialOverlapSeconds?:number;relayCredentialSeconds?:number;policy?:Policy;initializeAuthority?:boolean;multihopEnabled?:boolean;probeExecutionEnabled?:boolean;probeScheduleEnabled?:boolean;probeIngressEnabled?:boolean;probeServicesEnabled?:boolean;probeEchoEnabled?:boolean;probePathEchoEnabled?:boolean;telemetryEnabled?:boolean;forwardTelemetryEnabled?:boolean;hostTelemetryEnabled?:boolean;probeTelemetryEnabled?:boolean;telemetryRollupsEnabled?:boolean;stationAlertsEnabled?:boolean;notificationSecretsDirectory?:string|undefined;webhookDeliveryEnabled?:boolean }
 export async function startControl(options:ServerOptions):Promise<{ port:number; db:MySqlUnitOfWork; control:ControlApplication; runtime:RuntimeController;authority:AuthorityStore; close:()=>Promise<void> }> {
@@ -112,7 +115,14 @@ export async function startControl(options:ServerOptions):Promise<{ port:number;
   const notificationEndpoints=new NotificationEndpoints(telemetryDb,identity,control.idempotency,notificationStore,stationStore,
     notificationSecrets,notificationBinding,Date.now,notificationDeliveries.enabled);
   const requests=new RequestLifecycle();
-  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy,authority,control.relay,control.resourceLimits), app=createControlApp({control,runtime,authority,requests,
+  const runtimeRelay:RuntimeRelay<Transaction,NativeRuntimeFamily>={
+    relatedNodeIDs:(tx,node)=>control.relay.relatedNodeIDs(tx,node),
+    advanceForNode:(tx,node)=>control.relay.progressForNode(tx,node),
+    authorizationBound:(tx,assignments)=>control.relay.authorizationBound(tx,assignments),
+    pendingNodeIDs:tx=>control.relay.pendingNodeIDs(tx),
+    executionError:(tx,snapshot,assignment,observation)=>control.relay.executionError(tx,snapshot,assignment,observation),
+  };
+  const runtime=new RuntimeController(db,nodes,control.forwarding,control.ledger,options.policy,authority,runtimeRelay,control.resourceLimits), app=createControlApp({control,runtime,authority,requests,
     services:{telemetry,forwardTelemetry,authenticateObservation:header=>telemetryDb.transaction(tx=>identity.authenticateIn(tx,header)),
       hostTelemetry,probeTelemetry,telemetryRollups,diagnostics,audit,stationAlerts,notificationEndpoints,notificationDeliveries,probeRuns,probePlans,observationServices}});
   const workers=options.worker!==false,backoff={initialMs:30000,maxMs:300000};

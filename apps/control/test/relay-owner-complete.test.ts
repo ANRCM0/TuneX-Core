@@ -5,8 +5,8 @@ import { createConnection } from 'mysql2/promise';
 import { DEFAULT_POLICY } from '@tunex/contracts/shared';
 import type { RuntimeSnapshot } from '@tunex/contracts/runtime';
 import type { Observation } from '@tunex/contracts/execution-observation';
-import { RuntimeRelayHost, RuntimeLedgerHost, ControlError, RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION, RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION } from '../src/framework/public.ts';
-import type { RuntimeOperation, RuntimeRelayDeployment, RuntimeLedgerOptions, RuntimeRelayOptions, RelayForwardAssignmentReader, RelayNodeAssignmentReader } from '../src/framework/public.ts';
+import { RuntimeRelayHost, RuntimeLedgerHost, ControlError, RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION, RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION, RELAY_PROGRESS_INTERFACE_VERSION } from '../src/framework/public.ts';
+import type { RuntimeOperation, RuntimeRelayDeployment, RuntimeLedgerOptions, RuntimeRelayOptions, RelayForwardAssignmentReader, RelayNodeAssignmentReader, RelayProgressCoordinator } from '../src/framework/public.ts';
 import { nativeRelayCompiler, nativeLedgerCompiler } from '../src/compatibility/public.ts';
 import type { NativeRuntimeFamily } from '../src/compatibility/public.ts';
 import { RuntimeLedger } from '../src/modules/runtime/ledger.ts';
@@ -40,6 +40,7 @@ function fixture(){
         async activate(this:unknown,...args:unknown[]){called(this,store,'activate',args);},
         async quarantine(this:unknown,...args:unknown[]){called(this,store,'quarantine',args);},
         async forNode(this:unknown,...args:unknown[]){called(this,store,'forNode',args);return [record];},
+        async forwardIDsForNode(this:unknown,...args:unknown[]){called(this,store,'forwardIDs',args);return [{forward_id:forward.id}];},
     };
     const ledger={async latest(this:unknown,...args:unknown[]){called(this,ledger,'operation',args);return op;},
         async accept(this:unknown,...args:unknown[]){called(this,ledger,'accept',args);return 'incident-operation';},
@@ -82,6 +83,81 @@ function fixture(){
     return {host,input,plan,tx,events,forward,op,record,state,failure,snapshot,assignment,observation,snapshots,runtimes,store,ledger,forwards,nodes};
 }
 const names=(f:ReturnType<typeof fixture>)=>f.events.map(e=>e.name);
+
+test('P Relay progress keeps original state writes with one locked input instead of three complete inputs and four Node fact passes',async()=>{
+    assert.equal(RELAY_PROGRESS_INTERFACE_VERSION,1);
+    const effects=new Set(['touch','withdraw','setStage','setPreparation','incrementActivation','activate','succeed','clear','retain','release','accept']);
+    for(const stage of ['preparing','egress_active','ingress_active','active','withdrawn'] as const) {
+        const next=fixture(),old=fixture();next.record.stage=stage;old.record.stage=stage;
+        const port:RelayProgressCoordinator<Tx>=next.host;
+        await port.progressForNode(next.tx,next.plan.nodes[0]!.nodeId);await old.host.advance(old.tx,old.forward.id);
+        const writes=(f:ReturnType<typeof fixture>)=>f.events.filter(event=>effects.has(event.name)).map(event=>[event.name,...event.args.slice(1)]);
+        assert.deepEqual(writes(next),writes(old));
+        assert.equal(names(next).filter(name=>name==='profile').length,1);
+        assert.equal(names(old).filter(name=>name==='profile').length,3);
+        assert.equal(names(next).filter(name=>name==='authorizedNode').length,next.plan.nodes.length);
+        assert.equal(names(old).filter(name=>name==='authorizedNode').length,4*old.plan.nodes.length);
+    }
+});
+
+test('P Relay progress reads authority again on another call, preserves original provider errors and refuses expiry during progress',async()=>{
+    const f=fixture(),node=f.plan.nodes[0]!.nodeId;
+    await f.host.progressForNode(f.tx,node);const first=names(f).filter(name=>name==='profile').length;
+    for(const endpoint of f.input.endpoints)for(const port of endpoint.config.allowedTcpPorts)f.state.deniedPorts.add(port);
+    await f.host.progressForNode(f.tx,node);
+    assert.ok(names(f).includes('withdraw'));assert.equal(names(f).filter(name=>name==='profile').length,first+1);
+    const failed=fixture();failed.state.fail='profile';
+    await assert.rejects(failed.host.progressForNode(failed.tx,node),error=>error===failed.failure);
+    assert.equal(names(failed).filter(name=>name==='profile').length,1);assert.equal(names(failed).includes('withdraw'),false);
+    const expiring=fixture(),authorizer=expiring.forwards.authorizer;let reads=0;
+    expiring.forwards.authorizer=async function(this:unknown,...args:unknown[]){
+        const actor=await authorizer.apply(this,args);
+        if(++reads===2)expiring.state.now=Math.max(...expiring.input.nodes.map(value=>value.credentialUntil))+1;
+        return actor;
+    };
+    await expiring.host.progressForNode(expiring.tx,node);
+    assert.ok(names(expiring).includes('withdraw'));assert.equal(names(expiring).filter(name=>name==='profile').length,1);
+    const during=fixture(),peers=during.nodes.relayCredentialFacts;let peerReads=0;
+    during.nodes.relayCredentialFacts=async function(this:unknown,...args:unknown[]){
+        const value=await peers.apply(this,args);
+        if(++peerReads===during.input.nodes.length)during.state.now=Math.max(...during.input.nodes.map(value=>value.credentialUntil))+1;
+        return value;
+    };
+    await assert.rejects(during.host.progressForNode(during.tx,node),{code:'AUTHORIZATION_DENIED'});
+    assert.equal(names(during).includes('retain'),false);
+    const endpoint=fixture();endpoint.input.endpoints[0]!.revision++;
+    await endpoint.host.progressForNode(endpoint.tx,node);assert.ok(names(endpoint).includes('withdraw'));
+    for(const change of ['pins','session'] as const){
+        const refresh=fixture();if(change==='pins')refresh.state.currentPins=false;else refresh.input.nodes[0]!.sessionEpoch++;
+        let accepts=0;
+        refresh.host.acceptPlan=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args){
+            assert.equal(this,refresh.host);assert.deepEqual(args,[refresh.tx,'actor-a',refresh.forward]);accepts++;throw refresh.failure;
+        };
+        await assert.rejects(refresh.host.progressForNode(refresh.tx,node),error=>error===refresh.failure);
+        assert.equal(accepts,1);assert.equal(names(refresh).includes('withdraw'),false);
+    }
+    const invalid=fixture();await assert.rejects(invalid.host.progressForNode(invalid.tx,''),{code:'INVALID_CONFIG'});assert.deepEqual(invalid.events,[]);
+});
+
+test('P Relay progress retains node/advance/authorization overrides with original receivers, transactions and errors',async()=>{
+    const node=fixture().plan.nodes[0]!.nodeId;
+    const overridden=fixture();let calls=0;
+    overridden.host.advanceForNode=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args){
+        assert.equal(this,overridden.host);assert.deepEqual(args,[overridden.tx,node]);calls++;throw overridden.failure;
+    };
+    await assert.rejects(overridden.host.progressForNode(overridden.tx,node),error=>error===overridden.failure);
+    assert.equal(calls,1);assert.deepEqual(overridden.events,[]);
+    const forward=fixture();forward.host.advance=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args){
+        assert.equal(this,forward.host);assert.deepEqual(args,[forward.tx,forward.forward.id]);throw forward.failure;
+    };
+    await assert.rejects(forward.host.progressForNode(forward.tx,node),error=>error===forward.failure);
+    assert.deepEqual(names(forward),['forwardIDs']);
+    const custom=fixture(),execute=custom.host.canExecute;let checks=0;
+    custom.host.canExecute=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args){checks++;return execute.apply(this,args);};
+    await custom.host.progressForNode(custom.tx,node);
+    assert.equal(checks,2);assert.equal(names(custom).filter(name=>name==='profile').length,3);
+    assert.equal(names(custom).filter(name=>name==='authorizedNode').length,4*custom.plan.nodes.length);
+});
 
 test('P Relay Node Snapshot read retains legacy projections but consumes one locked multihop input per plan',async()=>{
     assert.equal(RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION,1);

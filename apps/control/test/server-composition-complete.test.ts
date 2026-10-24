@@ -121,6 +121,24 @@ function fixture() {
     setBoundPort: (port: number) => { boundPort = port; } };
 }
 
+test('P native Runtime Relay adapter selects progress explicitly with deferred original receivers and errors',async()=>{
+  const f=fixture(),started=await f.start();
+  const adapter=f.argumentsByName.get('RuntimeController')![0]![6] as Record<string,(...args:unknown[])=>unknown>;
+  const calls:unknown[][]=[];
+  for(const [entry,method,args] of [
+    ['relatedNodeIDs','relatedNodeIDs',[f.tx,'node']],['advanceForNode','progressForNode',[f.tx,'node']],
+    ['authorizationBound','authorizationBound',[f.tx,[f.result]]],['pendingNodeIDs','pendingNodeIDs',[f.tx]],
+    ['executionError','executionError',[f.tx,f.result,f.result,f.result]],
+  ] as const){
+    (f.control.relay as any)[method]=function(this:unknown,...values:unknown[]){calls.push([method,this,...values]);return f.result;};
+    assert.equal(adapter[entry]!(...args),f.result);
+    assert.deepEqual(calls.pop(),[method,f.control.relay,...args]);
+  }
+  (f.control.relay as any).progressForNode=()=>{throw f.fault.error;};
+  assert.throws(()=>adapter.advanceForNode!(f.tx,'node'),error=>error===f.fault.error);
+  await started.close();
+});
+
 test('159 server preflight preserves feature-first and native lifetime/default/getter behavior before any dependency', () => {
   for (const [change, message] of [
     [{ webhookDeliveryEnabled: true }, 'Webhook delivery requires protected notification storage'],
@@ -159,7 +177,9 @@ test('159 server startup reads exact pool SQL, binds original resources and defe
   const args = (name: string) => f.argumentsByName.get(name)![0]!;
   assert.deepEqual(args('Nodes'), [f.db, f.identity, f.instances.get('NodeCertificateAuthority'), 120, 86400, f.resources,f.instances.get('NodePortLimitPolicy')]);
   assert.deepEqual(args('ControlApplication'), [f.db, f.identity, f.instances.get('Nodes'), undefined, false, false, false, false, f.resources, false, false]);
-  assert.deepEqual(args('RuntimeController'), [f.db, f.instances.get('Nodes'), f.control.forwarding, f.control.ledger, undefined, f.authority, f.control.relay, f.control.resourceLimits]);
+  assert.deepEqual(args('RuntimeController').slice(0,6), [f.db, f.instances.get('Nodes'), f.control.forwarding, f.control.ledger, undefined, f.authority]);
+  assert.deepEqual(Object.keys(args('RuntimeController')[6] as object), ['relatedNodeIDs','advanceForNode','authorizationBound','pendingNodeIDs','executionError']);
+  assert.equal(args('RuntimeController')[7],f.control.resourceLimits);
   assert.equal(args('NodeTelemetry')[6], Date.now); assert.equal(args('ForwardTelemetry')[7], Date.now);
   assert.equal(args('HostTelemetry')[6], Date.now); assert.equal(args('ProbeTelemetry')[7], Date.now);
   for (const [name, index] of [['NodeTelemetry', 7], ['ForwardTelemetry', 8], ['HostTelemetry', 7], ['ProbeTelemetry', 8]] as const) assert.equal(args(name)[index], f.instances.get('MySqlTelemetryRollupStorage'));

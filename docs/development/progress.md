@@ -2,7 +2,14 @@
 
 更新：2026-10-24（Asia/Shanghai）。
 
-## P 候选（245d438 Actions 覆盖病例通过，独立环境待验）
+## P 候选（245d438 完整修订通过，推进后继待验）
+
+当前后继已补实际路径样本 -> Station/outbox SQL 病例，并修复最近路径通知将
+Forward 误判为 Node 的私有解析缺陷；整条后继尚未完整通过。锁等待产物进一步
+确认原 Runtime tick/report/snapshot 的排他锁阻塞 Probe。FR-0044 已先记提案，
+新增原 Relay owner 的显式推进入口，在原事务内复用单次锁定输入，保留旧入口、
+覆盖转接和当前时间拒绝；原 server 通过既有公共 RuntimeRelay 端口选择它。
+源码、契约病例及本地类型／边界通过，准确修订功能验收仍待后继 Actions。
 
 [P 方案与持续目标](product-readiness-stage-p-2026-10-24.md)已在独立
 `source/p-product-readiness-20261024` 工作树实施：安装计划、所有者成员页、本人

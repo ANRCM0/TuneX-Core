@@ -93,6 +93,29 @@ An operation label is emitted only when the same connection-borrow identity
 exists before and after the metadata query; released/reused connections are
 reported as unobserved, never attributed using a later borrow's owner label.
 
+The 3983abb lock metadata now identifies the actual blocking owners: Probe's
+shared runtime_nodes PRIMARY read waits for original Runtime tick, report and
+snapshot transactions holding exclusive record locks. Runtime operations also
+queue behind each other. The failed candidate's artifact `12549564916` records
+these edges; its original TCP workflow failed before the new path-alert case.
+
+[FR-0044](../changes/FR-0044-relay-locked-progress-input.md) was recorded before
+adding RelayProgressCoordinator1.progressForNode to the original Relay owner.
+It reuses one locked input per multihop deployment/call through original progress,
+refresh and plan checks, while rechecking current credential/peer/plan time
+bounds. Old advance/advanceForNode and overrides retain the old flow. The native
+server explicitly selects the new entry through the existing five-method public
+RuntimeRelay port; RuntimeHost4 is unchanged. The compatibility constructor's
+optional Relay source type widens to that existing public port without changing
+argument positions or valid old calls. No lock, transaction, capacity, authority,
+wire, schema, deadline, heartbeat or retry bound changes.
+
+New/old state/write parity, three-versus-one complete inputs, four-versus-one Node
+fact passes, next-call freshness, expiry/errors/overrides and deferred native
+public binding cases are authored. Local type/boundary checks pass. This new
+foundation successor still requires its own complete exact-source Actions;
+fewer reads do not establish a latency or first-command reliability improvement.
+
 ## Latest Complete Verification - 245d438
 
 The corrected FR-0043 Node Snapshot reader candidate is

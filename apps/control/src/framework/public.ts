@@ -87,8 +87,8 @@ export type { SnapshotAssignmentContext, SnapshotContribution, AssignmentDriverD
     SnapshotAssignmentCollector, RelayAssignmentReader, RelayForwardAssignmentReader, RelayNodeAssignmentReader } from './runtime-assignment-ports.ts';
 export { RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION, RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION } from './runtime-assignment-ports.ts';
 export { RuntimeRelayHost } from './runtime-relay.ts';
-export { RUNTIME_RELAY_INTERFACE_VERSION } from './runtime-relay-ports.ts';
-export type { RuntimeRelayProfile, RuntimeRelayEndpointConfig, RuntimeRelayEndpoint, RuntimeRelayNodeFacts,
+export { RUNTIME_RELAY_INTERFACE_VERSION, RELAY_PROGRESS_INTERFACE_VERSION } from './runtime-relay-ports.ts';
+export type { RelayProgressCoordinator, RuntimeRelayProfile, RuntimeRelayEndpointConfig, RuntimeRelayEndpoint, RuntimeRelayNodeFacts,
     RuntimeAssignmentNetworkPolicy, RuntimeRelayAssignmentPolicy, RuntimeMultihopAssignmentPolicy,
     RuntimeRelayPlan, RuntimeMultihopInput, RuntimeRelayPlanInput, RuntimeRelayDeployment, RuntimeRelayNodeView,
     RuntimeRelayIsolation, RuntimeRelayStore, RuntimeRelayObservations, RuntimeRelayNodes, RuntimeRelayTransport,
