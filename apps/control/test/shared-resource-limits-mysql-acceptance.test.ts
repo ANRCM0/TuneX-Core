@@ -14,7 +14,12 @@ import { SharedResourceLimits } from '../src/modules/resource-limit-owner/public
 import { ResourceUsage } from '../src/modules/resource-limit-owner/public.ts';
 import { MySqlResourceUsageStore } from '../src/infrastructure/mysql-resource-usage.ts';
 import { MySqlStationAlertStore } from '../src/infrastructure/mysql-station-alerts.ts';
+import { MySqlNotificationEndpoints } from '../src/infrastructure/mysql-notification-endpoints.ts';
+import { MySqlNotificationDeliveries } from '../src/infrastructure/mysql-notification-deliveries.ts';
 import { StationAlerts, StationResourceFacts } from '../src/modules/station-alert-owner/public.ts';
+import type { StationEventHandoff } from '../src/modules/station-alert-owner/public.ts';
+import { NotificationDeliveries, parseNotificationEndpoint } from '../src/modules/notification-owner/public.ts';
+import type { NotificationDelivery, NotificationSecrets, NotificationSender } from '../src/modules/notification-owner/public.ts';
 import { Idempotency } from '../src/modules/idempotency.ts';
 import type { SharedResourceLimitInput } from '../src/modules/resource-limit-owner/public.ts';
 
@@ -151,24 +156,77 @@ test('FR0032 real MySQL original identity locks CAS replay history and post-audi
     assert.equal(alertObservation?.policy.bucketId,current.policy!.bucketId,'future policy does not replace the started period');
     const stationFacts=new StationResourceFacts<Transaction>({async read(){return {kind:'node',id:'shared',revoked:false,
         credentialUntil:stationNow+60000,report:null,invalidReport:false};}},service,()=>stationNow);
-    const stationStore=new MySqlStationAlertStore();let failHandoff=true,handoffs=0;
-    const alerts=new StationAlerts(db,options.identity,new Idempotency(),stationStore,stationFacts,true,()=>stationNow,0,
-        {async enqueueIn(tx,scope,policy,event){
+    const stationStore=new MySqlStationAlertStore(),endpoints=new MySqlNotificationEndpoints();
+    let failOutbox=true,handoffs=0,handoffTx:Transaction|undefined;
+    const outboxFailure=new Error('injected resource alert outbox post-insert failure'),insertOutcomes:string[]=[];
+    class FailingOutbox extends MySqlNotificationDeliveries {
+        override async insert(tx:Transaction,scope:string,value:NotificationDelivery,at:number) {
+            assert.equal(tx,handoffTx,'the original Station transaction reaches the native outbox insert');
+            const result=await super.insert(tx,scope,value,at);insertOutcomes.push(result);
+            assert.equal((await rows(tx,'SELECT id FROM notification_deliveries')).length,1);
+            if(failOutbox)throw outboxFailure;
+            return result;
+        }
+    }
+    const outbox=new FailingOutbox(),notificationTables=['notification_endpoint_scopes','notification_endpoints',
+        'notification_endpoint_events','notification_delivery_scopes','notification_deliveries','notification_delivery_attempts','notification_delivery_rates'];
+    const notificationRows=async()=>Object.fromEntries(await Promise.all(notificationTables.map(async table=>[table,
+        (await rows(db.pool,`SELECT * FROM \`${table}\``)).map(row=>JSON.stringify(row)).sort()])));
+    let secretUses=0,sends=0;
+    const noSecrets:NotificationSecrets={async acquire(){secretUses++;assert.fail('revoked deliveries must not acquire secrets');},
+        async read(){secretUses++;assert.fail('enqueue does not read secrets');},async stage(){secretUses++;assert.fail('enqueue does not stage secrets');},async close(){}};
+    const noSender:NotificationSender={async send(){sends++;assert.fail('revoked deliveries must not send');},async idle(){},async close(){}};
+    const deliveries=new NotificationDeliveries({db,auth:options.identity,store:outbox,endpoints,policies:stationStore,
+        enabled:true,secrets:noSecrets,sender:noSender,authorityBinding:async()=>'sha256:'+'a'.repeat(64),clock:()=>stationNow,clockSkewMs:0});
+    const endpointConfig={schemaVersion:1,enabled:true,policyIds:['quota-policy'],kinds:['firing'],minimumIntervalSeconds:10};
+    await db.transaction(async tx=>{
+        await endpoints.lockScope(tx,'scope');
+        await endpoints.put(tx,'scope',parseNotificationEndpoint({endpointId:'quota-endpoint',revision:1,credentialRevision:1,
+            config:endpointConfig,configDigest:nativeValueDigest(endpointConfig),managedBy:'admin',createdAt:stationNow,updatedAt:stationNow,
+            suspended:'none',authorityDigest:'sha256:'+'a'.repeat(64),credentialRef:'b'.repeat(64)}));
+    });
+    const handoff:StationEventHandoff<Transaction>={
+        async enqueueIn(tx,scope,policy,event,at){
             assert.equal(scope,'scope');assert.equal(policy.config.rule,'shared-period-ending');
             assert.equal(event.config.rule,'shared-period-ending');
             assert.equal(Number((await rows<{count:number}>(tx,'SELECT COUNT(*) AS count FROM station_alert_events'))[0]!.count),1);
-            if(failHandoff)throw Error('injected resource alert handoff failure');handoffs++;
-        }});
+            handoffTx=tx;
+            try{await deliveries.enqueueIn(tx,scope,policy,event,at);handoffs++;}finally{handoffTx=undefined;}
+        }};
+    const alerts=new StationAlerts(db,options.identity,new Idempotency(),stationStore,stationFacts,true,()=>stationNow,0,handoff);
     await alerts.publish('admin','scope','quota-policy','quota-alert-create',0,{schemaVersion:2,rule:'shared-period-ending',
         target:{kind:'node',id:'shared'},enabled:true,subjectActorId:'alice',thresholdPercent:null,thresholdSeconds:60});
-    await assert.rejects(alerts.tick(),/injected resource alert handoff failure/);
+    const notificationBefore=await notificationRows(),policyBefore=(await rows<Record<string,unknown>>(db.pool,'SELECT * FROM station_alert_policies'))[0]!;
+    await assert.rejects(alerts.tick(),error=>error===outboxFailure);
     assert.equal((await rows(db.pool,'SELECT * FROM station_alert_events')).length,0,'event insert rolls back with failed handoff');
+    assert.deepEqual(await notificationRows(),notificationBefore,'the actual outbox write and all seven notification tables roll back');
+    const deferred=(await rows<Record<string,unknown>>(db.pool,'SELECT * FROM station_alert_policies'))[0]!;
+    assert.equal(deferred.next_evaluate_at,stationNow+300000);
+    assert.deepEqual({...deferred,next_evaluate_at:policyBefore.next_evaluate_at},policyBefore,'only the original separate failure deferral persists');
     const stored=(await rows<{state:unknown}>(db.pool,"SELECT state FROM station_alert_policies WHERE policy_id='quota-policy'"))[0]!.state;
     assert.equal((typeof stored==='string'?JSON.parse(stored):stored).condition,'unknown');
-    failHandoff=false;
+    failOutbox=false;
     await db.transaction(tx=>write(tx,"UPDATE station_alert_policies SET next_evaluate_at=? WHERE policy_id='quota-policy'",[stationNow]));
     await alerts.tick();await alerts.tick();
     assert.equal(handoffs,1);assert.equal((await rows(db.pool,'SELECT * FROM station_alert_events')).length,1);
+    const queued=(await rows<{id:string;event_id:string}>(db.pool,'SELECT id,event_id FROM notification_deliveries'))[0]!;
+    await db.transaction(async tx=>{
+        await options.identity.owner(tx,'admin','scope');await stationStore.lockScope(tx,'scope');
+        const policy=await stationStore.policy(tx,'scope','quota-policy',true),event=await stationStore.event(tx,'scope',queued.event_id,true);
+        await handoff.enqueueIn(tx,'scope',policy!,event!,stationNow);
+        const delivery=await outbox.get(tx,'scope',queued.id);
+        assert.equal(delivery!.payload.event.rule,'shared-period-ending');assert.equal(delivery!.payload.event.reason,'period-ending');
+        assert.equal(delivery!.status,'queued');assert.equal(delivery!.eventId,event!.id);
+    });
+    assert.deepEqual(insertOutcomes,['inserted','inserted','duplicate']);
+    assert.equal((await rows(db.pool,'SELECT id FROM notification_deliveries')).length,1);
+    await db.transaction(tx=>write(tx,"UPDATE scope_members SET active=FALSE WHERE scope_id='scope' AND actor_id='admin'"));
+    await deliveries.tick();
+    const revoked=await db.transaction(tx=>outbox.get(tx,'scope',queued.id));
+    assert.equal(revoked!.status,'cancelled');assert.equal(revoked!.lastCode,'AUTHORIZATION_REVOKED');
+    assert.equal(revoked!.attemptCount,0);assert.equal((await rows(db.pool,'SELECT id FROM notification_delivery_attempts')).length,0);
+    assert.deepEqual([secretUses,sends],[0,0]);
+    await db.transaction(tx=>write(tx,"UPDATE scope_members SET active=TRUE WHERE scope_id='scope' AND actor_id='admin'"));
     const after=await policyRows(db);
     await assert.rejects(service.set('admin','scope','shared','alice','overlap',input(3)),code('REVISION_CONFLICT'));
     assert.deepEqual(await policyRows(db),after);

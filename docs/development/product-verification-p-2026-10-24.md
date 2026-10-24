@@ -140,6 +140,26 @@ test merge checkout, tree, workflow/run/job identities, final conclusions and
 artifacts for each candidate. Database-conditional skips require same-candidate
 native MySQL matches. Record failed attempts and subsequent repairs separately.
 
+## Post-Acceptance Coverage Follow-Up
+
+The P completion audit found an achievable PP-10 evidence gap: the resource
+Station SQL case used a declared handoff replacement, while the actual
+Notification outbox SQL was verified separately. The successor case now joins
+the original Station, resource-limit observation and NotificationDeliveries
+owners using their real native MySQL stores in the existing invocation.
+
+The authored case throws the original Error after the actual outbox insertion,
+checks rollback of the Station event/state and all seven notification tables,
+and permits only the original separately committed Station deferral. Success
+must persist the real new-rule payload once; replay of that same event must
+return the native duplicate outcome. Deactivating the recorded owner membership
+must cancel the queued delivery with zero attempts, secret accesses or sender
+calls. No Runtime/Journal/foundation/interface changes or new CI framework are
+introduced. Local type/boundary checks passed; this successor still needs
+Actions. The accepted execution above remains bound to `aae0632f`, not these
+new test assertions. Independent environments and actual external delivery
+remain separate requirements.
+
 ## First Candidate Findings
 
 Baseline run `40041418761` and container run `40041418834` tested the initial
