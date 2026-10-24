@@ -11,6 +11,11 @@ CI/image workflow identities and the required environment inputs. Post-merge
 CI/image outcomes and actual host execution are still pending at this handoff.
 The earlier authorization statements below retain their original dated scope.
 
+The human subsequently confirmed self-managed deployment ("我自己部署"). The
+operator fills/reviews the environment inputs locally and retains host access;
+no credentials or host allocation must be supplied to this chat for preparation.
+Actual PP-13 through PP-16 outcomes still require their execution evidence.
+
 Environment decision (2026-10-24, Asia/Shanghai): the human confirmed that no
 independent-host or long-run environment is currently available and requested
 source and acceptance preparation first. No runner labels, host allocation or
