@@ -1,21 +1,22 @@
 {
   "version": 1,
-  "status": "accepted-frozen-baselines-with-Actions-verified-P-candidate",
+  "status": "accepted-frozen-baselines-with-authorized-unverified-Node-reader-successor",
   "currentSourceCandidate": {
     "stage": "P",
     "authorizationDate": "2026-10-24",
     "record": "docs/development/product-readiness-stage-p-2026-10-24.md",
     "status": "Actions-covered-cases-passed-independent-environment-pending",
-    "testedSource": "aae0632f20c1ffc333433b67c72beafc29605e2a",
-    "testedTree": "9c6efb22ff514d3da22c108377a036c660539da2",
+    "testedSource": "fe531cb2b55b8e78689c861526d6ef3ce5affd9c",
+    "testedTree": "75524cc3f9f4fa790e60dcfeca0a093f2aebd0ee",
     "verificationRecord": "docs/development/product-verification-p-2026-10-24.md",
-    "baselineRun": 40052868559,
-    "packagingRun": 40052868553,
+    "baselineRun": 40058076170,
+    "packagingRun": 40058076180,
+    "unverifiedSuccessor": {"record":"docs/changes/FR-0043-relay-node-snapshot-assignment-read.md","status":"source-implemented-Actions-pending","contract":"RelayNodeAssignmentReader1","nativeBinding":"existing Snapshot Relay source explicitly selects assignmentsForNode"},
     "upgradeAssessment": {"interfaceVersion":10,"catalogLast":"0046-recent-path-probe-alert.sql","controlProfileCount":35,"olderCeilingsUnchanged":true,"agentProfilesUnchanged":true,"newAgentProfile":null,"consumerCases":"Actions-contracts-and-native-MySQL-passed"},
-    "publicSuccessorVersions": {"ControlHttp":6,"ControlDetail":4,"ControlStartup":3,"Identity":3,"ResourceLimitModule":3,"ResourceUsageStore":1,"ProbeModule":5,"ProbeOwner":3,"ProbeMachineApi":3,"ForwardProbeApi":4,"ForwardProbeCapabilityApi":3,"ProbeHistoryModule":3,"ProbeHistoryApi":3,"StationModule":3,"StationApi":4,"AgentCli":2,"AgentCommand":2,"NativeExecution":3,"RelayForwardAssignments":1,"ProbePermitObservation":1},
+    "publicSuccessorVersions": {"ControlHttp":6,"ControlDetail":4,"ControlStartup":3,"Identity":3,"ResourceLimitModule":3,"ResourceUsageStore":1,"ProbeModule":5,"ProbeOwner":3,"ProbeMachineApi":3,"ForwardProbeApi":4,"ForwardProbeCapabilityApi":3,"ProbeHistoryModule":3,"ProbeHistoryApi":3,"StationModule":3,"StationApi":4,"AgentCli":2,"AgentCommand":2,"NativeExecution":3,"RelayForwardAssignments":1,"ProbePermitObservation":1,"RelayNodeAssignments":1},
     "verificationExecuted": true,
     "successorParallelGateOpen": false,
-    "meaning": "P verification is bound to testedSource and testedTree; all ten baseline jobs and packaging passed; full P acceptance still requires independent environments; independent-host/load/long-run and parallel-feature gates remain separate"
+    "meaning": "accepted baseline verification remains bound to testedSource and testedTree; the separately recorded Node reader successor is unverified; full P independent-host/load/long-run and parallel-feature gates remain separate"
   },
   "verification": {
     "authorizationDate": "2026-10-19",
@@ -60,6 +61,7 @@
     "unverifiedConsumers": "named fakes source assertions public examples and browser fixtures have authored successor migrations; complete graph generated parity and runtime compatibility remain unverified; no saved acceptance revision"
   },
   "publicContractChanges": [
+    {"id":"FR-0043","status":"authorized-source-implemented-unverified","record":"docs/changes/FR-0043-relay-node-snapshot-assignment-read.md","entries":["apps/control/src/framework/runtime-assignment-ports.ts","apps/control/src/framework/runtime-relay.ts","apps/control/src/application/control.ts"],"interfaces":[{"name":"RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION","version":1}],"kind":"original-owner-Node-Snapshot-read-with-single-locked-multihop-input-per-plan","legacyBinding":"legacy assignments and RuntimeRelay7 retain original double-input provider/error order; native Snapshot source explicitly consumes new reader; same caller transaction and stage/session/plan checks; no cache, schema, capacity or deadline change"},
     {"id":"FR-0042","status":"Actions-contract-native-scope-verified-at-aae0632f","record":"docs/changes/FR-0042-probe-budget-observation-read.md","entries":["apps/control/src/framework/probe-permit-storage-ports.ts","apps/control/src/infrastructure/mysql-probe-permit-store.ts","apps/control/src/infrastructure/mysql-probe-permits.ts","apps/control/src/modules/probe-owner/permit-contracts.ts","apps/control/src/modules/probe-owner/permits.ts"],"interfaces":[{"name":"PROBE_PERMIT_OBSERVATION_INTERFACE_VERSION","version":1}],"kind":"optional-shared-lock-budget-observation-for-nonexecuting-offer-and-status","legacyBinding":"original exclusive mutations/recovery, bound decoders, monotonic clock and caller transaction retained; native reader shares locks, old providers/subclass overrides retain exclusive path; no fallback on reader error; no wire/schema/deadline changes"},
     {"id":"FR-0041","status":"Actions-contract-native-scope-verified-at-aae0632f","record":"docs/changes/FR-0041-relay-forward-assignment-read.md","entries":["apps/control/src/framework/runtime-assignment-ports.ts","apps/control/src/framework/runtime-relay.ts","apps/control/src/modules/probe-owner/path-plans.ts","apps/control/src/application/control.ts"],"interfaces":[{"name":"RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION","version":1}],"kind":"single-original-owner-Forward-plan-read-with-original-per-node-session-and-stage-projections","legacyBinding":"RuntimeRelay7 and legacy node reader unchanged; optional Probe grouped provider with explicit native binding; same caller transaction and original grants/Profile/endpoint/Operation/session checks; no cache, deadline, wire or protected-history change"},
     {"id":"FR-0040","status":"Actions-contract-native-scope-verified-at-aae0632f","record":"docs/changes/FR-0040-recent-path-probe-alert.md","entries":["apps/control/src/modules/probe-history-owner/path-observations.ts","apps/control/src/modules/station-alert-owner/path-facts.ts","apps/control/migrations/0046-recent-path-probe-alert.sql","apps/web/station-alerts.js"],"kind":"bounded-recent-historical-path-sample-condition-with-current-original-issuer-revalidation","legacyBinding":"same principal/history store/locking planner in original Station transaction; no issuance or new observation store; missing/stale/changed binding never recovers; migration46 Control-only profile with original Agent Journal unchanged"},

@@ -374,3 +374,29 @@ projections, clock and corruption checks; old providers and overridden legacy
 locks keep their original exclusive path. No new authority, schema or lifetime
 is introduced. Concurrent readers/writer exclusion is covered by an authored
 real MySQL case in the existing Actions invocation.
+
+### P Node Snapshot Read Successor
+
+FR-0043 adds `RelayNodeAssignmentReader1` and
+`RuntimeRelayHost.assignmentsForNode(tx,nodeId,includeAccepted=false)`.
+The native call chain is original Runtime transaction -> RuntimeLedger ->
+SnapshotAssignmentRegistry -> RelayAssignmentSource -> explicit new-reader
+callback -> original Relay owner forNode walk -> original publishable-plan and
+Node projection helpers. Each multihop plan consumes one locked input for
+resource and immutable-plan checks; two-node Relay retains its original flow.
+The unchanged `modules/runtime/relay-coordinator.ts` compatibility constructor
+still assembles the original host and native providers. Existing inherited or
+instance canExecute overrides retain the legacy dispatch/provider path instead
+of being bypassed by the optimized entrypoint.
+The original `assignments` entrypoint, constructor, RuntimeRelay7, Snapshot
+context/source/driver declarations and includeAccepted/session/stage behavior
+remain available. No authorization input survives the caller transaction.
+
+The native composition fake explicitly migrates its deferred method expectation
+and retains the original receiver and argument/transaction checks. The public
+example and new/legacy parity, input refusal, once-only read and error/no-cache
+cases are authored in the original owner corpus. Local type/source boundaries
+pass; exact-source Actions and native delay comparison are still required.
+Earlier measured shared JOIN waits are not presented as pool starvation or as
+acceptance of this successor. See
+[FR-0043](../changes/FR-0043-relay-node-snapshot-assignment-read.md).

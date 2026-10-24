@@ -84,8 +84,8 @@ export type { RuntimeOperation, RuntimeRetirementKey, RuntimeRetirement, Runtime
     RuntimeQuarantineSnapshot, RuntimeAcceptedOperation, RuntimeLedgerStore, RuntimeLedgerForwards, RuntimeLedgerAuthorization,
     RuntimeLedgerCompiler, RuntimeLedgerOptions } from './runtime-ledger-ports.ts';
 export type { SnapshotAssignmentContext, SnapshotContribution, AssignmentDriverDeclaration, SnapshotAssignmentSource,
-    SnapshotAssignmentCollector, RelayAssignmentReader, RelayForwardAssignmentReader } from './runtime-assignment-ports.ts';
-export { RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION } from './runtime-assignment-ports.ts';
+    SnapshotAssignmentCollector, RelayAssignmentReader, RelayForwardAssignmentReader, RelayNodeAssignmentReader } from './runtime-assignment-ports.ts';
+export { RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION, RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION } from './runtime-assignment-ports.ts';
 export { RuntimeRelayHost } from './runtime-relay.ts';
 export { RUNTIME_RELAY_INTERFACE_VERSION } from './runtime-relay-ports.ts';
 export type { RuntimeRelayProfile, RuntimeRelayEndpointConfig, RuntimeRelayEndpoint, RuntimeRelayNodeFacts,

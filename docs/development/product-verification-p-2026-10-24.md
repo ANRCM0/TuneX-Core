@@ -6,7 +6,55 @@ PR, Actions execution and necessary failure repairs. Merge, image publication,
 release and delegation are outside this task. Independent-host and long-run
 environments remain unavailable under the human's preceding answer.
 
-## Current Decision
+## Current Source And Last Complete Verification
+
+The FR-0043 Node Snapshot reader successor is source-implemented and locally
+type/boundary checked; its new contract cases and native behavior have not run.
+The last complete tested source before that successor is
+`fe531cb2b55b8e78689c861526d6ef3ce5affd9c`, tree
+`75524cc3f9f4fa790e60dcfeca0a093f2aebd0ee`, tested as PR merge
+`74a8c5f4d51ff6f036dce7de07f9c5385fb17ffe` with the identical tree against
+`b729a5b`. It is not a merge into main and does not validate the new reader.
+
+Baseline `40058076170` completed successfully at 2026-10-24 03:52:21 UTC
+(11:52:21 Asia/Shanghai), with all ten jobs successful. Packaging `40058076180`
+also passed. Contracts recorded 2299 tests: 2149 passes and 150 database skips;
+all 150 names match native MySQL passes on this source, with zero missing names
+or native skips. Web recorded 231 passes; deployment-tools recorded 30 passes.
+The real Station-to-Notification SQL integration and shared-reader/writer
+concurrency cases passed in the complete native job, not just an early step.
+
+Actual Direct/Relay/three-node signed TCP/UDP workflows, account/credential
+Chromium flows, Journal-derived usage through SQL/API/Chromium and 3/4/8-node
+native/browser plus same-host namespace cases passed. Three-node TCP needed two
+independent commands: the first reached the responder once but had no accepted
+result, the second succeeded; UDP's first succeeded. Per-permit replay did not
+execute again. The retained shared JOIN delays of 676/559/426ms remain real
+limitations, not an accepted latency or first-command success-rate guarantee.
+Scans under the existing policy report fixable CRITICAL=0 and HIGH observations
+of 11 Control / 17 Agent. No registry image, main merge or release is produced.
+
+| Job on fe531cb | Job ID | Final conclusion |
+| --- | --- | --- |
+| deployment-tools | 120765690062 | success |
+| contracts | 120765689946 | success |
+| windows-agent | 120765690043 | success |
+| unsupported-platform | 120765690021 | success |
+| phase1 | 120765689810 | success |
+| probe-workflow | 120765690507 | success |
+| relay-isolation | 120765689956 | success |
+| multihop (3) | 120765689945 | success |
+| multihop (4) | 120765690189 | success |
+| multihop (8) | 120765690092 | success |
+| containers (run 40058076180) | 120765387050 | success |
+
+Artifacts: probe `12545843320`, phase1 `12546423237`, Relay isolation
+`12547020122`, multihop 3/4/8 `12546318177`/`12547080275`/`12546867406`,
+scan reports `12546515723`, Agent/Control SBOMs `12546665182`/`12546580469`.
+Their individual names remain in the Actions artifact index. FR-0043 and all
+physical-host/deployment/load/24-72-hour requirements remain separately open.
+
+## Earlier Complete Verification - aae0632f
 
 The current tested source is `aae0632f20c1ffc333433b67c72beafc29605e2a`,
 tree `9c6efb22ff514d3da22c108377a036c660539da2`. Actions checked out PR test
@@ -199,6 +247,30 @@ read into artifacts. Original methods retain their receiver, result/error
 identity and original transactions. This adds no production contract, capacity,
 retry, heartbeat or deadline change; it is needed to locate the measured delay
 before choosing an original-owner source repair.
+
+The fe531cb three-node job and actual TCP/UDP signed workflows passed. Its
+artifact records TCP's first independent command reaching the responder once
+without an accepted result, its second new command succeeding, and UDP's first
+succeeding. SQL attribution shows zero connection acquisition wait on the
+slowest empty polls; the machine-evidence shared JOIN consumes 676ms of a
+679ms call, 559ms of 562ms, and 426ms of 428ms. This does not identify which
+individual joined row is locked and does not prove a production latency bound.
+
+[FR-0043](../changes/FR-0043-relay-node-snapshot-assignment-read.md) was recorded
+before adding an original-owner Node Snapshot read. Native Snapshot collection
+still called the legacy Relay node reader, which reads each multihop input
+twice while the original transaction retains locks. The new separately versioned
+reader reuses one input per plan, delegates the same original projection and
+preserves the legacy entrypoint's double-input provider/error order. Native
+composition explicitly selects the new method. No cache, new authority, table,
+heartbeat, connection capacity or deadline change is added.
+
+Public new/old stage/inclusion parity, one-versus-two input counts, typed public
+binding, current next-call authority, invalid inputs, session refusal and exact
+provider failure cases are authored. Local type/boundary checks pass; no local
+functional or SQL test ran. This dirty successor requires its own saved source
+and Actions results; neither fe531cb's successful samples nor older acceptance
+validate the new reader or prove that all contention is removed.
 
 ## First Candidate Findings
 

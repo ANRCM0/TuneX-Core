@@ -225,7 +225,7 @@ export class ControlApplication implements RelayPlanApi {
         this.probeCapabilities=new ForwardProbeCapabilities(db,identity,this.readAccess,this.forwarding,this.probePlans,this.probes);
         // Sources are declared now and read only after the complete host/Relay assembly returns.
         const assignments=new SnapshotAssignmentRegistry<Transaction>([
-            new RelayAssignmentSource({assignments:(tx,nodeId,includeAccepted)=>this.relay.assignments(tx,nodeId,includeAccepted)}),
+            new RelayAssignmentSource({assignments:(tx,nodeId,includeAccepted)=>this.relay.assignmentsForNode(tx,nodeId,includeAccepted)}),
         ]);
         this.ledger=new RuntimeLedger(policy,nodes,assignments,resources);
         this.transport=new Transport(db,identity,this.idempotency,this.forwarding);

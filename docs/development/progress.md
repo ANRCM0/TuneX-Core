@@ -2,7 +2,7 @@
 
 更新：2026-10-24（Asia/Shanghai）。
 
-## P 候选（Actions 范围通过，独立环境待验）
+## P 候选（最近完整修订通过，Node reader 后继待验）
 
 [P 方案与持续目标](product-readiness-stage-p-2026-10-24.md)已在独立
 `source/p-product-readiness-20261024` 工作树实施：安装计划、所有者成员页、本人
@@ -11,13 +11,18 @@
 契约／HTTP／SQL／Go／Web 病例及[部署质量手册](product-p-deployment-acceptance.md)
 已撰写。唯一 Runtime ledger、Agent authority／Journal 与原事务 owners 保持。
 
-准确验证源码为 `aae0632f20c1ffc333433b67c72beafc29605e2a`，实际 PR 测试合并
-`686f8b9` 与其 tree 相同。baseline `40052868559` 的 10 个作业及 packaging
-`40052868553` 全部通过。契约主运行 2149 通过、150 数据库条件跳过，150 项均与
+最近完整验证源码为 `fe531cb2b55b8e78689c861526d6ef3ce5affd9c`，实际 PR 测试合并
+`74a8c5f` 与其 tree 相同。baseline `40058076170` 的 10 个作业及 packaging
+`40058076180` 全部通过。契约主运行 2149 通过、150 数据库条件跳过，150 项均与
 同候选 native MySQL 通过记录匹配；Web 231 项与部署工具 30 项通过。真实成员／
 凭据／有限刷新、Journal 用量投影、Direct/Relay/三节点签名 TCP/UDP Echo，以及
 3/4/8 节点原生转发／浏览器／同机 namespace 故障通过。三节点 TCP 首个新许可
 未形成结果、第二个独立新命令成功，不能据此宣称首发成功率或生产延迟保证。
+真实额度 Station -> Notification outbox 的写后失败回滚、同事件去重和撤权后零
+发送病例也已在该修订的完整 native SQL 作业通过。分项诊断显示慢空 poll 的
+共享机器证据 JOIN 等待达 676ms，记录的连接获取耗时为 0ms。
+FR-0043 原 owner Node reader 后继针对 Snapshot 锁内重复输入读取，已完成源码、
+契约病例及本地类型／边界检查；尚无该新契约的 Actions 通过，不能继承上述修订。
 完整范围、扫描 HIGH 观察项及早期失败见 [P 验证记录](product-verification-p-2026-10-24.md)。
 候选已推送至草稿 PR #118，未合并、未发布镜像／标签；后续仅文档提交不继承
 准确 head 的功能通过声明。整体目标保持 active。以下 N／B／C／D 仍保留历史证据。

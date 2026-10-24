@@ -25,3 +25,8 @@ export const RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION=1 as const;
 export interface RelayForwardAssignmentReader<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> {
     assignmentsForForward(tx:Tx,forwardId:string):Promise<readonly SnapshotContribution<F>[]>;
 }
+
+export const RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION=1 as const;
+export interface RelayNodeAssignmentReader<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> {
+    assignmentsForNode(tx:Tx,nodeId:string,includeAccepted?:boolean):Promise<RuntimeAssignmentFor<F>[]>;
+}

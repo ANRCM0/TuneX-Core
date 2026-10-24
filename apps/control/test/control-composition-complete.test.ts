@@ -130,7 +130,7 @@ test('208 deferred Relay and migration origin callbacks select the original late
   const f = fixture(), control = f.construct(undefined, false, false, false, false);
   const source = f.one('RelayAssignmentSource').args[0];
   assert.equal(source.assignments(f.tx, 'node', true), f.token);
-  assert.deepEqual(f.calls.pop(), { owner: control.relay, name: 'RelayCoordinator.assignments', args: [f.tx, 'node', true] });
+  assert.deepEqual(f.calls.pop(), { owner: control.relay, name: 'RelayCoordinator.assignmentsForNode', args: [f.tx, 'node', true] });
   const origin = f.one('IngressMigrations').args[6];
   for (const kind of ['deployment', 'migration', 'other']) {
     const ref = { kind, id: 'original' }, owner = kind === 'deployment' ? control.ingressDeployments : control.ingressMigrations;

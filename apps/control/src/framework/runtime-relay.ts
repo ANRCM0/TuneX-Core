@@ -1,18 +1,18 @@
-import { MAX_COUNTER } from '@tunex/core';
+import { MAX_COUNTER, isId } from '@tunex/core';
 import type { Forward } from '@tunex/core';
 import type { RuntimeValueFamily, RuntimeAssignmentFor as RuntimeAssignment, RuntimeSnapshotFor as RuntimeSnapshot, RuntimeReportRequestFor as Report } from '@tunex/contracts/execution-values';
 import type { Observation } from '@tunex/contracts/execution-observation';
 import type { Policy } from '@tunex/contracts/policy';
-import { ControlError } from './errors.ts';
+import { ControlError, invalid } from './errors.ts';
 import type { RuntimeOperation as Operation, RuntimeLedgerForwards } from './runtime-ledger-ports.ts';
 import type { RuntimeRelayNodes, RuntimeRelayTransport, RuntimeRelayEndpointResolver, RuntimeRelayLedger,
   RuntimeRelayStore, RuntimeRelayObservations, RuntimeRelayCompiler, RuntimeRelayOptions,
   RuntimeRelayDeployment as Deployment, RuntimeRelayNodeFacts as RelayNodeExecutionFacts,
   RuntimeRelayPlan as RelayPreparedPlan, RuntimeMultihopInput as MultihopPlanInput } from './runtime-relay-ports.ts';
-import type { RelayAssignmentReader, RelayForwardAssignmentReader, SnapshotContribution } from './runtime-assignment-ports.ts';
+import type { RelayAssignmentReader, RelayForwardAssignmentReader, RelayNodeAssignmentReader, SnapshotContribution } from './runtime-assignment-ports.ts';
 
 
-export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> implements RelayAssignmentReader<Tx,F>, RelayForwardAssignmentReader<Tx,F> {
+export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily> implements RelayAssignmentReader<Tx,F>, RelayForwardAssignmentReader<Tx,F>, RelayNodeAssignmentReader<Tx,F> {
   private readonly nodes:RuntimeRelayNodes<Tx>; private readonly forwarding:RuntimeLedgerForwards<Tx>; private readonly transport:RuntimeRelayTransport<Tx,F>;
   private readonly endpoints:RuntimeRelayEndpointResolver<Tx>; private readonly ledger:RuntimeRelayLedger<Tx,F>; private readonly policy:Policy;
   private readonly store:RuntimeRelayStore<Tx,F>; private readonly observations:RuntimeRelayObservations<Tx>;
@@ -197,9 +197,17 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
     return !forward.deleting&&!forward.recoverySuspended&&forward.spec.enabled&&forward.revision===record.target_revision&&record.stage!=='withdrawn'&&await this.authorized(tx,forward,plan,singleInput);
   }
   async assignments(tx:Tx,nodeId:string,includeAccepted=false):Promise<RuntimeAssignment<F>[]>{
+    return this.readNodeAssignments(tx,nodeId,includeAccepted,false);
+  }
+  async assignmentsForNode(tx:Tx,nodeId:string,includeAccepted=false):Promise<RuntimeAssignment<F>[]>{
+    if(!isId(nodeId)||typeof includeAccepted!=='boolean')invalid('Valid Relay Node assignment identity and inclusion flag required');
+    // Legacy authorization overrides keep their original dispatch and provider order.
+    return this.readNodeAssignments(tx,nodeId,includeAccepted,this.canExecute===originalRelayCanExecute);
+  }
+  private async readNodeAssignments(tx:Tx,nodeId:string,includeAccepted:boolean,singleInput:boolean):Promise<RuntimeAssignment<F>[]>{
     const records=await this.store.forNode(tx,nodeId);
     const result:RuntimeAssignment<F>[]=[];
-    for(const record of records){const plan=this.plan(record);if(!await this.publishablePlan(tx,record,plan,includeAccepted))continue;
+    for(const record of records){const plan=this.plan(record);if(!await this.publishablePlan(tx,record,plan,includeAccepted,singleInput))continue;
       result.push(...await this.nodeAssignments(tx,nodeId,record,plan,includeAccepted));
     }
     return result;
@@ -358,3 +366,4 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
     return [...ids].sort((a,b)=>Number(ingresses.has(b))-Number(ingresses.has(a))||(a<b?-1:a>b?1:0));
   }
 }
+const originalRelayCanExecute=RuntimeRelayHost.prototype.canExecute;

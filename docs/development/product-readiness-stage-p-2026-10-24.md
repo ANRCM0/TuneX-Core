@@ -124,6 +124,7 @@ VPN/L7、第三方执行后端兼容或动态插件运行时。这些需要后�
 
 | 项目 | 状态 | 准确证据 |
 | --- | --- | --- |
+| 最新已完成验证／当前后继 | 分开记账 | `fe531cb` 的 baseline `40058076170` 10 作业及 packaging `40058076180` 通过；FR-0043 Node reader 后继仅源码／病例与本地静态检查完成，不能继承其通过 |
 | 范围、目标、顺序、接受矩阵 | 已记录 | 本文；不是实现/执行证明 |
 | P1 | Actions-covered-cases-passed | 部署预检／安装计划 30 项及容器打包通过；独立安装见 PP-13 |
 | P2 | Actions-covered-cases-passed | FR-0033/34 契约、原生 SQL、Web、真实 Chromium 成员／本人凭据场景通过 |
@@ -222,6 +223,7 @@ principal／Forward 读取权限 -> 原签发者在 locking planner 中重新授
 | Station module／API | 3／4；旧规则 schema1，额度 schema2，最近路径样本 schema3 |
 | UpgradeAssessment | 10；Control 新 ceiling 0042–0046，旧 ceiling 不变 |
 | Agent CLI／command／nativeexecution | 2／2／3；默认新开关关闭 |
+| Relay Forward／Node assignments | 1／1；Forward 读已有准确修订证据，FR-0043 Node 读后继待 Actions |
 
 新增五项迁移只由原 owner／明确 adapter 管理：0042 本人凭据事件，0043 用量派生
 heads／samples，0044 原 Station rule enum，0045 原 Probe permit/history enum/check，0046 原 Station 样本告警 rule enum。
@@ -229,6 +231,13 @@ heads／samples，0044 原 Station rule enum，0045 原 Probe permit/history enu
 旧模块别名继续指向原公共 owner；原构造位置追加可选开关／provider，默认保持原行为。
 HTTP 的账号／Echo／用量 providers 是明确新增结构消费者；对应 substitution fakes 已
 显式迁移。升级 plan 的 Agent profile 仍使用原 runtime／multihop／shared-resource。
+
+FR-0043 在记录提案后增加原 Relay owner 的 Node Snapshot 新入口。原 Runtime
+事务 -> Ledger -> Snapshot registry -> RelayAssignmentSource -> 原兼容构造的
+RelayCoordinator -> RuntimeRelayHost 新 reader，单次复用多跳锁定输入并保留原
+阶段／session 投影。旧 assignments 及 canExecute 覆盖保留旧调用链；新入口不缓存
+跨调用权限，不新增权威／表／期限。相关新旧投影、次数、拒绝、错误与组合入口
+病例已撰写，本地类型／边界通过，功能证据仍待该后继的独立 Actions。
 
 ### 审阅与验证边界
 

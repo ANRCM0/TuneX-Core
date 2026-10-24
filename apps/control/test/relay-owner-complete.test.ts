@@ -5,8 +5,8 @@ import { createConnection } from 'mysql2/promise';
 import { DEFAULT_POLICY } from '@tunex/contracts/shared';
 import type { RuntimeSnapshot } from '@tunex/contracts/runtime';
 import type { Observation } from '@tunex/contracts/execution-observation';
-import { RuntimeRelayHost, RuntimeLedgerHost, RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION } from '../src/framework/public.ts';
-import type { RuntimeOperation, RuntimeRelayDeployment, RuntimeLedgerOptions, RuntimeRelayOptions, RelayForwardAssignmentReader } from '../src/framework/public.ts';
+import { RuntimeRelayHost, RuntimeLedgerHost, ControlError, RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION, RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION } from '../src/framework/public.ts';
+import type { RuntimeOperation, RuntimeRelayDeployment, RuntimeLedgerOptions, RuntimeRelayOptions, RelayForwardAssignmentReader, RelayNodeAssignmentReader } from '../src/framework/public.ts';
 import { nativeRelayCompiler, nativeLedgerCompiler } from '../src/compatibility/public.ts';
 import type { NativeRuntimeFamily } from '../src/compatibility/public.ts';
 import { RuntimeLedger } from '../src/modules/runtime/ledger.ts';
@@ -82,6 +82,79 @@ function fixture(){
     return {host,input,plan,tx,events,forward,op,record,state,failure,snapshot,assignment,observation,snapshots,runtimes,store,ledger,forwards,nodes};
 }
 const names=(f:ReturnType<typeof fixture>)=>f.events.map(e=>e.name);
+
+test('P Relay Node Snapshot read retains legacy projections but consumes one locked multihop input per plan',async()=>{
+    assert.equal(RELAY_NODE_ASSIGNMENTS_INTERFACE_VERSION,1);
+    for(const stage of ['preparing','egress_active','ingress_active','active','withdrawn'] as const)
+        for(const includeAccepted of [false,true])for(const status of ['running','accepted','succeeded'] as const){
+            const current=fixture(),legacy=fixture(),node=current.plan.nodes[0]!.nodeId;
+            for(const f of [current,legacy]){f.record.stage=stage;f.record.prepared_count=1;f.record.activated_count=1;f.op.status=status;}
+            const reader:RelayNodeAssignmentReader<Tx,NativeRuntimeFamily>=current.host;
+            const actual=await reader.assignmentsForNode(current.tx,node,includeAccepted);
+            const expected=await legacy.host.assignments(legacy.tx,node,includeAccepted);
+            assert.deepEqual(actual,expected);
+            const reads=stage==='withdrawn'||status==='accepted'&&!includeAccepted?0:current.plan.nodes.length;
+            assert.equal(names(current).filter(name=>name==='authorizedNode').length,reads);
+            assert.equal(names(legacy).filter(name=>name==='authorizedNode').length,2*reads);
+            assert.equal(names(current).filter(name=>name==='forNode').length,1);
+            assert.equal(names(current).includes('latest'),false);
+            assert.equal(names(current).some(name=>['accept','touch','withdraw','succeed','fail'].includes(name)),false);
+        }
+    for(const includeAccepted of [false,true])for(const nodeIndex of [0,1,2]){
+        const current=fixture(),legacy=fixture(),node=current.plan.nodes[nodeIndex]!.nodeId;
+        for(const f of [current,legacy]){f.record.stage='preparing';f.record.prepared_count=1;f.record.activated_count=1;}
+        assert.deepEqual(await current.host.assignmentsForNode(current.tx,node,includeAccepted),await legacy.host.assignments(legacy.tx,node,includeAccepted));
+    }
+    const fresh=fixture(),node=fresh.plan.nodes[0]!.nodeId;
+    assert.ok((await fresh.host.assignmentsForNode(fresh.tx,node)).length>0);
+    fresh.state.currentPins=false;
+    assert.deepEqual(await fresh.host.assignmentsForNode(fresh.tx,node),[],'another call must read current authority again');
+    const customized=fixture(),original=customized.host.canExecute;let calls=0;
+    customized.host.canExecute=async function(this:RuntimeRelayHost<Tx,NativeRuntimeFamily>,...args:Parameters<typeof original>){
+        assert.equal(this,customized.host);calls++;return original.apply(this,args);
+    };
+    assert.ok((await customized.host.assignmentsForNode(customized.tx,node)).length>0);
+    assert.equal(calls,1);assert.equal(names(customized).filter(name=>name==='authorizedNode').length,2*customized.plan.nodes.length);
+    const denied=fixture();denied.host.canExecute=async()=>false;
+    assert.deepEqual(await denied.host.assignmentsForNode(denied.tx,node),[]);
+    const failed=fixture();failed.host.canExecute=async()=>{throw failed.failure;};
+    await assert.rejects(()=>failed.host.assignmentsForNode(failed.tx,node),error=>error===failed.failure);
+});
+
+test('P Relay Node Snapshot read rejects unknown inputs, preserves original refusals and never falls back after failure',async()=>{
+    for(const node of ['', 'bad id',null,17]){
+        const f=fixture();await assert.rejects(()=>f.host.assignmentsForNode(f.tx,node as never),{code:'INVALID_CONFIG',status:422});assert.deepEqual(f.events,[]);
+    }
+    for(const flag of ['true',null,0,{}]){
+        const f=fixture();await assert.rejects(()=>f.host.assignmentsForNode(f.tx,f.plan.nodes[0]!.nodeId,flag as never),{code:'INVALID_CONFIG',status:422});assert.deepEqual(f.events,[]);
+    }
+    for(const mode of ['deleted','suspended','revoke','failed','changed-pins','blocked-resource']){
+        const f=fixture();
+        if(mode==='deleted')f.forward.deleting=true;if(mode==='suspended')f.forward.recoverySuspended=true;
+        if(mode==='revoke')f.op.kind='revoke';if(mode==='failed')f.op.status='failed';if(mode==='changed-pins')f.state.currentPins=false;
+        if(mode==='blocked-resource')for(const endpoint of f.input.endpoints)for(const port of endpoint.config.allowedTcpPorts)f.state.deniedPorts.add(port);
+        assert.deepEqual(await f.host.assignmentsForNode(f.tx,f.plan.nodes[0]!.nodeId),[]);
+    }
+    const unsafe=fixture();unsafe.ledger.sessionAuthoritySafe=async()=>false;
+    assert.deepEqual(await unsafe.host.assignmentsForNode(unsafe.tx,unsafe.plan.nodes[0]!.nodeId),[]);
+    const empty=fixture(),read=empty.store.forNode;
+    empty.store.forNode=async function(...args){await read.apply(this,args);return [];};
+    assert.deepEqual(await empty.host.assignmentsForNode(empty.tx,empty.plan.nodes[0]!.nodeId),[]);
+    for(const name of ['forNode','operation','forward','authorizer','authorizedNode','facts','peers','profile','endpoint','sessionSafe']){
+        const f=fixture();f.state.fail=name;
+        await assert.rejects(()=>f.host.assignmentsForNode(f.tx,f.plan.nodes[0]!.nodeId),error=>error===f.failure);
+        assert.equal(names(f).filter(event=>event==='forNode').length,1);
+    }
+    const refused=fixture();refused.nodes.authorizedRelayNode=async()=>{throw new ControlError('AUTHORIZATION_DENIED',403,'withdrawn');};
+    assert.deepEqual(await refused.host.assignmentsForNode(refused.tx,refused.plan.nodes[0]!.nodeId),[]);
+    const deniedPort=fixture(),ports=deniedPort.nodes.reservationPorts;
+    deniedPort.nodes.reservationPorts=async function(...args){await ports.apply(this,args);throw deniedPort.failure;};
+    await assert.rejects(()=>deniedPort.host.assignmentsForNode(deniedPort.tx,deniedPort.plan.nodes[0]!.nodeId),error=>error===deniedPort.failure);
+    for(const mode of ['foreign-record','stale-revision','corrupt-plan']){
+        const f=fixture();if(mode==='foreign-record')f.record.forward_id='other';if(mode==='stale-revision')f.record.target_revision++;if(mode==='corrupt-plan')f.record.body='{}';
+        await assert.rejects(()=>f.host.assignmentsForNode(f.tx,f.plan.nodes[0]!.nodeId),{code:'INTEGRITY_FAILURE'});
+    }
+});
 
 test('P Relay Forward read shares original node projections while authorizing one current plan on the caller transaction',async()=>{
     assert.equal(RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION,1);
