@@ -32,6 +32,9 @@ func (runner *Runner) pollProbeEcho(ctx context.Context, session *registeredProb
 	}
 	raw, started, err := runner.probeDeliveryExchangeBounded(ctx, session, "/agent/v3/probe/echo/poll", request, 32768)
 	if err != nil {
+		if runner.options.Diagnostics != "" && runner.options.ProbePathEcho {
+			runner.localLog().Warn("Echo poll exchange failed after milliseconds:", runner.scheduler().Now().Sub(started).Milliseconds())
+		}
 		return nil, err
 	}
 	ack, err := nativeexecution.DecodeProbeEchoPoll(request, raw)
@@ -76,10 +79,16 @@ func (runner *Runner) pollProbeEcho(ctx context.Context, session *registeredProb
 	server, _ := nativeexecution.ParseProbeWireTime(ack.ServerTime)
 	remaining := expires.Sub(server) - skew
 	if remaining <= 0 || remaining > 2*time.Second {
+		if runner.options.Diagnostics != "" && runner.options.ProbePathEcho {
+			runner.localLog().Warn("Echo remaining milliseconds after skew:", remaining.Milliseconds(), "raw:", expires.Sub(server).Milliseconds())
+		}
 		return nil, probe.ErrDenied
 	}
 	until := minProbeDeadline(started.Add(remaining), minProbeDeadline(session.echo.until, target.ExecutionUntil))
 	if !runner.scheduler().Now().Before(until) || !runner.scheduler().Now().Before(freshUntil) {
+		if runner.options.Diagnostics != "" && runner.options.ProbePathEcho {
+			runner.localLog().Warn("Echo discovery deadline milliseconds:", until.Sub(started).Milliseconds(), "fresh:", freshUntil.Sub(started).Milliseconds(), "elapsed:", runner.scheduler().Now().Sub(started).Milliseconds())
+		}
 		return nil, probe.ErrDenied
 	}
 	return &probeDeliveryOffer{permitID: offer.PermitId, measurement: offer.Measurement, echo: true, service: service, echoInput: echoInput,

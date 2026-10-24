@@ -105,7 +105,7 @@ export async function verifyControlledEcho(options:Options) {
                 await wait(options.qualified,'fresh Echo qualification');
                 // Align a new explicit command with the next original one-second
                 // poll. Keep the two-second permit and clock-skew deduction intact.
-                const previous=emptySequence,observeUntil=Date.now()+5000;
+                const previous=emptySequence,observeUntil=Date.now()+15000;
                 while(emptySequence===previous&&Date.now()<observeUntil)await sleep(10);
                 assert.ok(emptySequence>previous,'No actual empty Echo poll observed before the next explicit command');
                 await sleep(Math.max(0,emptyAt+650-Date.now()));

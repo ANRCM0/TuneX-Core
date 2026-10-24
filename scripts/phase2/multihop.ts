@@ -86,7 +86,8 @@ try{
       catch(error){echoTrace.push({stage:'qualification',node:args[0],code:(error as {code?:string}).code??'error'});throw error;}};
     const echo=control.control.probeEcho;
     const trace=<T>(stage:string,invoke:(node:string,fingerprint:string,epoch:number,input:unknown)=>Promise<T>)=>async(...args:Parameters<typeof invoke>):Promise<T>=>{
-      try{const result=await invoke(...args);if(stage!=='poll'||result&&typeof result==='object'&&'offer' in result&&result.offer){const offer=stage==='poll'?(result as {offer:{issuedAt:string;expiresAt:string}}).offer:null;echoTrace.push({stage,node:args[0],outcome:'accepted',...(offer?{ageMs:Date.now()-Date.parse(offer.issuedAt),remainingMs:Date.parse(offer.expiresAt)-Date.now(),lifetimeMs:Date.parse(offer.expiresAt)-Date.parse(offer.issuedAt)}:{})});}return result;}
+      const started=Date.now();
+      try{const result=await invoke(...args);if(stage!=='poll'||result&&typeof result==='object'&&'offer' in result&&result.offer){const offer=stage==='poll'?(result as {offer:{issuedAt:string;expiresAt:string}}).offer:null;echoTrace.push({stage,node:args[0],outcome:'accepted',durationMs:Date.now()-started,...(offer?{ageMs:Date.now()-Date.parse(offer.issuedAt),remainingMs:Date.parse(offer.expiresAt)-Date.now(),lifetimeMs:Date.parse(offer.expiresAt)-Date.parse(offer.issuedAt)}:{})});}return result;}
       catch(error){echoTrace.push({stage,node:args[0],code:(error as {code?:string}).code??'error'});throw error;}
     };
     echo.poll=trace('poll',echo.poll.bind(echo));echo.claim=trace('claim',echo.claim.bind(echo));
