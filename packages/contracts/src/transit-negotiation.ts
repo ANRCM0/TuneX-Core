@@ -27,7 +27,7 @@ export interface TransitNegotiationResponse {
   readonly state:'contract-only';
   readonly executionEnabled:false;
 }
-const schema=JSON.parse(readFileSync(new URL('../../../docs/protocol/schemas/adp-v3-transit-negotiation.schema.json',import.meta.url),'utf8')) as {$id:string};
+const schema=JSON.parse(readFileSync(new URL('../../../packages/contracts/schemas/adp-v3-transit-negotiation.schema.json',import.meta.url),'utf8')) as {$id:string};
 const ajv=new Ajv2020({strict:true,allErrors:true});
 const addFormats:(instance:Ajv2020)=>void=createRequire(import.meta.url)('ajv-formats');
 addFormats(ajv);

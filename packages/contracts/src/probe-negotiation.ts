@@ -25,7 +25,7 @@ export interface ProbeNegotiationResponse extends Omit<ProbeNegotiationRequest, 
     readonly executionEnabled: false;
 }
 interface Messages { Request: ProbeNegotiationRequest; Response: ProbeNegotiationResponse }
-const schema = JSON.parse(readFileSync(new URL('../../../docs/protocol/schemas/probe-negotiation-v1.schema.json',
+const schema = JSON.parse(readFileSync(new URL('../../../packages/contracts/schemas/probe-negotiation-v1.schema.json',
     import.meta.url), 'utf8')) as { $id: string };
 const ajv = new Ajv2020({ strict: true, allErrors: true });
 const addFormats: (instance: Ajv2020) => void = createRequire(import.meta.url)('ajv-formats');

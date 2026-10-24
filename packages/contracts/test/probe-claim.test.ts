@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { checkProbeClaim, parseProbeClaim, parseProbeInstance, parseProbeNegotiation } from '../src/index.ts';
 import type { ProbeClaimRequest, ProbeClaimResponse } from '../src/index.ts';
-const fixture = JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/probe-claim-v1.json', import.meta.url), 'utf8')) as {
+const fixture = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/probe-claim-v1.json', import.meta.url), 'utf8')) as {
     cases: { name: string; message: 'Request' | 'Response'; raw: string; valid: boolean }[] };
 test('Probe claim shared vectors enforce closed binding, safe counters, consumed times and disabled execution', () => {
     for (const entry of fixture.cases) {

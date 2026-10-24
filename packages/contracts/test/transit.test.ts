@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { parseTransitIntent } from '../src/transit.ts';
 import { parseRelayAssignment } from '../src/relay.ts';
 
-const vector = JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/transit-v1.json',import.meta.url),'utf8')) as {
+const vector = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/transit-v1.json',import.meta.url),'utf8')) as {
  cases: {name:string;raw:string;valid:boolean}[];
 };
 for (const sample of vector.cases) {
@@ -23,7 +23,7 @@ test('existing ADP/3 runtime and Relay assignment parsers do not admit Transit i
  const raw = JSON.parse(vector.cases[0]!.raw);
  assert.throws(() => parseRelayAssignment('Assignment', JSON.stringify(raw)));
  // A role spoof on a known-good deployed Relay contract must also fail.
- const old = JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/adp-v3-relay.json',import.meta.url),'utf8'));
+ const old = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/adp-v3-relay.json',import.meta.url),'utf8'));
  const assignment = JSON.parse(old.cases.find((v:{name:string})=>v.name==='assignment-structure').raw);
  assignment.role = 'relay-transit';
  assignment.driver.config.role = 'relay-transit';

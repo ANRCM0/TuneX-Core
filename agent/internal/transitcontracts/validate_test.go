@@ -10,7 +10,7 @@ import (
 )
 
 func TestSharedTransitVectors(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/transit-v1.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/transit-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestSharedTransitVectors(t *testing.T) {
 }
 
 func TestTransitEmbeddedSchemaMatchesRepositoryContract(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/protocol/schemas/transit-v1.schema.json")
+	raw, err := os.ReadFile("../../../packages/contracts/schemas/transit-v1.schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestTransitEmbeddedSchemaMatchesRepositoryContract(t *testing.T) {
 	}
 }
 func TestLegacyRelayAgentParserDeniesNewTransitRole(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/adp-v3-relay.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/adp-v3-relay.json")
 	if err != nil {
 		t.Fatal(err)
 	}

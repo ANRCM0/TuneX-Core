@@ -13,7 +13,7 @@ import (
 
 func executionFixture(t *testing.T) adp3.Snapshot {
 	t.Helper()
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/adp-v3-execution.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/adp-v3-execution.json")
 	if err != nil {
 		t.Fatal(err)
 	}

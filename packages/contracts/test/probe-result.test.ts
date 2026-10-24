@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { checkProbeResult, parseProbeResult, probeResultDigest } from '../src/probe-result.ts';
 import type { ProbeResultRequest, ProbeResultResponse } from '../src/probe-result.ts';
-const fixture = JSON.parse(await readFile(new URL('../../../docs/protocol/fixtures/probe-result-v1.json', import.meta.url), 'utf8')) as {
+const fixture = JSON.parse(await readFile(new URL('../../../packages/contracts/fixtures/probe-result-v1.json', import.meta.url), 'utf8')) as {
     request: ProbeResultRequest; response: ProbeResultResponse; resultDigest: string;
     cases: { name: string; message: 'Request' | 'Response'; raw: string; valid: boolean }[];
 };

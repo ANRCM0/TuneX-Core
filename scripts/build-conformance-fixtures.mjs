@@ -1,6 +1,6 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { digest } from '../packages/contracts/src/digest.ts';
-const fixture = JSON.parse(readFileSync(new URL('../docs/protocol/fixtures/adp-v2-direct.json', import.meta.url), 'utf8'));
+const fixture = JSON.parse(readFileSync(new URL('../packages/contracts/fixtures/adp-v2-direct.json', import.meta.url), 'utf8'));
 const base = name => structuredClone(fixture.valid.find(item => item.name === name).payload);
 const cases = [];
 function add(name, schema, payload, structural = true, semantic = true) {

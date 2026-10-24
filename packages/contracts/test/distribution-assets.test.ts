@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 
-const sourceRoot = new URL('../../../docs/protocol/schemas/', import.meta.url);
+const sourceRoot = new URL('../../../packages/contracts/schemas/', import.meta.url);
 const pairs = [
   ['adp-v2-direct', 'contracts/schema.json'], ['adp-v3-runtime', 'adp3/schema.json'],
   ['adp-v3-execution', 'adp3/execution.schema.json'], ['adp-v3-execution', 'adp3execution/schema.json'],
@@ -65,7 +65,7 @@ test('staged native package initialization refuses missing or malformed schema/c
     writeFileSync(join(temporary, 'package.json'), '{"type":"module"}');
     cpSync(new URL('../src/', import.meta.url), join(packageRoot, 'src'), { recursive: true });
     cpSync(new URL('../data/', import.meta.url), join(packageRoot, 'data'), { recursive: true });
-    const schemas = join(temporary, 'docs', 'protocol', 'schemas');
+    const schemas = join(temporary, 'packages', 'contracts', 'schemas');
     mkdirSync(schemas, { recursive: true }); cpSync(sourceRoot, schemas, { recursive: true });
     symlinkSync(fileURLToPath(new URL('../../../node_modules/', import.meta.url)), join(temporary, 'node_modules'), 'junction');
     const run = (entries: string[]) => spawnSync(process.execPath, ['--input-type=module', '-e',

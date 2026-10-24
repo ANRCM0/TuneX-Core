@@ -2,7 +2,7 @@ import {readFileSync, writeFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 
 const root = new URL('../', import.meta.url);
-const schema = JSON.parse(readFileSync(new URL('docs/protocol/schemas/adp-v3-runtime.schema.json', root), 'utf8'));
+const schema = JSON.parse(readFileSync(new URL('packages/contracts/schemas/adp-v3-runtime.schema.json', root), 'utf8'));
 schema.$id = 'urn:tunex:adp:3:execution:1';
 schema.title = 'ADP/3 complete mixed execution extension 1';
 schema.description = 'Explicit opt-in mixed Direct/Relay/multi-hop snapshots; old Runtime schemas reject this extension.';
@@ -30,7 +30,7 @@ d.assignment.properties.role.enum.push(...roles);
 d.tombstone.properties.role.enum.push(...roles);
 d.Snapshot.properties.executionExtension = {const: 1};
 d.Snapshot.required.push('executionExtension');
-const output = new URL('docs/protocol/schemas/adp-v3-execution.schema.json', root);
+const output = new URL('packages/contracts/schemas/adp-v3-execution.schema.json', root);
 const raw = JSON.stringify(schema, null, 2) + '\n';
 if (process.argv.includes('--check')) assert.equal(readFileSync(output, 'utf8').replaceAll('\r\n', '\n'), raw);
 else writeFileSync(output, raw);

@@ -8,7 +8,7 @@ import { parseJson } from './json.ts';
 import { compareTimes, validateTime } from './time.ts';
 import type { Messages, Policy, Snapshot } from './types.ts';
 
-const schema = JSON.parse(readFileSync(new URL('../../../docs/protocol/schemas/adp-v2-direct.schema.json', import.meta.url), 'utf8')) as { $id: string };
+const schema = JSON.parse(readFileSync(new URL('../../../packages/contracts/schemas/adp-v2-direct.schema.json', import.meta.url), 'utf8')) as { $id: string };
 // Domain scalars require full-string matches. JS "$" otherwise accepts a final newline; Go rejects it.
 const fullStringRegExp = Object.assign((pattern: string, flags: string) => new RegExp(pattern.endsWith('$') ? `${pattern.slice(0, -1)}$(?![\\s\\S])` : pattern, flags), { code: 'fullStringRegExp' });
 const ajv = new Ajv2020({ strict: true, allErrors: true, code: { regExp: fullStringRegExp } });

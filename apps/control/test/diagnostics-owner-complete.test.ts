@@ -12,7 +12,7 @@ import { ForwardDiagnostics as LegacyDiagnostics, FORWARD_DIAGNOSTIC_LIMITS as l
 import type { DiagnosticAssignment, DiagnosticNode, DiagnosticProbe, ForwardDiagnosticReadPort } from '../src/modules/forward-diagnostic-owner/public.ts';
 
 type Any=Record<string,any>;
-const wire=JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/probe-result-v1.json',import.meta.url),'utf8')).request as Any;
+const wire=JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/probe-result-v1.json',import.meta.url),'utf8')).request as Any;
 const start=Date.parse(wire.issuedAt),at=start+500,iso=(value:number)=>new Date(value).toISOString(),hash=(digit='a')=>'sha256:'+digit.repeat(64),clone=<T>(value:T):T=>structuredClone(value);
 const policy={freshnessMs:5000,clockSkewMs:50};
 function node(id='node-a'):DiagnosticNode{return {nodeId:id,scopeId:'scope-a',revoked:false,credentialUntil:start+20000,bootId:'boot-a',sessionEpoch:2,snapshotGeneration:3,lastReportSequence:4,receivedAt:start+110,snapshot:{nodeId:id,sessionEpoch:2,generation:3,issuedAt:iso(start-1000),validUntil:iso(start+10000),digest:hash()},report:{nodeId:id,bootId:'boot-a',sessionEpoch:2,sequence:4,snapshotGeneration:3,observedAt:iso(start+100)},invalidSnapshot:false,invalidReport:false};}

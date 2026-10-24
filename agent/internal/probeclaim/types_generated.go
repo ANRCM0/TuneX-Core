@@ -1,4 +1,4 @@
-// Code generated from docs/protocol/schemas/probe-claim-v1.schema.json. DO NOT EDIT.
+// Code generated from packages/contracts/schemas/probe-claim-v1.schema.json. DO NOT EDIT.
 package probeclaim
 
 type Id = string

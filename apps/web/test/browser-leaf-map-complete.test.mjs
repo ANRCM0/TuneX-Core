@@ -21,8 +21,8 @@ const leaves = [
 ];
 
 test('all twenty-two declared browser leaves retain exact old exports real consumers and explicit per-file roles', async () => {
-  const inventory = JSON.parse(await readFile(new URL('../../../docs/architecture/foundation-boundaries-v1.json', import.meta.url), 'utf8'));
-  const declared = JSON.parse(await readFile(new URL('../../../docs/architecture/entrypoint-inventory-v1.json', import.meta.url), 'utf8')).browser;
+  const inventory = JSON.parse(await readFile(new URL('../../../scripts/config/foundation-boundaries-v1.json', import.meta.url), 'utf8'));
+  const declared = JSON.parse(await readFile(new URL('../../../scripts/config/entrypoint-inventory-v1.json', import.meta.url), 'utf8')).browser;
   assert.equal(declared.length, 22);
   const main = await readFile(new URL('../app.js', import.meta.url), 'utf8'), mainImports = sourceReferences('apps/web/app.js', main);
   assert.equal(leaves.length, 22); assert.equal(leaves.reduce((count, [, names]) => count + names.length, 0), 23);
@@ -51,7 +51,7 @@ test('all twenty-two declared browser leaves retain exact old exports real consu
 });
 
 test('P native presentation additions have explicit scopes exports and composition consumers',async()=>{
-  const inventory=JSON.parse(await readFile(new URL('../../../docs/architecture/foundation-boundaries-v1.json',import.meta.url),'utf8'));
+  const inventory=JSON.parse(await readFile(new URL('../../../scripts/config/foundation-boundaries-v1.json',import.meta.url),'utf8'));
   const source=await readFile(new URL('../browser-native/control-console.js',import.meta.url),'utf8');
   for(const [file,names] of [
     ['member-console.js',['initMemberConsole','memberCommand','memberListView','memberReceipt']],

@@ -6,7 +6,7 @@ import { compareTimes, digest, parseJson, parseMessage, validateStructure, valid
 import type { Messages } from '../src/index.ts';
 
 interface FixtureCase { name: string; schema: keyof Messages; payload: unknown }
-const fixture = JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/adp-v2-direct.json', import.meta.url), 'utf8')) as { valid: FixtureCase[]; invalid: FixtureCase[] };
+const fixture = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/adp-v2-direct.json', import.meta.url), 'utf8')) as { valid: FixtureCase[]; invalid: FixtureCase[] };
 for (const item of fixture.valid) test(`authoritative valid: ${item.name}`, () => {
   const raw = JSON.stringify(item.payload);
   assert.equal(validateStructure(item.schema, raw), true);

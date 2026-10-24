@@ -29,7 +29,7 @@ func TestAuthoritativeFixture(t *testing.T) {
 		Valid   []fixtureCase
 		Invalid []fixtureCase
 	}
-	loadJSON(t, "../../../docs/protocol/fixtures/adp-v2-direct.json", &fixture)
+	loadJSON(t, "../../../packages/contracts/fixtures/adp-v2-direct.json", &fixture)
 	for _, item := range fixture.Valid {
 		t.Run("valid/"+item.Name, func(t *testing.T) {
 			if err := ValidateStructure(item.Schema, item.Payload); err != nil {

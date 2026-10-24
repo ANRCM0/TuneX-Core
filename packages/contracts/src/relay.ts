@@ -27,7 +27,7 @@ export interface RelayResource {address:string;port:number;protocol:'tcp'|'udp'}
 export interface RelayConfig {role:'relay-ingress'|'relay-egress';binding:RelayBinding;profile:RelayProfileConfig;peerFingerprints:string[];peerEndpoint?:{host:string;port:number};target?:{host:string;port:number};egressPolicyRevision:number;allowedDestinationCidrs:string[];allowMetadataTargets:boolean}
 export interface RelayAssignment {protocolVersion:3;nodeId:string;sessionEpoch:number;assignmentId:string;forwardId:string;forwardRevision:number;deploymentGeneration:number;bindingFence:number;role:'relay-ingress'|'relay-egress';protocol:'tcp'|'udp';phase:'prepared'|'active'|'draining';resource:RelayResource;driver:{id:'native.relay.v1';schemaVersion:1;configDigest:string;config:RelayConfig};drainTimeoutSeconds:number}
 export interface RelayTombstone {protocolVersion:3;nodeId:string;role:'relay-ingress'|'relay-egress';assignmentId:string;forwardId:string;protocol:'tcp'|'udp';physicalProtocol:'tcp'|'udp';port:number;bindingFence:number;retirementGeneration:number}
-const schema=JSON.parse(readFileSync(new URL('../../../docs/protocol/schemas/native-relay-v1.schema.json',import.meta.url),'utf8')) as {$id:string};
+const schema=JSON.parse(readFileSync(new URL('../../../packages/contracts/schemas/native-relay-v1.schema.json',import.meta.url),'utf8')) as {$id:string};
 const fullStringRegExp=Object.assign((pattern:string,flags:string)=>new RegExp(pattern.endsWith('$')?`${pattern.slice(0,-1)}$(?![\\s\\S])`:pattern,flags),{code:'fullStringRegExp'});
 const ajv=new Ajv2020({strict:true,allErrors:true,code:{regExp:fullStringRegExp}});ajv.addSchema(schema);
 const validators=new Map<string,ValidateFunction>();for(const name of ['ProfileConfig','Open','Accept','Reject'])validators.set(name,ajv.compile({$ref:`${schema.$id}#/$defs/${name}`}));
@@ -38,7 +38,7 @@ export function parseRelayMessage<K extends keyof RelayMessages>(name:K,raw:stri
  return deepFreeze(value as RelayMessages[K]);
 }
 
-const adp3=JSON.parse(readFileSync(new URL('../../../docs/protocol/schemas/adp-v3-relay.schema.json',import.meta.url),'utf8')) as {$id:string};
+const adp3=JSON.parse(readFileSync(new URL('../../../packages/contracts/schemas/adp-v3-relay.schema.json',import.meta.url),'utf8')) as {$id:string};
 const adp3Ajv=new Ajv2020({strict:true,allErrors:true,code:{regExp:fullStringRegExp}});const addFormats:(instance:Ajv2020)=>void=createRequire(import.meta.url)('ajv-formats');addFormats(adp3Ajv);adp3Ajv.addSchema(adp3);
 const adp3Validators=new Map<string,ValidateFunction>(['Assignment','Tombstone'].map(name=>[name,adp3Ajv.compile({$ref:`${adp3.$id}#/$defs/${name}`})]));
 export function parseRelayAssignment<K extends 'Assignment'|'Tombstone'>(name:K,raw:string,maxBytes=16384):K extends 'Assignment'?RelayAssignment:RelayTombstone{

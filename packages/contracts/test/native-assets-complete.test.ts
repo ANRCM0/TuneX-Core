@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 
 const repository = fileURLToPath(new URL('../../../', import.meta.url));
-const schemas = 'docs/protocol/schemas/';
+const schemas = 'packages/contracts/schemas/';
 const normalize = (value: string) => value.replaceAll('\r\n', '\n');
 const generated = [
     ['adp-v2-direct', 'contracts', 'schema.json'],

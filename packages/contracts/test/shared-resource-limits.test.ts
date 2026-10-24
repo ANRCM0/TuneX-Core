@@ -5,7 +5,7 @@ import { digest } from '../src/digest.ts';
 import { parseRuntimeMessage } from '../src/adp3.ts';
 import type { RuntimeSnapshot } from '../src/adp3.ts';
 
-const fixture = JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/adp-v3-runtime.json', import.meta.url), 'utf8')) as {
+const fixture = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/adp-v3-runtime.json', import.meta.url), 'utf8')) as {
     cases: { schema: string; raw: string; valid: boolean }[];
 };
 

@@ -7,7 +7,7 @@ import (
 )
 
 func TestSharedContract(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/native-relay-v1.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/native-relay-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestTypedControlMessage(t *testing.T) {
 }
 
 func TestTypedOpenAcceptsExactExponentCounter(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/native-relay-v1.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/native-relay-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -37,7 +37,7 @@ function ownerAccess<Tx>(tx:Tx,scopeId:string,members:ReadonlyMap<string,boolean
 
 
 // Readiness 186: staged v4 parsing/history is deliberately separate from the v1/v2/v3 machine API.
-const fixture = JSON.parse(await readFile(new URL('../../../docs/protocol/fixtures/probe-result-v1.json', import.meta.url), 'utf8')) as { request: ProbeResultRequest };
+const fixture = JSON.parse(await readFile(new URL('../../../packages/contracts/fixtures/probe-result-v1.json', import.meta.url), 'utf8')) as { request: ProbeResultRequest };
 const base = fixture.request, issued = Date.parse(base.issuedAt), consumed = Date.parse(base.consumedAt), accepted = Date.parse(base.measuredAt) + 10;
 const fingerprint = 'f'.repeat(64), hash = (value: Uint8Array) => 'sha256:' + createHash('sha256').update(value).digest('hex');
 const measurements = ['tcp-connect-v1', 'tcp-ingress-connect-v1', 'tcp-ingress-tls-v1', 'tcp-ingress-echo-v1', 'udp-ingress-echo-v1'] as const;

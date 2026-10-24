@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 
 const normalizeNewlines = value => value.replaceAll('\r\n', '\n');
 
-const ts = readFileSync(new URL('../docs/protocol/schemas/adp-v3-transit.schema.json', import.meta.url), 'utf8');
+const ts = readFileSync(new URL('../packages/contracts/schemas/adp-v3-transit.schema.json', import.meta.url), 'utf8');
 const go = readFileSync(new URL('../agent/internal/adp3transit/schema.json', import.meta.url), 'utf8');
 assert.equal(normalizeNewlines(go), normalizeNewlines(ts),
   'Embedded Go Transit ADP/3 schema differs from the authoritative contract');
 
-const runtime = JSON.parse(readFileSync(new URL('../docs/protocol/schemas/adp-v3-runtime.schema.json', import.meta.url), 'utf8'));
+const runtime = JSON.parse(readFileSync(new URL('../packages/contracts/schemas/adp-v3-runtime.schema.json', import.meta.url), 'utf8'));
 assert.equal(runtime.$defs.assignment.properties.role.enum.includes('relay-transit'), false,
   'Production Runtime Assignment accidentally admitted Transit');
 assert.equal(runtime.$defs.driver.properties.id.enum.includes('native.transit.v1'), false,
@@ -16,14 +16,14 @@ assert.equal(runtime.$defs.driver.properties.id.enum.includes('native.transit.v1
 const transit = JSON.parse(ts);
 assert.equal(transit.$defs.Assignment.properties.extensionVersion.const, 1);
 assert.equal(transit.$defs.Snapshot.properties.kind.const, 'transit-snapshot');
-const negotiation=readFileSync(new URL('../docs/protocol/schemas/adp-v3-transit-negotiation.schema.json',import.meta.url),'utf8');
+const negotiation=readFileSync(new URL('../packages/contracts/schemas/adp-v3-transit-negotiation.schema.json',import.meta.url),'utf8');
 const embedded=readFileSync(new URL('../agent/internal/transitnegotiation/schema.json',import.meta.url),'utf8');
 assert.equal(normalizeNewlines(embedded),normalizeNewlines(negotiation),
   'Transit mTLS negotiation Go schema differs');
 const response=JSON.parse(negotiation).$defs.Response;
 assert.equal(response.properties.executionEnabled.const,false);
 assert.equal(response.properties.state.const,'contract-only');
-const delivery=readFileSync(new URL('../docs/protocol/schemas/adp-v3-transit-delivery.schema.json',import.meta.url),'utf8');
+const delivery=readFileSync(new URL('../packages/contracts/schemas/adp-v3-transit-delivery.schema.json',import.meta.url),'utf8');
 const embeddedDelivery=readFileSync(new URL('../agent/internal/transitdelivery/schema.json',import.meta.url),'utf8');
 assert.equal(normalizeNewlines(embeddedDelivery),normalizeNewlines(delivery),'Transit delivery Go schema differs');
 const definitions=JSON.parse(delivery).$defs;

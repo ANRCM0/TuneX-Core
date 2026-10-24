@@ -54,7 +54,7 @@ export interface TransitDeliveryAck {
 export type TransitDeliveryMessage={
  Command:TransitPreviewCommand;Report:TransitDeliveryReport;Ack:TransitDeliveryAck;
 };
-const schema=JSON.parse(readFileSync(new URL('../../../docs/protocol/schemas/adp-v3-transit-delivery.schema.json',import.meta.url),'utf8')) as {$id:string};
+const schema=JSON.parse(readFileSync(new URL('../../../packages/contracts/schemas/adp-v3-transit-delivery.schema.json',import.meta.url),'utf8')) as {$id:string};
 const fullStringRegExp=Object.assign(
  (pattern:string,flags:string)=>new RegExp(pattern.endsWith('$')?`${pattern.slice(0,-1)}$(?![\\s\\S])`:pattern,flags),
  {code:'fullStringRegExp'});

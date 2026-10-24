@@ -5,7 +5,7 @@ import { checkProbeResult, parseProbeResult, probeResultDigest } from '@tunex/co
 import type { ProbeResultRequest } from '@tunex/contracts';
 import { ProbeResults } from '../src/application/probe-results.ts';
 import { createApp } from '../src/api/app.ts';
-const fixture = JSON.parse(await readFile(new URL('../../../docs/protocol/fixtures/probe-result-v1.json', import.meta.url), 'utf8')) as { request: ProbeResultRequest };
+const fixture = JSON.parse(await readFile(new URL('../../../packages/contracts/fixtures/probe-result-v1.json', import.meta.url), 'utf8')) as { request: ProbeResultRequest };
 const input = parseProbeResult('Request', JSON.stringify(fixture.request)), at = Date.parse(input.measuredAt) + 10;
 const accepted = () => ({ resultDigest: probeResultDigest(input), acceptedAt: at, checkedAt: at, duplicate: false });
 test('result adapter delegates once to the owner, awaits commit and returns only a detached receipt', async () => {

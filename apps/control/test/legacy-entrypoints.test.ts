@@ -312,7 +312,7 @@ for (const [family, table, count] of [
       expectations.set(leaf, expected);
     }
     assert.equal(expectations.size, count);
-    const inventory = JSON.parse(await readFile(new URL('../../../docs/architecture/entrypoint-inventory-v1.json', import.meta.url), 'utf8'));
+    const inventory = JSON.parse(await readFile(new URL('../../../scripts/config/entrypoint-inventory-v1.json', import.meta.url), 'utf8'));
     for (const leaf of expectations.keys()) assert.ok(inventory.legacy[family].includes(leaf + '.ts'), leaf);
     for (const [leaf, expected] of expectations) {
       const relative = family === 'modules' ? leaf : family === 'runtime' ? 'runtime/' + leaf : '../application/' + leaf;

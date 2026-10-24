@@ -79,7 +79,7 @@ vector('future-consumed', 'StatusResponse', { ...statusAck, consumedAt: '2026-10
 vector('not-consumed', 'StatusResponse', { ...statusAck, state: 'issued' });
 vector('duplicate-offer-binding', 'PollResponse', JSON.stringify(pollAck).replace('"bindingFence":5', '"bindingFence":5,"bindingFence":5'));
 vector('surrogate', 'PollRequest', JSON.stringify(poll).replace('"node-a"', '"\\ud800"'));
-const path = new URL('docs/protocol/fixtures/probe-delivery-v1.json', root);
+const path = new URL('packages/contracts/fixtures/probe-delivery-v1.json', root);
 const output = JSON.stringify({ description: 'Bounded non-executable discovery and point-in-time current authority observations', cases }, null, 2) + '\n';
 if (process.argv.includes('--check')) {
   if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== output) throw new Error('Probe delivery fixtures out of date');

@@ -8,7 +8,7 @@ import (
 
 func deliveryFixture(t *testing.T) (PollRequest, PollResponse, StatusRequest, StatusResponse) {
 	t.Helper()
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/probe-delivery-v1.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/probe-delivery-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,7 +12,7 @@ import { parseRuntimeMessage } from '@tunex/contracts/runtime';
 import type { Transaction } from '../src/infrastructure/mysql.ts';
 
 type Any=Record<string,any>;
-const fixtureFile=JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/adp-v3-runtime.json',import.meta.url),'utf8')) as Any;
+const fixtureFile=JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/adp-v3-runtime.json',import.meta.url),'utf8')) as Any;
 const snapshotText=fixtureFile.cases.find((value:Any)=>value.name==='direct-snapshot').raw as string,snapshot=()=>JSON.parse(snapshotText) as Any;
 const publishedSQL='SELECT r.boot_id,r.session_epoch,r.snapshot_generation,n.credential_until,s.valid_until,s.body\n            FROM nodes n JOIN runtime_nodes r ON r.node_id=n.id\n            JOIN snapshots s ON s.node_id=n.id AND s.generation=r.snapshot_generation AND s.session_epoch=r.session_epoch\n            WHERE n.id=? AND n.scope_id=? AND n.revoked=FALSE AND OCTET_LENGTH(s.body)<=1048576';
 const machineSQL='SELECT r.node_id,r.boot_id,r.session_epoch,n.revoked,n.credential_until,n.facts,\n                c.revoked credential_revoked,c.valid_until,c.retire_after\n            FROM runtime_nodes r JOIN nodes n ON n.id=r.node_id\n            LEFT JOIN node_credentials c ON c.node_id=r.node_id AND c.fingerprint=?\n            WHERE r.node_id=? FOR SHARE';

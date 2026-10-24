@@ -8,7 +8,7 @@ import (
 )
 
 func TestProbeInstanceSharedVectors(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/probe-instance-v1.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/probe-instance-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}

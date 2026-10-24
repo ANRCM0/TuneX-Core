@@ -8,7 +8,7 @@ import (
 
 func claimFixture(t *testing.T) (Request, Response) {
 	t.Helper()
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/probe-claim-v1.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/probe-claim-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}

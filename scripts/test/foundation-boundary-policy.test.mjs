@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { classifySource, sourceReferences, sourceViolations } from '../foundation-boundary-policy.mjs';
 
-const inventory = JSON.parse(readFileSync(new URL('../../docs/architecture/foundation-boundaries-v1.json', import.meta.url), 'utf8'));
+const inventory = JSON.parse(readFileSync(new URL('../../scripts/config/foundation-boundaries-v1.json', import.meta.url), 'utf8'));
 const lower = 'apps/control/src/framework/mutation-fixture.ts';
 function rejected(path, source, reason) {
   assert.ok(sourceViolations(path, source, inventory).some(error => reason.test(error)), 'Expected rejection: ' + reason);

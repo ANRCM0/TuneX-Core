@@ -1,4 +1,4 @@
-// Code generated from docs/protocol/schemas/probe-negotiation-v1.schema.json. DO NOT EDIT.
+// Code generated from packages/contracts/schemas/probe-negotiation-v1.schema.json. DO NOT EDIT.
 package probenegotiation
 
 type Id = string

@@ -68,7 +68,7 @@ test('upgrade assessment preserves MySQL, authenticated journals and Authority; 
             const stateDirectory = join(directory, 'control');
             const authority = new AuthorityStore(stateDirectory);
             await authority.initialize(binding[0]!.binding, trustDigest(await readFile(caPath)), true);
-            const vectors = JSON.parse(await readFile(new URL('../../../docs/protocol/fixtures/adp-v3-runtime.json', import.meta.url), 'utf8'));
+            const vectors = JSON.parse(await readFile(new URL('../../../packages/contracts/fixtures/adp-v3-runtime.json', import.meta.url), 'utf8'));
             const snapshot = parseRuntimeMessage('Snapshot', vectors.cases.find((v: { name: string }) => v.name === 'relay-egress-udp').raw);
             const node = snapshot.nodeId, generation = snapshot.snapshotGeneration;
             await writer.query("INSERT INTO accounts(id,token_hash) VALUES('owner',?)", ['a'.repeat(64)]);

@@ -1,4 +1,4 @@
-// Code generated from docs/protocol/schemas/probe-instance-v1.schema.json. DO NOT EDIT.
+// Code generated from packages/contracts/schemas/probe-instance-v1.schema.json. DO NOT EDIT.
 package probeinstance
 
 type Id = string

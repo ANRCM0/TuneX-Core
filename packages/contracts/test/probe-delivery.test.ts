@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { checkProbePoll, checkProbeStatus, parseProbeDelivery, parseProbeClaim, parseProbeInstance, parseProbeNegotiation } from '../src/index.ts';
 import type { ProbePollRequest, ProbePollResponse, ProbeStatusRequest, ProbeStatusResponse } from '../src/index.ts';
-const fixture = JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/probe-delivery-v1.json', import.meta.url), 'utf8')) as {
+const fixture = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/probe-delivery-v1.json', import.meta.url), 'utf8')) as {
     cases: { name: string; message: 'PollRequest' | 'PollResponse' | 'StatusRequest' | 'StatusResponse'; raw: string; valid: boolean }[] };
 test('Probe delivery shared vectors enforce closed singleton offers, safe identity/binding and bounded observations', () => {
     for (const entry of fixture.cases) {

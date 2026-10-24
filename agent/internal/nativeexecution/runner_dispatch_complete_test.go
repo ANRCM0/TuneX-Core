@@ -64,7 +64,7 @@ func TestRunnerWireCompleteHelloReportLiteralBytesAndRecoveryDecodeKinds(t *test
 }
 
 func TestRunnerWireCompleteActualStrictHelloSnapshotAndAckParsers(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/adp-v3-runtime.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/adp-v3-runtime.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestRunnerDispatchCompleteOriginalDirectRelayAndMultihopEffectOrder(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	relayFixture, err := os.ReadFile("../../../docs/protocol/fixtures/adp-v3-relay.json")
+	relayFixture, err := os.ReadFile("../../../packages/contracts/fixtures/adp-v3-relay.json")
 	if err != nil {
 		t.Fatal(err)
 	}

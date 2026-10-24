@@ -11,7 +11,7 @@ import (
 
 func resourceSnapshot(t *testing.T, extension bool) map[string]any {
 	t.Helper()
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/adp-v3-runtime.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/adp-v3-runtime.json")
 	if err != nil {
 		t.Fatal(err)
 	}

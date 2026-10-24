@@ -33,7 +33,7 @@ vector('lone-surrogate', 'Request', JSON.stringify(request).replace('"node-a"', 
 vector('null-message', 'Request', 'null');
 vector('oversized-message', 'Request', ' '.repeat(4097) + JSON.stringify(request));
 const output = JSON.stringify({ description: 'Parser recognition only, never Probe authorization', cases }, null, 2) + '\n';
-const path = new URL('docs/protocol/fixtures/probe-negotiation-v1.json', root);
+const path = new URL('packages/contracts/fixtures/probe-negotiation-v1.json', root);
 if (process.argv.includes('--check')) {
   if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== output) throw new Error('Probe negotiation fixtures out of date');
 } else writeFileSync(path, output);

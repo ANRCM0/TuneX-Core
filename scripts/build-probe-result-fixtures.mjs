@@ -57,7 +57,7 @@ for (const [name, patch] of [['enabled', { executionEnabled: true }], ['health',
   ['time', { serverTime: '2026-10-17T00:00:00.109Z' }], ['pre-epoch', { acceptedAt: '1969-12-31T23:59:59.999Z' }]])
   vector('ack-' + name, 'Response', { ...response, ...patch });
 const contents = JSON.stringify({ version: 1, request, response, resultDigest: hash(request), cases }, null, 2) + '\n';
-const path = new URL('docs/protocol/fixtures/probe-result-v1.json', root);
+const path = new URL('packages/contracts/fixtures/probe-result-v1.json', root);
 if (process.argv.includes('--check')) {
   if (readFileSync(path, 'utf8').replaceAll('\r\n','\n') !== contents) throw new Error('Probe result fixtures are out of date');
 } else writeFileSync(path, contents);

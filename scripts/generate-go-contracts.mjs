@@ -40,15 +40,15 @@ for (const [name, contents] of [[alias?'execution.schema.json':'schema.json', ra
   } else writeFileSync(path, contents);
 }
 }
-generate('docs/protocol/schemas/adp-v2-direct.schema.json', 'agent/internal/contracts/', 'contracts');
-generate('docs/protocol/schemas/native-relay-v1.schema.json', 'agent/internal/relaycontracts/', 'relaycontracts');
-generate('docs/protocol/schemas/adp-v3-relay.schema.json', 'agent/internal/adp3relay/', 'adp3relay');
-generate('docs/protocol/schemas/adp-v3-execution.schema.json', 'agent/internal/adp3/', 'adp3', true);
+generate('packages/contracts/schemas/adp-v2-direct.schema.json', 'agent/internal/contracts/', 'contracts');
+generate('packages/contracts/schemas/native-relay-v1.schema.json', 'agent/internal/relaycontracts/', 'relaycontracts');
+generate('packages/contracts/schemas/adp-v3-relay.schema.json', 'agent/internal/adp3relay/', 'adp3relay');
+generate('packages/contracts/schemas/adp-v3-execution.schema.json', 'agent/internal/adp3/', 'adp3', true);
 // Generate the superset types separately; both parsers share these Go value types.
-generate('docs/protocol/schemas/adp-v3-execution.schema.json', 'agent/internal/adp3execution/', 'adp3execution');
-generate('docs/protocol/schemas/probe-negotiation-v1.schema.json', 'agent/internal/probenegotiation/', 'probenegotiation');
-generate('docs/protocol/schemas/probe-instance-v1.schema.json', 'agent/internal/probeinstance/', 'probeinstance');
-generate('docs/protocol/schemas/probe-claim-v1.schema.json', 'agent/internal/probeclaim/', 'probeclaim');
-generate('docs/protocol/schemas/probe-delivery-v1.schema.json', 'agent/internal/probedelivery/', 'probedelivery');
-generate('docs/protocol/schemas/probe-result-v1.schema.json', 'agent/internal/proberesult/', 'proberesult');
+generate('packages/contracts/schemas/adp-v3-execution.schema.json', 'agent/internal/adp3execution/', 'adp3execution');
+generate('packages/contracts/schemas/probe-negotiation-v1.schema.json', 'agent/internal/probenegotiation/', 'probenegotiation');
+generate('packages/contracts/schemas/probe-instance-v1.schema.json', 'agent/internal/probeinstance/', 'probeinstance');
+generate('packages/contracts/schemas/probe-claim-v1.schema.json', 'agent/internal/probeclaim/', 'probeclaim');
+generate('packages/contracts/schemas/probe-delivery-v1.schema.json', 'agent/internal/probedelivery/', 'probedelivery');
+generate('packages/contracts/schemas/probe-result-v1.schema.json', 'agent/internal/proberesult/', 'proberesult');
 console.log('Go schemas and types match ADP/2, ADP/3 Runtime execution extension 1, Relay and independent Probe negotiation/instance/claim/delivery/result contracts.');

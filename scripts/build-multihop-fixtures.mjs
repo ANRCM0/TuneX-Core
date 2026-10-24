@@ -14,7 +14,7 @@ for(const count of [3,4,8]){
   for(const node of plan.nodes)add(`${count}-${node.nodeId}`,compileSnapshot({nodeId:node.nodeId,sessionEpoch:node.sessionEpoch,snapshotGeneration:1,issuedAt:input.issuedAt,validUntil:'2026-10-16T10:05:00Z',assignments:node.assignments,tombstones:[]}),true);
 }
 const base=()=>JSON.parse(cases.find(c=>c.name==='3-node-2').raw);
-const mixed=base(),legacy=JSON.parse(readFileSync(new URL('../docs/protocol/fixtures/adp-v3-runtime.json',import.meta.url),'utf8'));
+const mixed=base(),legacy=JSON.parse(readFileSync(new URL('../packages/contracts/fixtures/adp-v3-runtime.json',import.meta.url),'utf8'));
 const old=JSON.parse(legacy.cases.find(c=>c.name==='mixed-direct-relay').raw);
 for(const [i,original] of old.assignments.entries()){
   const a=structuredClone(original);a.assignmentId='mixed-assignment-'+i;a.resource.port=34000+i;
@@ -43,7 +43,7 @@ const negative={
   'retired-fence':s=>{const a=s.assignments[0];s.tombstones=[{assignmentId:a.assignmentId,forwardId:a.forwardId,role:a.role,protocol:a.protocol,physicalProtocol:a.resource.protocol,port:a.resource.port,bindingFence:a.bindingFence,retirementGeneration:1}];},
 };
 for(const [name,mutate] of Object.entries(negative)){const s=base();mutate(s);add(name,sign(s),false);}
-const file=new URL('../docs/protocol/fixtures/adp-v3-execution.json',import.meta.url);
+const file=new URL('../packages/contracts/fixtures/adp-v3-execution.json',import.meta.url);
 const contents=JSON.stringify({description:'Shared execution extension vectors; stateless contract evidence only.',cases},null,2)+'\n';
 if(process.argv.includes('--check')){if(readFileSync(file,'utf8').replaceAll('\r\n','\n')!==contents)throw Error('Multi-hop fixtures are stale');}
 else writeFileSync(file,contents);

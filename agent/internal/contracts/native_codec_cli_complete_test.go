@@ -463,7 +463,7 @@ func TestNativeCodecCompleteActualADPValidatorCLIBoundsAndExitCodes(t *testing.T
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("actual validator fixture executable: %v\n%s", err, out)
 	}
-	fixture, err := os.ReadFile("../../../docs/protocol/fixtures/adp-v3-runtime.json")
+	fixture, err := os.ReadFile("../../../packages/contracts/fixtures/adp-v3-runtime.json")
 	if err != nil {
 		t.Fatal(err)
 	}

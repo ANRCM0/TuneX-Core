@@ -9,7 +9,7 @@ import (
 
 func resultFixture(t *testing.T) (Request, Response, string) {
 	t.Helper()
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/probe-result-v1.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/probe-result-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}

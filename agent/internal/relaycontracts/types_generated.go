@@ -1,4 +1,4 @@
-// Code generated from docs/protocol/schemas/native-relay-v1.schema.json. DO NOT EDIT.
+// Code generated from packages/contracts/schemas/native-relay-v1.schema.json. DO NOT EDIT.
 package relaycontracts
 
 type Id = string

@@ -1,4 +1,4 @@
-// Code generated from docs/protocol/schemas/probe-result-v1.schema.json. DO NOT EDIT.
+// Code generated from packages/contracts/schemas/probe-result-v1.schema.json. DO NOT EDIT.
 package proberesult
 
 type Id = string

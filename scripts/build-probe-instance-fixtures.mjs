@@ -40,7 +40,7 @@ vector('trailing', 'Request', JSON.stringify(request) + '{}');
 vector('surrogate', 'Request', JSON.stringify(request).replace('"node-a"', '"\\ud800"'));
 vector('oversize', 'Request', ' '.repeat(4097));
 vector('null', 'Response', 'null');
-const path = new URL('docs/protocol/fixtures/probe-instance-v1.json', root);
+const path = new URL('packages/contracts/fixtures/probe-instance-v1.json', root);
 const output = JSON.stringify({ description: 'Non-executable ownership; no permit authority', cases }, null, 2) + '\n';
 if (process.argv.includes('--check')) {
   if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== output) throw new Error('Probe instance fixtures out of date');

@@ -47,7 +47,7 @@ test('36 original finite-plan isolate retains classifier timing and every native
 });
 
 function ownerFixture(){
-    const binding=JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/probe-result-v1.json',import.meta.url),'utf8')).request.binding;
+    const binding=JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/probe-result-v1.json',import.meta.url),'utf8')).request.binding;
     const config:ProbePlanConfig={version:1,kind:'tcp-connect',forwardId:binding.forwardId,expectedForwardRevision:binding.forwardRevision,timeoutMs:1000,mode:'manual',intervalSeconds:null,maxRuns:3,expiresAt:at+60000};
     const head:ProbePlanHead={id:'plan',scopeId:'scope-a',createdBy:'creator',createdAt:at-1000,config,configDigest:nativeValueDigest(config),originBinding:binding,revision:1,state:'active',decisionCount:0,acceptedCount:0,nextRunAt:0,updatedAt:at-1000,cancelledBy:null,cancelledAt:null,lastCode:null,recoverySuspended:false};
     const trace:string[]=[],state={head,decisions:[] as ProbePlanDecision[],issued:[] as string[],replies:[] as unknown[],error:undefined as unknown,fault:''},failure=new Error('original owner provider');let issuedSavepoint:string[]=[];

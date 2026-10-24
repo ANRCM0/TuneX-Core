@@ -295,7 +295,7 @@ payloadbudget/history InterfaceVersion 1
 });
 
 test('native ADP3 admission refuses legacy input while the original internal ADP2 projection and lower generic shapes remain available', () => {
-    const fixtures = JSON.parse(read('docs/protocol/fixtures/adp-v2-direct.json')) as { valid: { schema: keyof legacy.Messages; payload: unknown }[] };
+    const fixtures = JSON.parse(read('packages/contracts/fixtures/adp-v2-direct.json')) as { valid: { schema: keyof legacy.Messages; payload: unknown }[] };
     assert.equal(legacyParse, rootParse);
     const hello = { protocolVersion: 2, nodeId: 'node-1', bootId: 'boot-1', agentBuild: 'old',
         capabilities: ['tcp', 'native.direct.v1', 'adp.3'], lastStoredSnapshotGeneration: 0 };
@@ -338,7 +338,7 @@ test('saved package support assets and actual deployment COPY embed fs and sourc
     }
     const control = read('deploy/Dockerfile.control');
     for (const [source, target] of [['apps/control', './apps/control'], ['packages/core', './packages/core'],
-        ['packages/contracts', './packages/contracts'], ['docs/protocol/schemas', './docs/protocol/schemas'],
+        ['packages/contracts', './packages/contracts'],
         ['apps/web', './apps/web'], ['scripts/ops', './scripts/ops'], ['deploy/control-liveness.mjs', './deploy/control-liveness.mjs']])
         assert.ok(control.includes(`COPY ${source} ${target}`), source);
     for (const name of ['agent', 'observation-responder']) {
@@ -360,10 +360,10 @@ test('saved package support assets and actual deployment COPY embed fs and sourc
             }
         }
     }
-    for (const path of ['docs/protocol/fixtures/adp-v2-direct.json', 'docs/protocol/fixtures/adp-v3-runtime.json',
-        'docs/protocol/fixtures/adp-v3-execution.json', 'docs/protocol/fixtures/native-relay-v1.json', 'docs/protocol/fixtures/adp-v3-relay.json',
-        'docs/protocol/fixtures/transit-v1.json', 'docs/protocol/fixtures/probe-negotiation-v1.json', 'docs/protocol/fixtures/probe-instance-v1.json',
-        'docs/protocol/fixtures/probe-claim-v1.json', 'docs/protocol/fixtures/probe-delivery-v1.json', 'docs/protocol/fixtures/probe-result-v1.json',
+    for (const path of ['packages/contracts/fixtures/adp-v2-direct.json', 'packages/contracts/fixtures/adp-v3-runtime.json',
+        'packages/contracts/fixtures/adp-v3-execution.json', 'packages/contracts/fixtures/native-relay-v1.json', 'packages/contracts/fixtures/adp-v3-relay.json',
+        'packages/contracts/fixtures/transit-v1.json', 'packages/contracts/fixtures/probe-negotiation-v1.json', 'packages/contracts/fixtures/probe-instance-v1.json',
+        'packages/contracts/fixtures/probe-claim-v1.json', 'packages/contracts/fixtures/probe-delivery-v1.json', 'packages/contracts/fixtures/probe-result-v1.json',
         'packages/contracts/test/fixtures/conformance.json']) assert.doesNotThrow(() => JSON.parse(read(path)), path);
     // Existing legacy imports are still real consumers, rather than being deleted
     // merely because their canonical owners now exist.

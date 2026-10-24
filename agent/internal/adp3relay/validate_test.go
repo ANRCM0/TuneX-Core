@@ -7,7 +7,7 @@ import (
 )
 
 func TestSharedFixture(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/adp-v3-relay.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/adp-v3-relay.json")
 	if err != nil {
 		t.Fatal(err)
 	}

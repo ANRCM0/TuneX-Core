@@ -13,7 +13,7 @@ function sources(directory) {
 }
 
 export function checkFoundationBoundaries() {
-  const inventory = JSON.parse(readFileSync(resolve(root, 'docs/architecture/foundation-boundaries-v1.json'), 'utf8'));
+  const inventory = JSON.parse(readFileSync(resolve(root, 'scripts/config/foundation-boundaries-v1.json'), 'utf8'));
   const paths = ['packages/core/src', 'packages/contracts/src', 'apps/control/src', 'apps/web', 'agent/internal', 'agent/cmd', 'examples', 'scripts/ops'].flatMap(sources);
   const errors = [];
   for (const path of paths) {

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { checkProbeNegotiation, parseProbeNegotiation, parseRuntimeMessage } from '../src/index.ts';
 import type { ProbeNegotiationRequest, ProbeNegotiationResponse } from '../src/index.ts';
-const fixture = JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/probe-negotiation-v1.json', import.meta.url),
+const fixture = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/probe-negotiation-v1.json', import.meta.url),
     'utf8')) as { cases: { name: string; message: 'Request' | 'Response'; raw: string; valid: boolean }[] };
 test('shared Probe v1 negotiation vectors agree without implying execution authority', () => {
     for (const entry of fixture.cases) {

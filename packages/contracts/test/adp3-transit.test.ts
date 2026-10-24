@@ -7,7 +7,7 @@ import { parseTransitAdpAssignment, parseTransitAdpSnapshot, requireTransitAdpCa
 import type { TransitAdpAssignment, TransitAdpSnapshot } from '../src/adp3-transit.ts';
 import { parseTransitIntent } from '../src/transit.ts';
 
-const fixture = JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/transit-v1.json', import.meta.url), 'utf8')) as {
+const fixture = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/transit-v1.json', import.meta.url), 'utf8')) as {
  cases: {name: string; raw: string; valid: boolean}[];
 };
 const intent = parseTransitIntent(fixture.cases.find(c => c.name === 'valid-three-node-transit-udp')!.raw);

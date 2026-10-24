@@ -75,12 +75,12 @@ for (const file of files(resolve(root, 'agent/internal/control'))) {
     throw new Error(`Raw Probe executor cannot bypass future one-use remote admission: ${file}`);
   }
 }
-const probeContract = JSON.parse(readFileSync(resolve(root, 'docs/protocol/schemas/probe-negotiation-v1.schema.json'), 'utf8'));
+const probeContract = JSON.parse(readFileSync(resolve(root, 'packages/contracts/schemas/probe-negotiation-v1.schema.json'), 'utf8'));
 if (probeContract.$defs.Response.properties.executionEnabled.const !== false ||
     probeContract.$defs.Response.properties.state.const !== 'contract-only') {
   throw new Error('Probe negotiation must remain contract-only without executable authority');
 }
-const instanceContract = JSON.parse(readFileSync(resolve(root, 'docs/protocol/schemas/probe-instance-v1.schema.json'), 'utf8'));
+const instanceContract = JSON.parse(readFileSync(resolve(root, 'packages/contracts/schemas/probe-instance-v1.schema.json'), 'utf8'));
 if (instanceContract.$defs.Response.properties.executionEnabled.const !== false ||
     instanceContract.$defs.Request.properties.action.enum.join(',') !== 'inspect,register,revoke') {
   throw new Error('Probe instance ownership must stay non-executable with a closed action set');
@@ -89,7 +89,7 @@ const probeRegistration = readFileSync(resolve(root, 'agent/internal/control/pro
 if (/\brunner\.(?:journal|runtimeState|instances|drains|ticket|guard)\s*=(?!=)|\b(?:StoreProtected|Save|beginDrain|startExecution)\s*\(/.test(probeRegistration)) {
   throw new Error('Probe registration lifecycle may not publish or replace Forward execution authority');
 }
-const claimContract = JSON.parse(readFileSync(resolve(root, 'docs/protocol/schemas/probe-claim-v1.schema.json'), 'utf8'));
+const claimContract = JSON.parse(readFileSync(resolve(root, 'packages/contracts/schemas/probe-claim-v1.schema.json'), 'utf8'));
 if (claimContract.$defs.Response.properties.executionEnabled.const !== false ||
     claimContract.$defs.Response.properties.state.const !== 'consumed' ||
     Object.keys(claimContract.$defs.Request.properties).sort().join(',') !==
@@ -97,7 +97,7 @@ if (claimContract.$defs.Response.properties.executionEnabled.const !== false ||
   throw new Error('Probe claims may close a known permit only, never accept caller authority or enable execution');
 }
 const claimHostPath = resolve(root, 'agent/internal/control/probe_claim.go');
-const deliveryContract = JSON.parse(readFileSync(resolve(root, 'docs/protocol/schemas/probe-delivery-v1.schema.json'), 'utf8'));
+const deliveryContract = JSON.parse(readFileSync(resolve(root, 'packages/contracts/schemas/probe-delivery-v1.schema.json'), 'utf8'));
 if (JSON.stringify(deliveryContract.$defs.Binding) !== JSON.stringify(claimContract.$defs.Binding) ||
     JSON.stringify(deliveryContract.$defs.PollResponse.properties.offer.anyOf) !==
       JSON.stringify([{ $ref: '#/$defs/Offer' }, { type: 'null' }])) {
@@ -119,7 +119,7 @@ const deliveryAdapter = readFileSync(resolve(root, 'apps/control/src/modules/pro
 if (/\b(?:fetch|createConnection|createPool|transaction|issue|consume|revoke|withdraw)\s*\(/.test(deliveryAdapter)) {
   throw new Error('Probe delivery adapter must delegate read-only offer/check without transactions, execution or mutation');
 }
-const resultContract = JSON.parse(readFileSync(resolve(root, 'docs/protocol/schemas/probe-result-v1.schema.json'), 'utf8'));
+const resultContract = JSON.parse(readFileSync(resolve(root, 'packages/contracts/schemas/probe-result-v1.schema.json'), 'utf8'));
 if (JSON.stringify(resultContract.$defs.Binding) !== JSON.stringify(claimContract.$defs.Binding) ||
     resultContract.$defs.Request.properties.applicationHealth.const !== 'unknown' ||
     resultContract.$defs.Request.properties.source.const !== 'agent-reported' ||

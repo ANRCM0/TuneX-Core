@@ -39,7 +39,7 @@ test('203 all 34 runtime leaves retain bounded eight construction one interface 
     assert.equal(construction.length,8);assert.equal(forwarders.length,25);
     const actual=(await readdir(runtime)).filter(name=>name.endsWith('.ts')).sort();
     assert.deepEqual(actual,[...construction,...forwarders,'relay-ledger-ports'].map(name=>`${name}.ts`).sort());
-    const inventory=JSON.parse(await readFile(new URL('../../../docs/architecture/entrypoint-inventory-v1.json',import.meta.url),'utf8'));
+    const inventory=JSON.parse(await readFile(new URL('../../../scripts/config/entrypoint-inventory-v1.json',import.meta.url),'utf8'));
     assert.deepEqual(inventory.legacy.runtime,actual);
 });
 

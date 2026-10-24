@@ -23,7 +23,6 @@ COPY package.json package-lock.json ./
 COPY apps/control ./apps/control
 COPY packages/core ./packages/core
 COPY packages/contracts ./packages/contracts
-COPY docs/protocol/schemas ./docs/protocol/schemas
 COPY apps/web ./apps/web
 COPY scripts/ops ./scripts/ops
 COPY deploy/control-liveness.mjs ./deploy/control-liveness.mjs

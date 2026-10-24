@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { checkProbeInstance, parseProbeInstance, parseProbeNegotiation } from '../src/index.ts';
 import type { ProbeInstanceResponse } from '../src/index.ts';
-const fixture = JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/probe-instance-v1.json', import.meta.url), 'utf8')) as {
+const fixture = JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/probe-instance-v1.json', import.meta.url), 'utf8')) as {
     cases: { name: string; message: 'Request' | 'Response'; raw: string; valid: boolean }[] };
 test('Probe instance shared vectors enforce closed shapes, ownership state, times and disabled execution', () => {
     for (const entry of fixture.cases) {

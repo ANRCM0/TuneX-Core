@@ -29,7 +29,7 @@ export interface TransitIntent {
  readonly egressPolicyRevision: number; readonly allowedDestinationCidrs: readonly string[];
  readonly allowMetadataTargets: boolean; readonly maxConnections: number;
 }
-const schema = JSON.parse(readFileSync(new URL('../../../docs/protocol/schemas/transit-v1.schema.json', import.meta.url), 'utf8'));
+const schema = JSON.parse(readFileSync(new URL('../../../packages/contracts/schemas/transit-v1.schema.json', import.meta.url), 'utf8'));
 const fullStringRegExp = Object.assign((pattern: string, flags: string) => new RegExp(pattern.endsWith('$') ? `${pattern.slice(0, -1)}$(?![\\s\\S])` : pattern, flags), {code:'fullStringRegExp'});
 const ajv = new Ajv2020({strict: true, allErrors: true, code: {regExp: fullStringRegExp}});
 const addFormats: (a: Ajv2020) => void = createRequire(import.meta.url)('ajv-formats');

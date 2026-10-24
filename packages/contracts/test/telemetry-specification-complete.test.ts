@@ -64,7 +64,7 @@ function frozen(value: unknown): void {
 test('four handwritten telemetry parsers independently agree with their specification samples and ACK fixtures and preserve immutable detached data', () => {
     const addFormats: (ajv: Ajv2020) => void = createRequire(import.meta.url)('ajv-formats');
     for (const family of families) {
-        const schema = JSON.parse(readFileSync(new URL(`../../../docs/protocol/schemas/${family.name}.schema.json`, import.meta.url), 'utf8'));
+        const schema = JSON.parse(readFileSync(new URL(`../../../packages/contracts/schemas/${family.name}.schema.json`, import.meta.url), 'utf8'));
         const ajv = new Ajv2020({ strict: true, allErrors: true }); addFormats(ajv);
         const validate = ajv.compile(schema);
         for (const [value, parse] of [[family.sample, family.parseSample], [family.ack, family.parseAck]] as const) {
@@ -101,7 +101,7 @@ test('the exact four Agent native encoder fixtures satisfy the separate TS handw
     const addFormats: (ajv: Ajv2020) => void = createRequire(import.meta.url)('ajv-formats');
     for (const [index, key] of ['process', 'host', 'forward', 'probe'].entries()) {
         const family = families[index]!, raw = fixtures[key]!;
-        const schema = JSON.parse(readFileSync(new URL(`../../../docs/protocol/schemas/${family.name}.schema.json`, import.meta.url), 'utf8'));
+        const schema = JSON.parse(readFileSync(new URL(`../../../packages/contracts/schemas/${family.name}.schema.json`, import.meta.url), 'utf8'));
         const ajv = new Ajv2020({ strict: true, allErrors: true }); addFormats(ajv);
         const validate = ajv.compile(schema), value = JSON.parse(raw);
         assert.equal(validate(value), true, key + ': ' + JSON.stringify(validate.errors));

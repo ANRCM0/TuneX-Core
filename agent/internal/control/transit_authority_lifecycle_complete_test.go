@@ -85,11 +85,11 @@ func TestTransitAuthorityLifecycleCompleteOriginalControllerEffects(t *testing.T
 		t.Fatal(err)
 	}
 	// Keep the original helper's fixture path valid without editing its body.
-	fixtureRoot := filepath.Join(root, "docs", "protocol", "fixtures")
+	fixtureRoot := filepath.Join(root, "packages", "contracts", "fixtures")
 	if err := os.MkdirAll(fixtureRoot, 0700); err != nil {
 		t.Fatal(err)
 	}
-	vector, err := os.ReadFile("../../../docs/protocol/fixtures/transit-v1.json")
+	vector, err := os.ReadFile("../../../packages/contracts/fixtures/transit-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -193,13 +193,13 @@ async function machineFactory(fingerprint:()=>string){
     const factory=exports.createControlApp;assert.ok(factory);return factory;
 }
 async function fixtureRaw(file:string,name:string){
-    const fixture=JSON.parse(await readFile(new URL('../../../docs/protocol/fixtures/'+file+'.json',import.meta.url),'utf8')) as {cases:{name:string;raw:string;valid:boolean}[]};
+    const fixture=JSON.parse(await readFile(new URL('../../../packages/contracts/fixtures/'+file+'.json',import.meta.url),'utf8')) as {cases:{name:string;raw:string;valid:boolean}[]};
     const item=fixture.cases.find(value=>value.name===name);assert.ok(item?.valid);return item.raw;
 }
 
 test('25/27 all eleven complete Probe APIs Transit and native Runtime providers substitute through actual HTTP and real wire parsers with TLS effect only',async()=>{
     type Machine={path:string;raw?:string;owner:string;parsed?:unknown;receiver:(f:ReturnType<typeof provider>)=>unknown;runtime?:'hello'|'report'|'snapshot';boot?:boolean};
-    const resultVector=JSON.parse(await readFile(new URL('../../../docs/protocol/fixtures/probe-result-v1.json',import.meta.url),'utf8')) as {request:unknown};
+    const resultVector=JSON.parse(await readFile(new URL('../../../packages/contracts/fixtures/probe-result-v1.json',import.meta.url),'utf8')) as {request:unknown};
     const base=Native.parseProbeResult('Request',JSON.stringify(resultVector.request));
     const identity={protocolVersion:3,nodeId:base.nodeId,bootId:base.bootId,sessionEpoch:base.sessionEpoch,instanceId:base.instanceId,instanceGeneration:base.instanceGeneration,requestId:base.requestId};
     const descriptor={measurement:'tcp-connect-v1',taskKind:'tcp-connect',point:'agent-direct-egress',capability:'probe.tcp-connect.v1'};

@@ -40,7 +40,7 @@ export interface ProbeClaimResponse extends Omit<ProbeClaimRequest, 'kind'> {
     readonly executionEnabled: false;
 }
 interface Messages { Request: ProbeClaimRequest; Response: ProbeClaimResponse }
-const schema = JSON.parse(readFileSync(new URL('../../../docs/protocol/schemas/probe-claim-v1.schema.json', import.meta.url), 'utf8')) as { $id: string };
+const schema = JSON.parse(readFileSync(new URL('../../../packages/contracts/schemas/probe-claim-v1.schema.json', import.meta.url), 'utf8')) as { $id: string };
 const ajv = new Ajv2020({ strict: true, allErrors: true });
 const addFormats: (instance: Ajv2020) => void = createRequire(import.meta.url)('ajv-formats');
 addFormats(ajv); ajv.addSchema(schema);

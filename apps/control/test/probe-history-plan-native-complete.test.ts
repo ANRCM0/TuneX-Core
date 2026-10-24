@@ -27,7 +27,7 @@ import type { ProbePermitRecord } from '../src/modules/probe-owner/public.ts';
 type Any=Record<string,any>;
 const governedReader:ReadPrincipal=Object.freeze({actorId:'actor',governance:true});
 const personalReader:ReadPrincipal=Object.freeze({actorId:'actor',governance:false});
-const wire=JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/probe-result-v1.json',import.meta.url),'utf8')).request as Any;
+const wire=JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/probe-result-v1.json',import.meta.url),'utf8')).request as Any;
 const at=1800000000000,retention=604800000,copy=<T>(v:T):T=>structuredClone(v);
 function run(id='probe'):ProbeRunRecord{return {probeId:id,scopeId:'scope-a',actorId:'actor',binding:copy(wire.binding),instanceId:'1'.repeat(64),instanceGeneration:2,timeoutMs:1000,issuedAt:at-1000,expiresAt:at+1000,state:'issued',closedAt:null,revision:1,updatedAt:at-1000,withdrawnAt:null,result:null,recoverySuspended:false};}
 function plan(id='plan',mode:'manual'|'scheduled'='manual'):ProbePlanHead{const config={version:1 as const,kind:'tcp-connect' as const,forwardId:wire.binding.forwardId,expectedForwardRevision:wire.binding.forwardRevision,timeoutMs:1000,mode,intervalSeconds:mode==='manual'?null:30,maxRuns:3,expiresAt:at+60000};return {id,scopeId:'scope-a',createdBy:'actor',createdAt:at-1000,config,configDigest:nativeValueDigest(config),originBinding:copy(wire.binding),revision:1,state:'active',decisionCount:0,acceptedCount:0,nextRunAt:mode==='manual'?0:at,updatedAt:at-1000,cancelledBy:null,cancelledAt:null,lastCode:null,recoverySuspended:false};}

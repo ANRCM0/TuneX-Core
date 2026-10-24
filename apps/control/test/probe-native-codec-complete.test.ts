@@ -20,7 +20,7 @@ function loaded(path:string,providers:Record<string,unknown>,globals:Record<stri
     new vm.Script(javascript,{filename:path}).runInNewContext({exports,require(name:string){assert.ok(Object.hasOwn(providers,name),name);return providers[name];},...globals});
     return exports;
 }
-const vector=JSON.parse(readFileSync(new URL('../../../docs/protocol/fixtures/probe-result-v1.json',import.meta.url),'utf8')) as {request:wire.ProbeResultRequest};
+const vector=JSON.parse(readFileSync(new URL('../../../packages/contracts/fixtures/probe-result-v1.json',import.meta.url),'utf8')) as {request:wire.ProbeResultRequest};
 const base=vector.request,at=Date.parse(base.measuredAt)+10;
 function result(version:1|2|3|4) {
     if(version===1)return {...base};

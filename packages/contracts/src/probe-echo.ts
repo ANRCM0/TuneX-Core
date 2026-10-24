@@ -69,7 +69,7 @@ interface Messages {
     PollRequest:ProbeEchoPollRequest;PollResponse:ProbeEchoPollResponse;ClaimRequest:ProbeEchoClaimRequest;ClaimResponse:ProbeEchoClaimResponse;
     StatusRequest:ProbeEchoStatusRequest;StatusResponse:ProbeEchoStatusResponse;ResultRequest:ProbeEchoResultRequest;ResultResponse:ProbeEchoResultResponse;
 }
-const schema=JSON.parse(readFileSync(new URL('../../../docs/protocol/schemas/probe-echo-v4.schema.json',import.meta.url),'utf8')) as {$id:string};
+const schema=JSON.parse(readFileSync(new URL('../../../packages/contracts/schemas/probe-echo-v4.schema.json',import.meta.url),'utf8')) as {$id:string};
 const ajv=new Ajv2020({strict:true,allErrors:true});
 const addFormats:(instance:Ajv2020)=>void=createRequire(import.meta.url)('ajv-formats');addFormats(ajv);ajv.addSchema(schema);
 const validators=Object.fromEntries(['ServiceConfig','ServiceContext','Challenge','EchoProof','Invocation','QualificationRequest','QualificationResponse',

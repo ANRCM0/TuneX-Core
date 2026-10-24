@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { checkFoundationBoundaries } from '../check-foundation.mjs';
 import { classifySource, sourceReferences, sourceViolations } from '../foundation-boundary-policy.mjs';
 
-const inventory = JSON.parse(readFileSync(new URL('../../docs/architecture/foundation-boundaries-v1.json', import.meta.url), 'utf8'));
+const inventory = JSON.parse(readFileSync(new URL('../../scripts/config/foundation-boundaries-v1.json', import.meta.url), 'utf8'));
 function rejects(path, source, pattern) {
   const errors = sourceViolations(path, source, inventory);
   assert.ok(errors.some(error => pattern.test(error)), path + '\n' + source + '\nExpected ' + pattern + ', got ' + errors.join('\n'));

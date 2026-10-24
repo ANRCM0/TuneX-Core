@@ -1,4 +1,4 @@
-// Code generated from docs/protocol/schemas/adp-v2-direct.schema.json. DO NOT EDIT.
+// Code generated from packages/contracts/schemas/adp-v2-direct.schema.json. DO NOT EDIT.
 package contracts
 
 type Id = string

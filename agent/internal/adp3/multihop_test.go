@@ -7,7 +7,7 @@ import (
 )
 
 func TestMultihopSharedExecutionConformance(t *testing.T) {
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/adp-v3-execution.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/adp-v3-execution.json")
 	if err != nil {
 		t.Fatal(err)
 	}

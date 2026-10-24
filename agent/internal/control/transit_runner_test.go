@@ -27,7 +27,7 @@ func transitRunnerHash(t *testing.T, v any) string {
 }
 func transitRunnerIntent(t *testing.T) map[string]any {
 	t.Helper()
-	raw, err := os.ReadFile("../../../docs/protocol/fixtures/transit-v1.json")
+	raw, err := os.ReadFile("../../../packages/contracts/fixtures/transit-v1.json")
 	if err != nil {
 		t.Fatal(err)
 	}
