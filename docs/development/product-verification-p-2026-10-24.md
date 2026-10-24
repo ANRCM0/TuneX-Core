@@ -231,6 +231,36 @@ worktree; generated parity remains separately recorded when complete. No local
 functional, database, network, container or browser test ran. The successor
 requires a new exact-source Actions run, including the three-node round trip.
 
+## Tenth And Eleventh Candidate Findings
+
+Head `6ab606186d393d6ac492a882d73c2955edc23a5a`, tree
+`bb7730500867edc4a3f6b4248a09159592a7e31d`: baseline `40049516529`, packaging
+`40049516450`. Packaging passed. The new owner/provider contract cases passed
+inside the collector, but the exhaustive public-version inventory omitted the
+new independent counter and failed; its explicit entry is now added rather
+than weakening the exhaustive comparison. The baseline was superseded after
+three-node failure; its shorter new permit planning retained 1815-1874ms life
+but still produced no accepted result.
+
+Head `646d749d3b66c89a88551b8f62ccfec7799c3e84`, tree
+`5c628e367f20480a61d076e9b32a9238777279b1`: baseline `40049988705`, packaging
+`40049988660`. Three-node numeric evidence confirms 458-651ms server poll
+handlers and Agent exchange refusal at 200-201ms. Faster calls reached original
+claim and status, but status also sometimes exceeded the transport bound, so
+there is still no signed path pass. The empty-poll observation wait is bounded
+to 15 seconds to allow original registration rotation; it sends no command or
+permit during that wait and changes no production deadline.
+
+FR-0041's pre-implementation amendment records a further single-call input
+reuse for the new Forward reader: original resource validation and immutable
+plan checks consume one set of original locked multihop inputs in the caller
+transaction. Legacy node reads retain their old two-read/provider order. Both
+paths use the original recognized-denial classification and propagate unknown
+provider failures. No authority or input is cached across calls. New owner
+cases assert exactly one Node authorization per path node for the new reader.
+Corrective local TypeScript/boundary checks passed; Actions on the successor
+must validate the changed functional behavior.
+
 ## Acceptance Limits
 
 Source preparation is delivered in the [P ledger](product-readiness-stage-p-2026-10-24.md).

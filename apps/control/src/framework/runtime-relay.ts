@@ -102,7 +102,11 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
       const facts=await this.facts(tx,actor,forward),profile=await this.transport.resolve(tx,actor,forward.scopeId,forward.spec.transport!.profileId,forward.spec.transport!.configRevision),endpoint=await this.endpoints.resolve(tx,forward.spec.path!.via[0]!);
       const ports=await this.nodes.reservationPorts(tx,actor,forward.scopeId,endpoint.nodeId,endpoint.config.allowedTcpPorts);
       this.compiler.relayResources({id:forward.id,scopeId:forward.scopeId,revision:forward.revision,spec:{...forward.spec,enabled:true}},facts.map(node=>node.facts),profile,endpoint,{tcp:ports[0]!,udp:ports[forward.spec.protocols.length===2?1:0]!});return true;
-    }catch(error){if(error instanceof ControlError&&[403,404,409,422,429].includes(error.status))return false;if(error instanceof Error&&/^(UNSUPPORTED_CAPABILITY|AUTHORIZATION_DENIED|RESOURCE_CONFLICT):/.test(error.message))return false;throw error;}
+    }catch(error){if(this.executionRefused(error))return false;throw error;}
+  }
+  private executionRefused(error:unknown):boolean{
+    return error instanceof ControlError&&[403,404,409,422,429].includes(error.status)||
+      error instanceof Error&&/^(UNSUPPORTED_CAPABILITY|AUTHORIZATION_DENIED|RESOURCE_CONFLICT):/.test(error.message);
   }
   async acceptPlan(tx:Tx,actor:string,forward:Forward):Promise<RelayPreparedPlan<F>>{
     await this.lockNodes(tx,forward);
@@ -158,12 +162,16 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
       return !current||!current.peers.some(p=>p.fingerprint===peer.peerFingerprint&&p.validUntil>this.now()+this.policy.maxClockSkewSeconds*1000);
     })));
   }
-  private async authorized(tx:Tx,forward:Forward,plan:RelayPreparedPlan<F>):Promise<boolean>{
+  private async authorized(tx:Tx,forward:Forward,plan:RelayPreparedPlan<F>,singleInput=false):Promise<boolean>{
     const actor=await this.forwarding.authorizer(tx,forward.id);if(!actor)return false;
-    if(!await this.canExecute(tx,actor,forward))return false;
+    let currentInput:MultihopPlanInput<F>|undefined;
+    if(singleInput&&plan.path){
+      try{currentInput=await this.multihopInput(tx,actor,forward);this.compiler.multihopResources(currentInput);}
+      catch(error){if(this.executionRefused(error))return false;throw error;}
+    }else if(!await this.canExecute(tx,actor,forward))return false;
     if(plan.path){
       if(!this.multihopEnabled||this.compiler.digest(plan.path)!==this.compiler.digest([forward.spec.ingress.nodeId,...forward.spec.path!.via])||plan.authorizationUntil<=this.now()+2*this.policy.maxClockSkewSeconds*1000)return false;
-      const input=await this.multihopInput(tx,actor,forward);
+      const input=currentInput??await this.multihopInput(tx,actor,forward);
       if(input.endpoints.some(e=>e.revision!==plan.endpointRevisions?.[e.nodeId])||this.pinsChanged(plan,input.nodes))return false;
       return plan.nodes.every(node=>{
         const current=input.nodes.find(n=>n.facts.nodeId===node.nodeId);
@@ -182,11 +190,11 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
     }
     return true;
   }
-  private async publishablePlan(tx:Tx,record:Deployment,plan:RelayPreparedPlan<F>,includeAccepted=false):Promise<boolean>{
+  private async publishablePlan(tx:Tx,record:Deployment,plan:RelayPreparedPlan<F>,includeAccepted=false,singleInput=false):Promise<boolean>{
     const op=await this.ledger.latest(tx,record.forward_id);
     if(!op||op.recovery_invalidated||op.kind==='revoke'||!['running','succeeded',...(includeAccepted?['accepted']:[])].includes(op.status)||op.status!=='succeeded'&&op.execution_deadline<=this.now())return false;
     const forward=await this.forwarding.record(tx,op.scope_id,record.forward_id);
-    return !forward.deleting&&!forward.recoverySuspended&&forward.spec.enabled&&forward.revision===record.target_revision&&record.stage!=='withdrawn'&&await this.authorized(tx,forward,plan);
+    return !forward.deleting&&!forward.recoverySuspended&&forward.spec.enabled&&forward.revision===record.target_revision&&record.stage!=='withdrawn'&&await this.authorized(tx,forward,plan,singleInput);
   }
   async assignments(tx:Tx,nodeId:string,includeAccepted=false):Promise<RuntimeAssignment<F>[]>{
     const records=await this.store.forNode(tx,nodeId);
@@ -201,7 +209,7 @@ export class RuntimeRelayHost<Tx,F extends RuntimeValueFamily=RuntimeValueFamily
     if(!record)return [];
     if(record.forward_id!==forwardId)throw new ControlError('INTEGRITY_FAILURE',409,'Relay Forward read differs');
     const plan=this.plan(record);
-    if(!await this.publishablePlan(tx,record,plan))return [];
+    if(!await this.publishablePlan(tx,record,plan,false,true))return [];
     const result:SnapshotContribution<F>[]=[];
     for(const node of plan.nodes)result.push({nodeId:node.nodeId,assignments:await this.nodeAssignments(tx,node.nodeId,record,plan,false)});
     return result;

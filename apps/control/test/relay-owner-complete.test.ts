@@ -92,6 +92,7 @@ test('P Relay Forward read shares original node projections while authorizing on
         assert.equal(names(f).filter(name=>name==='operation').length,1);
         assert.equal(names(f).includes('forNode'),false);
         if(stage==='withdrawn'){assert.deepEqual(result,[]);continue;}
+        assert.equal(names(f).filter(name=>name==='authorizedNode').length,f.plan.nodes.length);
         assert.deepEqual(result.map(part=>part.nodeId),f.plan.nodes.map(node=>node.nodeId));
         assert.equal(names(f).filter(name=>name==='sessionSafe').length,f.plan.nodes.length);
         for(const part of result){

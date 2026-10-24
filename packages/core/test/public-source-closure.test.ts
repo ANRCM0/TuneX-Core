@@ -128,6 +128,7 @@ framework/runtime-exclusive-reservation-ports RUNTIME_EXCLUSIVE_RESERVATION_INTE
 framework/runtime-host-ports RUNTIME_HOST_INTERFACE_VERSION 4
 framework/runtime-ledger-ports RUNTIME_LEDGER_INTERFACE_VERSION 3
 framework/runtime-relay-ports RUNTIME_RELAY_INTERFACE_VERSION 7
+framework/runtime-assignment-ports RELAY_FORWARD_ASSIGNMENTS_INTERFACE_VERSION 1
 framework/runtime-reservation-release-ports RUNTIME_RESERVATION_RELEASE_INTERFACE_VERSION 1
 framework/runtime-resource-ports RUNTIME_RESOURCE_INTERFACE_VERSION 2
 framework/resource-limit-ports RESOURCE_LIMIT_INTERFACE_VERSION 1

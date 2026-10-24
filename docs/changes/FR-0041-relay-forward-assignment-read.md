@@ -7,6 +7,16 @@ standing foundation source authorization and 2026-10-24 P Actions/failure-repair
 instruction cover this serial corrective extension. No separate confirmation
 is required; merge, publication, release and delegation remain closed.
 
+Corrective amendment recorded before implementation: the successor's numeric
+Actions trace shows 458-651ms server poll calls against the unchanged 200ms
+exchange. The new Forward reader will reuse one current multihop input inside
+its single owner call for resource compilation and immutable-plan checks.
+Original Node/grant/credential/Profile/endpoint SQL readers hold their original
+locks in the same supplied transaction. No input survives this call or its
+transaction. The legacy node reader keeps its original two-read flow and error
+ordering; no frozen legacy contract is silently optimized. This amendment is
+covered by the same standing source/current failure-repair authorization.
+
 ## Task Proposal
 
 1. Layers: L1 original Relay host/read contract; L3 Probe planner and native
