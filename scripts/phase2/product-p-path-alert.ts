@@ -98,7 +98,8 @@ export async function verifyPathAlertOutbox(options:Options):Promise<string[]> {
         now+=301000;
         await alerts.tick();
         const unknown=await db.transaction(tx=>store.policy(tx,scope,policyId));
-        assert.ok(unknown);assert.equal(unknown.state.condition,'unknown');
+        assert.ok(unknown);assert.equal(unknown.state.last?.status,'unknown');
+        assert.equal(unknown.state.condition,'firing','missing recent evidence retains the incident instead of recovering it');
         assert.equal((await db.transaction(tx=>store.events(tx,scope,{from:eventFrom,to:now+1,limit:50,before:null,policyId}))).length,1,'stale history cannot emit recovered');
         assert.deepEqual(await commandCounts(),beforeCommands,'alert reads/evaluation issue no Probe permits or history');
         checks.push('Real SQL stale sample stays unknown without recovered event or additional Probe issuance');

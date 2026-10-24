@@ -41,6 +41,19 @@ exact source/image/binary/fixture identities and SSH aliases with known host key
 Its successful TCP/UDP sample is a functional baseline, not the fault, load or
 long-run evidence below. Namespace Actions remains separately labeled same-host.
 
+Keep collector observations distinct from operator declarations. The current
+collector compares its checkout SHA, remote Agent binary/fixture hashes,
+machine-id hashes, Journal Node identity, recent diagnostics, active deployment
+and actual TCP/UDP payload results. The `images` fields are reviewed input
+references copied into evidence; the collector does not inspect the running
+Control/Agent container image, attest the remote Control build, prove a clean
+installation or establish physical-host independence. A dirty checkout flag is
+reported, not accepted as clean. Retain separate deployment inspection and
+source/artifact provenance for those requirements before assigning PP-13/14 a
+pass. Local image IDs, manifest digests, binary hashes and source archive hashes
+are different identities; do not substitute one for another or invent a registry
+digest when the candidate has only passed local image packaging in Actions.
+
 ## Installation And Maintenance Scenarios
 
 | Case | Exercise | Required observation |

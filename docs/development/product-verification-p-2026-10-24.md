@@ -30,6 +30,20 @@ functionally accepted until its own exact-source Actions jobs complete. The
 deployment handoff now names the last completed source below instead of the
 older aae0632f candidate. It still requires actual independent environments.
 
+Initial follow-up `a9e1c4c` ran baseline `40064942481` and packaging
+`40064942592`. Packaging/contracts passed, but three-node job `120786090358`
+failed before reaching the new alert case: all six TCP commands had zero
+responder arrivals (three consumed without a result, three still issued).
+Shared JOIN waiting reached 714ms; accepted claims took 348/289/240ms, with
+208-306ms in shared Node reads and zero acquisition wait. This failed workflow
+attempt is retained, not accepted as a reliability result. A same-job rerun
+request was rejected while the containing workflow was still running.
+
+Source review also corrected the new stale-sample assertion before its first
+execution: original Station state retains the firing incident while `last.status`
+becomes unknown; neither a stale sample nor a missing result recovers it. The
+successor asserts both original behaviors without changing production semantics.
+
 ## Latest Complete Verification - 245d438
 
 The corrected FR-0043 Node Snapshot reader candidate is
