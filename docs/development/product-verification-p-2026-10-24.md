@@ -6,10 +6,86 @@ PR, Actions execution and necessary failure repairs. Merge, image publication,
 release and delegation are outside this task. Independent-host and long-run
 environments remain unavailable under the human's preceding answer.
 
-## Current Source And Last Complete Verification
+## Current Verified Source - 245d438
 
-The FR-0043 Node Snapshot reader successor is source-implemented and locally
-type/boundary checked; its new contract cases and native behavior have not run.
+The corrected FR-0043 Node Snapshot reader candidate is
+`245d438ace32e1a58c39f00c9dca0a5d1d8cc7d4`, tree
+`750d32fdd962e7fa7bda4abbb468cf7509f8bf43`. Baseline `40062014210` completed
+with all ten jobs successful on 2026-10-24; the last job finished at 04:49:20 UTC
+(12:49:20 Asia/Shanghai). Packaging `40062014243` also completed successfully.
+The actual PR checkout is `2a66270b73595d135d0a86fb0b20e1128b3c43b4`, with
+that identical tree against base `b729a5b`. Its three new Node reader cases
+passed, including original projection/input counts, once-only legacy override
+dispatch and refusal/error propagation. The principal contract run records
+2302 tests: 2152 passes and 150 database-conditional skips. All 150 names match
+passed tests in this candidate's native MySQL job, with zero missing matches,
+native skips or failures. Web records 231 passes; deployment-tools records 30.
+The complete collector, generated parity, boundaries, compile/vet and Linux Go
+race jobs passed. This acceptance covers the cases and limits in the PP matrix;
+it does not close the complete P goal or independent-environment requirements.
+
+The unchanged native Snapshot source-failure and resource-conflict rollback
+cases both pass on this corrected candidate. The new reader's three cases also
+pass in the native job. Actual original Station-to-Notification SQL rollback,
+immutable-event deduplication and membership-revocation cancellation with zero
+sends pass. Two shared budget observers coexist while the original exclusive
+writer waits for both transactions to release. These are complete-job outcomes,
+not early-step conclusions from the failed predecessor.
+
+Downloaded current-candidate artifacts confirm Direct and two-node Relay each
+complete TCP/UDP on the first independent command, one responder arrival per
+permit and non-executing expired replay. The current three-node sample needs
+three independent TCP commands: the first two each reach the responder once
+but have no accepted result; the third succeeds. UDP's first request is refused
+with `PROBE_PERMIT_UNAVAILABLE`; its next independent command succeeds. These
+are distinct new commands, never repeat consumption of the same permit.
+
+Current three-node SQL attribution still records a 749ms empty poll, including
+746ms in the original shared machine-evidence JOIN and zero connection-acquisition
+wait. Other samples record 272/230/220ms in that JOIN. The new reader removes
+the measured duplicate input read by contract, but these samples do not establish
+an improvement in latency or first-command reliability. Retain this limitation
+despite every applicable workflow job succeeding. Snapshot input reuse has
+contract acceptance; a production latency or first-command reliability gain
+has not been demonstrated. Original permit, exchange and result bounds remain.
+
+The actual desktop/mobile Console artifact records member creation, self Token
+rotation with old-token refusal, six GET rounds with no seventh read/mutation,
+and cancellation on page change. Selected saved screenshots were inspected.
+The fresh Direct Journal sample reaches accepted-report-bound SQL/API/Chromium:
+used 1024 and remaining 1047552 of 1048576 bytes, conservative precharge and
+upper-bound-at-sample semantics retained. This is not an execution grant.
+
+| Job on 245d438 | Job ID | Final conclusion |
+| --- | --- | --- |
+| deployment-tools | 120777638125 | success |
+| contracts | 120777638144 | success |
+| windows-agent | 120777638075 | success |
+| unsupported-platform | 120777638063 | success |
+| phase1 | 120777638081 | success |
+| probe-workflow | 120777637895 | success |
+| relay-isolation | 120777638074 | success |
+| multihop (3) | 120777638044 | success |
+| multihop (4) | 120777638056 | success |
+| multihop (8) | 120777638080 | success |
+| containers (run 40062014243) | 120777364151 | success |
+
+Artifacts: phase1 `12548820243`, probe `12547876577`, Relay isolation
+`12548226093`, multihop 3/4/8 `12548540099`/`12548550367`/`12547894728`,
+scan reports `12547827046`, Control/Agent SBOMs `12548066313`/`12547911751`.
+Scans under the existing policy report fixable CRITICAL=0 and 11 Control /
+17 Agent HIGH observations. Container builds, refusal and Compose checks pass;
+no registry image is published. Main remains `b729a5b`; PR #118 remains draft.
+The actual PR test merge above is not a merge into main. Any subsequent
+documentation-only head is distinct from this exact tested source/tree.
+
+Independent physical hosts, reviewed deployment/load campaigns, actual external
+notification delivery and 24/72-hour environments remain unverified. Namespace
+fault evidence is from the same Actions host. No release or parallel-feature
+gate is opened by this bounded case acceptance.
+
+## Previous Complete Verification - fe531cb
+
 The last complete tested source before that successor is
 `fe531cb2b55b8e78689c861526d6ef3ce5affd9c`, tree
 `75524cc3f9f4fa790e60dcfeca0a093f2aebd0ee`, tested as PR merge
@@ -52,11 +128,12 @@ Artifacts: probe `12545843320`, phase1 `12546423237`, Relay isolation
 `12547020122`, multihop 3/4/8 `12546318177`/`12547080275`/`12546867406`,
 scan reports `12546515723`, Agent/Control SBOMs `12546665182`/`12546580469`.
 Their individual names remain in the Actions artifact index. FR-0043 and all
-physical-host/deployment/load/24-72-hour requirements remain separately open.
+physical-host/deployment/load/24-72-hour requirements remained separately open
+at that point. FR-0043's later bounded acceptance is recorded above.
 
 ## Earlier Complete Verification - aae0632f
 
-The current tested source is `aae0632f20c1ffc333433b67c72beafc29605e2a`,
+The earlier tested source is `aae0632f20c1ffc333433b67c72beafc29605e2a`,
 tree `9c6efb22ff514d3da22c108377a036c660539da2`. Actions checked out PR test
 merge `686f8b9b5e37fb4b029378722b773db0c562cdaf`, whose tree is identical to
 the candidate and whose parents are base `b729a5b` and that candidate.
@@ -103,7 +180,7 @@ visible; a passing packaging gate does not mean vulnerability-free images.
 The detailed earlier attempts below retain failed/superseded evidence. They
 are not combined into a successful successor revision.
 
-## Exact Run And Job Index
+## Earlier aae0632f Run And Job Index
 
 All baseline rows refer to run `40052868559` on the source/test merge above.
 
@@ -188,7 +265,7 @@ test merge checkout, tree, workflow/run/job identities, final conclusions and
 artifacts for each candidate. Database-conditional skips require same-candidate
 native MySQL matches. Record failed attempts and subsequent repairs separately.
 
-## Post-Acceptance Coverage Follow-Up
+## Post-Acceptance Follow-Up History
 
 The P completion audit found an achievable PP-10 evidence gap: the resource
 Station SQL case used a declared handoff replacement, while the actual
@@ -203,10 +280,10 @@ must persist the real new-rule payload once; replay of that same event must
 return the native duplicate outcome. Deactivating the recorded owner membership
 must cancel the queued delivery with zero attempts, secret accesses or sender
 calls. No Runtime/Journal/foundation/interface changes or new CI framework are
-introduced. Local type/boundary checks passed; this successor still needs
-Actions. The accepted execution above remains bound to `aae0632f`, not these
-new test assertions. Independent environments and actual external delivery
-remain separate requirements.
+introduced. Local type/boundary checks passed at proposal time, before Actions.
+The earlier `aae0632f` execution did not validate these new assertions. Their
+later native acceptance on fe531cb and 245d438 is recorded above. Independent
+environments and actual external delivery remain separate requirements.
 
 The follow-up head `9b60b2bf00d0e712d2cb08b1a2628ad56c1d15a7` (tree
 `36e59a928b773864c160f629d922cbc06d23e703`) ran baseline `40056410939`
@@ -268,23 +345,30 @@ heartbeat, connection capacity or deadline change is added.
 Public new/old stage/inclusion parity, one-versus-two input counts, typed public
 binding, current next-call authority, invalid inputs, session refusal and exact
 provider failure cases are authored. Local type/boundary checks pass; no local
-functional or SQL test ran. This dirty successor requires its own saved source
-and Actions results; neither fe531cb's successful samples nor older acceptance
-validate the new reader or prove that all contention is removed.
+functional or SQL test ran. The unsaved successor then required its own saved
+source and Actions results; fe531cb's samples could not validate it. The later
+failed and corrected successors are tracked separately below and above, without
+claiming that all contention is removed.
 
 The first Node-reader candidate `17a9c2af6801bfb94c41c4ad4ac96b4811151800`
 (tree `43cc3fc1fd4bd6d45e85cce5d03d2c8ebc57e00e`) ran baseline
 `40061168508` and packaging `40061168510`. Packaging/contracts and the
 three-node main signed workflow passed, but native job `120774808817` failed
 the multihop command/Snapshot atomicity/capacity step. It is not accepted.
-Source inspection identified an actual compatibility gap: the existing native
+The failed original cases are `Snapshot source failure during capacity rolls
+back accepted owner changes, reservations, operations and replay` and
+`Snapshot source ownership and resource conflicts fail before publication and
+roll back preceding coordinator work`. Both report missing expected rejection.
+The failed baseline was subsequently cancelled; its successful samples do not
+accept it. Source inspection identified an actual compatibility gap: the existing native
 rollback/conflict cases override the public legacy assignments method, which
 the new entrypoint had bypassed. Keep those native cases unchanged. The FR-0043
 amendment precedes a guard that captures the old method once and delegates any
 override with original receiver/arguments/result/error before optimized reads.
 New owner cases pin one getter access, opaque result identity, wrapped original
 provider counts and unknown getter/override failures. Local type/boundary
-checks pass; the corrected successor still requires exact-source Actions.
+checks pass; the corrected successor's final exact-source conclusion is tracked
+at the beginning of this record.
 
 ## First Candidate Findings
 

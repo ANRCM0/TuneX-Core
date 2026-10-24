@@ -399,8 +399,12 @@ remain available. No authorization input survives the caller transaction.
 The native composition fake explicitly migrates its deferred method expectation
 and retains the original receiver and argument/transaction checks. The public
 example and new/legacy parity, input refusal, once-only read and error/no-cache
-cases are authored in the original owner corpus. Local type/source boundaries
-pass; exact-source Actions and native delay comparison are still required.
-Earlier measured shared JOIN waits are not presented as pool starvation or as
-acceptance of this successor. See
+cases pass on `245d438` in baseline `40062014210`; packaging `40062014243`
+also passes. The unchanged native Snapshot rollback/conflict cases pass.
+Actual PR test merge `2a66270` has the identical source tree. The current
+three-node sample still needs three independent TCP commands and the next UDP
+command after an unavailable-permit refusal; a shared JOIN wait reaches 746ms
+with zero connection acquisition wait. Input-count acceptance does not establish
+improved latency or first-command reliability. Independent deployment/load and
+physical-host requirements remain open. See
 [FR-0043](../changes/FR-0043-relay-node-snapshot-assignment-read.md).

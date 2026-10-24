@@ -1,7 +1,7 @@
 # FR-0043: Single-Input Relay Node Snapshot Read
 
 Date: 2026-10-24.
-Status: source implemented; exact-source acceptance pending. The proposal was
+Status: accepted within the recorded P Actions case scope on 245d438. The proposal was
 recorded before implementation.
 Owner and authorization: original RuntimeRelayHost. The human's 2026-10-19
 standing foundation source authorization and current P Actions/failure-repair
@@ -116,11 +116,22 @@ const assignments=await reader.assignmentsForNode(tx,nodeId);
 
 ## Acceptance And Known Limits
 
-Author the cases above and run authorized verification on an exact saved source.
-Keep fe531cb's measurements, successful functional samples and whole-run
-conclusions separate from this unverified successor. The change targets duplicate
-work during the original locked Snapshot collection; it is not proof that all
-lock contention disappears or that the original 200ms exchange always succeeds.
+Source `245d438ace32e1a58c39f00c9dca0a5d1d8cc7d4`, tree
+`750d32fdd962e7fa7bda4abbb468cf7509f8bf43`, passed baseline `40062014210`
+(all ten jobs) and packaging `40062014243`. Actual PR test merge
+`2a66270b73595d135d0a86fb0b20e1128b3c43b4` has the identical tree. Public
+type/binding/projection/input-count/override/error cases and the original native
+Snapshot rollback/conflict cases pass. See the full exact-source job/artifact
+index in [P verification](../development/product-verification-p-2026-10-24.md).
+
+Keep fe531cb and failed 17a9c2a samples separate. Current signed three-node
+TCP requires three independent commands; UDP first refuses an unavailable
+permit, then its next command succeeds. The slowest empty poll still records
+746ms in the original shared machine-evidence JOIN, with zero connection
+acquisition wait. Input reuse is verified; a latency or first-command reliability
+improvement is not established. The change targets duplicate work during the
+original locked Snapshot collection; it is not proof that all lock contention
+disappears or that the original 200ms exchange always succeeds.
 Physical-host, deployment/load/24-72-hour and release gates remain independent.
 
 ## Source Authorization And Acceptance Gate
@@ -128,5 +139,6 @@ Physical-host, deployment/load/24-72-hour and release gates remain independent.
 Decision: implement the separately versioned original-owner Node reader under
 the standing source authorization and current bounded failure-repair task.
 The native composition intentionally selects its single-input semantics;
-legacy public behavior remains available. Record exact-source acceptance only
-after the applicable successor Actions jobs and contract cases actually pass.
+legacy public behavior remains available. Applicable successor Actions jobs and
+contract cases passed on the source/tree above; the stated operational limits
+remain open. This does not authorize merge, publication or release.

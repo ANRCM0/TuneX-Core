@@ -1,6 +1,6 @@
 # P: 产品易用性与运行闭环
 
-日期：2026-10-24（Asia/Shanghai）。状态：P1-P5 源码候选与 P6 准备已撰写，待审阅／验证。
+日期：2026-10-24（Asia/Shanghai）。状态：P1-P5 Actions 覆盖病例通过；P6 准备已交付，独立环境待验。
 基线：`b729a5be8ef98164d3de515e37e424741ad83608`。
 工作树：`product-readiness-p`；分支：`source/p-product-readiness-20261024`。
 
@@ -124,7 +124,7 @@ VPN/L7、第三方执行后端兼容或动态插件运行时。这些需要后�
 
 | 项目 | 状态 | 准确证据 |
 | --- | --- | --- |
-| 最新已完成验证／当前后继 | 分开记账 | `fe531cb` 的 baseline `40058076170` 10 作业及 packaging `40058076180` 通过；FR-0043 Node reader 后继仅源码／病例与本地静态检查完成，不能继承其通过 |
+| 最新完整验证 | 有界通过 | `245d438` 的 baseline `40062014210` 10 作业及 packaging `40062014243` 通过，包含 FR-0043 新病例与原 Snapshot 回滚／冲突病例；整体 P 未接受 |
 | 范围、目标、顺序、接受矩阵 | 已记录 | 本文；不是实现/执行证明 |
 | P1 | Actions-covered-cases-passed | 部署预检／安装计划 30 项及容器打包通过；独立安装见 PP-13 |
 | P2 | Actions-covered-cases-passed | FR-0033/34 契约、原生 SQL、Web、真实 Chromium 成员／本人凭据场景通过 |
@@ -132,7 +132,7 @@ VPN/L7、第三方执行后端兼容或动态插件运行时。这些需要后�
 | P4 | Actions-covered-cases-passed | FR-0036/37/39–42 契约、原 MySQL 事务及 Direct/Relay/三节点签名 TCP/UDP 往返通过；不宣称首发成功率、外部通知投递或容量 |
 | P5 | Actions-covered-cases-passed | FR-0038 Web 病例及真实六轮读取、页面切换取消和原批次场景通过；不扩大为全设备／无障碍认证 |
 | P6 准备 | authored-not-executed | [部署／恢复／负载／长稳手册](product-p-deployment-acceptance.md)、原 physical collector 的拒绝默认 inventory 示例；PP-13–16 实际环境门槛仍开放 |
-| P Actions 验证 | passed-with-bounded-scope | 准确源码 `aae0632f`；baseline `40052868559` 10 作业及 packaging `40052868553` 全通过；150 条数据库条件跳过均匹配 native 通过；详见验证记录 |
+| P Actions 验证 | passed-with-bounded-scope | 准确源码 `245d438`；baseline `40062014210` 10 作业及 packaging `40062014243` 全通过；主契约 2152 通过、150 条数据库跳过均匹配 native 通过；Web 231／部署 30 通过；详见验证记录 |
 | P commit/push、草稿 PR | 已完成 | 独立测试分支、PR #118；原主工作树保持不变 |
 | P 主线整合、镜像发布、发行 | 未执行 | 当前验证授权不包含这些动作 |
 
@@ -223,7 +223,7 @@ principal／Forward 读取权限 -> 原签发者在 locking planner 中重新授
 | Station module／API | 3／4；旧规则 schema1，额度 schema2，最近路径样本 schema3 |
 | UpgradeAssessment | 10；Control 新 ceiling 0042–0046，旧 ceiling 不变 |
 | Agent CLI／command／nativeexecution | 2／2／3；默认新开关关闭 |
-| Relay Forward／Node assignments | 1／1；Forward 读已有准确修订证据，FR-0043 Node 读后继待 Actions |
+| Relay Forward／Node assignments | 1／1；FR-0043 新旧读与兼容覆盖在准确源码 Actions 通过，延迟及首发可靠性未接受 |
 
 新增五项迁移只由原 owner／明确 adapter 管理：0042 本人凭据事件，0043 用量派生
 heads／samples，0044 原 Station rule enum，0045 原 Probe permit/history enum/check，0046 原 Station 样本告警 rule enum。
@@ -237,13 +237,15 @@ FR-0043 在记录提案后增加原 Relay owner 的 Node Snapshot 新入口。�
 RelayCoordinator -> RuntimeRelayHost 新 reader，单次复用多跳锁定输入并保留原
 阶段／session 投影。旧 assignments 及 canExecute 覆盖保留旧调用链；新入口不缓存
 跨调用权限，不新增权威／表／期限。相关新旧投影、次数、拒绝、错误与组合入口
-病例已撰写，本地类型／边界通过，功能证据仍待该后继的独立 Actions。
+病例、本地类型／边界及准确源码 `245d438` 的完整 Actions 已通过。三节点 TCP
+需第三个独立新命令才成功，UDP 首次许可不可用、下一条新命令成功；共享机器
+证据 JOIN 仍有 746ms 等待。不得据此宣称首发可靠性或延迟改善已接受。
 
 ### 审阅与验证边界
 
-候选已保存／推送为 `aae0632f20c1ffc333433b67c72beafc29605e2a`，tree
-`9c6efb22ff514d3da22c108377a036c660539da2`。本轮 Actions 的实际 PR 测试合并
-`686f8b9b5e37fb4b029378722b773db0c562cdaf` 与候选 tree 相同，不是合并主线。
+准确验证源码为 `245d438ace32e1a58c39f00c9dca0a5d1d8cc7d4`，tree
+`750d32fdd962e7fa7bda4abbb468cf7509f8bf43`。本轮 Actions 的实际 PR 测试合并
+`2a66270b73595d135d0a86fb0b20e1128b3c43b4` 与候选 tree 相同，不是合并主线。
 类型／语法／边界／parity／编译检查与完整 contracts（含 Go race）已通过；其余
 完整作业结论和数据库跳过项对账以验证记录为准，不借用旧 N 的结果。
 
