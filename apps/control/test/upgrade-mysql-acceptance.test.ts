@@ -98,7 +98,7 @@ test('upgrade assessment preserves MySQL, authenticated journals and Authority; 
             assert.equal(summary.snapshotDigest, snapshot.snapshotDigest);
             assert.deepEqual(await fileInventory(directory), beforeInspect);
             const build = { revision: 'a'.repeat(40), imageDigest: 'sha256:' + 'b'.repeat(64), profile: 'adp3-multihop-v1' };
-            const controlBuild = { ...build, profile: 'adp3-shared-resource-limits-v1' };
+            const controlBuild = { ...build, profile: 'adp3-path-sample-alert-v1' };
             const plan = parseUpgradePlan(JSON.stringify({
                 version: 1, operation: 'upgrade', source: { control: controlBuild, agent: build },
                 target: { control: controlBuild, agent: build }, controlMultihop: false, agentMultihop: false, journals: [summary],
@@ -114,7 +114,8 @@ test('upgrade assessment preserves MySQL, authenticated journals and Authority; 
                 return report;
             }
             assert.equal((await unchangedAssessment()).decision, 'compatible');
-            for (const migration of ['0039-product-resource-access.sql', '0040-shared-node-port-limits.sql','0041-shared-resource-payload-limits.sql']) {
+            for (const migration of ['0039-product-resource-access.sql', '0040-shared-node-port-limits.sql','0041-shared-resource-payload-limits.sql',
+                '0042-account-credential-events.sql','0043-resource-usage-observation.sql']) {
                 const [ledger]: [RowDataPacket[], unknown] = await writer.query<RowDataPacket[]>('SELECT name,applied_at FROM vnext_migrations WHERE name=?', [migration]);
                 assert.equal(ledger.length, 1);
                 await writer.query('DELETE FROM vnext_migrations WHERE name=?', [migration]);

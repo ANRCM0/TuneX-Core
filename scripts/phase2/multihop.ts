@@ -13,12 +13,14 @@ import { DEFAULT_POLICY } from '@tunex/contracts';
 import { host, linuxPath, linux, spawnLinux, linuxBinary, topology, viaWSL } from './native-linux.ts';
 import { NetworkLab } from './network-lab.ts';
 import { verifyMultihopConsole } from './multihop-console.ts';
+import { verifyControlledEcho } from './product-p-observation.ts';
 
 const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
 const count=Number(process.env.TUNEX_MULTIHOP_NODES??'3');
 const browserConsole=process.env.TUNEX_MULTIHOP_BROWSER==='1';
 if(browserConsole&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'||process.argv.includes('--isolated')))throw Error('Multi-hop browser acceptance requires non-isolated Linux Actions');
 const lab=process.argv.includes('--isolated')?new NetworkLab(count):undefined;
+const productP=process.env.TUNEX_PRODUCT_P_ACCEPTANCE==='1'&&!lab&&count===3;
 if(!databaseUrl||![3,4,8].includes(count))throw Error('Disposable MySQL URL and TUNEX_MULTIHOP_NODES=3,4,8 required');
 await mkdir('.artifacts/multihop',{recursive:true});const directory=await mkdtemp(resolve(`.artifacts/multihop/${count}-nodes-`));
 const caKey=join(directory,'ca.key'),caCert=join(directory,'ca.pem'),serverKey=join(directory,'server.key'),serverCert=join(directory,'server.pem');
@@ -30,8 +32,9 @@ const admin=await createConnection(databaseUrl),database=`tunex_multihop_${rando
 const url=new URL(databaseUrl);url.pathname='/'+database;
 const token=newToken(),scope='multihop-scope',owner='multihop-owner',ca=await readFile(caCert),checks:string[]=[],deploymentHistory:unknown[]=[];
 const binary=linuxBinary('tunex-agent'),fixture=linuxBinary('network-fixture'),nativeRoot=`/tmp/tunex-multihop-${randomUUID()}`;
-const policy={...DEFAULT_POLICY,pollIntervalSeconds:1,leaseSeconds:45,renewalLeadSeconds:18,observationFreshnessSeconds:10,drainTimeoutSeconds:3,udpIdleTimeoutSeconds:2};
-const options={databaseUrl:url.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,multihopEnabled:true};
+const policy={...DEFAULT_POLICY,maxClockSkewSeconds:productP?1:DEFAULT_POLICY.maxClockSkewSeconds,pollIntervalSeconds:1,leaseSeconds:45,renewalLeadSeconds:18,observationFreshnessSeconds:10,drainTimeoutSeconds:3,udpIdleTimeoutSeconds:2};
+const options={databaseUrl:url.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,multihopEnabled:true,
+    probeExecutionEnabled:productP,probeIngressEnabled:productP,probeServicesEnabled:productP,probeEchoEnabled:productP,probePathEchoEnabled:productP};
 let control:Awaited<ReturnType<typeof startControl>>|undefined,target:ChildProcess|undefined,targetPID:number|undefined,releaseReady:(()=>void)|undefined,proxy:ChildProcess|undefined,proxyPID:number|undefined,controlURL='';
 const agents:{nodeId:string;root:string;args:string[];process:ChildProcess;errors:string;exitedAt?:string}[]=[];
 let completedEvidence:Record<string,unknown>|undefined;
@@ -83,12 +86,14 @@ try{
   const usedPorts=new Set<number>([targetStatus.port]);
   async function distinctPort(){for(let attempt=0;attempt<128;attempt++){const next=await port();if(!usedPorts.has(next)){usedPorts.add(next);return next;}}throw Error('Distinct fixture port selection exhausted');}
   const listenPort=await distinctPort(),copyPort=browserConsole?await distinctPort():undefined,batchPort=browserConsole?await distinctPort():undefined;
+  const echoPort=productP?await distinctPort():undefined;
   const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:5,idleTimeoutSeconds:5,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:128};
   assert.equal((await call('PUT','transport-profiles/multihop-profile',{expectedRevision:0,config:profile})).status,202);
   for(let i=0;i<count;i++){
-    const node=await call('POST','shared-nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:i===0&&copyPort!==undefined?[listenPort,copyPort,batchPort!]:[listenPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
+    const node=await call('POST','shared-nodes',{allowedListenerAddresses:['127.0.0.1'],allowedPorts:[...(i===0&&copyPort!==undefined?[listenPort,copyPort,batchPort!]:[listenPort]),...(echoPort===undefined?[]:[echoPort])],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8',...(lab?[lab.subnet]:[])],allowMetadataTargets:false});assert.equal(node.status,201);
     const useGrant=await call('PUT',`nodes/${node.body.nodeId}/grants/${owner}`,{expectedRevision:1,allowed:true,allowedRoles:['ingress','transit','egress']});assert.equal(useGrant.status,202);assert.equal(useGrant.body.revision,2);
     const root=nativeRoot+'/node-'+i;const args:string[]=['--control',controlURL,'--node',node.body.nodeId,'--ca',linuxPath(caCert),'--state',root+'/state','--journal-key',root+'/secrets/journal.key','--relay','--multihop','--diagnostics'];
+    if(productP)args.push('--probe-registration','--probe-execution','--probe-ingress','--probe-services','--probe-echo','--probe-path-echo');
     try{const enroll=[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll'];if(lab)await lab.run(lab.namespaces[i]!,'/usr/bin/env',enroll);else await linux('env',enroll);}catch{throw Error('Multi-hop enrollment failed; token redacted');}
     const process=lab?lab.spawn(lab.namespaces[i]!,binary,args):spawnLinux(binary,args);const entry:typeof agents[number]={nodeId:node.body.nodeId,root,args,process,errors:''};observeAgent(entry);agents.push(entry);
     await until(async()=>{const [r]=await control!.db.pool.query<any[]>('SELECT session_epoch,(SELECT COUNT(*) FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE) peers FROM runtime_nodes WHERE node_id=?',[entry.nodeId,entry.nodeId]);return r[0]?.session_epoch>0&&r[0]?.peers>0;},'current Node session and peer credential');
@@ -119,6 +124,9 @@ try{
   const traffic=await probe(listenPort);assert.equal(traffic.tcp,true);assert.equal(traffic.udp,true);
   const [slots]=await control.db.pool.query<any[]>('SELECT node_id,protocol,port,fence FROM port_slots WHERE owner_id=?',[id]);assert.equal(slots.length,2*count);
   pass('Exact bidirectional TCP and UDP data crosses the fully activated path with two exclusive resources per Node');
+  if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress.nodeId,mode:'multihop',directory,listenPort:echoPort!,spec,call,
+      qualified:async()=>{const [result]=await control!.db.pool.query<any[]>("SELECT COUNT(*) n FROM probe_type_qualifications q JOIN runtime_nodes r ON r.node_id=q.node_id AND r.session_epoch=q.session_epoch WHERE q.node_id=? AND q.state='qualified' AND q.echo_version=1 AND q.expires_at>?",[ingress.nodeId,Date.now()+2000]);return result[0].n===1;}
+  }))pass('P multihop '+check);
   const [generation]=await control.db.pool.query<any[]>('SELECT node_id,snapshot_generation FROM runtime_nodes');
   await until(async()=>{const [r]=await control!.db.pool.query<any[]>('SELECT node_id,snapshot_generation FROM runtime_nodes');return r.every(n=>n.snapshot_generation>generation.find(p=>p.node_id===n.node_id).snapshot_generation);},'whole-Node lease renewal');
   assert.equal((await call('GET',resource+'/deployment')).body.deployment.generation,initial.generation);assert.equal((await probe(listenPort)).udp,true);

@@ -84,7 +84,7 @@ test('208 actual Control composition preserves field initializer and every origi
   assert.deepEqual(args('ConsoleQueries'), [f.db, f.identity, f.one('ConsoleReadModels'), control.readAccess]);
   assert.equal(control.readAccess, f.one('ResourceAccess')); assert.equal(control.resourceLimits, f.one('SharedResourceLimits'));
   const payload = args('SharedResourceLimits')[0];
-  assert.equal(payload.db, f.db); assert.equal(payload.identity, f.identity); assert.equal(payload.nodes, f.one('MySqlNodeAuthorityStore'));
+  assert.equal(payload.db, f.db); assert.equal(payload.identity, f.identity); assert.equal(payload.nodes, f.one('MySqlNodeAuthorityStore',1));
   assert.equal(payload.owners, f.one('MySqlRuntimeResourceStore')); assert.equal(payload.runtime, f.resources); assert.equal(payload.store, f.one('MySqlSharedResourceLimitStore'));
   assert.equal(args('MySqlManagementReadStore')[0].now, f.bindings.nativeReadProjectionValues.now);
   assert.equal(args('ConsoleReadModels')[1], f.bindings.nativeReadProjectionValues); assert.equal(args('TunnelReadModels')[1], f.bindings.nativeReadProjectionValues);

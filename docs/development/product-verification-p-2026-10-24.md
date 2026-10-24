@@ -76,6 +76,44 @@ and simulate the old Control's missing usage endpoint, so the original Journal,
 renewal and drain tests exercise extension failure without changing report ACKs.
 No P functional/MySQL/network/browser/container tests ran locally.
 
+## Third Candidate Findings And P Execution Coverage
+
+Head `77a408ace73a11d725360d43fa27f9f5b9af77d8`, tree
+`04995cd9c02c0dce9e2928e58cbe703c119da2b3`: packaging `40042838827` passed.
+Baseline `40042838357` has a failed contract job `120717639608`; other jobs were
+still running at this repair snapshot. Types, generated parity, Web and source
+boundaries passed. Five contract failures remained: the distinct node-store
+instance expected by the updated composition, a changed sample fixture needing
+a coherent invocation digest, and old assertions treating qualified v4 as an
+unknown marker or refusing it before current authority checks. Native MySQL
+also exposed old successor-migration counts and a Control profile ceiling in the
+SELECT-only upgrade fixture. Repairs keep the original transactional refusal,
+CHECK replacement and old-reader/executor rules.
+
+P-specific execution coverage now extends the original Actions fixtures:
+
+- `scripts/phase2/product-p-console.ts`: real HTTPS/SQL/Chromium member creation,
+  viewer-only visibility, self Token rotation and old-token refusal, desktop and
+  mobile screenshots, six actual ten-second GET rounds and page-change cancel.
+- `scripts/phase2/product-p-observation.ts`: fixed-size loopback signed responder
+  with one published context, current expiry and nonce identity, real original
+  permit/Agent/Forward TCP and UDP exchange, historical proof and non-executing
+  same-key replay; Direct, two-node Relay and three-node multihop separately.
+- Direct shared-node quota: original policy/Journal precharge -> accepted report
+  -> optional mTLS usage endpoint -> native SQL projection -> real API and mobile
+  Chromium view, retaining sample freshness and conservative accounting labels.
+
+The P fixtures run only under explicit `TUNEX_PRODUCT_P_ACCEPTANCE=1` on the
+existing hosted Actions jobs; the independent namespace variants keep their old
+scope. Exact redacted P JSON/screenshot paths are included in original artifact
+allowlists. Their responder is a test fixture, not standalone Responder delivery,
+physical-host proof or long-run/load acceptance. The new result-ACK case also
+catches a real closed-v4 codec defect: an extra checkedAt and missing health
+field after persistence. The adapter now matches the existing response schema.
+
+All new/changed cases require another exact-source run. No local functional,
+MySQL, network, browser or container execution has been substituted for Actions.
+
 ## Acceptance Limits
 
 Source preparation is delivered in the [P ledger](product-readiness-stage-p-2026-10-24.md).

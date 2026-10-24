@@ -65,7 +65,9 @@ test('P4 path sample reader uses original principal and issuer in the supplied t
     assert.deepEqual(f.trace.map(item=>item[0]),['scope','access','history','planner']);
     f.deny();assert.equal(await f.read(),null);
     const changed=historyFixture();changed.rebound();assert.equal(await changed.read(),null);
-    const latest=historyFixture();latest.records([{...latest.record,probeId:'newer',issuedAt:at-900,result:null},latest.record]);assert.equal(await latest.read(),null);
+    const latest=historyFixture(),newer={...latest.record,probeId:'newer',issuedAt:at-900,result:null};
+    newer.echoChallenge={...newer.echoChallenge,invocationDigest:probeEchoInvocationDigest(nativeProbeHistoryEchoInvocation(newer))};
+    latest.records([newer,latest.record]);assert.equal(await latest.read(),null);
     const corrupt=historyFixture();corrupt.record.result.elapsedMs=-1;await assert.rejects(corrupt.read(),{code:'INTEGRITY_FAILURE'});
 });
 test('P4 Station path bridge reads only the public original sample reader in its caller transaction',async()=>{

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { generateKeyPairSync } from 'node:crypto';
-import { nativeValueDigest, probeEchoServiceSelection } from '../src/compatibility/public.ts';
+import { nativeValueDigest, probeEchoServiceSelection, probeEchoResultDigest } from '../src/compatibility/public.ts';
 import { ProbePermits, ForwardProbes, ProbeEcho, ProbeEchoRegistry, parseProbeQualification } from '../src/modules/probe-owner/public.ts';
 
 function fixture() {
@@ -64,6 +64,30 @@ test('P4 disabled Echo, missing qualification and persistence failure cannot iss
         {version:1,kind:'tcp-ingress-echo',expectedRevision:1,service:off.reference}),{code:'PROBE_DISABLED'});
     const unqualified=fixture();unqualified.unqualify();await assert.rejects(unqualified.issue());assert.equal(unqualified.records().length,0);
     const failed=fixture();failed.fail();await assert.rejects(failed.issue(),/persist failure/);assert.equal(failed.records().length,0);
+});
+
+test('P4 Echo result ACK conforms to the closed v4 response after original-owner persistence',async()=>{
+    for(const [measurement,kind,point,capability] of [
+        ['tcp-ingress-echo-v1','tcp-ingress-echo','agent-local-direct-ingress','probe.tcp-ingress-echo.v1'],
+        ['tcp-path-echo-v1','tcp-path-echo','agent-local-forward-ingress','probe.tcp-path-echo.v1'],
+    ] as const){
+        const f=fixture();await f.issue();const permit=f.records()[0];
+        const request={...f.machineRequest,kind:'probe-echo-result',measurement,taskKind:kind,point,capability,businessProtocol:'tcp',
+            permitId:permit.id,binding:permit.binding,timeoutMs:1000,issuedAt:new Date(f.now).toISOString(),expiresAt:new Date(f.now+2000).toISOString(),
+            service:probeEchoServiceSelection(f.context),challenge:permit.echoChallenge,tls:null,echo:null,
+            consumedAt:new Date(f.now).toISOString(),measuredAt:new Date(f.now).toISOString(),validUntil:new Date(f.now+500).toISOString(),
+            elapsedMs:0,status:'unreachable',code:'tcp-connect-failed',requestBytes:0,responseBytes:0,applicationPayloadBytes:0,
+            applicationHealth:'unknown',source:'agent-reported'};
+        // The invocation changes with the distinct measurement, so keep its challenge coherent.
+        const invocation={domain:'tunex.probe.echo.invocation.v1' as const,probeVersion:4 as const,measurement,permitId:permit.id,
+            binding:permit.binding,instanceId:request.instanceId,instanceGeneration:1,timeoutMs:1000,issuedAt:request.issuedAt,
+            expiresAt:request.expiresAt,service:request.service,nonce:request.challenge.nonce};
+        request.challenge={...request.challenge,invocationDigest:nativeValueDigest(invocation)};
+        const echo=new ProbeEcho({async receiveResult(){return {resultDigest:probeEchoResultDigest(request as never),acceptedAt:f.now,checkedAt:f.now,duplicate:false};}} as never,()=>f.now);
+        const ack=await echo.result('node','f'.repeat(64),1,request);
+        assert.equal(ack.health,'unknown');assert.equal(ack.executionEnabled,false);assert.equal(ack.measurement,measurement);
+        assert.equal(Object.hasOwn(ack,'checkedAt'),false);
+    }
 });
 test('P4 Echo qualification extends recognition on the original slot without extending expiry and keeps revocation sticky',async()=>{
     const f=fixture(),request={...f.machineRequest,kind:'probe-echo-instance',action:'register',measurements:

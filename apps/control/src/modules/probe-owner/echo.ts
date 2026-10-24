@@ -124,12 +124,12 @@ export class ProbeEcho<Tx> implements ProbeEchoApi {
         const request=parseProbeEcho('ResultRequest',nativeJsonEncode(input));identity(node,epoch,request);
         const value=await this.permits.receiveResult(node,fingerprint,epoch,request),now=this.now(value.checkedAt);
         if(!Number.isSafeInteger(value.acceptedAt)||value.acceptedAt<0||value.acceptedAt>value.checkedAt||
-            now>=nativeParseTime(request.validUntil)||value.resultDigest!==probeEchoResultDigest(request))unavailable();
+            now>=nativeParseTime(request.validUntil)||value.resultDigest!==probeEchoResultDigest(request)||typeof value.duplicate!=='boolean')unavailable();
         return parseProbeEcho('ResultResponse',nativeJsonEncode({protocolVersion:3,probeVersion:4,kind:'probe-echo-result-ack',
             nodeId:request.nodeId,bootId:request.bootId,sessionEpoch:request.sessionEpoch,instanceId:request.instanceId,
             instanceGeneration:request.instanceGeneration,requestId:request.requestId,
             ...probeEchoMeasurement(request.measurement),permitId:request.permitId,service:request.service,challenge:request.challenge,
-            resultDigest:value.resultDigest,acceptedAt:time(value.acceptedAt),checkedAt:time(value.checkedAt),
-            serverTime:time(now),duplicate:value.duplicate,executionEnabled:false}));
+            resultDigest:value.resultDigest,acceptedAt:time(value.acceptedAt),
+            serverTime:time(now),duplicate:value.duplicate,health:'unknown',executionEnabled:false}));
     }
 }

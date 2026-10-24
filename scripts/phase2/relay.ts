@@ -14,9 +14,11 @@ import { host,linuxPath,linux,spawnLinux,linuxBinary,topology,viaWSL } from './n
 import { relaySwitchFaults } from './relay-scenarios.ts';
 import { reportsDuringIntentLock } from './runtime-intent-lock.ts';
 import { verifyTunnelConsole } from './tunnel-console.ts';
+import { verifyControlledEcho } from './product-p-observation.ts';
 
 const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
 const tunnelBrowser=process.env.TUNEX_TUNNEL_BROWSER==='1';
+const productP=process.env.TUNEX_PRODUCT_P_ACCEPTANCE==='1'&&tunnelBrowser;
 if(tunnelBrowser&&(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true'))throw Error('Tunnel browser acceptance is Actions-only');
 if(!databaseUrl)throw new Error('Disposable MySQL URL required');
 await mkdir('.artifacts/relay',{recursive:true});const directory=await mkdtemp(resolve('.artifacts/relay/run-'));
@@ -31,8 +33,9 @@ const token=newToken(),scope='relay-scope',owner='relay-owner',ca=await readFile
 const binary=linuxBinary('tunex-agent'),fixture=linuxBinary('network-fixture'),collector=linuxBinary('time-proof');
 const nativeRoot=`/tmp/tunex-relay-${randomUUID()}`;
 const switchFaults=process.argv.includes('--switch-faults'),tag=switchFaults?'A':'';
-const policy={...DEFAULT_POLICY,pollIntervalSeconds:1,leaseSeconds:switchFaults?45:30,renewalLeadSeconds:switchFaults?18:12,observationFreshnessSeconds:5,drainTimeoutSeconds:switchFaults?20:2,udpIdleTimeoutSeconds:2};
-const options={databaseUrl:dbUrl.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,worker:false};
+const policy={...DEFAULT_POLICY,maxClockSkewSeconds:productP?1:DEFAULT_POLICY.maxClockSkewSeconds,pollIntervalSeconds:1,leaseSeconds:switchFaults?45:30,renewalLeadSeconds:switchFaults?18:12,observationFreshnessSeconds:5,drainTimeoutSeconds:switchFaults?20:2,udpIdleTimeoutSeconds:2};
+const options={databaseUrl:dbUrl.toString(),caCert,caKey,serverKey,serverCert,openssl,stateDirectory:join(directory,'control'),initializeAuthority:true,port:0,host,policy,worker:false,
+    probeExecutionEnabled:productP,probeIngressEnabled:productP,probeServicesEnabled:productP,probeEchoEnabled:productP,probePathEchoEnabled:productP};
 let control:Awaited<ReturnType<typeof startControl>>|undefined,target:ChildProcess|undefined,targetPID:number|undefined;
 const agents:{nodeId:string;root:string;args:string[];process:ChildProcess;errors?:string}[]=[];
 let releaseReady:(()=>void)|undefined;
@@ -46,13 +49,15 @@ try{
  control=await startControl(options);await control.control.identity.bootstrap(scope,owner,token);
  target=spawnLinux(fixture,['--mode','target','--tag',tag,'--run-id',nativeRoot]);const targetStatus=JSON.parse(await new Promise<string>((resolve,reject)=>{target!.stdout!.once('data',chunk=>resolve(chunk.toString()));target!.once('error',reject)}));assert.equal(targetStatus.platform,'linux');assert.equal(targetStatus.runId,nativeRoot);targetPID=targetStatus.pid;
  const listenPort=await port(),movedPort=await port(),peerPorts=[await port(),await port()];assert.notEqual(peerPorts[0],peerPorts[1]);
- if(tunnelBrowser){while(peerPorts.length<4){const next=await port();if(![listenPort,movedPort,...peerPorts].includes(next))peerPorts.push(next);}}
+ let echoPort=await port();while([listenPort,movedPort,...peerPorts].includes(echoPort))echoPort=await port();
+ if(tunnelBrowser){while(peerPorts.length<4){const next=await port();if(![listenPort,movedPort,echoPort,...peerPorts].includes(next))peerPorts.push(next);}}
  const profile={driver:'native.relay.v1',wireVersion:1,security:'mutual-tls13',protocols:['tcp','udp'],handshakeTimeoutSeconds:2,idleTimeoutSeconds:2,maxFrameBytes:65536,maxUdpDatagramBytes:16384,maxConnectionsPerNode:32};
  assert.equal((await call('PUT',`/api/v1/scopes/${scope}/transport-profiles/secure-relay`,{expectedRevision:0,config:profile})).status,202);
  for(const role of ['ingress','egress']){
-  const node=await call('POST',`/api/v1/scopes/${scope}/shared-nodes`,{allowedListenerAddresses:['127.0.0.1'],allowedPorts:[listenPort,movedPort],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false});assert.equal(node.status,201);
+  const node=await call('POST',`/api/v1/scopes/${scope}/shared-nodes`,{allowedListenerAddresses:['127.0.0.1'],allowedPorts:[listenPort,movedPort,...(productP?[echoPort]:[])],egressPolicyRevision:1,allowedDestinationCidrs:['127.0.0.0/8'],allowMetadataTargets:false});assert.equal(node.status,201);
   const useGrant=await call('PUT',`/api/v1/scopes/${scope}/nodes/${node.body.nodeId}/grants/${owner}`,{expectedRevision:1,allowed:true,allowedRoles:[role]});assert.equal(useGrant.status,202);assert.equal(useGrant.body.revision,2);
   const root=`${nativeRoot}/${role}`,args=['--control',`https://${host}:${control.port}`,'--node',node.body.nodeId,'--ca',linuxPath(caCert),'--state',`${root}/state`,'--journal-key',`${root}/secrets/journal.key`,'--relay'];
+  if(productP)args.push('--probe-registration','--probe-execution','--probe-ingress','--probe-services','--probe-echo','--probe-path-echo');
   try{await linux('env',[`TUNEX_ENROLLMENT_TOKEN=${node.body.enrollmentToken}`,binary,...args,'--enroll']);}catch{throw new Error('Relay enrollment failed; token redacted');}
   const process=spawnLinux(binary,args),entry={nodeId:node.body.nodeId,root,args,process,errors:''};process.stderr!.on('data',chunk=>{entry.errors=(entry.errors+chunk.toString()).slice(-32768);});agents.push(entry);
   await until(async()=>{const [rows]=await control!.db.pool.query<any[]>('SELECT COUNT(*) n FROM node_relay_credentials WHERE node_id=? AND revoked=FALSE',[node.body.nodeId]);return rows[0].n===1;},'peer issuance');
@@ -83,6 +88,10 @@ try{
  const [stage]=await control.db.pool.query<any[]>('SELECT generation,stage,body FROM relay_deployments WHERE forward_id=? ORDER BY generation DESC LIMIT 1',[created.body.forwardId]);assert.equal(stage[0].stage,'active');
  const healthy=await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`);assert.equal(healthy.body.applied.length,4);assert.equal(healthy.body.health.condition,'ready');assert.equal(new Set(healthy.body.applied.map((obs:any)=>obs.nodeId)).size,2);assert.ok(healthy.body.applied.every((obs:any)=>obs.forwardRevision===1));assert.deepEqual([...new Set(healthy.body.applied.map((obs:any)=>obs.role))].sort(),['relay-egress','relay-ingress']);
  pass('Encrypted Relay traffic: real API/Worker/two native Agents/target verify exact bidirectional TCP and UDP payload');
+ if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress!.nodeId,mode:'relay',directory,listenPort:echoPort,spec,
+    call:(method,path,input,key)=>call(method,`/api/v1/scopes/${scope}/`+path,input,key),tick:async()=>{await control!.runtime.tick();},
+    qualified:async()=>{const [result]=await control!.db.pool.query<any[]>("SELECT COUNT(*) n FROM probe_type_qualifications q JOIN runtime_nodes r ON r.node_id=q.node_id AND r.session_epoch=q.session_epoch WHERE q.node_id=? AND q.state='qualified' AND q.echo_version=1 AND q.expires_at>?",[ingress!.nodeId,Date.now()+2000]);return result[0].n===1;}
+ }))pass('P Relay '+check);
  const egressAssignment=stage[0].body.nodes.find((node:any)=>node.nodeId===egress!.nodeId).assignments.find((a:any)=>a.protocol==='tcp');
  const currentOpen=join(directory,'negative-open.json');await writeFile(currentOpen,JSON.stringify({wireVersion:1,type:'open',action:'probe',requestId:'negative-probe',binding:egressAssignment.driver.config.binding}));
  const peerFacts=await control.db.transaction(tx=>control!.control.nodes.relayCredentialFacts(tx,egress!.nodeId));
