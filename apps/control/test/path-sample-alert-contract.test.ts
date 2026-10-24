@@ -5,6 +5,7 @@ import { nativeValueDigest as digest, nativeProbeHistoryEchoInvocation, probeEch
 import { ControlError } from '../src/framework/public.ts';
 import { evaluateStationAlert, advanceStationAlert, emptyStationAlertState, parseStationAlertConfig, StationPathFacts } from '../src/modules/station-alert-owner/public.ts';
 import type { StationAlertConfig, StationAlertFact, StationPathEvidence } from '../src/modules/station-alert-owner/public.ts';
+import { parseNotificationPayload, notificationWireBody } from '../src/modules/notification-owner/public.ts';
 
 const at=Date.parse('2026-10-24T00:00:00.000Z');
 const config:StationAlertConfig={schemaVersion:3,rule:'recent-path-probe-degraded',target:{kind:'forward',id:'forward'},enabled:true,
@@ -12,6 +13,21 @@ const config:StationAlertConfig={schemaVersion:3,rule:'recent-path-probe-degrade
 const sample=():StationPathEvidence=>({kind:'path-probe',targetId:'forward',forwardRevision:1,bindingDigest:'sha256:'+'b'.repeat(64),probeId:'probe',
     measurement:'tcp-path-echo-v1',status:'unverified',elapsedMs:200,measuredAt:at-100,acceptedAt:at-50,validUntil:at+1000});
 const fact=(pathSample:StationPathEvidence|null):StationAlertFact=>({kind:'forward',id:'forward',revision:1,enabled:true,deleting:false,recoverySuspended:false,operation:null,pathSample});
+
+test('P4 notification payload preserves Forward targets for recent path rules and rejects the opposite target for all six rules',()=>{
+    for(const [rule,kind,reason] of [
+        ['forward-operation-failed','forward','operation-failed'],['node-report-stale','node','report-stale'],
+        ['node-credential-expiring','node','credential-expiring'],['shared-usage-high','node','usage-high'],
+        ['shared-period-ending','node','period-ending'],['recent-path-probe-degraded','forward','path-sample-slow'],
+    ] as const) {
+        const payload={notificationVersion:1,deliveryId:'delivery',scopeId:'scope',event:{id:'event',policyId:'policy',
+            configRevision:1,episode:1,kind:'firing',rule,target:{kind,id:'target'},reason,occurredAt:at}};
+        const parsed=parseNotificationPayload(payload);assert.deepEqual(parsed,payload);
+        assert.equal(notificationWireBody(parsed),JSON.stringify(payload),'closed v1 bytes and field order stay unchanged');
+        assert.throws(()=>parseNotificationPayload({...payload,event:{...payload.event,target:{kind:kind==='forward'?'node':'forward',id:'target'}}}),{code:'INVALID_CONFIG'});
+        assert.throws(()=>parseNotificationPayload({...payload,event:{...payload.event,target:{...payload.event.target,extra:true}}}),{code:'INVALID_CONFIG'});
+    }
+});
 
 test('P4 recent path condition distinguishes a recorded failure and slow sample from missing stale and threshold-equal samples',()=>{
     const first=evaluateStationAlert(config,fact(sample()),emptyStationAlertState(),at,0);assert.equal(first.reason,'path-sample-failed');

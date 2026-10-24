@@ -44,6 +44,22 @@ execution: original Station state retains the firing incident while `last.status
 becomes unknown; neither a stale sample nor a missing result recovers it. The
 successor asserts both original behaviors without changing production semantics.
 
+Corrected fixture `ecbfa9e` ran baseline `40066060443` and packaging
+`40066060549`. The three-node signed TCP/UDP workflows reached accepted results
+(TCP third command, UDP sixth), and the original history reader/locking planner
+accepted the actual 37ms UDP sample. The new Station/outbox case then exposed a
+production defect before insertion: Notification allowed the recent-path rule
+but still required every non-operation rule to target a Node. Its valid Forward
+target failed with `Invalid bounded notification payload`; the deliberately
+injected post-insert error was never reached. Artifact `12548969414` and job
+`120789570934` retain this failed evidence, not acceptance.
+
+The private L3 parser repair adds the already declared recent-path rule to the
+Forward-target branch. It changes no public version/schema, wire field/order,
+payload size, transaction, authority or deadline. A regression checks correct
+and opposite target kinds for all six rules, closed fields and exact v1 wire
+order; the unchanged new native SQL case must now reach the real outbox insert.
+
 ## Latest Complete Verification - 245d438
 
 The corrected FR-0043 Node Snapshot reader candidate is
