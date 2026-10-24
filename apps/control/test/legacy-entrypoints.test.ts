@@ -293,10 +293,10 @@ type Namespace = Record<string, unknown>;
 const modulesRoot = new URL('../src/modules/', import.meta.url);
 const load = async (url: URL): Promise<Namespace> => import(url.href);
 const parsed = (table: string) => table.trim().split('\n').map(line => line.trim().split(/\s+/) as [string, string, string]);
-for (const [family, table, count, map] of [
-  ['modules', moduleLeaves, 53, 'control-legacy-module-leaves-v1.md'],
-  ['runtime', runtimeLeaves, 25, 'control-runtime-legacy-leaves-v1.md'],
-  ['application', applicationLeaves, 96, 'control-application-legacy-leaves-v1.md'],
+for (const [family, table, count] of [
+  ['modules', moduleLeaves, 53],
+  ['runtime', runtimeLeaves, 25],
+  ['application', applicationLeaves, 96],
 ] as const) {
   test(`${family} pure legacy entries load their exact mapped canonical values and preserve erased runtime surfaces`, async () => {
     const expectations = new Map<string, Namespace>();
@@ -312,9 +312,8 @@ for (const [family, table, count, map] of [
       expectations.set(leaf, expected);
     }
     assert.equal(expectations.size, count);
-    // Independent documentation inventory keeps the explicit test table complete.
-    const document = await readFile(new URL('../../../docs/architecture/' + map, import.meta.url), 'utf8');
-    for (const leaf of expectations.keys()) assert.ok(document.includes('| ' + leaf + '.ts |'), leaf);
+    const inventory = JSON.parse(await readFile(new URL('../../../docs/architecture/entrypoint-inventory-v1.json', import.meta.url), 'utf8'));
+    for (const leaf of expectations.keys()) assert.ok(inventory.legacy[family].includes(leaf + '.ts'), leaf);
     for (const [leaf, expected] of expectations) {
       const relative = family === 'modules' ? leaf : family === 'runtime' ? 'runtime/' + leaf : '../application/' + leaf;
       const actual = await load(new URL(relative + '.ts', modulesRoot));

@@ -39,8 +39,8 @@ test('203 all 34 runtime leaves retain bounded eight construction one interface 
     assert.equal(construction.length,8);assert.equal(forwarders.length,25);
     const actual=(await readdir(runtime)).filter(name=>name.endsWith('.ts')).sort();
     assert.deepEqual(actual,[...construction,...forwarders,'relay-ledger-ports'].map(name=>`${name}.ts`).sort());
-    const doc=await readFile(new URL('../../../docs/architecture/control-runtime-legacy-leaves-v1.md',import.meta.url),'utf8');
-    for(const name of [...construction,...forwarders,'relay-ledger-ports'])assert.ok(doc.includes(`${name}.ts`),name);
+    const inventory=JSON.parse(await readFile(new URL('../../../docs/architecture/entrypoint-inventory-v1.json',import.meta.url),'utf8'));
+    assert.deepEqual(inventory.legacy.runtime,actual);
 });
 
 test('203 all legacy runtime native aliases and generic defaults resolve to the exact original uninstantiated public declarations',()=>{

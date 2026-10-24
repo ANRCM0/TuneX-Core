@@ -1,0 +1,338 @@
+{
+  "version": 1,
+  "legacy": {
+    "modules": [
+      "audit-ports.ts",
+      "forward-diagnostic-ports.ts",
+      "forward-query-ports.ts",
+      "forward-telemetry-ports.ts",
+      "forwarding-ports.ts",
+      "forwarding.ts",
+      "host-telemetry-ports.ts",
+      "idempotency.ts",
+      "identity-credentials.ts",
+      "identity-ports.ts",
+      "identity.ts",
+      "ingress-contract.ts",
+      "ingress-migration-contract.ts",
+      "ingress-migration-ports.ts",
+      "ingress-ports.ts",
+      "native-path-references.ts",
+      "node-execution-ports.ts",
+      "node-grant-ports.ts",
+      "node-management-ports.ts",
+      "node-policy.ts",
+      "node-report-observation.ts",
+      "nodes.ts",
+      "notification-delivery-ports.ts",
+      "notification-ports.ts",
+      "observation-policy.ts",
+      "observation-ports.ts",
+      "observation-service-ports.ts",
+      "path-binding-contract.ts",
+      "path-binding-ports.ts",
+      "path-group-contract.ts",
+      "path-group-ports.ts",
+      "path-operation-limits.ts",
+      "path-publication-contract.ts",
+      "path-publication-ports.ts",
+      "path-template-contract.ts",
+      "path-template-ports.ts",
+      "probe-instance-ports.ts",
+      "probe-measurement-ports.ts",
+      "probe-measurements.ts",
+      "probe-negotiation-ports.ts",
+      "probe-owner-ports.ts",
+      "probe-permit-ports.ts",
+      "probe-permit-state.ts",
+      "probe-plan-ports.ts",
+      "probe-ports.ts",
+      "probe-result-ports.ts",
+      "probe-run-ports.ts",
+      "probe-service-ports.ts",
+      "probe-telemetry-ports.ts",
+      "relay-endpoint-contract.ts",
+      "relay-endpoints.ts",
+      "station-alert-ports.ts",
+      "target-policy.ts",
+      "telemetry-policy.ts",
+      "telemetry-ports.ts",
+      "telemetry-rollup-ports.ts",
+      "telemetry-rollup-values.ts",
+      "transport-ports.ts",
+      "transport.ts"
+    ],
+    "runtime": [
+      "access-changes.ts",
+      "access-ports.ts",
+      "authorization-ports.ts",
+      "controller.ts",
+      "execution-adapter-ports.ts",
+      "execution-adapters.ts",
+      "forward-command-ports.ts",
+      "forward-commands.ts",
+      "forward-telemetry-ports.ts",
+      "ledger.ts",
+      "multihop-plan.ts",
+      "native-forward-adapters.ts",
+      "node-change-ports.ts",
+      "node-changes.ts",
+      "operation-contract.ts",
+      "path-topology.ts",
+      "planner.ts",
+      "probe-telemetry-ports.ts",
+      "profile-grants.ts",
+      "query-ports.ts",
+      "relay-assignment-source.ts",
+      "relay-coordinator.ts",
+      "relay-ledger-ports.ts",
+      "relay-plan.ts",
+      "relay-planner.ts",
+      "snapshot-assignment-ports.ts",
+      "snapshot-assignments.ts",
+      "transit-api-contract.ts",
+      "transit-coordination.ts",
+      "transit-delivery.ts",
+      "transit-negotiation.ts",
+      "transit-preparation.ts",
+      "transit-reservations.ts",
+      "transit-staging.ts"
+    ],
+    "application": [
+      "access-command-contract.ts",
+      "access-commands.ts",
+      "audit-api.ts",
+      "audit-events.ts",
+      "audit-read-models.ts",
+      "background-tasks.ts",
+      "command-request.ts",
+      "console-queries.ts",
+      "console-query-contract.ts",
+      "console-query.ts",
+      "control-queries.ts",
+      "control-query-contract.ts",
+      "control.ts",
+      "errors.ts",
+      "forward-command-contract.ts",
+      "forward-commands.ts",
+      "forward-diagnostic-api.ts",
+      "forward-diagnostics.ts",
+      "forward-probe-api.ts",
+      "forward-probe-plans.ts",
+      "forward-probes.ts",
+      "forward-telemetry.ts",
+      "host-telemetry.ts",
+      "ingress-deployment-api.ts",
+      "ingress-deployments.ts",
+      "ingress-group-api.ts",
+      "ingress-groups.ts",
+      "ingress-migration-api.ts",
+      "ingress-migrations.ts",
+      "management-read-models.ts",
+      "native-driver-contract.ts",
+      "native-drivers.ts",
+      "native-tunnel-api.ts",
+      "native-tunnels.ts",
+      "node-command-contract.ts",
+      "node-management.ts",
+      "node-observation-contract.ts",
+      "node-observations.ts",
+      "node-telemetry.ts",
+      "notification-api.ts",
+      "notification-deliveries.ts",
+      "notification-delivery-values.ts",
+      "notification-destination.ts",
+      "notification-endpoint-storage-values.ts",
+      "notification-endpoint-values.ts",
+      "notification-endpoints.ts",
+      "notification-outbox-storage-values.ts",
+      "observation-service-api.ts",
+      "observation-service-storage-values.ts",
+      "observation-service-values.ts",
+      "observation-services.ts",
+      "path-binding-api.ts",
+      "path-bindings.ts",
+      "path-group-api.ts",
+      "path-groups.ts",
+      "path-publication-api.ts",
+      "path-publications.ts",
+      "path-template-api.ts",
+      "path-templates.ts",
+      "ports.ts",
+      "probe-claims.ts",
+      "probe-delivery.ts",
+      "probe-history-api.ts",
+      "probe-instance-registry.ts",
+      "probe-instance-storage-values.ts",
+      "probe-instances.ts",
+      "probe-machine-api.ts",
+      "probe-machine-authorization.ts",
+      "probe-negotiation.ts",
+      "probe-observation-services.ts",
+      "probe-permit-storage-values.ts",
+      "probe-permits.ts",
+      "probe-plan-storage-values.ts",
+      "probe-plan-values.ts",
+      "probe-plans.ts",
+      "probe-qualification-storage-values.ts",
+      "probe-results.ts",
+      "probe-run-storage-values.ts",
+      "probe-run-values.ts",
+      "probe-runs.ts",
+      "probe-services.ts",
+      "probe-telemetry.ts",
+      "probe-type-qualifications.ts",
+      "probe-types.ts",
+      "relay-query-contract.ts",
+      "request-lifecycle.ts",
+      "station-alert-api.ts",
+      "station-alert-storage-values.ts",
+      "station-alert-values.ts",
+      "station-alerts.ts",
+      "telemetry-api.ts",
+      "telemetry-rollup-storage-values.ts",
+      "telemetry-rollups.ts",
+      "transport-grant-contract.ts",
+      "transport-grants.ts",
+      "transport-queries.ts",
+      "transport-query-contract.ts",
+      "tunnel-queries.ts",
+      "tunnel-query-contract.ts"
+    ]
+  },
+  "browser": [
+    {
+      "file": "probe.js",
+      "exports": [
+        "initProbeConsole"
+      ]
+    },
+    {
+      "file": "probe-runs.js",
+      "exports": [
+        "initProbeRuns"
+      ]
+    },
+    {
+      "file": "probe-plans.js",
+      "exports": [
+        "initProbePlans"
+      ]
+    },
+    {
+      "file": "transport-console.js",
+      "exports": [
+        "initTransportConsole"
+      ]
+    },
+    {
+      "file": "rule-console.js",
+      "exports": [
+        "initRuleConsole"
+      ]
+    },
+    {
+      "file": "tunnel-console.js",
+      "exports": [
+        "initTunnelConsole"
+      ]
+    },
+    {
+      "file": "observation-services.js",
+      "exports": [
+        "initObservationServices"
+      ]
+    },
+    {
+      "file": "path-templates.js",
+      "exports": [
+        "initPathTemplates",
+        "initPathSwitch"
+      ]
+    },
+    {
+      "file": "path-groups.js",
+      "exports": [
+        "initPathGroups"
+      ]
+    },
+    {
+      "file": "path-publications.js",
+      "exports": [
+        "initPathPublications"
+      ]
+    },
+    {
+      "file": "ingress-groups.js",
+      "exports": [
+        "initIngressGroups"
+      ]
+    },
+    {
+      "file": "ingress-migrations.js",
+      "exports": [
+        "initIngressMigrations"
+      ]
+    },
+    {
+      "file": "forward-diagnostics.js",
+      "exports": [
+        "initForwardDiagnostics"
+      ]
+    },
+    {
+      "file": "audit-console.js",
+      "exports": [
+        "initAuditConsole"
+      ]
+    },
+    {
+      "file": "station-alerts.js",
+      "exports": [
+        "initStationAlerts"
+      ]
+    },
+    {
+      "file": "notification-endpoints.js",
+      "exports": [
+        "initNotificationEndpoints"
+      ]
+    },
+    {
+      "file": "notification-deliveries.js",
+      "exports": [
+        "initNotificationDeliveries"
+      ]
+    },
+    {
+      "file": "telemetry-console.js",
+      "exports": [
+        "initTelemetryConsole"
+      ]
+    },
+    {
+      "file": "forward-telemetry-console.js",
+      "exports": [
+        "initForwardTelemetryConsole"
+      ]
+    },
+    {
+      "file": "host-telemetry-console.js",
+      "exports": [
+        "initHostTelemetryConsole"
+      ]
+    },
+    {
+      "file": "probe-telemetry-console.js",
+      "exports": [
+        "initProbeTelemetryConsole"
+      ]
+    },
+    {
+      "file": "telemetry-aggregate-console.js",
+      "exports": [
+        "initTelemetryAggregateConsole"
+      ]
+    }
+  ]
+}

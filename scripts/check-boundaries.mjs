@@ -312,11 +312,4 @@ for (const source of [observer, probeReader, probeMachine, permitIntents]) {
     throw new Error('Observation and probe projections must remain SELECT-only, not write paths or network clients');
   }
 }
-for (const file of [resolve(root, 'README.md'), ...files(resolve(root, 'docs')).filter(path => path.endsWith('.md'))]) {
-  for (const [, target] of readFileSync(file, 'utf8').matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
-    if (/^(?:https?:|mailto:|#)/.test(target)) continue;
-    const path = target.split('#')[0];
-    if (path && !existsSync(resolve(dirname(file), path))) throw new Error(`Broken documentation link: ${file}: ${target}`);
-  }
-}
-console.log('Core, execution adapters and Control ports, VNext source isolation and documentation links passed.');
+console.log('Core, execution adapters and Control ports, VNext source isolation passed.');

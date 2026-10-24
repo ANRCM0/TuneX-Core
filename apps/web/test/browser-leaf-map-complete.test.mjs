@@ -20,17 +20,19 @@ const leaves = [
   ['telemetry-aggregate-console.js', ['initTelemetryAggregateConsole']],
 ];
 
-test('all twenty-two documented browser leaves retain exact old exports real consumers and explicit per-file roles', async () => {
+test('all twenty-two declared browser leaves retain exact old exports real consumers and explicit per-file roles', async () => {
   const inventory = JSON.parse(await readFile(new URL('../../../docs/architecture/foundation-boundaries-v1.json', import.meta.url), 'utf8'));
-  const document = await readFile(new URL('../../../docs/architecture/browser-native-leaf-inventory-v1.md', import.meta.url), 'utf8');
+  const declared = JSON.parse(await readFile(new URL('../../../docs/architecture/entrypoint-inventory-v1.json', import.meta.url), 'utf8')).browser;
+  assert.equal(declared.length, 22);
   const main = await readFile(new URL('../app.js', import.meta.url), 'utf8'), mainImports = sourceReferences('apps/web/app.js', main);
   assert.equal(leaves.length, 22); assert.equal(leaves.reduce((count, [, names]) => count + names.length, 0), 23);
   for (const [file, names] of leaves) {
     const path = 'apps/web/' + file, source = await readFile(new URL('../' + file, import.meta.url), 'utf8');
     const module = await import(new URL('../' + file, import.meta.url).href);
     assert.deepEqual(Object.keys(module).sort(), [...names].sort(), path);
-    for (const name of names) { assert.equal(module[name].length, 1, name); assert.ok(document.includes(name), name); }
-    assert.ok(document.includes(file), file); assert.ok(mainImports.includes('./' + file), file + ' actual composition consumer');
+    assert.deepEqual(declared.find(entry => entry.file === file)?.exports, names, file);
+    for (const name of names) assert.equal(module[name].length, 1, name);
+    assert.ok(mainImports.includes('./' + file), file + ' actual composition consumer');
     const classification = classifySource(path, inventory);
     if (file === 'rule-console.js') {
       assert.equal(classification.binding, true);
