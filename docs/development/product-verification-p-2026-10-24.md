@@ -73,6 +73,23 @@ routes replay through the same handoff wrapper and uses a boolean identity
 assertion so a failure never expands a database connection in the public log.
 The original native insert/dedup, policy and transaction assertions remain.
 
+Fixture correction `a4d9cff` ran baseline `40066964954` and packaging
+`40066964957`. Three-node job `120792371854` again failed its original six-command
+TCP workflow before the new alert case. This is retained as an unresolved
+availability/locking observation, not hidden by another blind rerun.
+
+The next bounded Actions diagnostic labels original Runtime hello/snapshot/report/
+tick and Node relay-credential operations through public method wrappers, keeping
+their receivers, arguments and result/errors. It uses public connection thread
+IDs and the existing separate fixture admin connection to observe at most 32
+lock-wait snapshots after a Probe SQL call has waited 75ms, at most 12 edges per
+snapshot. Only closed owner/table/index/mode labels enter the existing 100-entry
+trace; SQL text/values, lock data, credentials and raw connections do not.
+Timers are cleared on query completion and sampling is enabled only during the
+controlled Echo case. Metadata reads do not change authorization or lock modes;
+their timing overhead is not a performance improvement or capacity proof. The
+diagnostic must identify the blocking owner before a production repair is chosen.
+
 ## Latest Complete Verification - 245d438
 
 The corrected FR-0043 Node Snapshot reader candidate is

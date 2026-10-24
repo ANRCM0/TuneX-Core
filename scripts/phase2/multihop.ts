@@ -43,6 +43,7 @@ let completedEvidence:Record<string,unknown>|undefined;
 let consoleEvidence:unknown;
 const echoTrace:Record<string,unknown>[]=[];
 const appendEcho=(sample:Record<string,unknown>)=>{echoTrace.push(sample);if(echoTrace.length>100)echoTrace.shift();};
+let captureEchoLocks=false;
 function pass(text:string){checks.push(text);console.log('PASS '+text);}
 async function until(action:()=>Promise<boolean>,label:string,timeout=120000){const start=Date.now();while(Date.now()-start<timeout){if(await action())return;await new Promise(r=>setTimeout(r,150));}throw Error('Multi-hop acceptance timed out: '+label);}
 async function call(method:string,path:string,input?:unknown,key:string=randomUUID()):Promise<{status:number;body:any}>{
@@ -86,20 +87,52 @@ try{
     // Keep only public outcome metadata; never persist credential, nonce or service material.
     type SqlTiming={poolWaitMs:number;statements:number;sqlMs:number;slow:{table:string;operation:string;lock:string;durationMs:number}[]};
     const sqlContext=new AsyncLocalStorage<SqlTiming>(),instrumented=new WeakSet<object>();
+    const owners=new Map<number,string>(),ownerContext=new AsyncLocalStorage<string>();let lockSamples=0;
+    const owned=(target:object,prefix:string,names:string[])=>{
+      const methods=target as Record<string,(...args:any[])=>Promise<any>>;
+      for(const name of names){const original=methods[name]!;methods[name]=(...args:any[])=>ownerContext.run(prefix+'-'+name,()=>original.apply(target,args));}
+    };
+    owned(control.runtime,'runtime',['hello','snapshot','report','tick']);
+    owned(control.control.nodes,'node',['relayCredential']);
+    const lockOwners=async()=>{
+      const [waits]=await admin.query<any[]>(`SELECT r.OBJECT_NAME requested_table,r.INDEX_NAME requested_index,r.LOCK_MODE requested_mode,
+          b.OBJECT_NAME blocking_table,b.INDEX_NAME blocking_index,b.LOCK_MODE blocking_mode,
+          rt.PROCESSLIST_ID requested_connection,bt.PROCESSLIST_ID blocking_connection
+        FROM performance_schema.data_lock_waits w
+        JOIN performance_schema.data_locks r ON r.ENGINE=w.ENGINE AND r.ENGINE_LOCK_ID=w.REQUESTING_ENGINE_LOCK_ID
+        JOIN performance_schema.data_locks b ON b.ENGINE=w.ENGINE AND b.ENGINE_LOCK_ID=w.BLOCKING_ENGINE_LOCK_ID
+        LEFT JOIN performance_schema.threads rt ON rt.THREAD_ID=w.REQUESTING_THREAD_ID
+        LEFT JOIN performance_schema.threads bt ON bt.THREAD_ID=w.BLOCKING_THREAD_ID
+        WHERE r.OBJECT_SCHEMA=? LIMIT 12`,[database]);
+      const tables=['runtime_nodes','nodes','node_credentials','node_grants','forwards','relay_deployments','scope_members','scopes',
+        'snapshots','port_slots','probe_permits','probe_instances','probe_type_qualifications','probe_permit_budget'];
+      const mode=(value:unknown)=>typeof value==='string'&&/^[A-Z_,]{1,40}$/.test(value)?value:'other';
+      const value=(row:any,prefix:string)=>({owner:owners.get(Number(row[prefix+'_connection']))??'other',
+        table:tables.includes(row[prefix+'_table'])?row[prefix+'_table']:'other',
+        index:row[prefix+'_index']==='PRIMARY'?'PRIMARY':'other',mode:mode(row[prefix+'_mode'])});
+      if(waits.length)appendEcho({stage:'lock-wait',waits:waits.map(row=>({request:value(row,'requested'),blocker:value(row,'blocking')}))});
+    };
     const pool=control.db.pool,connect=pool.getConnection.bind(pool);
     pool.getConnection=async()=>{
       const started=Date.now(),connection=await connect(),timing=sqlContext.getStore();
+      owners.set(connection.threadId,ownerContext.getStore()??'other');
       if(timing)timing.poolWaitMs+=Date.now()-started;
       if(!instrumented.has(connection)){
         instrumented.add(connection);
+        const release=connection.release.bind(connection);
+        connection.release=()=>{owners.delete(connection.threadId);release();};
         const methods=connection as unknown as Record<'query'|'execute'|'beginTransaction'|'commit'|'rollback',(...args:any[])=>Promise<any>>;
         for(const method of ['query','execute','beginTransaction','commit','rollback'] as const){
           const original=methods[method].bind(connection);
           methods[method]=async(...args:any[])=>{
             const timing=sqlContext.getStore();if(!timing)return original(...args);
             const started=Date.now();
+            const sample=captureEchoLocks&&(method==='query'||method==='execute')?setTimeout(()=>{
+              if(captureEchoLocks&&lockSamples<32){lockSamples++;void lockOwners().catch(()=>appendEcho({stage:'lock-wait-unavailable'}));}
+            },75):undefined;
             try{return await original(...args);}
             finally{
+              if(sample)clearTimeout(sample);
               const durationMs=Date.now()-started,sql=typeof args[0]==='string'?args[0]:'';
               timing.statements++;timing.sqlMs+=durationMs;
               timing.slow.push({table:/\b(probe_permit_budget|probe_permits|probe_instances|probe_type_qualifications|runtime_nodes|nodes|node_credentials|forwards|relay_deployments|scope_members|scopes|snapshots|port_slots)\b/.exec(sql)?.[1]??'other',
@@ -119,7 +152,7 @@ try{
     const echo=control.control.probeEcho;
     const trace=<T>(stage:string,invoke:(node:string,fingerprint:string,epoch:number,input:unknown)=>Promise<T>)=>async(...args:Parameters<typeof invoke>):Promise<T>=>{
       const started=Date.now(),sql:SqlTiming={poolWaitMs:0,statements:0,sqlMs:0,slow:[]};
-      try{const result=await sqlContext.run(sql,()=>invoke(...args)),durationMs=Date.now()-started;
+      try{const result=await ownerContext.run('probe-'+stage,()=>sqlContext.run(sql,()=>invoke(...args))),durationMs=Date.now()-started;
         const offer=stage==='poll'?(result as {offer:{issuedAt:string;expiresAt:string}|null}).offer:null;
         if(stage!=='poll'||offer||durationMs>=200)appendEcho({stage,node:args[0],outcome:'accepted',durationMs,sql,
           ...(offer?{ageMs:Date.now()-Date.parse(offer.issuedAt),remainingMs:Date.parse(offer.expiresAt)-Date.now(),lifetimeMs:Date.parse(offer.expiresAt)-Date.parse(offer.issuedAt)}:{})});return result;}
@@ -174,10 +207,10 @@ try{
   const traffic=await probe(listenPort);assert.equal(traffic.tcp,true);assert.equal(traffic.udp,true);
   const [slots]=await control.db.pool.query<any[]>('SELECT node_id,protocol,port,fence FROM port_slots WHERE owner_id=?',[id]);assert.equal(slots.length,2*count);
   pass('Exact bidirectional TCP and UDP data crosses the fully activated path with two exclusive resources per Node');
-  if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress.nodeId,mode:'multihop',directory,listenPort:echoPort!,spec,call,diagnostics:()=>echoTrace.slice(-100),discovery:control.control.probeEcho,
+  if(productP){captureEchoLocks=true;try{for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress.nodeId,mode:'multihop',directory,listenPort:echoPort!,spec,call,diagnostics:()=>echoTrace.slice(-100),discovery:control.control.probeEcho,
       responseDelayMs:15,pathAlerts:forward=>verifyPathAlertOutbox({db:control!.db,auth:control!.control.identity,samples:control!.control.probePathObservations,actor:owner,scope,forward,directory}),
       qualified:async()=>{const [result]=await control!.db.pool.query<any[]>("SELECT COUNT(*) n FROM probe_type_qualifications q JOIN runtime_nodes r ON r.node_id=q.node_id AND r.session_epoch=q.session_epoch WHERE q.node_id=? AND q.state='qualified' AND q.echo_version=1 AND q.expires_at>?",[ingress.nodeId,Date.now()+2000]);return result[0].n===1;}
-  }))pass('P multihop '+check);
+  }))pass('P multihop '+check);}finally{captureEchoLocks=false;}}
   const [generation]=await control.db.pool.query<any[]>('SELECT node_id,snapshot_generation FROM runtime_nodes');
   await until(async()=>{const [r]=await control!.db.pool.query<any[]>('SELECT node_id,snapshot_generation FROM runtime_nodes');return r.every(n=>n.snapshot_generation>generation.find(p=>p.node_id===n.node_id).snapshot_generation);},'whole-Node lease renewal');
   assert.equal((await call('GET',resource+'/deployment')).body.deployment.generation,initial.generation);assert.equal((await probe(listenPort)).udp,true);
