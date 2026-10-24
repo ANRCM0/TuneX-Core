@@ -88,7 +88,7 @@ try{
  const [stage]=await control.db.pool.query<any[]>('SELECT generation,stage,body FROM relay_deployments WHERE forward_id=? ORDER BY generation DESC LIMIT 1',[created.body.forwardId]);assert.equal(stage[0].stage,'active');
  const healthy=await call('GET',`/api/v1/scopes/${scope}/forwards/${created.body.forwardId}`);assert.equal(healthy.body.applied.length,4);assert.equal(healthy.body.health.condition,'ready');assert.equal(new Set(healthy.body.applied.map((obs:any)=>obs.nodeId)).size,2);assert.ok(healthy.body.applied.every((obs:any)=>obs.forwardRevision===1));assert.deepEqual([...new Set(healthy.body.applied.map((obs:any)=>obs.role))].sort(),['relay-egress','relay-ingress']);
  pass('Encrypted Relay traffic: real API/Worker/two native Agents/target verify exact bidirectional TCP and UDP payload');
- if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress!.nodeId,mode:'relay',directory,listenPort:echoPort,spec,
+ if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress!.nodeId,mode:'relay',directory,listenPort:echoPort,spec,discovery:control.control.probeEcho,
     call:(method,path,input,key)=>call(method,`/api/v1/scopes/${scope}/`+path,input,key),tick:async()=>{await control!.runtime.tick();},
     qualified:async()=>{const [result]=await control!.db.pool.query<any[]>("SELECT COUNT(*) n FROM probe_type_qualifications q JOIN runtime_nodes r ON r.node_id=q.node_id AND r.session_epoch=q.session_epoch WHERE q.node_id=? AND q.state='qualified' AND q.echo_version=1 AND q.expires_at>?",[ingress!.nodeId,Date.now()+2000]);return result[0].n===1;}
  }))pass('P Relay '+check);

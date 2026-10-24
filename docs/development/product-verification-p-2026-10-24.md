@@ -139,15 +139,41 @@ status/result outcomes and receipt state, preserving original method receivers
 and failure identity. It stores no credential, service key, nonce or request
 body. No path pass is claimed from these failed artifacts.
 
-## Fifth Candidate In Progress
+## Fifth And Sixth Candidate Findings
 
 Head `b93c9fb4b964891d564425935f9494be5290db79`, tree
 `0f12ecc9a3dcac4adbf848b5c062530d1ed70b7f`: baseline `40045886863`, packaging
-`40045886873`. Packaging completed successfully. Baseline jobs are pending or
-running; consult final conclusions before acceptance. Local Go test-binary
+`40045886873`. Packaging and the complete contract job passed. The baseline was
+cancelled after three-node Echo failed with all six receipts still issued.
+Its diagnostic SQL attempted unsigned `snapshot_generation - 7`, masking the
+original failure before the failure artifact could be written. The fixture now
+casts to a signed value before applying the zero floor, and independently
+preserves redacted P trace metadata. Local Go test-binary
 compilation passed without executing the binary. Local TypeScript checking
 could not start because dependencies are absent; Actions remains the execution
 source. No local functional/MySQL/network/browser/container test ran.
+
+Head `99f5d1645025cf0319172e1f45ce433acdaebf78`, tree
+`aed922d49e00e68d2bfb9ed934558fb444fc84c2`: packaging `40046394665` and contract
+job `120729313245` passed; baseline `40046394624` was cancelled after failures.
+The real Probe fixture passed the original zero-payload workflow, historical
+Chromium receipt and non-executing replay. Its P Console JSON passed actual
+member creation, owner/viewer isolation, self-token rotation with old bearer
+refusal, desktop/mobile views and the six-round refresh/page-change cancellation.
+Direct Echo then hit a fixture-only matrix-version mismatch: Direct deliberately
+retains capabilityVersion 1 while path modes use 2. Its assertion is corrected
+without changing the product matrix contract.
+
+The three-node artifact now shows successful original qualification and
+server-side nonempty poll responses but no claim. The next candidate adds only
+opt-in diagnostic stage names at local v4 poll refusal, preserving failure
+identity, limits and authorization. These observations are not a path pass.
+
+## Seventh Candidate In Progress
+
+Head `ac99932f08e5dda84b83184084f57e55723adee9`, tree
+`c76e4b105df1d356900b1d4d86971aca14279cb8`: baseline `40047203942`, packaging
+`40047203910`. Both require final conclusions and artifact review.
 
 ## Acceptance Limits
 

@@ -138,7 +138,7 @@ try{
   const traffic=await probe(listenPort);assert.equal(traffic.tcp,true);assert.equal(traffic.udp,true);
   const [slots]=await control.db.pool.query<any[]>('SELECT node_id,protocol,port,fence FROM port_slots WHERE owner_id=?',[id]);assert.equal(slots.length,2*count);
   pass('Exact bidirectional TCP and UDP data crosses the fully activated path with two exclusive resources per Node');
-  if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress.nodeId,mode:'multihop',directory,listenPort:echoPort!,spec,call,diagnostics:()=>echoTrace.slice(-100),
+  if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress.nodeId,mode:'multihop',directory,listenPort:echoPort!,spec,call,diagnostics:()=>echoTrace.slice(-100),discovery:control.control.probeEcho,
       qualified:async()=>{const [result]=await control!.db.pool.query<any[]>("SELECT COUNT(*) n FROM probe_type_qualifications q JOIN runtime_nodes r ON r.node_id=q.node_id AND r.session_epoch=q.session_epoch WHERE q.node_id=? AND q.state='qualified' AND q.echo_version=1 AND q.expires_at>?",[ingress.nodeId,Date.now()+2000]);return result[0].n===1;}
   }))pass('P multihop '+check);
   const [generation]=await control.db.pool.query<any[]>('SELECT node_id,snapshot_generation FROM runtime_nodes');

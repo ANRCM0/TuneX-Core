@@ -9,13 +9,7 @@ import (
 	"github.com/tunex/vnext/agent/internal/probeecho"
 )
 
-func (runner *Runner) pollProbeEcho(ctx context.Context, session *registeredProbe) (offerResult *probeDeliveryOffer, failure error) {
-	stage := "current"
-	defer func() {
-		if failure != nil && runner.options.Diagnostics != "" && runner.options.ProbePathEcho {
-			runner.localLog().Warn("Probe Echo poll refused at", stage)
-		}
-	}()
+func (runner *Runner) pollProbeEcho(ctx context.Context, session *registeredProbe) (*probeDeliveryOffer, error) {
 	runner.mutex.Lock()
 	if ctx.Err() != nil || !runner.probeEchoCurrentLocked(session) || runner.hello.Policy.MaxClockSkewSeconds > 2 {
 		runner.mutex.Unlock()
@@ -36,17 +30,14 @@ func (runner *Runner) pollProbeEcho(ctx context.Context, session *registeredProb
 	if err != nil {
 		return nil, err
 	}
-	stage = "exchange"
 	raw, started, err := runner.probeDeliveryExchangeBounded(ctx, session, "/agent/v3/probe/echo/poll", request, 32768)
 	if err != nil {
 		return nil, err
 	}
-	stage = "decode"
 	ack, err := nativeexecution.DecodeProbeEchoPoll(request, raw)
 	if err != nil {
 		return nil, err
 	}
-	stage = "freshness"
 	freshUntil, err := probeFreshUntilWith(runner.scheduler(), session, started, ack.ObservedAt, ack.ServerTime)
 	if err != nil {
 		return nil, err
@@ -59,18 +50,15 @@ func (runner *Runner) pollProbeEcho(ctx context.Context, session *registeredProb
 		}
 		return nil, nil
 	}
-	stage = "descriptor"
 	offer := ack.Offer
 	descriptor, err := probeecho.DescriptorFor(offer.Measurement)
 	if err != nil || descriptor != offer.Descriptor {
 		return nil, probe.ErrDenied
 	}
-	stage = "context"
 	service, echoInput, err := probeEchoOfferInputs(session, *offer)
 	if err != nil {
 		return nil, err
 	}
-	stage = "binding"
 	runner.mutex.Lock()
 	defer runner.mutex.Unlock()
 	if ctx.Err() != nil || !runner.probeEchoCurrentLocked(session) || !runner.scheduler().Now().Before(freshUntil) {
@@ -80,12 +68,10 @@ func (runner *Runner) pollProbeEcho(ctx context.Context, session *registeredProb
 		return nil, probe.ErrReplay
 	}
 	binding := probeTypesBinding(offer.Binding)
-	stage = "target"
 	target, err := runner.probeEchoTargetLocked(binding, offer.Measurement, service, echoInput)
 	if err != nil {
 		return nil, err
 	}
-	stage = "deadline"
 	expires, _ := nativeexecution.ParseProbeWireTime(offer.ExpiresAt)
 	server, _ := nativeexecution.ParseProbeWireTime(ack.ServerTime)
 	remaining := expires.Sub(server) - skew

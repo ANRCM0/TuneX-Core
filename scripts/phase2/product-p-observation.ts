@@ -6,6 +6,7 @@ import { createServer } from 'node:net';
 import type { Socket } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { digest } from '@tunex/contracts';
+import type { ProbeEchoPollResponse } from '@tunex/contracts';
 
 type Call = (method:string,path:string,input?:unknown,key?:string)=>Promise<{status:number;body:any}>;
 interface Options {
@@ -13,6 +14,7 @@ interface Options {
     mode:'direct'|'relay'|'multihop';directory:string;qualified:()=>Promise<boolean>;tick?:()=>Promise<void>;
     usage?:{actorId:string;display:()=>Promise<void>};
     diagnostics?:()=>unknown;
+    discovery:{poll(node:string,fingerprint:string,epoch:number,input:unknown):Promise<ProbeEchoPollResponse>};
 }
 
 // Disposable loopback responder: signs only fixed-size, current requests for the
@@ -61,6 +63,13 @@ async function echoFixture() {
 export async function verifyControlledEcho(options:Options) {
     if(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true')throw Error('Product P network acceptance is Actions-only');
     const fixture=await echoFixture(),attempts:Record<string,unknown>[]=[],checks:string[]=[];
+    const discovery=options.discovery,originalPoll=discovery.poll;
+    let emptySequence=0,emptyAt=0;
+    discovery.poll=async(...args)=>{
+        const result=await originalPoll.apply(discovery,args);
+        if(args[0]===options.nodeId&&result.offer===null){emptySequence++;emptyAt=Date.now();}
+        return result;
+    };
     let usageSample:unknown=null;
     let forwardId='',created=false,scenarioPassed=false,conclusion:'passed'|'failed'='failed';
     const serviceId='p-echo-'+options.mode,call=options.call;
@@ -88,12 +97,18 @@ export async function verifyControlledEcho(options:Options) {
         await wait(async()=>{const result=await call('GET','forwards/'+forwardId);return result.body.lastOperation?.status==='succeeded'&&result.body.health?.condition==='ready';},'actual Forward activation');
         await wait(options.qualified,'current Echo qualification');
         const matrix=await call('GET','forwards/'+forwardId+'/probe-capabilities');
-        assert.equal(matrix.status,200);assert.equal(matrix.body.capabilityVersion,options.mode==='direct'?1:2);assert.equal(matrix.body.items.length,7);assert.equal(matrix.body.mode,options.mode);
+        assert.equal(matrix.status,200);assert.equal(matrix.body.capabilityVersion,options.mode==='direct'?1:2);assert.equal(matrix.body.items.length,options.mode==='direct'?5:7);assert.equal(matrix.body.mode,options.mode);
         for(const protocol of ['tcp','udp'] as const) {
             const kind=protocol+(options.mode==='direct'?'-ingress-echo':'-path-echo');
             let success=false;
             for(let ordinal=0;ordinal<6;ordinal++) {
                 await wait(options.qualified,'fresh Echo qualification');
+                // Align a new explicit command with the next original one-second
+                // poll. Keep the two-second permit and clock-skew deduction intact.
+                const previous=emptySequence,observeUntil=Date.now()+5000;
+                while(emptySequence===previous&&Date.now()<observeUntil)await sleep(10);
+                assert.ok(emptySequence>previous,'No actual empty Echo poll observed before the next explicit command');
+                await sleep(Math.max(0,emptyAt+650-Date.now()));
                 const key=randomUUID(),input={version:1,kind,expectedRevision:1,timeoutMs:1000,service};
                 const issued=await call('POST','forwards/'+forwardId+'/probes',input,key);
                 if(issued.status!==202){
@@ -146,6 +161,7 @@ export async function verifyControlledEcho(options:Options) {
             }
             if(scenarioPassed)conclusion='passed';
         } finally {
+            discovery.poll=originalPoll;
             await fixture.close();
             await writeFile(options.directory+'/product-p-echo-'+options.mode+'.json',JSON.stringify({conclusion,mode:options.mode,checks,attempts,usageSample,diagnostics:options.diagnostics?.(),
                 topology:'native Agent processes and a disposable signed responder on one hosted Actions runner',physicalHosts:false,

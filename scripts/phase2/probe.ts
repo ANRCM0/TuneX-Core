@@ -233,7 +233,7 @@ try {
     passed('Real poll/claim/watch/zero-payload connect/report commits one result; lost-client replay and spent mTLS claim cannot reexecute');
     if(productP){
         if(browserEnabled)for(const check of await verifyProductConsole({url:`https://127.0.0.1:${control.port}`,scope,token,directory}))passed('P Console '+check);
-        for(const check of await verifyControlledEcho({scopeId:scope,nodeId,mode:'direct',directory,listenPort:ingressPorts.at(-1)!,spec:{},
+        for(const check of await verifyControlledEcho({scopeId:scope,nodeId,mode:'direct',directory,listenPort:ingressPorts.at(-1)!,spec:{},discovery:control.control.probeEcho,
             ...(browserEnabled?{usage:{actorId:actor,display:()=>verifyProductUsageConsole({url:`https://127.0.0.1:${control!.port}`,scope,token,directory},nodeId,actor)}}:{}),
             call:(method,path,input,key)=>call(method,`/api/v1/scopes/${scope}/`+path,input,key),
             tick:async()=>{await control!.runtime.tick();},qualified:async()=>{
