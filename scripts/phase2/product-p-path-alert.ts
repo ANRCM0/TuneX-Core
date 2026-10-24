@@ -35,7 +35,7 @@ export async function verifyPathAlertOutbox(options:Options):Promise<string[]> {
         (await rows<{n:number}>(db.pool,`SELECT COUNT(*) n FROM \`${table}\``))[0]!.n));
     class FaultOutbox extends MySqlNotificationDeliveries {
         override async insert(tx:Transaction,scopeId:string,value:NotificationDelivery,at:number) {
-            assert.equal(tx,handoffTx,'original path alert transaction reaches the real outbox');
+            assert.ok(tx===handoffTx,'original path alert transaction reaches the real outbox');
             const outcome=await super.insert(tx,scopeId,value,at);outcomes.push(outcome);
             if(failInsert)throw failure;
             return outcome;
@@ -90,7 +90,7 @@ export async function verifyPathAlertOutbox(options:Options):Promise<string[]> {
         const queued=(await rows<{id:string}>(db.pool,'SELECT id FROM notification_deliveries WHERE scope_id=? AND policy_id=?',[scope,policyId]))[0]!;
         assert.ok(queued);
         await db.transaction(async tx=>{await store.lockScope(tx,scope);const policy=await store.policy(tx,scope,policyId,true);
-            assert.ok(policy);await deliveries.enqueueIn(tx,scope,policy,events[0]!,events[0]!.occurredAt);});
+            assert.ok(policy);await handoff.enqueueIn(tx,scope,policy,events[0]!,events[0]!.occurredAt);});
         assert.deepEqual(outcomes,['inserted','inserted','duplicate']);
         assert.equal((await rows(db.pool,'SELECT id FROM notification_deliveries WHERE scope_id=? AND policy_id=?',[scope,policyId])).length,1);
         checks.push('Actual path event payload persists once and immutable-event replay deduplicates the original outbox');

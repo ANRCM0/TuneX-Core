@@ -60,6 +60,19 @@ payload size, transaction, authority or deadline. A regression checks correct
 and opposite target kinds for all six rules, closed fields and exact v1 wire
 order; the unchanged new native SQL case must now reach the real outbox insert.
 
+Repair `b6b8627` ran baseline `40066530381` and packaging `40066530200`.
+Three-node job `120791098697` accepted the actual signed 35ms UDP sample and
+the corrected parser reached real outbox insertion. The deliberate first
+post-insert error rolled back event/state and all seven notification tables;
+the next transaction inserted successfully. The following duplicate replay
+then failed the fixture's transaction identity assertion because that replay
+called deliveries directly without entering the tracing handoff wrapper.
+Artifact `12549458114` records both inserts and the completed rollback check;
+this partial result does not accept the whole candidate. The fixture repair
+routes replay through the same handoff wrapper and uses a boolean identity
+assertion so a failure never expands a database connection in the public log.
+The original native insert/dedup, policy and transaction assertions remain.
+
 ## Latest Complete Verification - 245d438
 
 The corrected FR-0043 Node Snapshot reader candidate is
