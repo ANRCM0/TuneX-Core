@@ -138,7 +138,7 @@ try{
   const traffic=await probe(listenPort);assert.equal(traffic.tcp,true);assert.equal(traffic.udp,true);
   const [slots]=await control.db.pool.query<any[]>('SELECT node_id,protocol,port,fence FROM port_slots WHERE owner_id=?',[id]);assert.equal(slots.length,2*count);
   pass('Exact bidirectional TCP and UDP data crosses the fully activated path with two exclusive resources per Node');
-  if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress.nodeId,mode:'multihop',directory,listenPort:echoPort!,spec,call,
+  if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress.nodeId,mode:'multihop',directory,listenPort:echoPort!,spec,call,diagnostics:()=>echoTrace.slice(-100),
       qualified:async()=>{const [result]=await control!.db.pool.query<any[]>("SELECT COUNT(*) n FROM probe_type_qualifications q JOIN runtime_nodes r ON r.node_id=q.node_id AND r.session_epoch=q.session_epoch WHERE q.node_id=? AND q.state='qualified' AND q.echo_version=1 AND q.expires_at>?",[ingress.nodeId,Date.now()+2000]);return result[0].n===1;}
   }))pass('P multihop '+check);
   const [generation]=await control.db.pool.query<any[]>('SELECT node_id,snapshot_generation FROM runtime_nodes');
@@ -221,7 +221,7 @@ try{
     // Keep only timing and instance identifiers, never wire bodies, credentials,
     // driver configuration or key material, in uploaded failure evidence.
     const readBody=(body:any)=>typeof body==='string'?JSON.parse(body):body;
-    const [storedSnapshots]=await control.db.pool.query<any[]>('SELECT s.node_id,s.generation,s.session_epoch,s.body FROM snapshots s JOIN runtime_nodes n ON n.node_id=s.node_id WHERE s.generation>=GREATEST(n.snapshot_generation-7,0) ORDER BY s.node_id,s.generation');
+    const [storedSnapshots]=await control.db.pool.query<any[]>('SELECT s.node_id,s.generation,s.session_epoch,s.body FROM snapshots s JOIN runtime_nodes n ON n.node_id=s.node_id WHERE s.generation>=GREATEST(CAST(n.snapshot_generation AS SIGNED)-7,0) ORDER BY s.node_id,s.generation');
     const snapshots=storedSnapshots.map(row=>{const body=readBody(row.body);return {nodeId:row.node_id,generation:row.generation,sessionEpoch:row.session_epoch,
       issuedAt:body.issuedAt,validUntil:body.validUntil,assignments:body.assignments.map((assignment:any)=>({forwardId:assignment.forwardId,
         assignmentId:assignment.assignmentId,deploymentGeneration:assignment.deploymentGeneration,bindingFence:assignment.bindingFence,phase:assignment.phase,role:assignment.role,protocol:assignment.protocol}))};});

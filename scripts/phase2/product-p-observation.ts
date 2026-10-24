@@ -12,6 +12,7 @@ interface Options {
     call:Call;scopeId:string;nodeId:string;listenPort:number;spec:Record<string,unknown>;
     mode:'direct'|'relay'|'multihop';directory:string;qualified:()=>Promise<boolean>;tick?:()=>Promise<void>;
     usage?:{actorId:string;display:()=>Promise<void>};
+    diagnostics?:()=>unknown;
 }
 
 // Disposable loopback responder: signs only fixed-size, current requests for the
@@ -146,7 +147,7 @@ export async function verifyControlledEcho(options:Options) {
             if(scenarioPassed)conclusion='passed';
         } finally {
             await fixture.close();
-            await writeFile(options.directory+'/product-p-echo-'+options.mode+'.json',JSON.stringify({conclusion,mode:options.mode,checks,attempts,usageSample,
+            await writeFile(options.directory+'/product-p-echo-'+options.mode+'.json',JSON.stringify({conclusion,mode:options.mode,checks,attempts,usageSample,diagnostics:options.diagnostics?.(),
                 topology:'native Agent processes and a disposable signed responder on one hosted Actions runner',physicalHosts:false,
                 responder:'test fixture only; no standalone delivery claim'},null,2));
         }

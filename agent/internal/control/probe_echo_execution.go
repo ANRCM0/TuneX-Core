@@ -148,6 +148,10 @@ func (execution *probeExecution) echoResultRequest() (probeecho.ResultRequest, e
 		value := *copy.Echo
 		copy.Echo = &value
 	}
+	if copy.TLS != nil {
+		value := *copy.TLS
+		copy.TLS = &value
+	}
 	return copy, nil
 }
 

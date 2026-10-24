@@ -114,6 +114,41 @@ field after persistence. The adapter now matches the existing response schema.
 All new/changed cases require another exact-source run. No local functional,
 MySQL, network, browser or container execution has been substituted for Actions.
 
+## Fourth Candidate Findings
+
+Head `3169b7dd30df0a812f6a97871794ad5cda0c9bc4`: packaging `40044185621`
+passed; baseline `40044185486` was cancelled after confirmed failures. The
+independent Windows, unsupported-platform, deployment-tools, Relay-isolation
+and four-node multihop jobs passed before cancellation; these results do not
+accept later source. The contract collector found UUID default-parameter type
+inference narrower than the shared fixture's string key contract. Explicit key
+annotations preserve the original request and replay values.
+
+Real Probe found original TCP connect results missing after enabling v4:
+the result builder required nonce evidence for every measurement. Native v4
+projection now retains original connect/ingress/TLS evidence and delegates nonce
+kinds to their original builder. Common result projection skips the old v1-only
+validator for a v4 receipt; the final closed v4 validator remains mandatory.
+Regression cases cover all seven measurement points, wrong family/evidence,
+injected TLS clock, mismatched pin and expired service context. The original
+legacy validator and existing result compatibility entry remain unchanged.
+
+Three-node signed Echo reached no responder and timed out waiting for fresh
+qualification. Its next fixture records only public qualification/poll/claim/
+status/result outcomes and receipt state, preserving original method receivers
+and failure identity. It stores no credential, service key, nonce or request
+body. No path pass is claimed from these failed artifacts.
+
+## Fifth Candidate In Progress
+
+Head `b93c9fb4b964891d564425935f9494be5290db79`, tree
+`0f12ecc9a3dcac4adbf848b5c062530d1ed70b7f`: baseline `40045886863`, packaging
+`40045886873`. Packaging completed successfully. Baseline jobs are pending or
+running; consult final conclusions before acceptance. Local Go test-binary
+compilation passed without executing the binary. Local TypeScript checking
+could not start because dependencies are absent; Actions remains the execution
+source. No local functional/MySQL/network/browser/container test ran.
+
 ## Acceptance Limits
 
 Source preparation is delivered in the [P ledger](product-readiness-stage-p-2026-10-24.md).
