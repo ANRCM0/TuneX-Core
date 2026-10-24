@@ -116,11 +116,13 @@ export async function verifyControlledEcho(options:Options) {
                     attempts.push({protocol,ordinal,refused:issued.body.code});await sleep(1100);continue;
                 }
                 assert.deepEqual(await call('POST','forwards/'+forwardId+'/probes',input,key),issued);
-                let receipt:any;
-                do {
-                    const result=await call('GET','probes/'+issued.body.probeId);assert.equal(result.status,200,JSON.stringify(result.body));receipt=result.body;
-                    if(receipt.result)break;await sleep(50);
-                }while(Date.now()<Date.parse(issued.body.expiresAt)+100);
+                // Historical receipt reads retain their original exclusive lock.
+                // Inspect once after the finite execution window instead of
+                // competing with the Agent's live claim/status/result exchanges.
+                await sleep(Math.max(0,Date.parse(issued.body.expiresAt)+50-Date.now()));
+                const observed=await call('GET','probes/'+issued.body.probeId);
+                assert.equal(observed.status,200,JSON.stringify(observed.body));const receipt=observed.body;
+                assert.equal(receipt.expired,true);
                 const received=fixture.seen.get(issued.body.challenge.invocationDigest)??0;
                 attempts.push({protocol,ordinal,probeId:issued.body.probeId,received,state:receipt.state,resultAccepted:!!receipt.result,
                     lifetimeMs:Date.parse(issued.body.expiresAt)-Date.parse(issued.body.issuedAt)});

@@ -292,6 +292,27 @@ both releases, and then permits the original clock update. It has not run
 locally. Corrective local TypeScript and source boundary checks passed; the
 successor still requires exact-source Actions execution.
 
+## Thirteenth Candidate And Historical Receipt Observation
+
+Head `18105af38f6a8924dd8423d662fb06087d8ea4b4`, tree
+`85c9d077f9f4f0a203bfc397bea390155db136d7`: baseline `40052224843`, packaging
+`40052224851`. Packaging passed; the contract collector passed before Go race
+finished, and Probe/Relay plus native Windows/deployment/unsupported jobs
+passed. The full job conclusions remain separate. Three-node nonempty poll
+timings fell to 112-161ms and original consumption occurred, but claim calls
+still sometimes exceeded 200ms. No signed path pass is inferred.
+
+The fixture was also querying historical permit receipts every 50ms during
+execution. That original management read intentionally retains an exclusive
+budget lock; this cadence adds active contention absent from the product's
+bounded ten-second refresh flow. The next fixture waits until the unchanged
+finite permit expires, then reads its retained historical receipt once. It
+still requires a stored signed result, exactly one responder request and the
+original expired same-key replay without reexecution. It asserts expired=true
+at that read. It neither extends result acceptance nor changes the production
+management read. Aggressive management-read contention is not accepted as a
+load result from this functional scenario; failed earlier artifacts remain.
+
 ## Acceptance Limits
 
 Source preparation is delivered in the [P ledger](product-readiness-stage-p-2026-10-24.md).
