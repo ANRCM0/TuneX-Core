@@ -180,6 +180,26 @@ result, registration and expiry bound are unchanged. This is not an acceptance
 of the failed calls or a heartbeat/load/latency guarantee. The successor needs
 its own exact-source Actions result.
 
+Head `b78d17543df25716652dd7f73a16bccbd4c3b61b`, tree
+`14a6e5bfb1e0178f60b7481208b9832f55991a06`, ran baseline `40057198297`
+and packaging `40057198430`. Packaging and contracts passed, and the real
+shared-resource SQL step passed again. Three-node job `120762996168` failed
+all six independent TCP commands: one consumed without a result, five remained
+issued, and no request reached the responder. The new artifact shows empty
+polls taking 241-946ms as well as a 388ms claim. Bounded empty observations did
+occur, so this is not only the earlier alignment/observation-wait defect.
+No signed TCP/UDP successor pass is inferred.
+
+The next diagnostic uses the existing Actions-only native fixture and the same
+public pool/connection methods. Per-call async context separates connection
+acquisition wait from SQL/begin/commit/rollback duration, retaining only counts
+and the five slowest closed statement families. Trace retention is capped at
+100 entries. SQL values, raw statements and private pool internals are never
+read into artifacts. Original methods retain their receiver, result/error
+identity and original transactions. This adds no production contract, capacity,
+retry, heartbeat or deadline change; it is needed to locate the measured delay
+before choosing an original-owner source repair.
+
 ## First Candidate Findings
 
 Baseline run `40041418761` and container run `40041418834` tested the initial

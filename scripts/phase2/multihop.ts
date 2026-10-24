@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -40,6 +41,7 @@ const agents:{nodeId:string;root:string;args:string[];process:ChildProcess;error
 let completedEvidence:Record<string,unknown>|undefined;
 let consoleEvidence:unknown;
 const echoTrace:Record<string,unknown>[]=[];
+const appendEcho=(sample:Record<string,unknown>)=>{echoTrace.push(sample);if(echoTrace.length>100)echoTrace.shift();};
 function pass(text:string){checks.push(text);console.log('PASS '+text);}
 async function until(action:()=>Promise<boolean>,label:string,timeout=120000){const start=Date.now();while(Date.now()-start<timeout){if(await action())return;await new Promise(r=>setTimeout(r,150));}throw Error('Multi-hop acceptance timed out: '+label);}
 async function call(method:string,path:string,input?:unknown,key:string=randomUUID()):Promise<{status:number;body:any}>{
@@ -81,14 +83,46 @@ try{
   control=await startControl(options);await control.control.identity.bootstrap(scope,owner,token);
   if(productP) {
     // Keep only public outcome metadata; never persist credential, nonce or service material.
+    type SqlTiming={poolWaitMs:number;statements:number;sqlMs:number;slow:{table:string;operation:string;lock:string;durationMs:number}[]};
+    const sqlContext=new AsyncLocalStorage<SqlTiming>(),instrumented=new WeakSet<object>();
+    const pool=control.db.pool,connect=pool.getConnection.bind(pool);
+    pool.getConnection=async()=>{
+      const started=Date.now(),connection=await connect(),timing=sqlContext.getStore();
+      if(timing)timing.poolWaitMs+=Date.now()-started;
+      if(!instrumented.has(connection)){
+        instrumented.add(connection);
+        const methods=connection as unknown as Record<'query'|'execute'|'beginTransaction'|'commit'|'rollback',(...args:any[])=>Promise<any>>;
+        for(const method of ['query','execute','beginTransaction','commit','rollback'] as const){
+          const original=methods[method].bind(connection);
+          methods[method]=async(...args:any[])=>{
+            const timing=sqlContext.getStore();if(!timing)return original(...args);
+            const started=Date.now();
+            try{return await original(...args);}
+            finally{
+              const durationMs=Date.now()-started,sql=typeof args[0]==='string'?args[0]:'';
+              timing.statements++;timing.sqlMs+=durationMs;
+              timing.slow.push({table:/\b(probe_permit_budget|probe_permits|probe_instances|probe_type_qualifications|runtime_nodes|nodes|node_credentials|forwards|relay_deployments|scope_members|scopes|snapshots|port_slots)\b/.exec(sql)?.[1]??'other',
+                operation:method==='beginTransaction'?'BEGIN':method==='commit'?'COMMIT':method==='rollback'?'ROLLBACK':
+                  /^\s*(SELECT|INSERT|UPDATE|DELETE|SET)\b/i.exec(sql)?.[1]?.toUpperCase()??'other',
+                lock:/FOR UPDATE/i.test(sql)?'exclusive':/FOR SHARE/i.test(sql)?'shared':'none',durationMs});
+              timing.slow.sort((a,b)=>b.durationMs-a.durationMs);timing.slow.length=Math.min(5,timing.slow.length);
+            }
+          };
+        }
+      }
+      return connection;
+    };
     const registry=control.control.probeEchoRegistry,handle=registry.handle.bind(registry);
-    registry.handle=async(...args)=>{try{const result=await handle(...args);echoTrace.push({stage:'qualification',node:args[0],action:result.action,qualified:result.qualified});return result;}
-      catch(error){echoTrace.push({stage:'qualification',node:args[0],code:(error as {code?:string}).code??'error'});throw error;}};
+    registry.handle=async(...args)=>{try{const result=await handle(...args);appendEcho({stage:'qualification',node:args[0],action:result.action,qualified:result.qualified});return result;}
+      catch(error){appendEcho({stage:'qualification',node:args[0],code:(error as {code?:string}).code??'error'});throw error;}};
     const echo=control.control.probeEcho;
     const trace=<T>(stage:string,invoke:(node:string,fingerprint:string,epoch:number,input:unknown)=>Promise<T>)=>async(...args:Parameters<typeof invoke>):Promise<T>=>{
-      const started=Date.now();
-      try{const result=await invoke(...args);if(stage!=='poll'||result&&typeof result==='object'&&'offer' in result&&result.offer){const offer=stage==='poll'?(result as {offer:{issuedAt:string;expiresAt:string}}).offer:null;echoTrace.push({stage,node:args[0],outcome:'accepted',durationMs:Date.now()-started,...(offer?{ageMs:Date.now()-Date.parse(offer.issuedAt),remainingMs:Date.parse(offer.expiresAt)-Date.now(),lifetimeMs:Date.parse(offer.expiresAt)-Date.parse(offer.issuedAt)}:{})});}return result;}
-      catch(error){echoTrace.push({stage,node:args[0],code:(error as {code?:string}).code??'error'});throw error;}
+      const started=Date.now(),sql:SqlTiming={poolWaitMs:0,statements:0,sqlMs:0,slow:[]};
+      try{const result=await sqlContext.run(sql,()=>invoke(...args)),durationMs=Date.now()-started;
+        const offer=stage==='poll'?(result as {offer:{issuedAt:string;expiresAt:string}|null}).offer:null;
+        if(stage!=='poll'||offer||durationMs>=200)appendEcho({stage,node:args[0],outcome:'accepted',durationMs,sql,
+          ...(offer?{ageMs:Date.now()-Date.parse(offer.issuedAt),remainingMs:Date.parse(offer.expiresAt)-Date.now(),lifetimeMs:Date.parse(offer.expiresAt)-Date.parse(offer.issuedAt)}:{})});return result;}
+      catch(error){appendEcho({stage,node:args[0],code:(error as {code?:string}).code??'error',durationMs:Date.now()-started,sql});throw error;}
     };
     echo.poll=trace('poll',echo.poll.bind(echo));echo.claim=trace('claim',echo.claim.bind(echo));
     echo.status=trace('status',echo.status.bind(echo));echo.result=trace('result',echo.result.bind(echo));
