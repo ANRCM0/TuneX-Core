@@ -84,7 +84,7 @@ export class ResourceUsage<Tx> implements ResourceUsageApi,ResourceUsageReader<T
     }
     async consumption(tx:Tx,record:SharedResourceLimitRecord):Promise<ResourceUsageConsumption> {
         const o=this.options,now=o.now(),sample=await o.store.sample(tx,record.bucketId);
-        const periodStatus=now<record.startsAt?'future':now>=record.endsAt?'ended':'active';
+        const periodStatus:ResourceUsageConsumption['periodStatus']=now<record.startsAt?'future':now>=record.endsAt?'ended':'active';
         const base={source:'agent-protected-journal' as const,accounting:'conservative-precharge' as const,
             remainingMeaning:'upper-bound-at-sample' as const,periodStatus};
         if(!sample)return {...base,status:'unknown',usedBytes:null,remainingBytes:null,receivedAt:null,policyRevision:null,sessionEpoch:null,reportSequence:null};

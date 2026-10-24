@@ -53,6 +53,29 @@ ticket and path opt-in checks. Original registry/catalog cases remain intact.
 These repairs require a new exact-source Actions run; no local functional tests
 were executed.
 
+## Second Candidate Findings
+
+Head `3ebe3d87770b12dccb8eb961f8335402e341d1d1`, tree
+`285a82da718019cebe01f042a49c5c998d208b16`: baseline `40041851092` failed;
+container packaging `40041851130` completed successfully. This packaging result
+applies only to that head and is not image publication or acceptance of later
+repairs. The superseded first baseline concluded cancelled after its failures.
+
+The baseline exposed a remaining parameter property in ForwardProbePlans,
+type narrowing/import issues, independently declared HTTP/observation/Station
+types and composition fixtures needing explicit P migration, two missing L2
+source classifications, and a five-row renderer for the new seven-row matrix.
+Repairs retain the independent declarations and old failure/transaction cases.
+The native upgrade marker parser now recognizes 0045's equivalent MODIFY COLUMN
+ENUM syntax; old schema reader ceilings stay unchanged. The 0041 Agent fixture
+uses the current Control profile for the full current schema, without upgrading
+the Agent Journal profile or weakening older-reader refusal.
+
+Windows/Linux payload-owner fixtures now provide the one-second usage timeout
+and simulate the old Control's missing usage endpoint, so the original Journal,
+renewal and drain tests exercise extension failure without changing report ACKs.
+No P functional/MySQL/network/browser/container tests ran locally.
+
 ## Acceptance Limits
 
 Source preparation is delivered in the [P ledger](product-readiness-stage-p-2026-10-24.md).

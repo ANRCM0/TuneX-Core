@@ -10,7 +10,7 @@ interface PathNodes<Tx> {
     authorizedRelayNode(tx:Tx,actor:string,scope:string,node:string,role:NodeUseRole,forward?:ForwardValue):Promise<AuthorizedNodeFacts>;
 }
 export interface ProbePathAssignments<Tx> {assignments(tx:Tx,node:string):Promise<readonly RuntimeAssignment[]>}
-const unavailable=():never=>{throw new ControlError('PROBE_UNAVAILABLE',409,'Current complete active forwarding path required');};
+function unavailable():never {throw new ControlError('PROBE_UNAVAILABLE',409,'Current complete active forwarding path required');}
 
 /** Reads the original Relay owner; no duplicate route compiler or authority issuer. */
 export class ForwardPathProbePlans<Tx> implements ProbePathPlans<Tx> {
@@ -43,7 +43,7 @@ export class ForwardPathProbePlans<Tx> implements ProbePathPlans<Tx> {
             if(index===route.length-1&&!targetAllowed(context.config.endpoint.address,{...facts,allowMetadataTargets:false}))unavailable();
             const expected=(await this.relay.assignments(tx,node)).filter(a=>a.forwardId===forward.id&&a.protocol===protocol);
             const current=await this.published.read(tx,forward.scopeId,node);
-            if(!current||current.snapshot.nodeId!==node||current.snapshot.sessionEpoch!==current.sessionEpoch||expected.length!==1)unavailable();
+            if(!current||!current.bootId||current.snapshot.nodeId!==node||current.snapshot.sessionEpoch!==current.sessionEpoch||expected.length!==1)unavailable();
             const snapshot=current!.snapshot,candidates=snapshot.assignments.filter(a=>a.forwardId===forward.id&&a.protocol===protocol),assignment=candidates[0];
             if(candidates.length!==1||!assignment||assignment.phase!=='active'||assignment.forwardRevision!==forward.revision||
                 nativeValueDigest(assignment)!==nativeValueDigest(expected[0])||

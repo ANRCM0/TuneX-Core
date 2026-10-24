@@ -2,7 +2,7 @@
 
 P source additions (2026-10-24, unverified): `member-console.js` exports
 `memberListView`, `memberCommand`, `memberReceipt`, `initMemberConsole`;
-`account-credentials.js` exports `accountCredentialView`, `initAccountCredentials`;
+`account-credentials.js` exports `accountCredentialView`, `initAccountCredentials`, `requestAccountCredentials`;
 `task-workflow.js` exports `workflowSteps`, `createBoundedPageReads`, `batchProgress`.
 Each is an explicitly classified L2 presentation leaf. The original native
 console consumes these leaves; Path/Ingress batch leaves consume batchProgress.

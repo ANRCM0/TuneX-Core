@@ -11,7 +11,7 @@ import { requireProbeMachine } from './machine-policy.ts';
 import { parseProbeQualification, sameProbeQualificationInstance, requireProbeTypeQualification } from './qualification-policy.ts';
 import { probeEchoMeasurement } from './measurements.ts';
 
-const unavailable=():never=>{throw new ControlError('PROBE_PERMIT_UNAVAILABLE',409,'Current controlled Echo authority required');};
+function unavailable():never {throw new ControlError('PROBE_PERMIT_UNAVAILABLE',409,'Current controlled Echo authority required');}
 const identity=(node:string,epoch:number,request:{nodeId:string;sessionEpoch:number})=>{
     if(request.nodeId!==node||request.sessionEpoch!==epoch)throw new ControlError('SESSION_SUPERSEDED',409,'Echo Node/session differs');
 };

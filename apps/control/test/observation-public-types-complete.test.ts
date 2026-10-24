@@ -114,7 +114,7 @@ export type HistoryPlanCompleteDeclarations36 = [
     Same<Equal<F.ProbeHistoryQuery,HistoryQuery>>,Same<Equal<Optional<F.ProbeHistoryPermit>,'measurement'|'service'|'echoChallenge'>>,
     Same<Equal<Optional<F.ProbeHistoryResult>,'tls'|'echo'|'requestBytes'|'responseBytes'>>,
     Same<Equal<Mutable<F.ProbeHistoryResult>,keyof HistoryResult>>,
-    Same<Equal<Runs.ProbeRunPermit,HistoryPermit<Probe.ProbeBinding,Runs.ProbeRunState,'tcp-ingress-connect-v1'|'tcp-ingress-tls-v1'|'tcp-ingress-echo-v1'|'udp-ingress-echo-v1',N.ProbeServiceSelection,N.ProbeEchoChallenge>>>,
+    Same<Equal<Runs.ProbeRunPermit,HistoryPermit<Probe.ProbeBinding,Runs.ProbeRunState,'tcp-ingress-connect-v1'|'tcp-ingress-tls-v1'|'tcp-ingress-echo-v1'|'udp-ingress-echo-v1'|'tcp-path-echo-v1'|'udp-path-echo-v1',N.ProbeServiceSelection,N.ProbeEchoChallenge>>>,
     Same<Equal<Runs.ProbeRunResult,HistoryResult<'connected'|'unreachable'|'verified'|'unverified'|'echoed','tcp-connected'|'tcp-connect-failed'|'tls-handshake-verified'|'tls-handshake-failed'|'nonce-echo-verified'|'nonce-echo-rejected',{version:'TLSv1.3';alpn:'tunex-observation/1';leafFingerprint:string;verified:true},N.ProbeEchoProof>>>,
     Same<Equal<Flat<Runs.ProbeRunRecord>,Flat<Runs.ProbeRunPermit&HistoryMetadata<Runs.ProbeRunResult>>>>,
     Same<Equal<Runs.ProbeRunStore<Tx>,HistoryStore<Runs.ProbeRunRecord>>>,
@@ -199,12 +199,13 @@ type Qualification<S=string,V=number,E=number> = {servicesVersion?:V;echoVersion
 type InstanceStore<R> = {readCurrent(tx:Tx,nodeId:string):Promise<R|undefined>;read(tx:Tx,nodeId:string):Promise<R|undefined>;lock(tx:Tx,nodeId:string):Promise<R|undefined>;replace(tx:Tx,expectedGeneration:number,next:R):Promise<void>};
 type QualificationStore<R> = {get(tx:Tx,node:string,lock?:boolean):Promise<R|null>;put(tx:Tx,value:R):Promise<void>};
 export type RegistrationCompleteDeclarations48And51 = [
-    Same<Equal<Probe.ProbeMeasurement,'tcp-connect-v1'|'tcp-ingress-connect-v1'|'tcp-ingress-tls-v1'|'tcp-ingress-echo-v1'|'udp-ingress-echo-v1'>>,
+    Same<Equal<Probe.ProbeMeasurement,'tcp-connect-v1'|'tcp-ingress-connect-v1'|'tcp-ingress-tls-v1'|'tcp-ingress-echo-v1'|'udp-ingress-echo-v1'|'tcp-path-echo-v1'|'udp-path-echo-v1'>>,
     Same<Equal<Probe.ProbeMeasurementDescription,
         {measurement:'tcp-connect-v1';taskKind:'tcp-connect';point:'agent-direct-egress';capability:'probe.tcp-connect.v1'}|
         {measurement:'tcp-ingress-connect-v1';taskKind:'tcp-ingress-connect';point:'agent-local-direct-ingress';capability:'probe.tcp-ingress-connect.v1'}|
         {measurement:'tcp-ingress-tls-v1';taskKind:'tcp-ingress-tls';point:'agent-local-direct-ingress';capability:'probe.tcp-ingress-tls.v1'}|
-        {measurement:'tcp-ingress-echo-v1'|'udp-ingress-echo-v1';taskKind:'tcp-ingress-echo'|'udp-ingress-echo';point:'agent-local-direct-ingress';capability:'probe.tcp-ingress-echo.v1'|'probe.udp-ingress-echo.v1'}
+        {measurement:'tcp-ingress-echo-v1'|'udp-ingress-echo-v1';taskKind:'tcp-ingress-echo'|'udp-ingress-echo';point:'agent-local-direct-ingress';capability:'probe.tcp-ingress-echo.v1'|'probe.udp-ingress-echo.v1'}|
+        {measurement:'tcp-path-echo-v1'|'udp-path-echo-v1';taskKind:'tcp-path-echo'|'udp-path-echo';point:'agent-local-forward-ingress';capability:'probe.tcp-path-echo.v1'|'probe.udp-path-echo.v1'}
     >>,
     Same<Equal<Probe.ProbeServiceReference,{readonly serviceId:string;readonly revision:number;readonly configRevision:number;readonly configDigest:string}>>,
     Same<Equal<Probe.ProbeServiceReference,Services.ObservationServiceReference>>,
@@ -272,7 +273,7 @@ export type PermitCompleteDeclarations50 = [
         readonly issuedAt:number;readonly expiresAt:number;readonly state:string;readonly closedAt:number|null;
     }>>,
     Same<Equal<F.ProbePermitStoredRecord,Permit>>,Same<Equal<F.ProbePermitResultInput,Result<unknown>>>,Same<Equal<F.ProbePermitStoredResult,Result>>,
-    Same<Equal<Probe.ProbePermitRecord,Permit<'tcp-ingress-connect-v1'|'tcp-ingress-tls-v1'|'tcp-ingress-echo-v1'|'udp-ingress-echo-v1',N.ProbeServiceContext|N.ProbeEchoServiceContext,N.ProbeEchoChallenge,Probe.ProbeBinding>>>,
+    Same<Equal<Probe.ProbePermitRecord,Permit<'tcp-ingress-connect-v1'|'tcp-ingress-tls-v1'|'tcp-ingress-echo-v1'|'udp-ingress-echo-v1'|'tcp-path-echo-v1'|'udp-path-echo-v1',N.ProbeServiceContext|N.ProbeEchoServiceContext,N.ProbeEchoChallenge,Probe.ProbeBinding>>>,
     Same<Equal<Probe.ProbeResultRecord,Result<N.ProbeResultBody|N.ProbeTypesResultBody|N.ProbeServicesResultBody|N.ProbeEchoResultBody>>>,
     Same<Equal<Mutable<Probe.ProbePermitRecord>,never>>,Same<Equal<Optional<Probe.ProbePermitRecord>,'measurement'|'serviceContext'|'echoChallenge'>>,
     Same<Equal<Mutable<Probe.ProbeResultRecord>,never>>,Same<Equal<Optional<Probe.ProbeResultRecord>,never>>,
@@ -332,13 +333,23 @@ type OperationFact = {kind:'operation';targetId:string;forwardRevision:number;op
 type ReportFact = {kind:'node-report';targetId:string;bootId:string;sessionEpoch:number;reportSequence:number;snapshotGeneration:number;observedAt:number;receivedAt:number;credentialUntil:number};
 type ForwardFact = {kind:'forward';id:string;revision:number;enabled:boolean;deleting:boolean;recoverySuspended:boolean;operation:OperationFact|null};
 type NodeFact = {kind:'node';id:string;revoked:boolean;credentialUntil:number|null;report:ReportFact|null;invalidReport:boolean};
+type ResourceEvidence = {kind:'resource-limit';targetId:string;actorId:string;bucketId:string;policyRevision:number;
+    startsAt:number;endsAt:number;byteLimit:string|null;usedBytes:string|null;receivedAt:number|null;usageStatus:'unknown'|'stale'|'policy-outdated'|'fresh'};
+type PathEvidence = {kind:'path-probe';targetId:string;forwardRevision:number;bindingDigest:string;probeId:string;
+    measurement:'tcp-path-echo-v1'|'udp-path-echo-v1';status:'echoed'|'unverified'|'unreachable';elapsedMs:number;measuredAt:number;acceptedAt:number;validUntil:number};
+type ProductForwardFact = ForwardFact & {pathSample?:PathEvidence|null};
+type ProductNodeFact = NodeFact & {resource?:ResourceEvidence|null};
 export type DiagnosticStationCompleteDeclarations38 = [
-    Same<Equal<Station.StationAlertRule,'forward-operation-failed'|'node-report-stale'|'node-credential-expiring'>>,
-    Same<Equal<Station.StationAlertConfig,{schemaVersion:1;rule:Station.StationAlertRule;target:{kind:'forward'|'node';id:string};enabled:boolean;thresholdSeconds:number}>>,
-    Same<Equal<Station.StationAlertReason,'operation-failed'|'deployment-succeeded'|'deployment-succeeded-after-failure'|'operation-in-progress'|'administrative-state'|'target-unavailable'|'recovery-suspended'|'evidence-unavailable'|'evidence-invalid'|'clock-regression'|'clock-uncertain'|'report-stale'|'report-fresh'|'fresh-baseline-required'|'instance-changed'|'credential-expiring'|'credential-expired'|'credential-valid'|'credential-renewed'|'recovery-not-proven'>>,
+    Same<Equal<Station.StationAlertRule,'forward-operation-failed'|'node-report-stale'|'node-credential-expiring'|'shared-usage-high'|'shared-period-ending'|'recent-path-probe-degraded'>>,
+    Same<Equal<Station.StationAlertConfig,{schemaVersion:1;rule:'forward-operation-failed'|'node-report-stale'|'node-credential-expiring';target:{kind:'forward'|'node';id:string};enabled:boolean;thresholdSeconds:number}|
+        {schemaVersion:2;rule:'shared-usage-high'|'shared-period-ending';target:{kind:'node';id:string};enabled:boolean;thresholdSeconds:number;subjectActorId:string;thresholdPercent:number|null}|
+        {schemaVersion:3;rule:'recent-path-probe-degraded';target:{kind:'forward';id:string};enabled:boolean;thresholdSeconds:0;measurement:'tcp-path-echo-v1'|'udp-path-echo-v1';maxSampleAgeSeconds:number;maxElapsedMs:number}>>,
+    Same<Equal<Station.StationAlertReason,'operation-failed'|'deployment-succeeded'|'deployment-succeeded-after-failure'|'operation-in-progress'|'administrative-state'|'target-unavailable'|'recovery-suspended'|'evidence-unavailable'|'evidence-invalid'|'clock-regression'|'clock-uncertain'|'report-stale'|'report-fresh'|'fresh-baseline-required'|'instance-changed'|'credential-expiring'|'credential-expired'|'credential-valid'|'credential-renewed'|'recovery-not-proven'|
+        'usage-high'|'usage-below-threshold'|'usage-unknown'|'period-ending'|'period-ended'|'period-valid'|'period-changed'|
+        'path-sample-failed'|'path-sample-slow'|'path-sample-within-threshold'|'path-sample-stale'|'path-binding-changed'>>,
     Same<Equal<Station.StationCredentialEvidence,{kind:'node-credential';targetId:string;credentialUntil:number}>>,
     Same<Equal<Station.StationUnavailableEvidence,{kind:'unavailable';targetId:string}>>,
-    Same<Equal<Station.StationAlertEvidence,OperationFact|ReportFact|{kind:'node-credential';targetId:string;credentialUntil:number}|{kind:'unavailable';targetId:string}>>,
+    Same<Equal<Station.StationAlertEvidence,OperationFact|ReportFact|{kind:'node-credential';targetId:string;credentialUntil:number}|{kind:'unavailable';targetId:string}|ResourceEvidence|PathEvidence>>,
     Same<Equal<Station.StationAlertEvaluation,{status:'clear'|'firing'|'unknown';reason:Station.StationAlertReason;instanceKey:string|null;evidence:Station.StationAlertEvidence}>>,
     Same<Equal<Station.StationAlertState,{
         condition:'unknown'|'clear'|'firing';episode:number;instanceKey:string|null;armed:boolean;openedAt:number|null;
@@ -370,10 +381,10 @@ export type DiagnosticStationCompleteDeclarations38 = [
     Same<Equal<F.StationAlertStorage<Tx,F.StationPolicyRecord,F.StationPolicyAuditRecord,F.StationEventRecord>,StationStore<F.StationPolicyRecord,F.StationPolicyAuditRecord,F.StationEventRecord>>>,
     Same<Equal<F.StationOperationFactRecord,OperationFact>>,Same<Equal<Station.StationOperationEvidence,OperationFact>>,
     Same<Equal<F.StationReportFactRecord,ReportFact>>,Same<Equal<Station.StationReportEvidence,ReportFact>>,
-    Same<Equal<F.StationForwardFactRecord,ForwardFact>>,Same<Equal<Station.StationAlertForwardFact,ForwardFact>>,
-    Same<Equal<F.StationNodeFactRecord,NodeFact>>,Same<Equal<Station.StationAlertNodeFact,NodeFact>>,
-    Same<Equal<F.StationFactRecord,ForwardFact|NodeFact>>,Same<Equal<Station.StationAlertFact,ForwardFact|NodeFact>>,
-    Same<Equal<Station.StationAlertFacts<Tx>,{read(tx:Tx,scope:string,config:Station.StationAlertConfig):Promise<ForwardFact|NodeFact|null>}>>,
+    Same<Equal<F.StationForwardFactRecord,ForwardFact>>,Same<Equal<Flat<Station.StationAlertForwardFact>,Flat<ProductForwardFact>>>,
+    Same<Equal<F.StationNodeFactRecord,NodeFact>>,Same<Equal<Flat<Station.StationAlertNodeFact>,Flat<ProductNodeFact>>>,
+    Same<Equal<F.StationFactRecord,ForwardFact|NodeFact>>,Same<Equal<Flat<Station.StationAlertFact>,Flat<ProductForwardFact|ProductNodeFact>>>,
+    Same<Equal<Station.StationAlertFacts<Tx>,{read(tx:Tx,scope:string,config:Station.StationAlertConfig,actor?:string):Promise<Station.StationAlertFact|null>}>>,
     Same<Equal<F.StationStorageValues<Station.StationAlertPolicy,Station.StationAlertPolicyAudit,Station.StationAlertEvent>,{
         readonly policy:(input:F.StationPolicyRecord)=>Station.StationAlertPolicy;readonly audit:(input:F.StationPolicyAuditRecord)=>Station.StationAlertPolicyAudit;readonly event:(input:F.StationEventRecord)=>Station.StationAlertEvent;
     }>>,

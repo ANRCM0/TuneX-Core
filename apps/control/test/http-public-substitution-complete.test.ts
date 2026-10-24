@@ -276,7 +276,7 @@ test('P3/P4 optional usage and Echo machine extensions retain authenticated Node
     ] as const) {
         const f=provider(factory),response=await f.app.request('/agent/v3/'+path,{method:'POST',headers:{'x-tunex-session-epoch':'2'},body:JSON.stringify(input)});
         assert.equal(response.status,409,path);assert.equal((await response.json()).code,'SUBSTITUTE_REFUSED');
-        assert.deepEqual(f.calls.map(call=>[call.owner,call.args]),[['nodes.machine',['fingerprint-a']],[owner,['node-a','fingerprint-a',2,input]]]);
+        assert.deepEqual(f.calls.map(call=>[call.owner,call.args]),[['nodes.machine',['fingerprint-a']],[owner,['node-a','fingerprint-a',2,Object.assign(Object.create(null),input)]]]);
         assert.equal(f.calls[1]!.receiver,f.control[receiver]);assert.deepEqual(f.trace,['request','allow','nodes.machine',owner,'drain']);
     }
 });

@@ -36,6 +36,10 @@ Actions repair: path listener observation uses the explicit L2
 not installed as the legacy Direct Probe hook on Relay/Multihop descriptors;
 their old registry port/capability agreement and five-measurement advertisement
 remain unchanged. The separate path opt-in advertises the new path capabilities.
+The existing upgrade footprint parser also recognizes the equivalent `MODIFY
+COLUMN measurement ENUM` spelling used by 0045, retaining explicit catalog names,
+historical profile ceilings and CHECK-only refusal behavior. Its enum markers
+detect partial 0045 application; they do not certify CHECK/schema equivalence.
 
 Planned acceptance: distinct TCP/UDP descriptors and signed frames; legacy five
 versus extended seven; disabled/missing capability; Direct/path mismatch; all

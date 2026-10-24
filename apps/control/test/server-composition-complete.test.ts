@@ -16,7 +16,7 @@ type ExpectedOptions = {
   databaseUrl: string; caCert: string; caKey: string; serverCert: string; serverKey: string; openssl: string; stateDirectory: string; port: number;
   host?: string; worker?: boolean; credentialOverlapSeconds?: number; relayCredentialSeconds?: number; policy?: Policy;
   initializeAuthority?: boolean; multihopEnabled?: boolean; probeExecutionEnabled?: boolean; probeScheduleEnabled?: boolean; probeIngressEnabled?: boolean;
-  probeServicesEnabled?: boolean; telemetryEnabled?: boolean; forwardTelemetryEnabled?: boolean; hostTelemetryEnabled?: boolean; probeTelemetryEnabled?: boolean;
+  probeServicesEnabled?: boolean; probeEchoEnabled?: boolean; probePathEchoEnabled?: boolean; telemetryEnabled?: boolean; forwardTelemetryEnabled?: boolean; hostTelemetryEnabled?: boolean; probeTelemetryEnabled?: boolean;
   telemetryRollupsEnabled?: boolean; stationAlertsEnabled?: boolean; notificationSecretsDirectory?: string | undefined; webhookDeliveryEnabled?: boolean;
 };
 const originalOptions: Equal<ServerOptions, ExpectedOptions> = true;
@@ -127,6 +127,8 @@ test('159 server preflight preserves feature-first and native lifetime/default/g
     [{ probeScheduleEnabled: true }, 'Probe schedule requires original Probe execution'],
     [{ probeIngressEnabled: true }, 'Ingress Probe requires original Probe execution'],
     [{ probeServicesEnabled: true }, 'Controlled service TLS Probe requires ingress and original Probe execution'],
+    [{ probeEchoEnabled: true }, 'Controlled Echo requires services, ingress and original Probe execution'],
+    [{ probePathEchoEnabled: true }, 'Path Echo requires explicit Echo'],
     [{ probeExecutionEnabled: true }, 'Probe execution requires an explicitly configured one-second maximum clock skew'],
     [{ relayCredentialSeconds: 1 }, 'Relay credential lifetime must allow renewal before expiry and bounded overlap'],
   ] as const) {
@@ -138,7 +140,7 @@ test('159 server preflight preserves feature-first and native lifetime/default/g
   const supplied: any = { probeExecutionEnabled: true, policy, relayCredentialSeconds: 121, credentialOverlapSeconds: 0 };
   const traced = new Proxy(supplied, { get(target, key) { reads.push(String(key)); return target[key]; } });
   assert.equal(checkControlServerPreflight(traced, DEFAULT_POLICY), policy);
-  assert.deepEqual(reads, ['webhookDeliveryEnabled', 'probeScheduleEnabled', 'probeIngressEnabled', 'probeServicesEnabled', 'probeExecutionEnabled',
+  assert.deepEqual(reads, ['webhookDeliveryEnabled', 'probeScheduleEnabled', 'probeIngressEnabled', 'probeServicesEnabled', 'probePathEchoEnabled', 'probeEchoEnabled', 'probeExecutionEnabled',
     'policy', 'policy:maxClockSkewSeconds', 'policy', 'policy:leaseSeconds', 'policy:maxClockSkewSeconds', 'policy:pollIntervalSeconds', 'relayCredentialSeconds', 'credentialOverlapSeconds']);
   for (const lifetime of [0, -1, 119, 120.5, NaN, Infinity, 86401]) assert.throws(() => checkControlServerPreflight({ relayCredentialSeconds: lifetime }, DEFAULT_POLICY));
   assert.equal(checkControlServerPreflight({}, DEFAULT_POLICY), DEFAULT_POLICY);
@@ -156,7 +158,7 @@ test('159 server startup reads exact pool SQL, binds original resources and defe
   assert.deepEqual(f.callbackCalls.filter(call => call[0] === 'allow').map(call => call[1]), [f.authority, f.authority]);
   const args = (name: string) => f.argumentsByName.get(name)![0]!;
   assert.deepEqual(args('Nodes'), [f.db, f.identity, f.instances.get('NodeCertificateAuthority'), 120, 86400, f.resources,f.instances.get('NodePortLimitPolicy')]);
-  assert.deepEqual(args('ControlApplication'), [f.db, f.identity, f.instances.get('Nodes'), undefined, false, false, false, false, f.resources]);
+  assert.deepEqual(args('ControlApplication'), [f.db, f.identity, f.instances.get('Nodes'), undefined, false, false, false, false, f.resources, false, false]);
   assert.deepEqual(args('RuntimeController'), [f.db, f.instances.get('Nodes'), f.control.forwarding, f.control.ledger, undefined, f.authority, f.control.relay, f.control.resourceLimits]);
   assert.equal(args('NodeTelemetry')[6], Date.now); assert.equal(args('ForwardTelemetry')[7], Date.now);
   assert.equal(args('HostTelemetry')[6], Date.now); assert.equal(args('ProbeTelemetry')[7], Date.now);
@@ -291,7 +293,7 @@ test('159 all original option reads remain lazy repeated and ordered across asse
   const f = fixture(), reads: string[] = [];
   const keys = ['databaseUrl', 'caCert', 'caKey', 'serverCert', 'serverKey', 'openssl', 'stateDirectory', 'port', 'host', 'worker',
     'credentialOverlapSeconds', 'relayCredentialSeconds', 'policy', 'initializeAuthority', 'multihopEnabled', 'probeExecutionEnabled',
-    'probeScheduleEnabled', 'probeIngressEnabled', 'probeServicesEnabled', 'telemetryEnabled', 'forwardTelemetryEnabled', 'hostTelemetryEnabled',
+    'probeScheduleEnabled', 'probeIngressEnabled', 'probeServicesEnabled', 'probeEchoEnabled', 'probePathEchoEnabled', 'telemetryEnabled', 'forwardTelemetryEnabled', 'hostTelemetryEnabled',
     'probeTelemetryEnabled', 'telemetryRollupsEnabled', 'stationAlertsEnabled', 'notificationSecretsDirectory', 'webhookDeliveryEnabled'];
   for (const key of keys) {
     let value = f.options[key]; Object.defineProperty(f.options, key, { enumerable: true, configurable: true,
@@ -299,9 +301,10 @@ test('159 all original option reads remain lazy repeated and ordered across asse
   }
   const started = await f.start();
   assert.deepEqual(reads, [
-    'webhookDeliveryEnabled', 'probeScheduleEnabled', 'probeIngressEnabled', 'probeServicesEnabled', 'probeExecutionEnabled', 'policy', 'relayCredentialSeconds', 'credentialOverlapSeconds',
+    'webhookDeliveryEnabled', 'probeScheduleEnabled', 'probeIngressEnabled', 'probeServicesEnabled', 'probePathEchoEnabled', 'probeEchoEnabled', 'probeExecutionEnabled', 'policy', 'relayCredentialSeconds', 'credentialOverlapSeconds',
     'databaseUrl', 'stateDirectory', 'caCert', 'initializeAuthority', 'openssl', 'caCert', 'caKey', 'stateDirectory',
     'credentialOverlapSeconds', 'relayCredentialSeconds', 'policy', 'multihopEnabled', 'probeExecutionEnabled', 'probeIngressEnabled', 'probeServicesEnabled',
+    'probeEchoEnabled', 'probePathEchoEnabled',
     'databaseUrl', 'telemetryRollupsEnabled', 'telemetryEnabled', 'forwardTelemetryEnabled', 'hostTelemetryEnabled', 'probeTelemetryEnabled', 'telemetryRollupsEnabled',
     'probeExecutionEnabled', 'probeScheduleEnabled', 'notificationSecretsDirectory', 'webhookDeliveryEnabled', 'stationAlertsEnabled', 'policy', 'worker',
     'serverKey', 'serverCert', 'caCert', 'port', 'host',
@@ -314,7 +317,7 @@ test('159 all original option reads remain lazy repeated and ordered across asse
   enabled.control.probes.ingressEnabled = true as never; enabled.control.probes.servicesEnabled = true as never;
   const active = await enabled.start(), args = (name: string) => enabled.argumentsByName.get(name)![0]!;
   assert.deepEqual(args('Nodes').slice(3), [0, 3600, enabled.resources,enabled.instances.get('NodePortLimitPolicy')]);
-  assert.deepEqual(args('ControlApplication').slice(3), [enabled.options.policy, true, true, true, true, enabled.resources]);
+  assert.deepEqual(args('ControlApplication').slice(3), [enabled.options.policy, true, true, true, true, enabled.resources, false, false]);
   assert.equal(args('NodeTelemetry')[5], true); assert.equal(args('ForwardTelemetry')[6], true);
   assert.equal(args('HostTelemetry')[5], true); assert.equal(args('ProbeTelemetry')[6], true);
   assert.equal(args('TelemetryRollups')[5], true); assert.equal(args('StationAlerts')[5], true);

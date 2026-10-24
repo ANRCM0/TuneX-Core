@@ -156,14 +156,14 @@ test('FR0032 real MySQL original identity locks CAS replay history and post-audi
         {async enqueueIn(tx,scope,policy,event){
             assert.equal(scope,'scope');assert.equal(policy.config.rule,'shared-period-ending');
             assert.equal(event.config.rule,'shared-period-ending');
-            assert.equal(Number((await rows(tx,'SELECT COUNT(*) AS count FROM station_alert_events'))[0]!.count),1);
+            assert.equal(Number((await rows<{count:number}>(tx,'SELECT COUNT(*) AS count FROM station_alert_events'))[0]!.count),1);
             if(failHandoff)throw Error('injected resource alert handoff failure');handoffs++;
         }});
     await alerts.publish('admin','scope','quota-policy','quota-alert-create',0,{schemaVersion:2,rule:'shared-period-ending',
         target:{kind:'node',id:'shared'},enabled:true,subjectActorId:'alice',thresholdPercent:null,thresholdSeconds:60});
     await assert.rejects(alerts.tick(),/injected resource alert handoff failure/);
     assert.equal((await rows(db.pool,'SELECT * FROM station_alert_events')).length,0,'event insert rolls back with failed handoff');
-    const stored=(await rows(db.pool,"SELECT state FROM station_alert_policies WHERE policy_id='quota-policy'"))[0]!.state;
+    const stored=(await rows<{state:unknown}>(db.pool,"SELECT state FROM station_alert_policies WHERE policy_id='quota-policy'"))[0]!.state;
     assert.equal((typeof stored==='string'?JSON.parse(stored):stored).condition,'unknown');
     failHandoff=false;
     await db.transaction(tx=>write(tx,"UPDATE station_alert_policies SET next_evaluate_at=? WHERE policy_id='quota-policy'",[stationNow]));

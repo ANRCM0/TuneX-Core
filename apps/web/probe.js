@@ -217,9 +217,9 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
     const switches = { enabled: '原命令开关已开启', disabled: '原命令开关已关闭', 'not-dispatchable': '现有命令不可派发' };
     const modes = { direct: 'Direct', relay: 'Relay', multihop: '多跳' };
     support.state.textContent = modes[value.mode] + ' · 当前读取 revision ' + value.forwardRevision + '；列表选择 revision ' + supportForward.revision + '。分次授权读取，不是同时刻执行证明。';
-    for (const kind of supportKinds) {
+    for (const kind of value.capabilityVersion===2?commandKinds:supportKinds) {
       const item = value.items.find(entry => entry.taskKind === kind), row = support.make('tr');
-      const point = item.point === 'agent-direct-egress' ? 'Agent 到原目标' : 'Agent 本机 Direct 入口';
+      const point = item.point === 'agent-direct-egress' ? 'Agent 到原目标' : item.point === 'agent-local-forward-ingress' ? 'Agent 本机完整转发入口' : 'Agent 本机 Direct 入口';
       const name = support.make('td'); name.append(support.make('strong', item.measurement), support.make('p', point, 'hint'));
       const issuance = support.make('td'); issuance.append(support.make('strong', switches[item.issuance]), support.make('p', item.issuanceReason, 'hint'));
       const preflight = support.make('td'), expired = item.preflight.state === 'available' && Date.parse(item.preflight.expiresAt) <= Date.now();

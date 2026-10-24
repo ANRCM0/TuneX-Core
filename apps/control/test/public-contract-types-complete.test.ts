@@ -349,6 +349,7 @@ type ExpectedControlApi = Forward.ForwardCommandApi & RelayPlan.RelayPlanApi & {
     readonly changeMember: Identity.AccessCommandApi['changeMember']; readonly changeNodeGrant: Identity.AccessCommandApi['changeNodeGrant'];
     readonly changeNode: Node.NodeManagementApi['change']; readonly identity: Identity.IdentityQueries; readonly nodes: Node.NodeApi;
     readonly resourceLimits: ResourceLimits.SharedResourceLimitApi;
+    readonly accountCredentials: Identity.AccountCredentialApi; readonly resourceUsage: ResourceLimits.ResourceUsageApi;
     readonly transport: Transport.TransportApi; readonly relayEndpoints: Endpoint.RelayEndpointApi;
     readonly details: ControlQueries.ControlDetailApi; readonly queries: ConsoleQueries.ConsoleQueryApi; readonly nativeDrivers: NativeDriver.NativeDriverApi;
     readonly transportQueries: Transport.TransportQueryApi; readonly tunnelQueries: TunnelQueries.TunnelQueryApi;
@@ -361,6 +362,7 @@ type ExpectedControlApi = Forward.ForwardCommandApi & RelayPlan.RelayPlanApi & {
     readonly probeRegistry: Probe.ProbeInstanceApi; readonly probeClaims: Probe.ProbeClaimApi; readonly probeDelivery: Probe.ProbeDeliveryApi;
     readonly probeResults: Probe.ProbeResultApi; readonly probeTypeRegistry: Probe.ProbeTypeRegistryApi; readonly probeTypes: Probe.ProbeTypesApi;
     readonly probeServiceRegistry: Probe.ProbeServiceRegistryApi; readonly probeServices: Probe.ProbeServicesApi;
+    readonly probeEcho: Probe.ProbeEchoApi; readonly probeEchoRegistry: Probe.ProbeEchoRegistryApi;
     readonly transitNegotiation: Transit.TransitNegotiationApi; readonly transitDelivery: Transit.TransitDeliveryApi;
 };
 type ExpectedHttpServices = {

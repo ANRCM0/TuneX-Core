@@ -72,7 +72,7 @@ export function payloadLimitInput(fields, expectedRevision) {
 
 export function personalPayloadLimitView(value, identity) {
   const view = payloadLimitView(value, identity), policy = view.policy, usage = view.consumption;
-  const status = {unavailable:'当前服务未提供用量视图',unknown:'此政策尚无报告；可能为旧 Agent 或尚未接收政策',
+  const status = {unavailable:'用量暂不可用：当前服务未提供用量视图',unknown:'此政策尚无报告；可能为旧 Agent 或尚未接收政策',
     stale:'报告已过期或会话已更换，余额未知','policy-outdated':'报告对应旧政策修订，余额未知',fresh:'已收到近期用量样本'}[usage.status];
   return {
     '机器':view.nodeId,'成员':view.actorId,'配置修订':view.revision,

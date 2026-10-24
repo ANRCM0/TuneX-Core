@@ -53,7 +53,7 @@ test('P native presentation additions have explicit scopes exports and compositi
   const source=await readFile(new URL('../browser-native/control-console.js',import.meta.url),'utf8');
   for(const [file,names] of [
     ['member-console.js',['initMemberConsole','memberCommand','memberListView','memberReceipt']],
-    ['account-credentials.js',['accountCredentialView','initAccountCredentials']],
+    ['account-credentials.js',['accountCredentialView','initAccountCredentials','requestAccountCredentials']],
     ['task-workflow.js',['batchProgress','createBoundedPageReads','workflowSteps']],
   ]) {
     const module=await import(new URL('../'+file,import.meta.url).href);

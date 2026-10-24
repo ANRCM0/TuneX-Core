@@ -13,7 +13,7 @@ export interface ProbePathObservation {
 export interface ProbePathObservationReader<Tx> {
     readIn(tx:Tx,actor:string,scope:string,forward:string,measurement:ProbePathObservation['measurement'],at:number,maxAgeSeconds:number):Promise<ProbePathObservation|null>;
 }
-const corrupt=():never=>{throw new ControlError('INTEGRITY_FAILURE',409,'Invalid controlled path history observation');};
+function corrupt():never {throw new ControlError('INTEGRITY_FAILURE',409,'Invalid controlled path history observation');}
 
 /** Recent historical outcome only; no issuance, network work or nested transaction. */
 export class ProbePathObservations<Tx> implements ProbePathObservationReader<Tx> {

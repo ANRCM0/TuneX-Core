@@ -37,14 +37,15 @@ export class ForwardProbePlans<Tx> implements ForwardProbePlanApi {
     private readonly services: ProbeServiceResolver<Tx> | undefined;
     private readonly echoes:ProbeEchoServiceResolver<Tx>|undefined;
     private readonly access:ResourceReadAccess<Tx>;
+    private readonly paths:ProbePathPlans<Tx>|undefined;
     constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, access: ResourceReadAccess<Tx>, intents: ProbeIntents<Tx>,
-        nodes: ProbeNodes<Tx>, published: PublishedProbeReader<Tx>, clockSkewMs: number, services?: ProbeServiceResolver<Tx>,echoes?:ProbeEchoServiceResolver<Tx>,private readonly paths?:ProbePathPlans<Tx>) {
+        nodes: ProbeNodes<Tx>, published: PublishedProbeReader<Tx>, clockSkewMs: number, services?: ProbeServiceResolver<Tx>,echoes?:ProbeEchoServiceResolver<Tx>,paths?:ProbePathPlans<Tx>) {
         this.access=access;
 
         if (!Number.isSafeInteger(clockSkewMs) || clockSkewMs < 0) invalid('Invalid probe clock policy');
         this.db = db; this.identity = identity; this.intents = intents; this.nodes = nodes;
         this.published = published; this.clockSkewMs = clockSkewMs; this.services = services;
-        this.echoes=echoes;
+        this.echoes=echoes;this.paths=paths;
     }
     async plan(actor: string, scopeId: string, id: string, input: unknown): Promise<ForwardProbePlan> {
         const parsed = request(actor, scopeId, id, input);
@@ -117,7 +118,7 @@ export class ForwardProbePlans<Tx> implements ForwardProbePlanApi {
         if (!Number.isSafeInteger(expires) || expires <= now || !Number.isSafeInteger(issued) ||
             issued >= valid || issued > now + this.clockSkewMs)
             throw new ControlError('PROBE_UNAVAILABLE', 409, 'Snapshot or credential time window unavailable');
-        const classification=echo?{kind:kind as 'tcp-ingress-echo'|'udp-ingress-echo'|'tcp-path-echo'|'udp-path-echo',
+        const classification=echo?{kind:kind as 'tcp-ingress-echo'|'udp-ingress-echo',
             ...probeEchoMeasurement(protocol==='tcp'?'tcp-ingress-echo-v1':'udp-ingress-echo-v1'),serviceContext:echoContext!}:
             tls?{kind:'tcp-ingress-tls' as const,point:'agent-local-direct-ingress' as const,
             measurement:'tcp-ingress-tls-v1' as const,capability:'probe.tcp-ingress-tls.v1' as const,serviceContext:tlsContext!}:

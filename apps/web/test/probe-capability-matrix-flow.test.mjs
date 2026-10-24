@@ -80,7 +80,7 @@ test('P4 extended path matrix keeps original five refusal rows and two explicit 
     transportSupport:'supported',issuance:'disabled',issuanceReason:'Path switch off.',preflight:{state:'requires-controlled-service',
       reason:{code:'CONTROLLED_SERVICE_REQUIRED',message:'Exact controlled final service required.'},expiresAt:null}});
   const h=harness(async()=>candidate);await h.api.openCapabilities(forward);
-  assert.equal(h.el('support-rows').children.length,7);assert.match(h.el('support-rows').textContent,/agent-local-forward-ingress/);
+  assert.equal(h.el('support-rows').children.length,7);assert.match(h.el('support-rows').textContent,/Agent 本机完整转发入口/);
   assert.equal(h.calls.some(call=>call[0]==='POST'),false);assert.equal(h.el('issue').disabled,true);
 });
 

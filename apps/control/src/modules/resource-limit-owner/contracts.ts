@@ -1,6 +1,6 @@
 import type { ScopeAuthorization, ScopeOwnerAuthorization, TransactionBoundary,
     NodeAuthorityStore, RuntimeNodeResources, RuntimePortUsageStore, SharedResourceLimitStore,
-    ResourceUsageReader, ResourceUsageConsumption } from '../../framework/public.ts';
+    ResourceUsageReader, ResourceUsageConsumption, SharedResourceLimitRecord } from '../../framework/public.ts';
 
 export interface SharedResourceLimitInput {
     expectedRevision:number;startsAt:string;endsAt:string;
