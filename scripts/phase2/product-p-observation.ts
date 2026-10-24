@@ -88,7 +88,7 @@ export async function verifyControlledEcho(options:Options) {
         await wait(async()=>{const result=await call('GET','forwards/'+forwardId);return result.body.lastOperation?.status==='succeeded'&&result.body.health?.condition==='ready';},'actual Forward activation');
         await wait(options.qualified,'current Echo qualification');
         const matrix=await call('GET','forwards/'+forwardId+'/probe-capabilities');
-        assert.equal(matrix.status,200);assert.equal(matrix.body.capabilityVersion,2);assert.equal(matrix.body.items.length,7);assert.equal(matrix.body.mode,options.mode);
+        assert.equal(matrix.status,200);assert.equal(matrix.body.capabilityVersion,options.mode==='direct'?1:2);assert.equal(matrix.body.items.length,7);assert.equal(matrix.body.mode,options.mode);
         for(const protocol of ['tcp','udp'] as const) {
             const kind=protocol+(options.mode==='direct'?'-ingress-echo':'-path-echo');
             let success=false;
