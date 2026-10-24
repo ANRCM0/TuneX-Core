@@ -15,6 +15,7 @@ import { host, linuxPath, linux, spawnLinux, linuxBinary, topology, viaWSL } fro
 import { NetworkLab } from './network-lab.ts';
 import { verifyMultihopConsole } from './multihop-console.ts';
 import { verifyControlledEcho } from './product-p-observation.ts';
+import { verifyPathAlertOutbox } from './product-p-path-alert.ts';
 
 const execute=promisify(execFile),databaseUrl=process.env.TUNEX_TEST_DATABASE_URL,openssl=process.env.TUNEX_OPENSSL??'openssl';
 const count=Number(process.env.TUNEX_MULTIHOP_NODES??'3');
@@ -174,6 +175,7 @@ try{
   const [slots]=await control.db.pool.query<any[]>('SELECT node_id,protocol,port,fence FROM port_slots WHERE owner_id=?',[id]);assert.equal(slots.length,2*count);
   pass('Exact bidirectional TCP and UDP data crosses the fully activated path with two exclusive resources per Node');
   if(productP)for(const check of await verifyControlledEcho({scopeId:scope,nodeId:ingress.nodeId,mode:'multihop',directory,listenPort:echoPort!,spec,call,diagnostics:()=>echoTrace.slice(-100),discovery:control.control.probeEcho,
+      responseDelayMs:15,pathAlerts:forward=>verifyPathAlertOutbox({db:control!.db,auth:control!.control.identity,samples:control!.control.probePathObservations,actor:owner,scope,forward,directory}),
       qualified:async()=>{const [result]=await control!.db.pool.query<any[]>("SELECT COUNT(*) n FROM probe_type_qualifications q JOIN runtime_nodes r ON r.node_id=q.node_id AND r.session_epoch=q.session_epoch WHERE q.node_id=? AND q.state='qualified' AND q.echo_version=1 AND q.expires_at>?",[ingress.nodeId,Date.now()+2000]);return result[0].n===1;}
   }))pass('P multihop '+check);
   const [generation]=await control.db.pool.query<any[]>('SELECT node_id,snapshot_generation FROM runtime_nodes');

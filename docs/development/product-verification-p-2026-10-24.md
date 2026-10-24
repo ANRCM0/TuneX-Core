@@ -6,7 +6,31 @@ PR, Actions execution and necessary failure repairs. Merge, image publication,
 release and delegation are outside this task. Independent-host and long-run
 environments remain unavailable under the human's preceding answer.
 
-## Current Verified Source - 245d438
+## Current Acceptance Follow-Up - Path Sample SQL Integration
+
+The continuing P completion audit found that PP-10's recent-path condition had
+contract/bridge evidence while the real native Station/outbox rollback case
+covered a resource rule. The new existing three-node Actions scenario consumes
+an actual signed UDP path result through the original public history reader and
+locking planner, then original Station facts/policy/event and Notification SQL
+owners. A 15ms delay only in the disposable signed responder makes the sample
+exceed a declared 1ms condition threshold; no production deadline is relaxed.
+
+The new case requires actual post-outbox-insert failure to roll back event/state
+and all seven notification tables, native payload persistence and immutable-event
+deduplication, stale history to stay unknown without recovery or Probe issuance,
+and original policy disable to cancel a queued delivery before any attempt,
+secret acquisition or sender call. Policy disable is not described as membership
+revocation; the separate original native membership-revocation case remains.
+Artifacts use the existing `product-p-*.json` upload glob. No new CI framework,
+public contract, production owner, network grant or parallel feature is added.
+
+Source/cases and local type/boundary checks are complete; this follow-up is not
+functionally accepted until its own exact-source Actions jobs complete. The
+deployment handoff now names the last completed source below instead of the
+older aae0632f candidate. It still requires actual independent environments.
+
+## Latest Complete Verification - 245d438
 
 The corrected FR-0043 Node Snapshot reader candidate is
 `245d438ace32e1a58c39f00c9dca0a5d1d8cc7d4`, tree

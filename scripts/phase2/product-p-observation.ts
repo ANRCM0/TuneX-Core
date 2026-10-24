@@ -14,14 +14,16 @@ interface Options {
     mode:'direct'|'relay'|'multihop';directory:string;qualified:()=>Promise<boolean>;tick?:()=>Promise<void>;
     usage?:{actorId:string;display:()=>Promise<void>};
     diagnostics?:()=>unknown;
+    responseDelayMs?:number;pathAlerts?:(forwardId:string)=>Promise<string[]>;
     discovery:{poll(node:string,fingerprint:string,epoch:number,input:unknown):Promise<ProbeEchoPollResponse>};
 }
 
 // Disposable loopback responder: signs only fixed-size, current requests for the
 // one published fixture context. It is not the independently delivered Responder.
-async function echoFixture() {
+async function echoFixture(responseDelayMs=0) {
+    assert.ok(Number.isSafeInteger(responseDelayMs)&&responseDelayMs>=0&&responseDelayMs<=50);
     const keys=generateKeyPairSync('ed25519'),sockets=new Set<Socket>(),seen=new Map<string,number>();
-    const udp=createSocket('udp4');let contextDigest='',validUntil=0,rejected=0;
+    const udp=createSocket('udp4');let contextDigest='',validUntil=0,rejected=0,closing=false;
     function response(raw:Buffer,protocol:'tcp'|'udp'):Buffer|null {
         if(raw.length!==256||raw.subarray(0,8).toString()!=='TNXECHOQ'||raw[8]!==1||raw[9]!== (protocol==='tcp'?1:2)||
             raw.subarray(10,16).some(Boolean)||raw.subarray(120).some(Boolean)||
@@ -42,27 +44,32 @@ async function echoFixture() {
         socket.on('data',chunk=>{
             if(done)return socket.destroy();buffered=Buffer.concat([buffered,chunk]);
             if(buffered.length>256){done=true;rejected++;socket.destroy();return;}
-            if(buffered.length===256){done=true;const frame=response(buffered,'tcp');if(frame)socket.end(frame);else socket.destroy();}
+            if(buffered.length===256){done=true;const frame=response(buffered,'tcp');if(frame){
+                if(responseDelayMs)setTimeout(()=>{if(!socket.destroyed)socket.end(frame);},responseDelayMs);else socket.end(frame);
+            }else socket.destroy();}
         });
     });
     await new Promise<void>((resolve,reject)=>{tcp.once('error',reject);tcp.listen(0,'127.0.0.1',resolve);});
     const port=(tcp.address() as {port:number}).port;
     try {await new Promise<void>((resolve,reject)=>{udp.once('error',reject);udp.bind(port,'127.0.0.1',resolve);});}
     catch(error){await new Promise<void>(resolve=>tcp.close(()=>resolve()));throw error;}
-    udp.on('message',(raw,remote)=>{const frame=response(raw,'udp');if(frame)udp.send(frame,remote.port,remote.address,()=>{});});
+    udp.on('message',(raw,remote)=>{const frame=response(raw,'udp');if(frame){
+        const deliver=()=>{if(!closing)udp.send(frame,remote.port,remote.address,()=>{});};
+        if(responseDelayMs)setTimeout(deliver,responseDelayMs);else deliver();
+    }});
     return {
         port,seen,
         publicKey:keys.publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64'),
         bind(context:string,until:number){assert.equal(contextDigest,'');contextDigest=context;validUntil=until;},
         rejected:()=>rejected,
-        async close(){for(const socket of sockets)socket.destroy();await Promise.all([
+        async close(){closing=true;for(const socket of sockets)socket.destroy();await Promise.all([
             new Promise<void>(resolve=>tcp.close(()=>resolve())),new Promise<void>(resolve=>udp.close(()=>resolve()))]);},
     };
 }
 
 export async function verifyControlledEcho(options:Options) {
     if(process.platform!=='linux'||process.env.GITHUB_ACTIONS!=='true')throw Error('Product P network acceptance is Actions-only');
-    const fixture=await echoFixture(),attempts:Record<string,unknown>[]=[],checks:string[]=[];
+    const fixture=await echoFixture(options.responseDelayMs),attempts:Record<string,unknown>[]=[],checks:string[]=[];
     const discovery=options.discovery,originalPoll=discovery.poll;
     let emptySequence=0,emptyStartedAt=0;
     const pollSamples:Record<string,unknown>[]=[];
@@ -162,6 +169,7 @@ export async function verifyControlledEcho(options:Options) {
             checks.push(protocol+' signed original permit/Agent/Forward/responder/result round trip and non-executing replay');
         }
         assert.equal(fixture.rejected(),0);
+        if(options.pathAlerts)checks.push(...await options.pathAlerts(forwardId));
         if(options.usage){
             await wait(async()=>{
                 const value=await call('GET',`nodes/${options.nodeId}/payload-limits/${options.usage!.actorId}`);
