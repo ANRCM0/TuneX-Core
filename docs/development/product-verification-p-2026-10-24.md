@@ -261,6 +261,37 @@ cases assert exactly one Node authorization per path node for the new reader.
 Corrective local TypeScript/boundary checks passed; Actions on the successor
 must validate the changed functional behavior.
 
+## Twelfth Candidate And FR-0042
+
+Head `a0e5671b4004c14d8a4b3cb097edcd0ca25ea9b0`, tree
+`d703449a7cb93d7e4ffb60d830874d9c9f3e9461`: baseline `40050691506`, packaging
+`40050691428`. Packaging and the complete contract job passed, including the
+new Relay owner/provider cases and explicit independent counter inventory.
+Probe/Relay, isolation, Windows, unsupported platform, deployment tools and
+four-node jobs passed; phase1/eight-node remained in progress at repair time.
+Three-node Echo remained unaccepted: early poll/claim could complete, but
+server-side operations still sometimes took 247-504ms and lost their original
+200ms exchange window. No hard limit was expanded.
+
+[FR-0042](../changes/FR-0042-probe-budget-observation-read.md) was recorded before
+adding the original storage's separately versioned shared observation port.
+Discovery/status previously used the one global exclusive budget lock even
+though they reserve and mutate nothing, serializing independent Node readers.
+The native root now explicitly supplies the same original lower store as the
+optional observation provider; legacy constructors retain their old provider
+contract and exclusive calls. Existing overridden lock methods remain honored.
+Only the non-executing offer/check paths use the supplied shared reader. All
+state changes, clock updates, withdrawal/history writes and recovery remain
+with the original exclusive owner/lifecycle paths.
+
+Authored cases retain exact bounded SQL/decoders, no reader fallback after
+failure, untouched legacy provider lookups, exclusive writer selection and
+same-object native composition. An actual migrated MySQL case in the existing
+native invocation allows two shared readers, requires the writer to wait for
+both releases, and then permits the original clock update. It has not run
+locally. Corrective local TypeScript and source boundary checks passed; the
+successor still requires exact-source Actions execution.
+
 ## Acceptance Limits
 
 Source preparation is delivered in the [P ledger](product-readiness-stage-p-2026-10-24.md).

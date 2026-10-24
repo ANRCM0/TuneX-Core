@@ -364,3 +364,13 @@ provider; all requester grants and exact published bindings are still checked in
 the same caller transaction. The FR includes a public composition example and
 the contract tests exercise it. This is a P acceptance candidate, not a new
 parallel-module or release gate.
+
+FR-0042 adds `ProbePermitObservationStorage1` beside the unchanged mutation
+storage. Original offer/status may consume its optional shared-lock snapshot;
+native composition delegates to the one original lower store. Normal mutations
+continue acquiring the original exclusive budget lock and recovery keeps its
+original startup admission/SQL. The shared reader retains all original bounded
+projections, clock and corruption checks; old providers and overridden legacy
+locks keep their original exclusive path. No new authority, schema or lifetime
+is introduced. Concurrent readers/writer exclusion is covered by an authored
+real MySQL case in the existing Actions invocation.

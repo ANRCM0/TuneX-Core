@@ -211,8 +211,10 @@ export class ControlApplication implements RelayPlanApi {
         const permitPlans=new ForwardProbePlans(db,identity,this.readAccess,new MySqlProbePermitIntents(),nodes,new MySqlProbeReader(true),
             observationPolicy.maxClockSkewSeconds*1000,probeObservationServices,probeObservationServices,new ForwardPathProbePlans(nodes,{assignments:(tx,node)=>this.relay.assignments(tx,node),forForward:(tx,id)=>this.relay.assignmentsForForward(tx,id)},new MySqlProbeReader(true),probeObservationServices,observationPolicy.maxClockSkewSeconds*1000));
         this.probePathObservations=new ProbePathObservations(identity,this.readAccess,new MySqlProbeHistoryStore(probeRunStorageValues),permitPlans);
+        const permitMachines=new MySqlProbeMachineReader(),permitInstances=new MySqlProbeInstanceStore(probeInstanceStorageValues),
+            permitStore=new MySqlProbePermitStore(probePermitStorageValues);
         this.probePermits=new ProbePermits(db,identity,this.readAccess,permitPlans,
-            new MySqlProbeMachineReader(),new MySqlProbeInstanceStore(probeInstanceStorageValues),new MySqlProbePermitStore(probePermitStorageValues),Date.now,new ProbeRunHistoryRecorder(new MySqlProbeHistoryStore(probeRunStorageValues)),probeTypes);
+            permitMachines,permitInstances,permitStore,Date.now,new ProbeRunHistoryRecorder(new MySqlProbeHistoryStore(probeRunStorageValues)),probeTypes,permitStore);
         this.probeClaims=new ProbeClaims(this.probePermits);
         this.probeDelivery=new ProbeDelivery(this.probePermits);
         this.probeResults=new ProbeResults(this.probePermits);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { createConnection } from 'mysql2/promise';
-import type { Connection, RowDataPacket } from 'mysql2/promise';
+import type { Connection, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import type { Forward } from '@tunex/core';
 import { ControlApplication } from '../src/application/control.ts';
 import { ForwardProbePlans } from '../src/application/forward-probe-plans.ts';
@@ -114,6 +114,28 @@ async function fixture() {
             consume: (id: string) => host.consume('node-a', fingerprint, 2, claim(id)) };
     } catch (error) { await close(); throw error; }
 }
+
+test('P real MySQL shared budget observers coexist while the original writer waits for both transactions',
+    {skip:!databaseUrl,timeout:60000},async()=>{
+        const f=await fixture(),sessions:PoolConnection[]=[],store=new MySqlProbePermits();
+        try{
+            for(let index=0;index<3;index++){
+                const session=await f.owner.pool.getConnection();sessions.push(session);
+                await session.execute('SET SESSION innodb_lock_wait_timeout=1');
+                await session.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');await session.beginTransaction();
+            }
+            const [first,second,writer]=sessions as [PoolConnection,PoolConnection,PoolConnection];
+            const before=await store.observe(first);assert.deepEqual(await store.observe(second),before);
+            await assert.rejects(store.lock(writer),{code:'ER_LOCK_WAIT_TIMEOUT'});await writer.rollback();
+            await first.rollback();await writer.beginTransaction();
+            await assert.rejects(store.lock(writer),{code:'ER_LOCK_WAIT_TIMEOUT'});await writer.rollback();
+            await second.rollback();await writer.beginTransaction();
+            assert.deepEqual(await store.lock(writer),before);
+            await store.clock(writer,before.observedAt+1);await writer.commit();
+            const [rows]=await f.writer.query<RowDataPacket[]>('SELECT observed_at FROM probe_permit_budget WHERE id=1');
+            assert.equal(rows[0]!.observed_at,before.observedAt+1);
+        }finally{for(const session of sessions){await session.rollback().catch(()=>{});session.release();}await f.close();}
+    });
 
 test('real MySQL shares budgets and writes only permit state plus delegated same-transaction history',
     { skip: !databaseUrl, timeout: 60000 }, async () => {

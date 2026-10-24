@@ -22,9 +22,9 @@ export { MACHINE_SESSION_LOCK_INTERFACE_VERSION } from './machine-session-lock-p
 export type { LockedMachineSession, MachineSessionLockReader } from './machine-session-lock-ports.ts';
 export { TRANSIT_DELIVERY_STORAGE_INTERFACE_VERSION } from './transit-delivery-storage-ports.ts';
 export type { TransitDeliveryMachineRow, TransitStoredStage, TransitDeliveryOutboxRow, TransitDeliveryJournalRow, TransitDeliveryJournalStatus, TransitDeliveryReceiptRow, TransitDeliveryStorage } from './transit-delivery-storage-ports.ts';
-export { PROBE_PERMIT_STORAGE_INTERFACE_VERSION } from './probe-permit-storage-ports.ts';
+export { PROBE_PERMIT_STORAGE_INTERFACE_VERSION, PROBE_PERMIT_OBSERVATION_INTERFACE_VERSION } from './probe-permit-storage-ports.ts';
 export type { ProbePermitStoredRecord, ProbePermitStoredInput, ProbePermitResultInput, ProbePermitStoredResult,
-    ProbePermitStorageValues, ProbePermitStorage } from './probe-permit-storage-ports.ts';
+    ProbePermitStorageValues, ProbePermitStorage, ProbePermitBudget, ProbePermitObservationStorage } from './probe-permit-storage-ports.ts';
 export { PROBE_REGISTRATION_STORAGE_INTERFACE_VERSION } from './probe-registration-store-ports.ts';
 export type { ProbeInstanceStoredRecord, ProbeInstanceStorageValues, ProbeInstanceStorage,
     ProbeQualificationStoredRecord, ProbeQualificationStorageValues, ProbeQualificationStorage } from './probe-registration-store-ports.ts';

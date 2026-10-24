@@ -7,7 +7,7 @@ import type { ProbeResultRequest, ProbeTypesResultRequest, ProbeServicesResultRe
 import type { ProbeEchoResultRequest, ProbeEchoChallenge, ProbeEchoInvocation } from '../../compatibility/public.ts';
 import { ControlError, invalid, notFound } from '../../framework/public.ts';
 import { requireProbeMachine } from './machine-policy.ts';
-import type { ScopeAuthorization, TransactionBoundary } from '../../framework/public.ts';
+import type { ScopeAuthorization, TransactionBoundary, ProbePermitObservationStorage } from '../../framework/public.ts';
 import type { ProbeMachineReader } from './machine-contracts.ts';
 import type { ProbeBinding } from './plan-contracts.ts';
 import type { CurrentProbeInstances } from './instance-contracts.ts';
@@ -92,17 +92,18 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
     private readonly machines: ProbeMachineReader<Tx>;
     private readonly instances: CurrentProbeInstances<Tx>;
     private readonly store: ProbePermitStore<Tx>;
+    private readonly observations:ProbePermitObservationStorage<Tx,ProbePermitRecord>|undefined;
     private readonly clock: () => number;
     private readonly history: ProbeRunRecorder<Tx> | undefined;
     private readonly types:ProbeTypeQualifications<Tx>|undefined;
     private readonly access:import('../../framework/public.ts').ResourceReadAccess<Tx>;
     constructor(db: TransactionBoundary<Tx>, identity: ScopeAuthorization<Tx>, access: import('../../framework/public.ts').ResourceReadAccess<Tx>,
         plans: ProbePermitPlans<Tx>, machines: ProbeMachineReader<Tx>,
-        instances: CurrentProbeInstances<Tx>, store: ProbePermitStore<Tx>, clock: () => number = nativeWallClockSource(), history?: ProbeRunRecorder<Tx>,types?:ProbeTypeQualifications<Tx>) {
+        instances: CurrentProbeInstances<Tx>, store: ProbePermitStore<Tx>, clock: () => number = nativeWallClockSource(), history?: ProbeRunRecorder<Tx>,types?:ProbeTypeQualifications<Tx>,observations?:ProbePermitObservationStorage<Tx,ProbePermitRecord>) {
         this.access=access;
 
         this.db = db; this.identity = identity; this.plans = plans; this.machines = machines;
-        this.instances = instances; this.store = store; this.clock = clock; this.history = history;this.types=types;
+        this.instances = instances; this.store = store; this.clock = clock; this.history = history;this.types=types;this.observations=observations;
     }
 
     private async recordHistory(tx: Tx, permit: ProbePermitRecord, kind: ProbeRunCapture['kind'], at: number, result: ProbeRunCapture['result'] = null) {
@@ -125,8 +126,8 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
             throw new ControlError('CLOCK_UNCERTAIN', 503, 'Probe permit clock requires operator review');
         return now;
     }
-    private async budget(tx: Tx) {
-        const current = await this.store.lock(tx);
+    private async budget(tx: Tx, observation=false) {
+        const current = observation&&this.observations?await this.observations.observe(tx):await this.store.lock(tx);
         if (current.records.length > 256 || current.records.some(p => !validProbePermit(p)) ||
             new Set(current.records.map(p => p.id)).size !== current.records.length ||
             current.withdrawals.length > 256 || new Set(current.withdrawals.map(w => w.permitId)).size !== current.withdrawals.length ||
@@ -314,7 +315,7 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
     async offer(node: string, fingerprint: string, epoch: number, input: unknown,typed:boolean|'services'|'echo'=false) {
         const { bootId, instanceId, instanceGeneration } = machineCommand(node, fingerprint, epoch, input, false);
         return this.db.transaction(async tx => {
-            const budget = await this.budget(tx);
+            const budget = await this.budget(tx,true);
             const { slot, machine } = await this.registered(tx, { nodeId: node, bootId, sessionEpoch: epoch },
                 instanceId, instanceGeneration, fingerprint);
             let now = this.now(budget.now);
@@ -342,7 +343,7 @@ export class ProbePermits<Tx> implements ProbePermitOwner<Tx> {
     async check(node: string, fingerprint: string, epoch: number, input: unknown,measurement:ProbeMeasurement=PROBE_EGRESS_MEASUREMENT,typed:boolean|'services'|'echo'=false,service?:ProbeServiceSelection|null,challenge?:ProbeEchoChallenge|null) {
         const { permitId, bootId, instanceId, instanceGeneration } = machineCommand(node, fingerprint, epoch, input, true);
         return this.db.transaction(async tx => {
-            const budget = await this.budget(tx), permit = budget.records.find(p => p.id === permitId);
+            const budget = await this.budget(tx,true), permit = budget.records.find(p => p.id === permitId);
             if (!permit || measurementOf(permit)!==measurement||(typed==='services'||typed==='echo')&&!serviceMatches(permit,service)||
                 typed==='echo'&&!challengeMatches(permit,challenge)||permit.state !== 'consumed' || budget.withdrawals.some(w => w.permitId === permitId) ||
                 permit.binding.nodeId !== node || permit.binding.bootId !== bootId || permit.binding.sessionEpoch !== epoch ||

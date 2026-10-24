@@ -117,6 +117,7 @@ framework/path-publication-storage-ports PATH_PUBLICATION_STORAGE_INTERFACE_VERS
 framework/path-template-storage-ports PATH_TEMPLATE_STORAGE_INTERFACE_VERSION 2
 framework/probe-history-store-ports PROBE_HISTORY_STORAGE_INTERFACE_VERSION 2
 framework/probe-permit-storage-ports PROBE_PERMIT_STORAGE_INTERFACE_VERSION 1
+framework/probe-permit-storage-ports PROBE_PERMIT_OBSERVATION_INTERFACE_VERSION 1
 framework/probe-registration-store-ports PROBE_REGISTRATION_STORAGE_INTERFACE_VERSION 1
 framework/publication-recovery-storage-ports PUBLICATION_RECOVERY_STORAGE_INTERFACE_VERSION 1
 framework/recovery-event-storage-ports RECOVERY_EVENT_STORAGE_INTERFACE_VERSION 1

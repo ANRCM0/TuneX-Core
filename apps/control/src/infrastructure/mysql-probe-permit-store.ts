@@ -1,14 +1,21 @@
 import { ControlError } from '../framework/public.ts';
-import type { ProbePermitStoredRecord, ProbePermitStoredResult, ProbePermitStorage, ProbePermitStorageValues } from '../framework/public.ts';
+import type { ProbePermitStoredRecord, ProbePermitStoredResult, ProbePermitStorage, ProbePermitStorageValues, ProbePermitObservationStorage } from '../framework/public.ts';
 import { json, rows, write } from './mysql.ts';
 import type { Transaction } from './mysql.ts';
 
 /** Owns bounded permits, withdrawals, reported result receipts and their SQL-local budget clock. */
-export class MySqlProbePermitStore<Permit extends ProbePermitStoredRecord,Result extends ProbePermitStoredResult> implements ProbePermitStorage<Transaction,Permit,Result> {
+export class MySqlProbePermitStore<Permit extends ProbePermitStoredRecord,Result extends ProbePermitStoredResult> implements ProbePermitStorage<Transaction,Permit,Result>, ProbePermitObservationStorage<Transaction,Permit> {
     private readonly values:ProbePermitStorageValues<Permit,Result>;
     constructor(values:ProbePermitStorageValues<Permit,Result>) {this.values=values;}
     async lock(tx: Transaction) {
-        const [budget] = await rows<{ observed_at: number }>(tx, 'SELECT observed_at FROM probe_permit_budget WHERE id=1 FOR UPDATE');
+        return this.readBudget(tx,'FOR UPDATE');
+    }
+    async observe(tx:Transaction) {
+        if(this.lock!==originalPermitLock)return this.lock(tx);
+        return this.readBudget(tx,'FOR SHARE');
+    }
+    private async readBudget(tx:Transaction,lock:'FOR UPDATE'|'FOR SHARE') {
+        const [budget] = await rows<{ observed_at: number }>(tx, 'SELECT observed_at FROM probe_permit_budget WHERE id=1 '+lock);
         if (!budget) throw new ControlError('PROBE_PERMIT_CORRUPT', 503, 'Probe permit budget is missing');
         const records = await rows<{ id: string; actor_id: string; scope_id: string; binding: unknown;
             instance_id: string; instance_generation: number; fingerprint: string; timeout_ms: number;
@@ -16,13 +23,13 @@ export class MySqlProbePermitStore<Permit extends ProbePermitStoredRecord,Result
         `SELECT id,actor_id,scope_id,IF(OCTET_LENGTH(binding)<=2048,binding,NULL) binding,
             instance_id,instance_generation,fingerprint,timeout_ms,issued_at,expires_at,state,closed_at,measurement,IF(tls_context IS NULL OR OCTET_LENGTH(tls_context)<=16384,tls_context,JSON_OBJECT('invalid','oversized')) tls_context,
             IF(echo_challenge IS NULL OR OCTET_LENGTH(echo_challenge)<=512,echo_challenge,JSON_OBJECT('invalid','oversized')) echo_challenge
-            FROM probe_permits ORDER BY id LIMIT 257 FOR UPDATE`);
+            FROM probe_permits ORDER BY id LIMIT 257 ${lock}`);
         const permits = records.map(row => this.values.readPermit({measurement:row.measurement,tlsContext:row.tls_context,echoChallenge:row.echo_challenge,
             id:row.id,actorId:row.actor_id,scopeId:row.scope_id,binding:row.binding,instanceId:row.instance_id,
             instanceGeneration:row.instance_generation,fingerprint:row.fingerprint,timeoutMs:row.timeout_ms,
             issuedAt:row.issued_at,expiresAt:row.expires_at,state:row.state,closedAt:row.closed_at},json));
         const withdrawals = await rows<{ permit_id: string; withdrawn_at: number }>(tx,
-            'SELECT permit_id,withdrawn_at FROM probe_permit_withdrawals ORDER BY permit_id LIMIT 257 FOR UPDATE');
+            'SELECT permit_id,withdrawn_at FROM probe_permit_withdrawals ORDER BY permit_id LIMIT 257 '+lock);
         return { observedAt: budget.observed_at, records: permits,
             withdrawals: withdrawals.map(row => ({ permitId: row.permit_id, withdrawnAt: row.withdrawn_at })) };
     }
@@ -74,3 +81,4 @@ export class MySqlProbePermitStore<Permit extends ProbePermitStoredRecord,Result
             SELECT id,GREATEST(?,closed_at) FROM probe_permits WHERE state='consumed'`, [Date.now()]);
     }
 }
+const originalPermitLock=MySqlProbePermitStore.prototype.lock;

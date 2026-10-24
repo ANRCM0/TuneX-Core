@@ -104,6 +104,7 @@ test('208 actual Control composition preserves field initializer and every origi
   assert.equal(payload.usage,control.resourceUsage);
   assert.equal(args('ForwardProbePlans')[7], f.one('ProbeObservationServices')); assert.equal(args('ForwardProbePlans', 1)[7], f.one('ProbeObservationServices'));
   assert.equal(args('ProbePermits')[2], control.readAccess); assert.equal(args('ProbePermits')[7], Date.now); assert.equal(args('ProbePermits')[8], f.one('ProbeRunHistoryRecorder'));
+  assert.equal(args('ProbePermits').length,11);assert.equal(args('ProbePermits')[10],args('ProbePermits')[6]);
   assert.deepEqual(args('ForwardProbeCapabilities'), [f.db, f.identity, control.readAccess, control.forwarding, control.probePlans, control.probes]);
   assert.equal(args('ForwardCommands')[2], control.readAccess); assert.equal(args('ForwardCommands')[3], control.idempotency); assert.equal(args('ForwardCommands')[4], control.forwarding); assert.equal(args('ForwardCommands')[5], control.ledger);
   assert.equal(args('PathTemplateCommands')[2], control.readAccess); assert.equal(args('PathTemplateCommands')[4], f.one('MySqlPathTemplateStore')); assert.equal(args('PathTemplateQueries')[3], f.one('MySqlPathTemplateStore'));
