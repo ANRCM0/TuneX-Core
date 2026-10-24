@@ -131,6 +131,19 @@ func ProbeServicesResult(fields proberesult.Request, descriptor probeservices.De
 func ProbeEchoResult(fields proberesult.Request, descriptor probeecho.Descriptor, binding probeecho.Binding,
 	service *probeecho.Selection, challenge *probeecho.Challenge, proof *probeecho.Proof,
 	requestBytes, responseBytes uint64) (probeecho.ResultRequest, error) {
+	return probeEchoResult(fields, descriptor, binding, service, challenge, nil, proof, requestBytes, responseBytes)
+}
+
+// ProbeEchoResultWithTLS preserves original connect/TLS evidence on v4. The
+// original ProbeEchoResult signature remains the nonce-proof compatibility entry.
+func ProbeEchoResultWithTLS(fields proberesult.Request, descriptor probeecho.Descriptor, binding probeecho.Binding,
+	service *probeecho.Selection, evidence *probeecho.TLSResult) (probeecho.ResultRequest, error) {
+	return probeEchoResult(fields, descriptor, binding, service, nil, evidence, nil, 0, 0)
+}
+
+func probeEchoResult(fields proberesult.Request, descriptor probeecho.Descriptor, binding probeecho.Binding,
+	service *probeecho.Selection, challenge *probeecho.Challenge, evidence *probeecho.TLSResult, proof *probeecho.Proof,
+	requestBytes, responseBytes uint64) (probeecho.ResultRequest, error) {
 	request := probeecho.ResultRequest{Machine: probeecho.Machine{ProtocolVersion: 3, ProbeVersion: 4,
 		NodeId: fields.NodeId, BootId: fields.BootId, SessionEpoch: fields.SessionEpoch, InstanceId: fields.InstanceId,
 		InstanceGeneration: fields.InstanceGeneration, RequestId: fields.RequestId}, Descriptor: descriptor,
@@ -138,7 +151,7 @@ func ProbeEchoResult(fields proberesult.Request, descriptor probeecho.Descriptor
 		Challenge: challenge, Binding: binding, TimeoutMs: fields.TimeoutMs,
 		IssuedAt: fields.IssuedAt, ExpiresAt: fields.ExpiresAt, ConsumedAt: fields.ConsumedAt,
 		MeasuredAt: fields.MeasuredAt, ValidUntil: fields.ValidUntil, ElapsedMs: fields.ElapsedMs,
-		Status: fields.Status, Code: fields.Code, Echo: proof, RequestBytes: requestBytes, ResponseBytes: responseBytes,
+		Status: fields.Status, Code: fields.Code, TLS: evidence, Echo: proof, RequestBytes: requestBytes, ResponseBytes: responseBytes,
 		ApplicationHealth: "unknown", Source: "agent-reported", ApplicationPayloadBytes: requestBytes + responseBytes}
 	raw, err := json.Marshal(request)
 	if err != nil {

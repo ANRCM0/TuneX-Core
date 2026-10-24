@@ -39,9 +39,10 @@ let control:Awaited<ReturnType<typeof startControl>>|undefined,target:ChildProce
 const agents:{nodeId:string;root:string;args:string[];process:ChildProcess;errors:string;exitedAt?:string}[]=[];
 let completedEvidence:Record<string,unknown>|undefined;
 let consoleEvidence:unknown;
+const echoTrace:Record<string,unknown>[]=[];
 function pass(text:string){checks.push(text);console.log('PASS '+text);}
 async function until(action:()=>Promise<boolean>,label:string,timeout=120000){const start=Date.now();while(Date.now()-start<timeout){if(await action())return;await new Promise(r=>setTimeout(r,150));}throw Error('Multi-hop acceptance timed out: '+label);}
-async function call(method:string,path:string,input?:unknown,key=randomUUID()):Promise<{status:number;body:any}>{
+async function call(method:string,path:string,input?:unknown,key:string=randomUUID()):Promise<{status:number;body:any}>{
   const body=input===undefined?undefined:JSON.stringify(input);return new Promise((resolve,reject)=>{
     const req=request({hostname:host,port:control!.port,path:`/api/v1/scopes/${scope}/`+path,method,ca,agent:false,timeout:15000,
       headers:{authorization:`Bearer ${token}`,'content-type':'application/json','idempotency-key':key,...(body!==undefined?{'content-length':String(Buffer.byteLength(body))}:{})}},res=>{const parts:Buffer[]=[];res.on('data',b=>parts.push(b));res.on('end',()=>{try{resolve({status:res.statusCode!,body:JSON.parse(Buffer.concat(parts).toString())});}catch(e){reject(e);}});});
@@ -78,6 +79,19 @@ try{
   if(lab){await lab.open();await writeFile(join(directory,'server.ext'),`subjectAltName=IP:${host},IP:${lab.gateway}\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\n`);await execute(openssl,['x509','-req','-in',join(directory,'server.csr'),'-CA',caCert,'-CAkey',caKey,'-set_serial','1','-out',serverCert,'-days','1','-extfile',join(directory,'server.ext')]);}
   const synchronization=JSON.parse((await linux(linuxBinary('time-proof'),['--check'])).stdout);assert.equal(synchronization.synchronized,true);
   control=await startControl(options);await control.control.identity.bootstrap(scope,owner,token);
+  if(productP) {
+    // Keep only public outcome metadata; never persist credential, nonce or service material.
+    const registry=control.control.probeEchoRegistry,handle=registry.handle.bind(registry);
+    registry.handle=async(...args)=>{try{const result=await handle(...args);echoTrace.push({stage:'qualification',node:args[0],action:result.action,qualified:result.qualified});return result;}
+      catch(error){echoTrace.push({stage:'qualification',node:args[0],code:(error as {code?:string}).code??'error'});throw error;}};
+    const echo=control.control.probeEcho;
+    const trace=<T>(stage:string,invoke:(node:string,fingerprint:string,epoch:number,input:unknown)=>Promise<T>)=>async(...args:Parameters<typeof invoke>):Promise<T>=>{
+      try{const result=await invoke(...args);if(stage!=='poll'||result&&typeof result==='object'&&'offer' in result&&result.offer)echoTrace.push({stage,node:args[0],outcome:'accepted'});return result;}
+      catch(error){echoTrace.push({stage,node:args[0],code:(error as {code?:string}).code??'error'});throw error;}
+    };
+    echo.poll=trace('poll',echo.poll.bind(echo));echo.claim=trace('claim',echo.claim.bind(echo));
+    echo.status=trace('status',echo.status.bind(echo));echo.result=trace('result',echo.result.bind(echo));
+  }
   controlURL=`https://${host}:${control.port}`;
   if(lab){proxy=spawnLinux(fixture,['--mode','tcp-proxy','--host',lab.gateway,'--upstream-host',host,'--upstream-port',String(control.port),'--run-id',nativeRoot+'/proxy']);const status=await ready(proxy);proxyPID=status.pid;controlURL=`https://${lab.gateway}:${status.port}`;}
   const targetArgs=['--mode','target','--run-id',nativeRoot,'--target-connection-seconds','120'];
@@ -217,7 +231,7 @@ try{
       authorizationUntil:body.authorizationUntil,nodes:body.nodes.map((node:any)=>({nodeId:node.nodeId,sessionEpoch:node.sessionEpoch}))};});
     const measurements=await diagnostics().catch(()=>undefined);
     await writeFile(join(directory,'failure.json'),JSON.stringify({passed:false,capturedAt:new Date().toISOString(),policy,
-      error:error instanceof Error?error.message:'Multi-hop acceptance failed',checks,operations,runtime,snapshots,deployments,measurements,
+      error:error instanceof Error?error.message:'Multi-hop acceptance failed',checks,operations,runtime,snapshots,deployments,measurements,echoTrace:echoTrace.slice(-100),
       agents:agents.map(a=>({nodeId:a.nodeId,errors:a.errors,exitCode:a.process.exitCode,exitedAt:a.exitedAt??null}))},null,2));
   }
   throw error;

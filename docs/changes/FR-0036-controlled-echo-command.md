@@ -51,3 +51,12 @@ to permit downgrade. Existing schema/profile ceilings stay unchanged.
 Source cases and future exact-source Actions/physical proof are separate. Keeping
 the staged codec export until acceptance records preserves its unfinished status;
 new routes do not by themselves assert acceptance or authorize publication.
+
+Actions found that enabling v4 allowed original connect tasks to execute but the
+Agent's result builder required nonce context for every measurement. The private
+`probeV4ResultWith` now retains original connect, ingress-connect and pinned TLS
+validation on that same negotiated wire; it delegates nonce kinds to the original
+`probeEchoResult`. The L2 `ProbeEchoResultWithTLS` projects only supplied evidence;
+`ProbeEchoResult` keeps its original signature as the explicit compatibility entry.
+No route downgrade, new authority, extra clock owner or relaxed deadline is added.
+TCP unreachable Echo results also retain their existing closed v4 classification.

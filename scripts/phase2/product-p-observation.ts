@@ -106,7 +106,7 @@ export async function verifyControlledEcho(options:Options) {
                     if(receipt.result)break;await sleep(50);
                 }while(Date.now()<Date.parse(issued.body.expiresAt)+100);
                 const received=fixture.seen.get(issued.body.challenge.invocationDigest)??0;
-                attempts.push({protocol,ordinal,probeId:issued.body.probeId,received,resultAccepted:!!receipt.result});
+                attempts.push({protocol,ordinal,probeId:issued.body.probeId,received,state:receipt.state,resultAccepted:!!receipt.result});
                 assert.ok(received<=1,'The same consumed permit reached the responder more than once');
                 if(receipt.result) {
                     const result=receipt.result.body;
