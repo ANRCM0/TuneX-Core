@@ -6,6 +6,21 @@ PR, Actions execution and necessary failure repairs. Merge, image publication,
 release and delegation are outside this task. Independent-host and long-run
 environments remain unavailable under the human's preceding answer.
 
+## Merge And Physical-Test Preparation - 2026-10-24
+
+The later human instruction "好的，合并整理一下，准备开始实机测试" authorizes
+merging and handoff consolidation. PR #118 was squash-merged at 13:56:37 UTC
+(21:56:37 Asia/Shanghai) as `dc03606fb61a6044a8a0a62c0fc1cd8a3c6e4ca8`,
+tree `eb87545328ed79ae560963ff9f2acaa953843c7d`, identical to PR head 8bfebae.
+The local main checkout was fast-forwarded without discarding work.
+
+Post-merge baseline `40100306844`, packaging `40100306837` and automatic
+development-image workflow `40100306858` have started. Their final outcomes and
+published registry digests are pending, separate from the pre-merge acceptance
+below. No stable release tag or actual physical-host experiment is created by
+this handoff. See [physical-test handoff](product-p-physical-handoff-2026-10-24.md).
+Earlier non-merge authorization/status below records its historical scope.
+
 ## Latest Complete Verification - 69dcaa7
 
 The tested source is `69dcaa710ee0298adde0656674b99c5cb6e1f2b8`, tree

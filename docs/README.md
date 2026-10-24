@@ -4,8 +4,9 @@
 当前状态以[实施进度](development/progress.md)与
 [P 准确修订验证记录](development/product-verification-p-2026-10-24.md)为准；
 [N 验证记录](development/product-verification-n-2026-10-21.md)保留历史修订证据。
-当前新增源码工作为 [P 产品完善阶段](development/product-readiness-stage-p-2026-10-24.md)，
-与历史 N 验证分别记账。
+当前 P 已通过 PR #118 合并为 `dc03606`，进入
+[实机测试准备](development/product-p-physical-handoff-2026-10-24.md)；主线 CI／镜像及
+实际环境执行分别记账，与历史 N 验证分开。
 N 已经 PR #114 合并为 `9a5f719`；历史地基 B 的接受仍见
 [B 验证记录](development/foundation-verification-2026-10-19.md)。
 
@@ -14,7 +15,8 @@ N 已经 PR #114 合并为 `9a5f719`；历史地基 B 的接受仍见
 | 文档 | 用途 |
 | --- | --- |
 | [P：产品易用性与运行闭环](development/product-readiness-stage-p-2026-10-24.md) | 当前串行完善方案、P1–P6 实施顺序、公共接口与 PP-01–16 验收矩阵；源码与执行分别记账 |
-| [P 准确修订验证](development/product-verification-p-2026-10-24.md) | `aae0632f` 的 10 作业 baseline、容器打包、150 跳过项与 native SQL 对账、实际往返和剩余环境范围；未合并或发布 |
+| [P 准确修订验证](development/product-verification-p-2026-10-24.md) | `69dcaa7` 的 10 作业 baseline、容器打包、150 跳过项与 native SQL 对账；PR #118 已合并，主线复验待完成 |
+| [P 实机测试交接](development/product-p-physical-handoff-2026-10-24.md) | 固定合并源码、主线 CI／开发镜像身份、主机输入、部署顺序及 PP-13–16 执行入口 |
 | [P 部署与质量验收](development/product-p-deployment-acceptance.md) | 安装、保留状态升级、原维护／恢复、独立主机故障、负载与 24／72 小时长稳；准备完成，执行未取得 |
 | [受控路径 Echo](spec/controlled-path-echo-v1.md) | Direct 与 Relay／多跳的测量位置、显式协商、完整原 owner 链路、兼容和证据边界 |
 | [开发入口](development/getting-started.md) | 工具、依赖、源码入口与本地／Actions 验证分工 |

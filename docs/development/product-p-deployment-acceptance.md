@@ -4,6 +4,13 @@ Prepared: 2026-10-24. Status: independent-host/load/long-run campaigns not execu
 This runbook is P6 source delivery; it records no production capacity. The parent
 ledger is [stage P](product-readiness-stage-p-2026-10-24.md), PP-13 through PP-16.
 
+The later human merge/preparation instruction has integrated PR #118 as main
+`dc03606fb61a6044a8a0a62c0fc1cd8a3c6e4ca8`. Use the
+[physical-test handoff](product-p-physical-handoff-2026-10-24.md) for exact main
+CI/image workflow identities and the required environment inputs. Post-merge
+CI/image outcomes and actual host execution are still pending at this handoff.
+The earlier authorization statements below retain their original dated scope.
+
 Environment decision (2026-10-24, Asia/Shanghai): the human confirmed that no
 independent-host or long-run environment is currently available and requested
 source and acceptance preparation first. No runner labels, host allocation or

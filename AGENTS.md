@@ -148,3 +148,10 @@ creating a draft PR so Actions can test the exact source. Keep functional,
 MySQL, network, container and browser execution in Actions. This does not
 authorize merge, image publication, release or delegation. Independent-host,
 load and long-run acceptance remains unavailable pending actual environments.
+
+On 2026-10-24 the human instructed "好的，合并整理一下，准备开始实机测试".
+This authorizes merging PR #118, synchronizing main and consolidating physical-test
+handoff documentation. Record post-merge Actions and automatic development-image
+publication separately from pre-merge verification. Actual host execution still
+requires the real host/runner, topology, resource/fault scope and time inputs;
+do not treat test preparation as independent-host/load/long-run acceptance.
