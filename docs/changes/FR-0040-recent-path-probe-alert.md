@@ -1,7 +1,7 @@
 # FR-0040: Recent Controlled Path Sample Condition
 
 Date: 2026-10-24. Authorized under the P source task and standing source change
-scope. Status: Actions contract/native scope verified at `aae0632f`; independent-host/load/long-run unverified.
+scope. Status: Actions contract/native path-to-outbox scope verified at `69dcaa7`; independent-host/load/long-run and external delivery unverified.
 
 Layers: L3 Probe history read service and Station condition; L2 SQL enum, native
 composition and browser representation. Consume original ProbeRunStore,
@@ -45,7 +45,24 @@ physical acceptance remain separately unexecuted. No parallel work is started.
 
 The current [P verification record](../development/product-verification-p-2026-10-24.md)
 binds executed contracts, native MySQL and hosted-runner functional evidence to
-`aae0632f20c1ffc333433b67c72beafc29605e2a`. Earlier planned/unexecuted
+`69dcaa710ee0298adde0656674b99c5cb6e1f2b8`. Earlier planned/unexecuted
 wording in this source proposal records its authoring snapshot. Whole-workflow
 conclusions and independent-host/load/long-run limits remain in that record;
 this update does not open merge, publication, release or parallel-feature gates.
+
+Baseline `40069707791` and packaging `40069707745` pass completely. The actual
+signed three-node UDP sample (47ms) goes through the original history reader,
+locking planner and issuer/current-binding reauthorization into Station schema3
+and the original Notification SQL owners. Post-outbox-insert rollback across
+Station state/event and all seven Notification tables, immutable-event dedup,
+controlled-clock stale unknown without recovery/new Probe, and original policy-
+disable cancellation with zero attempts/secrets/sends pass in artifact
+`12550529868`. Membership-revocation cancellation passes in the separate native
+resource case. Clock advancement is not an actual long-duration experiment.
+
+This native case found a private parser defect: the existing recent-path rule's
+valid Forward target was incorrectly required to be a Node. The repair restores
+that already declared rule/target relation and adds correct/opposite-target
+regression for all six rules. No payload version/field/order, byte bound, schema,
+authority or transaction is changed. Actual external sender delivery remains
+unverified; the cancellation cases intentionally stop before sender access.

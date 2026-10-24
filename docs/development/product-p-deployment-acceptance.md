@@ -150,7 +150,7 @@ Acceptance proceeds separately: source review -> authorized local static/type/
 boundary/parity/format/compilation -> exact-source Actions functional/MySQL/
 network/container/browser -> independently reviewed physical hosts -> actual
 duration load/long-run -> release decision. The saved P Actions source is
-`245d438ace32e1a58c39f00c9dca0a5d1d8cc7d4`; executed contracts, native SQL,
+`69dcaa710ee0298adde0656674b99c5cb6e1f2b8`; executed contracts, native SQL,
 hosted-runner functional/recovery/capacity samples and container packaging are
 recorded separately in the verification record. Those bounded samples are not
 the reviewed topology, offered load, thresholds or 24/72-hour campaigns required

@@ -426,7 +426,11 @@ explicitly and defers all five adapter methods to the same original host.
 No Proxy, competing authority, source copy, new root or database table is added.
 
 Public type/counter/example, old/new state writes, provider counts, current facts,
-expiry/error/override and native binding cases are authored. Local type/boundary
-checks pass; this successor remains unaccepted until its own full Actions pass.
+expiry/error/override and native binding cases pass on `69dcaa7`, tree
+`62cd28b39e8e7e37cce2745c4781827186cac403`. Baseline `40069707791` has all
+ten jobs successful and packaging `40069707745` passes. Unchanged native
+Snapshot/Runtime rollback and actual signed-path-to-Station/outbox cases also
+pass. Acceptance is limited to the cases in the P verification record; original
+RuntimeHost4/old entries remain and the constructor type widening above is explicit.
 See [FR-0044](../changes/FR-0044-relay-locked-progress-input.md). Its reduced input
 count does not prove improved latency or physical-host/load/long-run acceptance.

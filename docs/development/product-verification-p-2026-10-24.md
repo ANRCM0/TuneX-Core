@@ -6,7 +6,99 @@ PR, Actions execution and necessary failure repairs. Merge, image publication,
 release and delegation are outside this task. Independent-host and long-run
 environments remain unavailable under the human's preceding answer.
 
-## Current Acceptance Follow-Up - Path Sample SQL Integration
+## Latest Complete Verification - 69dcaa7
+
+The tested source is `69dcaa710ee0298adde0656674b99c5cb6e1f2b8`, tree
+`62cd28b39e8e7e37cce2745c4781827186cac403`. Baseline `40069707791`
+completed with all ten jobs successful at 2026-10-24 06:44:01 UTC (14:44:01
+Asia/Shanghai); packaging `40069707745` also completed successfully. Actions
+checked out PR test merge `62b0b98022dd804c8e1b6fafbc3cec0111b4d405`, whose
+tree is identical and whose parents are base `b729a5b` and the tested source.
+This is not a merge into main. The cases below are accepted within the PP
+coverage/limits table; the complete P goal remains unaccepted.
+
+The full contract collector, generated parity, boundary/type/compile checks,
+Linux Go vet/race, Windows and unsupported-platform jobs pass. The principal
+contract run has 2307 tests: 2157 passes and 150 database-conditional skips.
+Every skipped name matches a passed test in this source's complete native MySQL
+job, with zero missing matches, native skips or failures. Web has 231 passes;
+deployment-tools has 30. Six-rule Notification target regression, three new
+Relay progress parity/input/freshness/expiry/error/override cases and the native
+public-port binding case pass. Unchanged Snapshot source-failure and resource-
+conflict rollback cases, actual resource Station/outbox membership-revocation
+cancellation and the two-observer/exclusive-writer SQL case also pass.
+
+The new PP-10 path case now has actual native SQL evidence, beyond its earlier
+bridge contracts. An accepted signed three-node UDP sample (47ms) passes through
+the original history reader and locking planner's current binding/issuer
+reauthorization, then Station schema3 and original Notification owners. Artifact
+`product-p-path-alert.json` in `12550529868` records all four checks passed:
+
+- Failure after actual outbox insertion rolls back Station event/state and all
+  seven Notification tables in the same original transaction.
+- The valid Forward-target payload persists; immutable-event replay deduplicates
+  the original outbox. Recorded outcomes are inserted, inserted, duplicate.
+- Advancing only the case's controlled clock by 301000ms makes the latest
+  observation unknown while retaining the firing incident, with no recovered
+  event or new Probe issuance. This is not an actual five-minute or long-run test.
+- Original policy disable cancels the queued delivery with POLICY_CHANGED and
+  zero attempts, secret acquisitions or sender calls. This is policy cancellation;
+  membership-revocation cancellation is covered separately in native SQL.
+
+The case exposed and repaired the private Notification parser's incorrect Node
+requirement for the already declared recent-path Forward rule. No public payload
+version, field/order, byte limit or schema is relaxed. FR-0044 separately adds
+RelayProgressCoordinator1: original native Runtime explicitly selects same-call,
+same-transaction locked input reuse while old advance entries/overrides remain.
+Contract evidence verifies three complete reads/four Node-fact passes become
+one each on the unchanged-plan case; this is not a latency/SLO certificate.
+
+Actual Direct and two-node Relay TCP/UDP each succeed on their first independent
+command with one responder arrival and non-executing expired same-key replay.
+Three-node TCP succeeds on its first command. UDP commands one through three
+each reach the responder once but have no accepted result; the fourth independent
+command succeeds. Status/result calls still reach 236/222ms, with zero connection
+acquisition wait in those samples. Do not infer first-command reliability or
+production latency improvement. Original deadlines, retry/permit/authority bounds
+and failed predecessor observations remain in force and recorded below.
+
+The current Direct Journal sample is used 1024, remaining 1047552 of 1048576
+bytes through accepted Report, SQL/API and Chromium, with conservative precharge
+and upper-bound-at-sample semantics. Actual desktop/mobile member creation,
+self-credential rotation/old-token refusal, six GET rounds and page-change
+cancellation pass. Native 3/4/8-node main/browser and separate same-host namespace
+fault jobs pass. Signed P Echo remains a three-node sample, not an eight-node
+signed Echo or independent-host result.
+
+| Job on 69dcaa7 | Job ID | Final conclusion |
+| --- | --- | --- |
+| deployment-tools | 120800501332 | success |
+| contracts | 120800501493 | success |
+| windows-agent | 120800501449 | success |
+| unsupported-platform | 120800501223 | success |
+| phase1 | 120800501333 | success |
+| probe-workflow | 120800501408 | success |
+| relay-isolation | 120800501409 | success |
+| multihop (3) | 120800501433 | success |
+| multihop (4) | 120800501404 | success |
+| multihop (8) | 120800501453 | success |
+| containers (run 40069707745) | 120800308716 | success |
+
+Artifacts: phase1 `12551660420`, probe `12551520038`, Relay isolation
+`12551076754`, multihop 3/4/8 `12550529868`/`12551096683`/`12551660652`,
+scan reports `12550766211`, Control/Agent SBOMs `12550243434`/`12550612262`.
+The existing scanner gate reports fixable CRITICAL=0 and 11 Control / 17 Agent
+HIGH observations. Packaging/refusal/Compose checks pass; no registry image is
+published. Main remains `b729a5b`; PR #118 remains open and draft.
+
+Any later documentation-only head is distinct from this tested source/tree;
+no exact-head functional CI pass is asserted for that documentation closure.
+Independent physical hosts, installation/restore campaigns, reviewed load,
+external notification delivery and 24/72-hour environments remain unavailable
+or unverified. Parallel features, merge, image publication and release remain
+outside the authorized verification task.
+
+## Historical Follow-Up - Path Sample SQL Integration
 
 The continuing P completion audit found that PP-10's recent-path condition had
 contract/bridge evidence while the real native Station/outbox rollback case
@@ -116,7 +208,7 @@ public binding cases are authored. Local type/boundary checks pass. This new
 foundation successor still requires its own complete exact-source Actions;
 fewer reads do not establish a latency or first-command reliability improvement.
 
-## Latest Complete Verification - 245d438
+## Previous Complete Verification - 245d438
 
 The corrected FR-0043 Node Snapshot reader candidate is
 `245d438ace32e1a58c39f00c9dca0a5d1d8cc7d4`, tree
@@ -339,7 +431,7 @@ process/namespace results are distinct evidence.
 | PP-07 | resource-usage Web/HTTP cases for freshness/unknown/legacy states; actual 1024-byte Journal sample through accepted Report, SQL/API and mobile Chromium | Remaining is an upper bound at sample time, never execution authority |
 | PP-08 | Echo command/qualification/permit/result contracts, original Go owner/executor cases, native permit/claim/instance MySQL and mTLS, actual Direct TCP/UDP signed round trips | Two-second permit and original exchange/result bounds retained; no availability guarantee |
 | PP-09 | actual two-node Relay and three-node signed TCP/UDP Echo; native 3/4/8-node payload/browser main scenarios; same-runner namespace fault cases tracked in the multihop jobs | Signed P Echo is sampled on three nodes, not eight; independent physical hosts remain unavailable |
-| PP-10 | resource/path condition and original-principal/transaction bridge contracts; native resource Station event/handoff rollback/dedup in shared-resource MySQL suite; original Station/notification SQL suites | Recent-path new condition is a contract/bridge proof; no actual external notification destination certification |
+| PP-10 | resource/path contracts; real signed three-node sample through original history/reauthorization into Station and Notification SQL: post-insert rollback, dedup, controlled-clock stale unknown/no recovery, policy-disable zero-send cancellation; separate resource/native membership-revocation cancellation | Stale time is case-clock controlled, not a long run; no actual external notification destination certification |
 | PP-11 | task-workflow and Web lifecycle cases, selected real desktop/mobile account/usage flows, six actual GET rounds and page-change cancellation | No exhaustive accessibility/device/offline certification from those selected flows |
 | PP-12 | original Path/Ingress/MySQL owner suites, Web batch uncertainty/replay/cancel cases, real Profile batch CAS/lost-response and multihop ordered-copy flows | No cross-rule atomicity, automatic retry or lossless-cutover guarantee |
 | PP-13 | setup/container/upgrade/native recovery cases executed in existing Actions | Independent empty-install/retained-state deployment campaign unavailable |

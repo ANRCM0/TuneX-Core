@@ -1,7 +1,7 @@
 # FR-0044: Original Relay Progress With One Locked Input
 
 Date: 2026-10-24.
-Status: source implemented; exact-source acceptance pending. Proposal recorded before implementation.
+Status: accepted within recorded P Actions case scope at `69dcaa7`; independent-host/load/long-run and latency/reliability claims remain unverified. Proposal recorded before implementation.
 Owner: original RuntimeRelayHost. The 2026-10-19 standing foundation source
 authorization and the current P Actions/failure-repair task authorize this serial
 source proposal and its bounded verification. Merge, image publication, release
@@ -109,3 +109,25 @@ Decision: select the additive original-owner progress port under the standing
 authorization, preserve old behavior, and serially select it in the original
 native Runtime composition. This proposal is recorded before implementing the
 public entrypoint/type widening. Exact-source acceptance remains pending.
+
+## Verification Update - 2026-10-24
+
+The preceding planned/pending wording retains the source proposal snapshot.
+The implemented successor is now verified at
+`69dcaa710ee0298adde0656674b99c5cb6e1f2b8`, tree
+`62cd28b39e8e7e37cce2745c4781827186cac403`; actual PR test merge
+`62b0b98022dd804c8e1b6fafbc3cec0111b4d405` has that identical tree.
+Baseline `40069707791` has all ten jobs successful; packaging `40069707745`
+also passes. New progress parity/count/freshness/expiry/error/override and native
+public binding cases pass, as do unchanged Snapshot/Runtime rollback and actual
+signed workflows including the new recent-path Station/outbox SQL case.
+
+The original-owner input reuse is accepted only in that recorded case scope.
+Three-node UDP needs a fourth independent command in this sample; 236ms status
+and 222ms result calls remain observed. Fewer input reads do not prove latency,
+first-command reliability, physical deployment, reviewed load or 24/72-hour
+acceptance. Old ports/overrides remain, RuntimeHost4 is unchanged, and the explicit
+constructor source-type widening above remains part of the migration contract.
+See the [P verification record](../development/product-verification-p-2026-10-24.md)
+for exact jobs/artifacts, failed predecessors and remaining gates. No merge,
+publication, release or parallel feature gate is opened.
