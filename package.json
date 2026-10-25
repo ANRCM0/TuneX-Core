@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test packages/core/test/*.test.ts packages/contracts/test/*.test.ts apps/control/test/*.test.ts",
     "test:web": "node scripts/check-web.mjs && node --test apps/web/test/*.test.mjs",
+    "test:web:browser": "node --test scripts/test/forward-canvas-browser.test.mjs",
     "test:boundaries": "node scripts/check-boundaries.mjs && node --test scripts/test/foundation-boundary*.test.mjs",
     "test:udp-smoke": "node --test scripts/manual/test/*.test.mjs",
     "test:go": "node scripts/run-go.mjs test ./...",

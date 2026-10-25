@@ -24,6 +24,8 @@ test('every distributed Web JavaScript leaf is served byte-exactly with security
   const paths = await leaves(root);
   assert.ok(paths.includes('rule-command-owner/service.js'));
   assert.ok(paths.includes('browser-native/control-console.js'));
+  assert.ok(paths.includes('forward-canvas.js'));
+  assert.ok(paths.includes('forward-canvas-model.js'));
   for (const path of paths) {
     const response = await app.request('/console/' + path);
     assert.equal(response.status, 200, path);
@@ -34,7 +36,10 @@ test('every distributed Web JavaScript leaf is served byte-exactly with security
     assert.match(response.headers.get('content-security-policy') ?? '', /connect-src 'self'/, path);
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), await readFile(new URL(path, root)), path);
   }
-  for (const path of ['future.js', 'console-model-owner/private.js', 'browser-native/future.js']) {
+  const canvasStyle = await app.request('/console/forward-canvas.css');
+  assert.equal(canvasStyle.headers.get('content-type'), 'text/css; charset=utf-8');
+  assert.deepEqual(Buffer.from(await canvasStyle.arrayBuffer()), await readFile(new URL('forward-canvas.css', root)));
+  for (const path of ['future.js', 'future.css', 'console-model-owner/private.js', 'browser-native/future.js']) {
     assert.equal((await app.request('/console/' + path)).status, 404, path);
   }
 });

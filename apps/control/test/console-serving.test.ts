@@ -25,6 +25,9 @@ test('same-origin console assets retain content types, no-store and strict CSP',
     ['/console/tunnel-console.js','text/javascript'],
     ['/console/path-templates.js','text/javascript'],
     ['/console/relay-model.js','text/javascript'],
+    ['/console/forward-canvas.js','text/javascript'],
+    ['/console/forward-canvas-model.js','text/javascript'],
+    ['/console/forward-canvas.css','text/css'],
     ['/console/style.css','text/css']
   ] as const)) {
     const response=await app.request(url);

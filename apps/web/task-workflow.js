@@ -1,13 +1,18 @@
 export function workflowSteps({ connected, overview }) {
   const count = key => Number.isSafeInteger(overview?.[key]) && overview[key] >= 0 ? overview[key] : null;
+  const known = ['nodes','forwards','activeOperations'].every(key => count(key) !== null);
+  const next = connected!==true || !known ? -1 : count('activeOperations') > 0 ? 3 :
+    count('forwards') === 0 ? count('nodes') === 0 ? 0 : 2 : 4;
   return [
     {title:'接入机器',view:'nodes',detail:!connected?'先登录并选择工作空间。':count('nodes')===0?
-      '当前可见范围没有机器，接入自己的机器或检查共享授权。':'检查接入凭据、报告与当前授权，资源数量不代表业务可用。'},
+      '当前可见范围没有机器记录。可以接入自己的机器，也可以先查看管理员共享的可用资源。':'已有机器记录，创建转发前确认接入凭据、Agent 报告和使用权限。'},
     {title:'选择资源',view:'available',detail:'按入口、中继、出口用途选择可用机器，确认端口和成员额度。'},
-    {title:'创建转发',view:'forwards',detail:count('forwards')===0?'先建立一条 Direct 转发，再按需要配置线路。':'编辑自己的规则或使用已发布线路模板；提交后记录原操作回执。'},
-    {title:'确认生效',view:'operations',detail:count('activeOperations')>0?'存在尚在执行的操作，请读取其回执与实际部署状态。':'核对 Operation、Agent 应用状态与受控探测，分别判断结果。'},
-    {title:'处理异常',view:'forwards',detail:count('failedOperations')>0?'存在历史失败记录，先查对应规则的分层诊断，再明确重试或修复。':'从规则的分层诊断和探测支持矩阵开始；缺失报告仍是未知。'},
-  ].map(step=>({...step,enabled:connected===true}));
+    {title:'创建转发',view:'forwards',detail:count('forwards')===0?'从一条简单转发开始：选择入口机器、监听端口和目标地址。':'可以新建转发，或在列表中编辑已有规则。'},
+    {title:'确认生效',view:'operations',detail:count('activeOperations')>0?'存在尚在执行的操作，先查看部署进度；任务接收不代表已经生效。':'确认部署完成后，再核对机器报告与实际 TCP/UDP 业务结果。'},
+    {title:'检查转发',view:'forwards',detail:count('failedOperations')>0?'存在历史失败记录，它不代表当前故障。先查看对应转发的最新状态和诊断。':'查看转发的应用状态，按需要进行受控探测；缺少新鲜报告时仍是未知。'},
+  ].map((step,index)=>({...step,enabled:connected===true,primary:index===next,
+    label:['接入自己的机器','查看共享与私有资源','新建转发','查看部署进度','查看转发状态'][index],
+    action:index===0?'workflow-node-create':index===2?'workflow-forward-create':'workflow-page'}));
 }
 
 /** A finite read session. Its caller supplies visible-page GET work and response guards. */

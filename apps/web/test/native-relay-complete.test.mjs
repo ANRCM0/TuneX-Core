@@ -127,6 +127,42 @@ test('unsaved composition loads the original form without publishing or submitti
   await assert.rejects(h.api.loadPathDraft({...draft,nodes:['a','a']}),/组线路径/);
 });
 
+test('canvas listener and destination load through the original Relay form with a pinned revision and disabled submit',async t=>{
+  const saved=['document','confirm'].map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]);
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});
+  Object.defineProperty(globalThis,'confirm',{configurable:true,value:()=>true});
+  t.after(()=>{for(const [name,value] of saved)value?Object.defineProperty(globalThis,name,value):delete globalThis[name];});
+  const h=consoleHarness((_method,path)=>path==='execution-capabilities'?{multihopEnabled:true}:
+    path==='transport-profiles'?{profiles:[{profileId:'profile-a',currentRevision:3}]}:path.startsWith('transport-profiles/')?profile:{});
+  const draft={nodes:['a','b'],profileId:'profile-a',profileRevision:2,protocol:'both',
+    listenAddress:'127.0.0.1',listenPort:25565,targetHost:' canvas.example ',targetPort:443};
+  assert.equal(await h.api.loadPathDraft(draft),true);
+  assert.equal(h.el('relay-listen-address').value,'127.0.0.1');assert.equal(h.el('relay-listen-port').value,'25565');
+  assert.equal(h.el('field-targetHost').value,'canvas.example');assert.equal(h.el('field-targetPort').value,'443');
+  assert.equal(h.el('field-enabled').checked,false);assert.equal(h.el('relay-submit').disabled,true);
+  assert.equal(h.mutations.length,0);assert.ok(h.requests.every(call=>call[0]==='GET'));
+  assert.ok(h.requests.some(call=>call[1]==='transport-profiles/profile-a?revision=2'));
+  assert.ok(!h.requests.some(call=>call[1]==='relay-plan'));
+  for(const invalid of [{...draft,targetPort:undefined},{...draft,targetPort:65536},{...draft,targetHost:' '}]) {
+    const before=h.requests.length;
+    await assert.rejects(h.api.loadPathDraft(invalid),/画布监听与目标/);
+    assert.equal(h.requests.length,before);assert.equal(h.mutations.length,0);
+  }
+});
+
+test('a current listener revocation refuses canvas transfer and never changes or bypasses the original command gate',async t=>{
+  const saved=['document','confirm'].map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]);
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});
+  Object.defineProperty(globalThis,'confirm',{configurable:true,value:()=>true});
+  t.after(()=>{for(const [name,value] of saved)value?Object.defineProperty(globalThis,name,value):delete globalThis[name];});
+  const h=consoleHarness((_method,path)=>path==='execution-capabilities'?{multihopEnabled:true}:
+    path==='transport-profiles'?{profiles:[{profileId:'profile-a',currentRevision:2}]}:path.startsWith('transport-profiles/')?profile:{});
+  h.callbacks.candidates.relay[0].policy.allowedPorts=[80];
+  await assert.rejects(h.api.loadPathDraft({nodes:['a','b'],profileId:'profile-a',profileRevision:2,protocol:'tcp',
+    listenAddress:'127.0.0.1',listenPort:25565,targetHost:'canvas.example',targetPort:443}),/不在当前授权/);
+  assert.equal(h.el('relay-submit').disabled,true);assert.equal(h.mutations.length,0);
+});
+
 test('clearing an unsaved draft discards delayed capability reads before profiles or form loading',async t=>{
   const originalDocument=Object.getOwnPropertyDescriptor(globalThis,'document'),originalConfirm=Object.getOwnPropertyDescriptor(globalThis,'confirm');
   Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});

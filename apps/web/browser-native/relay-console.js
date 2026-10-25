@@ -257,6 +257,14 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
         draft.nodes.some(node=>!validId(node))||new Set(draft.nodes).size!==draft.nodes.length||
         !validId(draft.profileId)||!Number.isSafeInteger(draft.profileRevision)||draft.profileRevision<1||
         !['tcp','udp','both'].includes(draft.protocol))throw Error('组线路径与精确传输修订无效');
+    const connectionFields=['listenAddress','listenPort','targetHost','targetPort'];
+    const hasConnection=connectionFields.some(name=>Object.hasOwn(draft,name));
+    const connection=hasConnection?Object.fromEntries(connectionFields.map(name=>[name,draft[name]])):null;
+    if(connection&&(typeof connection.listenAddress!=='string'||!connection.listenAddress||connection.listenAddress.length>45||
+        !Number.isInteger(connection.listenPort)||connection.listenPort<1||connection.listenPort>65535||
+        typeof connection.targetHost!=='string'||!connection.targetHost.trim()||connection.targetHost.trim().length>253||
+        !Number.isInteger(connection.targetPort)||connection.targetPort<1||connection.targetPort>65535))
+      throw Error('画布监听与目标参数不完整或超出范围');
     if(!confirm('载入当前组合，准备一条新的停用转发？这会替换下方编辑内容；不会撤销或重放此前结果不确定的提交。'))return false;
     cancelEdit();const version=++editVersion,nodes=[...draft.nodes];
     const {profileId,profileRevision,protocol}=draft;
@@ -271,12 +279,19 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     if(profile.profileId!==profileId||profile.revision!==profileRevision||
         protocols.some(protocol=>!profile.config?.protocols?.includes(protocol)||path.some(node=>!node.policy.capabilities.includes(protocol))))
       throw Error('路径或精确传输修订不支持选择的业务协议');
+    if(connection&&(!path[0].policy.allowedListenerAddresses.includes(connection.listenAddress)||
+        !path[0].policy.allowedPorts.includes(connection.listenPort)))
+      throw Error('画布入口监听已不在当前授权中，请重新读取线路资源');
     const form=el('relay-forward-form');form.reset();
     el('relay-ingress').value=nodes[0];el('relay-egress').value=nodes.at(-1);populateIngress();
     el('relay-profile-select').value=profileId;pinnedProfileRevision=profileRevision;
     intermediates=nodes.slice(1,-1);form.elements.namedItem('protocol').value=protocol;
     form.elements.namedItem('enabled').checked=false;
     form.elements.namedItem('targetHost').value='';form.elements.namedItem('targetPort').value='';
+    if(connection){
+      el('relay-listen-address').value=connection.listenAddress;el('relay-listen-port').value=String(connection.listenPort);
+      form.elements.namedItem('targetHost').value=connection.targetHost.trim();form.elements.namedItem('targetPort').value=String(connection.targetPort);
+    }
     el('relay-submit').textContent='创建转发（当前组合）';el('relay-cancel-edit').hidden=false;
     invalidate();display('relay');return true;
   }

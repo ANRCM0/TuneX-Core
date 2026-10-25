@@ -50,7 +50,7 @@ test('uncertain issue replays the same immutable key/body, double clicks and suc
     return new Promise(resolve => { pending = resolve; });
   });
   await h.api.open(forward); consent(h); await h.api.issue();
-  assert.match(h.el('state').textContent, /uncertain/);
+  assert.match(h.el('state').textContent, /未知/);
   assert.equal(h.el('timeout').disabled, true);
   h.el('timeout').value = '2000';
   const replay = h.api.issue(); await h.api.issue();
@@ -61,7 +61,7 @@ test('uncertain issue replays the same immutable key/body, double clicks and suc
   pending(acceptance); await replay; await h.api.issue();
   assert.equal(h.calls.filter(c => c[0] === 'POST').length, 2);
   assert.equal(h.el('id').value, 'probe-a'); assert.equal(h.el('issue').disabled, true);
-  assert.match(h.el('state').textContent, /not guaranteed/);
+  assert.match(h.el('state').textContent, /尚未确认/);
   await h.api.prepare(); assert.equal(h.el('consent').checked, false);
 });
 
@@ -70,7 +70,7 @@ test('abandoning an uncertain command is explicit; no new key appears without a 
   await h.api.open(forward); consent(h); await h.api.issue();
   await h.api.prepare(); await h.api.open({ ...forward, id: 'other' });
   assert.match(h.el('selected').textContent, /forward-a/);
-  assert.match(h.el('issue').textContent, /Replay/);
+  assert.match(h.el('issue').textContent, /原探测请求/);
   assert.equal(h.calls.filter(c => c[0] === 'POST').length, 1);
 });
 
@@ -81,10 +81,10 @@ test('historical connected result stays unknown and query failures never become 
   const view = JSON.parse(h.el('receipt').textContent);
   assert.equal(view.health, 'unknown'); assert.equal(view.report.historical, true);
   assert.equal(view.report.source, 'agent-reported'); assert.equal(view.report.elapsedMs, 0);
-  assert.match(h.el('state').textContent, /Historical/);
+  assert.match(h.el('state').textContent, /历史/);
   fail = true; await h.api.query();
   assert.equal(h.el('receipt').textContent, ''); assert.equal(h.el('revoke').disabled, true);
-  assert.match(h.el('state').textContent, /unknown/);
+  assert.match(h.el('state').textContent, /未知/);
 });
 
 test('invalid source, payload, identity and current-health assertions fail closed in display projection', async () => {
@@ -95,16 +95,16 @@ test('invalid source, payload, identity and current-health assertions fail close
     receipt({ state: 'consumed', result: { ...result(), body: { ...result().body, code: 'tcp-connect-failed' } } })]) {
     const h = harness(async () => bad); h.el('id').value = 'probe-a'; await h.api.query();
     assert.equal(h.el('receipt').textContent, ''); assert.equal(h.el('revoke').disabled, true);
-    assert.match(h.el('state').textContent, /unknown/);
+    assert.match(h.el('state').textContent, /未知/);
   }
 });
 
 test('receipt wait makes at most eight GETs, never a hidden POST, and stops at expiry', async () => {
   const h = harness(async () => receipt()); h.el('id').value = 'probe-a'; await h.api.wait();
   assert.equal(h.calls.length, 8); assert.ok(h.calls.every(c => c[0] === 'GET' && c[4].timeoutMs === 1500));
-  assert.equal(h.el('stop').disabled, true); assert.match(h.el('state').textContent, /Bounded/);
+  assert.equal(h.el('stop').disabled, true); assert.match(h.el('state').textContent, /限时/);
   const expired = harness(async () => receipt({ expired: true })); expired.el('id').value = 'probe-a'; await expired.api.wait();
-  assert.equal(expired.calls.length, 1); assert.match(expired.el('state').textContent, /unknown/);
+  assert.equal(expired.calls.length, 1); assert.match(expired.el('state').textContent, /未知/);
 });
 
 test('stop, edited IDs and disconnect discard in-flight responses even when the transport ignores abort', async () => {
@@ -216,6 +216,6 @@ test('Echo display rejects malformed scope, descriptor, binding, timing, proof a
     const value = echoReceipt(); mutate(value);
     const h = harness(async () => value, () => true, 'scope-a'); h.el('id').value = 'probe-a'; await h.api.query();
     assert.equal(h.el('receipt').textContent, ''); assert.equal(h.el('revoke').disabled, true); assert.equal(h.calls.length, 1);
-    assert.match(h.el('state').textContent, /unknown/);
+    assert.match(h.el('state').textContent, /未知/);
   }
 });

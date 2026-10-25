@@ -27,8 +27,79 @@ function harness(handler = async (_, resource, input) => accepted(resource, inpu
   return { api, calls, notices, select, el, consent, send, refreshes: () => refreshes };
 }
 function find(element, tag) { return element.children.flatMap(child => [child, ...find(child, tag)]).filter(child => child.tag === tag); }
-const states = h => h.el('command-rows').children.map(row => row.children[1].textContent);
+const states = h => h.el('command-rows').children.map(row => row.children[1]['data-state']);
+const resultDetails = (h, index = 0) => find(h.el('command-rows').children[index].children[2], 'pre')[0].textContent;
 const replay = h => find(h.el('command-rows'), 'button')[0];
+
+test('page selection fills ten slots in list order, skips suspended rules and preserves original proposals', async () => {
+  const h = harness();
+  const suspended = h.api.checkbox({ ...item('suspended'), recoverySuspended: true });
+  const records = Array.from({ length: 12 }, (_, index) => item('rule-' + index));
+  const boxes = records.map(record => h.api.checkbox(record));
+  boxes[11].checked = true; boxes[11].listeners.change();
+  h.el('select-page').listeners.click();
+  assert.equal(suspended.checked, false);
+  assert.deepEqual(boxes.map((box, index) => box.checked ? index : null).filter(index => index !== null), [0,1,2,3,4,5,6,7,8,11]);
+  assert.equal(h.el('select-page').disabled, true);
+  assert.match(h.el('selection').textContent, /已选 10 \/ 10 条 · 本页可选 12 条，恢复暂停 1 条暂不可选/);
+  assert.equal(h.calls.length, 0, 'selection cannot issue a request');
+  records[0].spec.target.port = 999;
+  h.api.batch(false);
+  assert.equal(h.el('command-title').textContent, '批量停用转发');
+  assert.equal(h.el('command-start').textContent, '确认并提交这 10 条');
+  assert.equal(h.calls.length, 0, 'preview cannot issue a request');
+  h.consent(); await h.send();
+  assert.equal(h.calls.length, 10);
+  assert.equal(h.calls[0][1], 'forwards/rule-11');
+  assert.equal(h.calls[1][2].spec.target.port, 80, 'selection uses the original detached proposal');
+});
+
+test('clear selection retains current-page choices while a page change drops every old choice', () => {
+  const h = harness(), old = h.api.checkbox(item());
+  h.el('select-page').listeners.click();
+  h.el('clear-selection').listeners.click();
+  assert.equal(old.checked, false); assert.equal(h.el('batch-enable').disabled, true);
+  assert.equal(h.el('clear-selection').disabled, true); assert.equal(h.el('select-page').disabled, false);
+  h.el('select-page').listeners.click(); assert.equal(old.checked, true);
+  h.api.page(); assert.equal(old.checked, false); assert.equal(h.el('select-page').disabled, true);
+  const next = h.api.checkbox(item('next-page'));
+  h.el('select-page').listeners.click(); assert.equal(next.checked, true); assert.equal(old.checked, false);
+  h.api.batch(true); assert.equal(h.el('command-rows').children.length, 1);
+  assert.match(h.el('command-rows').children[0].children[0].textContent, /next-page/);
+  assert.equal(h.calls.length, 0);
+});
+
+test('active dispatch disables selection and ignores stale page-selection events', async () => {
+  let finish;
+  const h = harness((_, resource, input) => new Promise(resolve => { finish = () => resolve(accepted(resource, input)); }));
+  h.select(item()); h.api.batch(false);
+  const later = h.api.checkbox(item('later'));
+  h.consent(); const pending = h.send();
+  assert.equal(later.disabled, true); assert.equal(h.el('select-page').disabled, true);
+  assert.equal(h.el('clear-selection').disabled, true);
+  h.el('select-page').listeners.click(); h.el('clear-selection').listeners.click();
+  assert.equal(later.checked, false); assert.equal(h.calls.length, 1);
+  finish(); await pending;
+  assert.equal(later.disabled, false); assert.equal(h.el('select-page').disabled, false);
+  assert.equal(h.calls.length, 1);
+});
+
+test('Chinese progress explains uncertainty and preserves original request details until explicit replay', async () => {
+  let first = true;
+  const h = harness(async (_, resource, input) => { if (first) { first = false; throw Error('Lost response'); } return accepted(resource, input); });
+  h.select(item()); h.select(item('rule-b')); h.api.batch(false); h.consent(); await h.send();
+  const row = h.el('command-rows').children[0];
+  assert.equal(row.children[1].textContent, '提交结果未知');
+  assert.match(row.children[2].children[0].textContent, /可能已经提交/);
+  assert.match(h.el('command-state').textContent, /待提交 1 条 · 提交结果未知 1 条/);
+  assert.match(resultDetails(h), /Lost response/); assert.equal(replay(h).textContent, '重试原请求');
+  assert.equal(replay(h).disabled, true); h.consent(); await replay(h).listeners.click();
+  assert.deepEqual(h.calls[0].slice(0,4), h.calls[1].slice(0,4));
+  assert.deepEqual(states(h), ['accepted', 'pending']);
+  assert.equal(h.el('command-start').textContent, '继续提交剩余 1 条');
+  assert.match(h.el('command-rows').children[0].children[2].children[0].textContent, /执行记录/);
+  assert.equal(JSON.parse(resultDetails(h)).operationId, 'operation-rule-a');
+});
 
 test('batch selection is bounded to 10 current-page detached configurations and preview sends nothing', async () => {
   const h = harness(), original = item(); h.select(original); original.spec.target.port = 99;
@@ -57,7 +128,7 @@ test('recovery-suspended rows are not selected and repeated preview/cancel keeps
   const box = h.select(item()); h.api.batch(false); assert.equal(box.checked, false);
   h.el('command-close').listeners.click();
   box.checked = true; box.listeners.change(); h.api.batch(true);
-  assert.equal(box.checked, false); assert.equal(h.el('selection').textContent, '0 / 10 selected on this page');
+  assert.equal(box.checked, false); assert.equal(h.el('selection').textContent, '已选 0 / 10 条 · 本页可选 1 条，恢复暂停 1 条暂不可选');
 });
 
 test('definite CAS rejection is retained per rule while independent later rules continue', async () => {
@@ -68,7 +139,7 @@ test('definite CAS rejection is retained per rule while independent later rules 
   h.select(item()); h.select(item('rule-b')); h.api.batch(false); h.consent(); await h.send();
   assert.deepEqual(states(h), ['rejected', 'accepted']); assert.equal(h.calls.length, 2);
   assert.equal(replay(h), undefined); assert.equal(h.el('command-start').disabled, true);
-  assert.match(h.el('command-state').textContent, /not applied or healthy/);
+  assert.match(h.el('command-state').textContent, /已接收不代表部署完成或业务可用/);
 });
 
 test('uncertain committed response stops the tail and only explicit same-key same-body replay can resolve it', async () => {
@@ -100,7 +171,7 @@ test('server errors and malformed acceptances remain uncertain and never turn in
 test('no-op accepts current revision without inventing an Operation or new desired revision', async () => {
   const h = harness(async (_, resource, input) => ({ forwardId: resource.split('/')[1], revision: input.expectedRevision, operationId: null }));
   h.select(item('rule-a', false)); h.api.batch(false); h.consent(); await h.send();
-  assert.deepEqual(states(h), ['unchanged']); assert.match(h.el('command-rows').children[0].children[2].textContent, /"operationId":null/);
+  assert.deepEqual(states(h), ['unchanged']); assert.equal(JSON.parse(resultDetails(h)).operationId, null);
 });
 
 test('batch requests are serial, cannot double-submit, and stop aborts current without sending the tail', async () => {
@@ -194,7 +265,7 @@ test('fresh plan authorization rejection sends no intent for that row but indepe
   h.api.profileBatch(profileProposal()); h.consent(); await h.send();
   assert.deepEqual(states(h), ['rejected', 'accepted']); assert.equal(h.calls.length, 3);
   assert.deepEqual(h.calls.map(call => call[1]), ['relay-plan', 'relay-plan', 'forwards/rule-1']);
-  assert.match(h.el('command-rows').children[0].children[2].textContent, /No intent sent/);
+  assert.match(resultDetails(h), /No intent sent/);
 });
 
 test('fresh preview is not a CAS lease: a changed rule rejects independently after its successful check', async () => {
@@ -224,7 +295,7 @@ test('unknown, disabled or mismatched preflight stops unsent tail and needs expl
     });
     h.api.profileBatch(profileProposal()); h.consent(); await h.send();
     assert.deepEqual(states(h), ['preflight-failed', 'pending']); assert.equal(h.calls.length, 1);
-    assert.equal(replay(h).textContent, 'Recheck Same Proposal'); assert.equal(replay(h).disabled, true);
+    assert.equal(replay(h).textContent, '重新检查原方案'); assert.equal(replay(h).disabled, true);
     h.consent(); await replay(h).listeners.click(); assert.deepEqual(states(h), ['accepted', 'pending']); assert.equal(h.calls.length, 3);
     assert.equal(h.calls[1][1], 'relay-plan'); assert.equal(h.calls[2][3], 'key-1');
     assert.equal(h.el('command-start').disabled, true, 'Tail requires another consent');
@@ -240,7 +311,7 @@ test('stop or disconnect during Profile check cannot send an intent after the la
     if (disconnect) h.api.clear(); else h.el('command-stop').listeners.click();
     assert.equal(h.calls[0][4].signal.aborted, true); finish(); await pending; assert.equal(h.calls.length, 1);
     if (disconnect) { assert.equal(h.el('command-dialog').open, false); assert.equal(h.refreshes(), 0); }
-    else { assert.deepEqual(states(h), ['preflight-failed', 'pending']); assert.match(h.el('command-rows').children[0].children[2].textContent, /No intent sent/); }
+    else { assert.deepEqual(states(h), ['preflight-failed', 'pending']); assert.match(resultDetails(h), /No intent sent/); }
   }
 });
 
@@ -268,7 +339,7 @@ test('a rejected replay cannot erase uncertainty about the original committed-or
     if (profile) h.api.profileBatch(profileProposal()); else { h.select(item()); h.select(item('tail')); h.api.batch(false); }
     h.consent(); await h.send(); h.consent(); await replay(h).listeners.click();
     assert.deepEqual(states(h), ['uncertain', 'pending']); assert.equal(h.el('command-start').disabled, true);
-    assert.match(h.el('command-rows').children[0].children[2].textContent, /Original outcome remains unknown/);
+    assert.match(resultDetails(h), /Original outcome remains unknown/);
   }
 });
 
@@ -303,7 +374,7 @@ test('ten exact path commands freeze source/target/CAS and use serial proposal +
     assert.deepEqual(preview.slice(0,2),['POST','forwards/rule-'+index+'/path-preview']);assert.equal(plan[1],'relay-plan');
     assert.deepEqual(plan[2],fixed.items[index].proposedSpec);assert.equal(put[1],'forwards/rule-'+index+'/path-binding');
     assert.deepEqual(preview[2],put[2]);assert.equal(put[3],'key-'+(index+1));assert.equal(Object.hasOwn(put[2],'spec'),false);
-    assert.equal(JSON.parse(h.el('command-rows').children[index].children[2].textContent).pathBinding.revision,2);
+    assert.equal(JSON.parse(resultDetails(h,index)).pathBinding.revision,2);
   }
   assert.ok(h.calls.every(call=>call[4].timeoutMs===5000));
 });
@@ -322,7 +393,7 @@ test('new path provenance with equivalent expansion returns unchanged spec and r
   const p=pathProposal(1);p.items[0].spec=structuredClone(p.items[0].proposedSpec);
   const h=harness((...args)=>pathReply(p,...args));assert.equal(h.api.pathBatch(p),true);h.consent();await h.send();
   assert.deepEqual(states(h),['unchanged']);assert.equal(h.calls.length,3);
-  const receipt=JSON.parse(h.el('command-rows').children[0].children[2].textContent);assert.equal(receipt.revision,3);assert.equal(receipt.operationId,null);assert.equal(receipt.pathBinding.changed,true);
+  const receipt=JSON.parse(resultDetails(h));assert.equal(receipt.revision,3);assert.equal(receipt.operationId,null);assert.equal(receipt.pathBinding.changed,true);
 });
 
 test('stale CAS or withdrawn authority rejects one fresh path proposal without a binding write and permits independent later rows',async()=>{

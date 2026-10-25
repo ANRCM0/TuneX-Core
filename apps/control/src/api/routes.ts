@@ -152,7 +152,7 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
     app.get('/console/', async c => { consoleHeaders(c); return c.html(await nativeControlConsoleAsset('index.html')); });
     app.get('/console/app.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('app.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/model.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('model.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
-    for (const asset of ['account-context.js', 'account-credentials.js', 'task-workflow.js', 'line-builder.js', 'template-reference.js', 'admin-resource-console.js', 'resource-limit-console.js', 'member-console.js'] as const)
+    for (const asset of ['account-context.js', 'account-credentials.js', 'task-workflow.js', 'line-builder.js', 'forward-canvas.js', 'forward-canvas-model.js', 'template-reference.js', 'admin-resource-console.js', 'resource-limit-console.js', 'member-console.js'] as const)
         app.get('/console/' + asset, async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset(asset), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/console-model-owner/public.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('console-model-owner/public.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/console-model-owner/service.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('console-model-owner/service.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
@@ -192,6 +192,7 @@ export function createControlApp(options:ControlHttpOptions): NativeControlHttpA
     app.get('/console/probe-telemetry-console.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('probe-telemetry-console.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/telemetry-aggregate-console.js', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('telemetry-aggregate-console.js'), 200, { 'Content-Type': 'text/javascript; charset=utf-8' }); });
     app.get('/console/style.css', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('style.css'), 200, { 'Content-Type': 'text/css; charset=utf-8' }); });
+    app.get('/console/forward-canvas.css', async c => { consoleHeaders(c); return c.body(await nativeControlConsoleAsset('forward-canvas.css'), 200, { 'Content-Type': 'text/css; charset=utf-8' }); });
     app.get('/api/v1/scopes/:scope/native-drivers', async c => {
         if (nativeControlQueryString(c.req.url)) invalid('Native catalog does not accept query parameters');
         return c.json(await control.nativeDrivers.list(c.get('actor'), scope(c.req.param('scope'))));

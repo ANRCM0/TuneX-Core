@@ -123,6 +123,8 @@
         "packages/contracts/src/resource-limits.ts",
         "apps/web/account-context.js",
         "apps/web/line-builder.js",
+        "apps/web/forward-canvas.js",
+        "apps/web/forward-canvas-model.js",
         "apps/web/template-reference.js",
         "apps/web/admin-resource-console.js",
         "apps/web/browser-native/public.js",

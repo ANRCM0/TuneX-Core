@@ -247,7 +247,7 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   function message(text) { el('state').textContent = text; }
   function sync() {
     el('issue').disabled = busy || !selected || (!attempt && (!issuanceEnabled() || Boolean(selected.path)!==pathKind(el('kind').value))) || Boolean(attempt?.acceptance);
-    el('issue').textContent = attempt && !attempt.acceptance ? 'Replay Same Acceptance' : 'Issue One Task';
+    el('issue').textContent = attempt && !attempt.acceptance ? '重试原探测请求' : '发起一次探测';
     el('timeout').disabled = busy || Boolean(attempt);
     el('kind').disabled = busy || Boolean(attempt);
     for (const name of serviceInputs) el(name).disabled = busy || Boolean(attempt) || !serviceKind(el('kind').value);
@@ -269,15 +269,15 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
     epoch++; capVersion++; readVersion++; session.abort(); session = new AbortController();
     stop(); selected = attempt = receipt = null; enabled = ingressEnabled = servicesEnabled = echoEnabled = pathEchoEnabled = busy = false;
     supportForward = null; resetSupport();
-    el('selected').textContent = 'Select a Direct TCP Forward from the Forward list.';
-    el('capability').textContent = 'Issuance policy: unknown / default off.';
+    el('selected').textContent = '先到“我的转发”选择规则，再点击“受控探测”或“探测支持”。';
+    el('capability').textContent = '当前探测开关未知，默认不允许新建任务。';
     el('id').value = ''; el('kind').value = 'tcp-connect'; el('timeout').value = '500'; el('consent').checked = false;
     for (const name of serviceInputs) el(name).value = '';
     el('acceptance').textContent = ''; el('receipt').textContent = '';
-    message('No task selected. Application health: unknown.'); sync();
+    message('尚未选择任务；当前业务健康状态未知。'); sync();
   }
   function abandon() {
-    return !attempt || Boolean(attempt.acceptance) || confirm('The previous submission may have been accepted. Losing its local key does not cancel it. Start a different explicit task?');
+    return !attempt || Boolean(attempt.acceptance) || confirm('上次探测可能已被接收。放弃本地原请求不会取消远程任务，确定准备另一次探测？');
   }
   async function capabilities() {
     const version = epoch, sequence = ++capVersion;
@@ -291,9 +291,11 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
       servicesEnabled = ingressEnabled && result.probeServicesIssuanceEnabled === true;
       echoEnabled = servicesEnabled && result.probeEchoIssuanceEnabled === true;
       pathEchoEnabled = echoEnabled && result.probePathEchoIssuanceEnabled === true;
-      el('capability').textContent = 'Control egress issuance=' + enabled + '; local-ingress issuance=' + ingressEnabled +
-        '; controlled TLS issuance=' + servicesEnabled + '; controlled Echo issuance=' + echoEnabled + '; path Echo issuance=' + pathEchoEnabled + '. Configuration is not Agent opt-in, trust, delivery or liveness proof. Receipt reads and revocation remain separate.';
-    } catch (error) { if (version === epoch && sequence === capVersion) { el('capability').textContent = 'Issuance policy: unknown; new tasks disabled.'; notify(error.message, true); } }
+      const mode = value => value ? '已开启' : '未开启';
+      el('capability').textContent = 'Control 允许发起的探测：目标连接 ' + mode(enabled) + '；本机入口 ' + mode(ingressEnabled) +
+        '；受控 TLS ' + mode(servicesEnabled) + '；受控往返 ' + mode(echoEnabled) + '；路径往返 ' + mode(pathEchoEnabled) +
+        '。开关不证明 Agent 已启用、服务可信、任务已送达或业务可用；查询回执与撤回任务分别操作。';
+    } catch (error) { if (version === epoch && sequence === capVersion) { el('capability').textContent = '探测开关读取失败，当前不允许发起新任务。'; notify(error.message, true); } }
     if (version === epoch && sequence === capVersion) sync();
     await supportRead;
   }
@@ -306,7 +308,7 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
       throw Error('Select a Forward with a complete supported path and transport.');
     clear(); selected = Object.freeze({ id: forward.id, revision: forward.revision, path:Boolean(forward.spec.path?.via?.length),protocols:Object.freeze([...forward.spec.protocols]) }); supportForward = selected;
     el('kind').value=selected.path?(selected.protocols.includes('tcp')?'tcp-path-echo':'udp-path-echo'):(selected.protocols.includes('tcp')?'tcp-connect':'udp-ingress-echo');
-    el('selected').textContent = 'Forward ' + selected.id + ' / selected revision ' + selected.revision + ' (server rechecks current authority).';
+    el('selected').textContent = '已选转发 ' + selected.id + ' · 列表版本 r' + selected.revision + '；提交时仍由服务端重新核对权限。';
     display('probes'); await capabilities();
   }
   async function openCapabilities(forward) {
@@ -320,7 +322,7 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   async function prepare() {
     if (busy || !selected || !abandon()) return;
     stop(); attempt = null; el('acceptance').textContent = ''; el('consent').checked = false;
-    message('A new explicit command requires fresh consent. No automatic task is scheduled.');
+    message('准备另一项探测前需要重新确认；不会自动安排任务。');
     await capabilities();
   }
   function idInput() {
@@ -333,8 +335,8 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
     if (version !== epoch || read !== readVersion) return null;
     receipt = receiptView(value, id, getScope());
     el('receipt').textContent = JSON.stringify(receipt, null, 2);
-    message(receipt.report ? echoKind(receipt.taskKind) ? 'Historical Agent-reported ' + receipt.businessProtocol.toUpperCase() + ' echo observation only. Current application health: unknown.' : 'Historical Agent-reported TCP observation only. Current application health: unknown.' :
-      'No result received. Pending, expired, denied, cancelled and lost reports all remain unknown.');
+    message(receipt.report ? echoKind(receipt.taskKind) ? '这是 Agent 历史上报的 ' + receipt.businessProtocol.toUpperCase() + ' 受控往返观测，当前业务健康仍未知。' : '这是 Agent 历史上报的 TCP 观测，当前业务健康仍未知。' :
+      '尚未收到结果。等待、过期、拒绝、取消或报告丢失均保持未知，不证明业务可用。');
     sync(); return receipt;
   }
   async function query() {
@@ -342,7 +344,7 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
     stop(); const version = epoch, readNumber = ++readVersion;
     receipt = null; el('receipt').textContent = ''; sync();
     try { await read(idInput(), version, readNumber, session.signal); }
-    catch (error) { if (version === epoch && readNumber === readVersion) { message('Receipt unavailable (including unknown, pruned or forbidden IDs). Health: unknown.'); notify(error.message, true); } }
+    catch (error) { if (version === epoch && readNumber === readVersion) { message('回执不可用：任务可能不存在、历史已淘汰或无读取权限。当前健康状态未知。'); notify(error.message, true); } }
   }
   async function issue(event) {
     event?.preventDefault();
@@ -374,10 +376,10 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
       attempt.acceptance = value;
       el('acceptance').textContent = JSON.stringify(value, null, 2);
       el('id').value = value.probeId; receipt = null; ++readVersion; el('receipt').textContent = '';
-      message('Durably accepted only; delivery and execution are not guaranteed. Query the receipt; no new task will be retried automatically.');
+      message('探测请求已持久接收，任务是否送达和执行尚未确认。请查询回执，不会自动新建任务重试。');
     } catch (error) {
       if (version === epoch) {
-        message(attempt ? 'Submission may be uncertain. Explicit replay uses the SAME key and body, never a new task. No result means unknown.' : 'No task submitted.');
+        message(attempt ? '提交结果未知，可能已被接收。只能明确重试原请求，保留原键与原内容，不创建新任务。' : '尚未提交探测任务。');
         notify(error.message, true);
       }
     } finally { if (version === epoch) { busy = false; sync(); } }
@@ -395,10 +397,10 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
         if (!value || value.report || value.expired || value.withdrawnAt || ['revoked', 'quarantined'].includes(value.state)) return;
         if (count < 7) await delay(400, signal);
       }
-      if (version === epoch && readNumber === readVersion) message('Bounded receipt wait ended. No result means unknown; no replacement task is created.');
+      if (version === epoch && readNumber === readVersion) message('本次限时等待已结束。没有结果仍是未知，不会另建任务。');
     } catch (error) {
       if (version === epoch && readNumber === readVersion) {
-        message('Receipt wait stopped or failed. Last displayed data is historical; current health remains unknown.');
+        message('回执等待已停止或读取失败。已显示的数据属于历史记录，当前健康仍未知。');
         if (!watch.signal.aborted) notify(error.message, true);
       }
     } finally {
@@ -409,13 +411,13 @@ export function initProbeConsole({ request, notify, byId, display, getScope = ()
   async function revoke() {
     if (busy || !receipt || el('id').value.trim() !== receipt.probeId) return;
     const id = receipt.probeId, version = epoch;
-    if (!confirm('Withdraw Probe ' + id + '? This cannot undo an already transmitted TCP SYN.')) return;
+    if (!confirm('确认撤回探测 ' + id + '？已经发出的报文无法撤销。')) return;
     stop(); ++readVersion; busy = true; sync();
     try {
       await request('POST', 'probes/' + encodeURIComponent(id) + '/revoke', {}, undefined, { signal: session.signal, timeoutMs: 3000 });
       if (version !== epoch) return;
-      message('Withdrawal accepted. This does not erase history or undo a sent packet.');
-    } catch (error) { if (version === epoch) { message('Withdrawal outcome unknown. Query retained state before assuming cancellation.'); notify(error.message, true); } }
+      message('撤回请求已接收；不会清除历史，也不能撤销已发出的报文。');
+    } catch (error) { if (version === epoch) { message('撤回结果未知，请先查询保留状态，不要假定任务已取消。'); notify(error.message, true); } }
     finally { if (version === epoch) { busy = false; sync(); } }
     if (version === epoch) await query();
   }
