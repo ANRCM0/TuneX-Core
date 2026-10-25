@@ -77,6 +77,7 @@ async function verifyForwardCanvasDraft(page: import('playwright').Page, fixture
     await page.waitForFunction(()=>!(document.getElementById('line-resources-refresh') as HTMLButtonElement).disabled);
     assert.equal(await page.locator('.fc-node').count(),path.length+1);
     assert.equal(await page.locator('#line-canvas-state').textContent(),'草稿结构完整');
+    await page.locator('#line-canvas-tab-route').click();
     await page.locator('#line-name').fill('');await page.locator('#line-prepare').click();
     assert.equal(await page.locator('#line-name').evaluate(node=>node===document.activeElement),true);
     await page.locator('#line-canvas-preview').click();
