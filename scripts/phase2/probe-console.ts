@@ -3,6 +3,13 @@ import { chromium } from 'playwright';
 import type { BrowserContext, Page } from 'playwright';
 
 export interface ConsoleFixture { url: string; scope: string; token: string; directory: string }
+export async function clickConsoleAction(page: Page, action: string, id: string) {
+    const control = page.locator('[data-action="' + action + '"][data-id="' + id + '"]');
+    await control.waitFor({ state: 'attached' });
+    const menu = control.locator('xpath=ancestor::details[1]');
+    if (await menu.count() && await menu.getAttribute('open') === null) await menu.locator(':scope > summary').click();
+    await control.click();
+}
 async function connect(page: Page, fixture: ConsoleFixture) {
     await page.goto(fixture.url + '/console', { waitUntil: 'networkidle' });
     await page.locator('#token').fill(fixture.token);
@@ -98,7 +105,7 @@ export async function issueFromConsole(fixture: ConsoleFixture, forwardId: strin
         await page.locator('[data-view="forwards"]').click();
         const [capabilities] = await Promise.all([
             page.waitForResponse(response => new URL(response.url()).pathname === `/api/v1/scopes/${fixture.scope}/execution-capabilities` && response.request().method() === 'GET'),
-            page.locator('[data-action="forward-probe"][data-id="' + forwardId + '"]').click()
+            clickConsoleAction(page, 'forward-probe', forwardId)
         ]);
         assert.equal(capabilities.status(), 200);
         assert.equal((await capabilities.json()).probeIssuanceEnabled, true);

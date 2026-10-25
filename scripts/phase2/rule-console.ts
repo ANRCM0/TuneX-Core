@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createConnection } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { withBrowser } from './probe-console.ts';
+import { withBrowser, clickConsoleAction } from './probe-console.ts';
 import type { ConsoleFixture } from './probe-console.ts';
 
 interface RuleFixture extends ConsoleFixture {
@@ -48,7 +48,7 @@ export async function verifyRuleConsole(fixture: RuleFixture) {
         await page.locator('[data-view="forwards"]').click();
         const copies: { forwardId: string; revision: number; operationId: string }[] = [];
         for (const port of fixture.listenerPorts) {
-            await page.locator('[data-action="forward-copy"][data-id="' + fixture.sourceId + '"]').click();
+            await clickConsoleAction(page, 'forward-copy', fixture.sourceId);
             await page.waitForFunction(() => document.getElementById('forward-form-title')?.textContent?.includes('复制为新'));
             await page.locator('#forward-form').waitFor({ state: 'visible' });
             assert.equal(await page.locator('#forward-form [name="enabled"]').isChecked(), false);
@@ -67,7 +67,7 @@ export async function verifyRuleConsole(fixture: RuleFixture) {
             assert.deepEqual(Object.keys(body).sort(), ['enabled', 'ingress', 'protocols', 'target']);
             const result = await created.json(); copies.push(result);
             assert.notEqual(result.forwardId, fixture.sourceId); assert.equal(result.revision, 1);
-            await page.locator('[data-action="forward-copy"][data-id="' + result.forwardId + '"]').waitFor();
+            await page.locator('[data-action="forward-copy"][data-id="' + result.forwardId + '"]').waitFor({ state: 'attached' });
             await succeeded(result.operationId);
         }
         for (const copy of copies) await page.getByRole('checkbox', { name: '选择转发 ' + copy.forwardId, exact: true }).check();

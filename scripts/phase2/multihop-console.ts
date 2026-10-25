@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { ForwardSpec } from '@tunex/core';
 import type { RelayProfileConfig } from '@tunex/contracts';
-import { withBrowser } from './probe-console.ts';
+import { withBrowser, clickConsoleAction } from './probe-console.ts';
 import type { ConsoleFixture } from './probe-console.ts';
 import { verifyPathTemplateConsole } from './path-template-console.ts';
 import { verifyPathSwitchConsole } from './path-switch-console.ts';
@@ -261,7 +261,7 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         assert.equal(unchanged.desired.revision, fixture.revision); assert.deepEqual(unchanged.desired.spec, fixture.spec);
 
         await page.locator('[data-view="forwards"]').click();
-        await page.locator('[data-action="forward-copy"][data-id="' + fixture.sourceId + '"]').click();
+        await clickConsoleAction(page, 'forward-copy', fixture.sourceId);
         await page.waitForFunction(() => document.getElementById('relay-submit')?.textContent?.includes('\u590d\u5236\u4e3a\u65b0'));
         assert.equal(await page.locator('#relay-forward-form [name="enabled"]').isChecked(), false);
         assert.equal(await page.locator('#relay-listen-port').inputValue(), '');
@@ -346,7 +346,7 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         assert.ok(deployed.nodes.every((node: any, index: number) => node.ready && node.reportFresh &&
             node.role === (index === 0 ? 'multihop-ingress' : index === path.length - 1 ? 'multihop-egress' : 'multihop-transit')));
         await fixture.traffic(fixture.copyPort); await fixture.traffic(fixture.spec.ingress.listen.port);
-        await page.locator('[data-action="forward-deployment"][data-id="' + copy.forwardId + '"]').click();
+        await clickConsoleAction(page, 'forward-deployment', copy.forwardId);
         await page.locator('#deployment-dialog').waitFor({ state: 'visible' });
         assert.equal(await page.locator('#deployment-topology li').count(), path.length);
         await page.screenshot({ path: fixture.directory + '/console-multihop-copy-active-deployment.png', fullPage: true });
@@ -369,7 +369,7 @@ export async function verifyMultihopConsole(fixture: MultihopConsoleFixture) {
         await page.waitForFunction(id => document.querySelector('[data-action="forward-toggle"][data-id="' + id + '"]')?.textContent === '\u542f\u7528', copy.forwardId);
         const [deleted] = await Promise.all([
             page.waitForResponse(response => new URL(response.url()).pathname === copyPath && response.request().method() === 'DELETE'),
-            page.locator('[data-action="forward-delete"][data-id="' + copy.forwardId + '"]').click()
+            clickConsoleAction(page, 'forward-delete', copy.forwardId)
         ]);
         assert.equal(deleted.status(), 202); assert.deepEqual(deleted.request().postDataJSON(), { expectedRevision: disable.revision });
         await succeeded((await deleted.json()).operationId); await fixture.closed(fixture.copyPort);
