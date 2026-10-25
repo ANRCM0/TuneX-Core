@@ -55,21 +55,21 @@ test('native Rule factory is lazy and keeps initializer defaults destructuring r
   assert.deepEqual(order.slice(-2), ['uuid', ['confirm', 'continue']]);
 });
 
-test('native Rule input Set preserves reset versus drop and callbacks retain original item and listener order', () => {
+test('native Rule inputs preserve reset versus drop and callbacks retain original item and listener order', () => {
   const h = harness(), view = h.dependencies.view;
-  assert.deepEqual(h.events, ['createCommands', 'rule-batch-enable', 'rule-batch-disable', 'rule-command-consent', 'rule-command-start',
-    'rule-command-stop', 'rule-command-close', 'rule-command-dialog', 'rule-selection', 'rule-batch-enable', 'rule-batch-disable']);
+  assert.deepEqual(h.events, ['createCommands', 'rule-select-page', 'rule-clear-selection', 'rule-batch-enable', 'rule-batch-disable', 'rule-command-consent', 'rule-command-start',
+    'rule-command-stop', 'rule-command-close', 'rule-command-dialog', 'rule-selection', 'rule-select-page', 'rule-clear-selection', 'rule-batch-enable', 'rule-batch-disable']);
   const item = { id: 'rule-a' }, input = h.api.checkbox(item), second = h.api.checkbox({ id: 'rule-b' });
-  assert.equal(input.tag, 'input'); assert.equal(input.type, 'checkbox'); assert.equal(input['aria-label'], 'Select Forward rule-a');
+  assert.equal(input.tag, 'input'); assert.equal(input.type, 'checkbox'); assert.equal(input['aria-label'], '选择转发 rule-a');
   input.checked = true; input.listeners.change();
   const selected = h.calls.pop(); assert.equal(selected.name, 'select'); assert.equal(selected.receiver, h.commands);
   assert.equal(selected.args[0], item); assert.equal(selected.args[1], true); selected.args[2](); assert.equal(input.checked, false);
   input.checked = second.checked = true; view.resetInputs(false); assert.equal(input.checked, false); assert.equal(second.checked, false);
   input.checked = true; view.resetInputs(false); assert.equal(input.checked, false, 'retained inputs are still tracked');
-  view.resetInputs(true); input.checked = true; view.resetInputs(false); assert.equal(input.checked, true, 'drop clears the tracked Set');
+  view.resetInputs(true); input.checked = true; view.resetInputs(false); assert.equal(input.checked, true, 'drop clears the tracked inputs');
   const suspended = h.api.checkbox({ id: 'suspended', recoverySuspended: true }); suspended.checked = true;
   suspended.listeners.change(); assert.equal(suspended.checked, false); assert.equal(h.calls.length, 0);
-  h.state.selected.set('rule-a', item); view.selectionState(); assert.equal(h.byId('rule-selection').textContent, '1 / 10 selected on this page');
+  h.state.selected.set('rule-a', item); view.selectionState(); assert.equal(h.byId('rule-selection').textContent, '已选 1 / 10 条 · 本页可选 0 条，恢复暂停 1 条暂不可选');
   assert.equal(h.byId('rule-batch-enable').disabled, false); h.state.active = true; view.selectionState(); assert.equal(h.byId('rule-batch-enable').disabled, true);
   h.byId('rule-batch-enable').listeners.click(); h.byId('rule-batch-disable').listeners.click(); h.byId('rule-command-start').listeners.click();
   assert.deepEqual(h.calls.map(call => [call.name, call.args]), [['batch', [true]], ['batch', [false]], ['dispatch', []]]);
@@ -97,7 +97,7 @@ test('native Rule show consent and clear callbacks preserve the original view op
   const h = harness(), { view } = h.dependencies;
   h.byId('rule-command-consent').checked = true; h.events.length = 0;
   view.show('Original proposal');
-  assert.deepEqual(h.events, ['rule-command-title', 'rule-command-consent', 'rule-selection', 'rule-batch-enable', 'rule-batch-disable', 'rule-command-dialog']);
+  assert.deepEqual(h.events, ['rule-command-title', 'rule-command-consent', 'rule-selection', 'rule-select-page', 'rule-clear-selection', 'rule-batch-enable', 'rule-batch-disable', 'rule-command-dialog']);
   assert.equal(h.byId('rule-command-title').textContent, 'Original proposal'); assert.equal(view.consented(), false);
   assert.equal(h.byId('rule-command-dialog').open, true); h.byId('rule-command-consent').checked = true;
   assert.equal(view.consented(), true); view.clearConsent(); assert.equal(view.consented(), false);

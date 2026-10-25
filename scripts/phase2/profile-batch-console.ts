@@ -67,7 +67,12 @@ export async function verifyProfileBatchConsole(page: Page, context: BrowserCont
         await page.locator('#rule-command-dialog').waitFor({ state: 'visible' });
         assert.equal(attempts, before); assert.equal(plans, checked, 'Preparing the frozen batch performed a hidden plan');
         assert.equal(await page.locator('#rule-command-start').isDisabled(), true);
-        assert.match((await page.locator('#rule-command-title').textContent())!, new RegExp('r' + revision));
+        assert.equal(await page.locator('#rule-command-title').textContent(), '批量更新传输配置');
+        for (const row of await page.locator('#rule-command-rows tr').all()) {
+            const frozen = JSON.parse((await row.locator('pre').first().textContent())!);
+            assert.equal(frozen.spec.transport.profileId, fixture.profileId);
+            assert.equal(frozen.spec.transport.configRevision, revision);
+        }
     }
 
     await publish(3); await prepare(3, [fixture.sourceId, fixture.copyId]);
@@ -78,12 +83,11 @@ export async function verifyProfileBatchConsole(page: Page, context: BrowserCont
     await succeeded(raced.operationId);
     await page.locator('#rule-command-consent').check(); await page.locator('#rule-command-start').click();
     await page.waitForFunction(() => {
-        const text = document.getElementById('rule-command-state')?.textContent ?? '';
-        return text.includes('rejected: 1') && text.includes('accepted: 1');
+        return document.querySelectorAll('#rule-command-rows [data-state="rejected"]').length === 1 && document.querySelectorAll('#rule-command-rows [data-state="accepted"]').length === 1;
     });
     assert.equal(plans, 2); assert.equal(attempts, 2, 'Exactly two original per-rule PUT attempts');
     const sourceRow = page.locator('#rule-command-rows tr').filter({ hasText: fixture.sourceId });
-    const accepted = JSON.parse((await sourceRow.locator('td').nth(2).textContent())!);
+    const accepted = JSON.parse((await sourceRow.locator('td').nth(2).locator('pre').textContent())!);
     assert.equal(accepted.revision, fixture.sourceRevision + 1); await succeeded(accepted.operationId);
     assert.match((await page.locator('#rule-command-rows tr').filter({ hasText: fixture.copyId }).textContent())!, /REVISION_CONFLICT/);
     const sourceAfterBatch = await call('GET', 'forwards/' + fixture.sourceId), copyAfterBatch = await call('GET', copyResource);
@@ -100,16 +104,16 @@ export async function verifyProfileBatchConsole(page: Page, context: BrowserCont
         assert.equal(response.status(), 202); lostAcceptance = await response.json(); await route.abort('failed');
     });
     await page.locator('#rule-command-consent').check(); await page.locator('#rule-command-start').click();
-    await page.waitForFunction(() => document.getElementById('rule-command-state')?.textContent?.includes('uncertain: 1'));
+    await page.waitForFunction(() => document.querySelectorAll('#rule-command-rows [data-state="uncertain"]').length === 1);
     assert.equal(plans, 3); assert.equal(attempts, 3); assert.equal(await page.locator('#rule-command-start').isDisabled(), true);
     await page.screenshot({ path: fixture.directory + '/console-tunnel-profile-batch-uncertain.png', fullPage: true });
     await page.locator('#rule-command-consent').check();
     const [replayed] = await Promise.all([
         page.waitForResponse(response => new URL(response.url()).pathname === sourcePath && response.request().method() === 'PUT'),
-        page.getByRole('button', { name: 'Replay Same Command', exact: true }).click()
+        page.getByRole('button', { name: '重试原请求', exact: true }).click()
     ]);
     assert.equal(replayed.status(), 202); assert.deepEqual(await replayed.json(), lostAcceptance);
-    await page.waitForFunction(() => document.getElementById('rule-command-state')?.textContent?.includes('accepted: 1'));
+    await page.waitForFunction(() => document.querySelectorAll('#rule-command-rows [data-state="accepted"]').length === 1);
     await succeeded(lostAcceptance.operationId); await fixture.verifySourceTraffic(); await page.unroute('**' + sourcePath);
     assert.equal(plans, 3, 'Unknown write replay must not obtain another plan or substitute a command');
     assert.equal(attempts, 4); assert.equal(publications, 2);

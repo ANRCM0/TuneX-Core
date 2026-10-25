@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { ForwardSpec } from '@tunex/core';
 import type { RelayProfileConfig } from '@tunex/contracts';
-import { withBrowser } from './probe-console.ts';
+import { withBrowser, clickConsoleAction } from './probe-console.ts';
 import type { ConsoleFixture } from './probe-console.ts';
 import { verifyProfileBatchConsole } from './profile-batch-console.ts';
 
@@ -116,7 +116,7 @@ export async function verifyTunnelConsole(fixture: TunnelFixture) {
         assert.equal(writes, 2); assert.equal(previews, 1);
 
         await page.locator('[data-view="forwards"]').click();
-        await page.locator('[data-action="forward-copy"][data-id="' + fixture.sourceId + '"]').click();
+        await clickConsoleAction(page, 'forward-copy', fixture.sourceId);
         await page.waitForFunction(() => document.getElementById('relay-submit')?.textContent?.includes('复制为新'));
         assert.equal(await page.locator('#relay-forward-form [name="enabled"]').isChecked(), false);
         assert.equal(await page.locator('#relay-listen-port').inputValue(), ''); assert.equal(await page.locator('#relay-ingress').isDisabled(), false);
@@ -145,7 +145,7 @@ export async function verifyTunnelConsole(fixture: TunnelFixture) {
         const copyPath = base + 'forwards/' + copy.forwardId;
         const [enabled] = await Promise.all([
             page.waitForResponse(response => new URL(response.url()).pathname === copyPath && response.request().method() === 'PUT'),
-            page.locator('[data-action="forward-toggle"][data-id="' + copy.forwardId + '"]').click()
+            clickConsoleAction(page, 'forward-toggle', copy.forwardId)
         ]);
         assert.equal(enabled.status(), 202); assert.equal(enabled.request().postDataJSON().expectedRevision, 1);
         await succeeded((await enabled.json()).operationId); await fixture.traffic(fixture.unusedListenPort);
@@ -157,7 +157,7 @@ export async function verifyTunnelConsole(fixture: TunnelFixture) {
         await page.waitForFunction(id => document.querySelector('[data-action="forward-toggle"][data-id="' + id + '"]')?.textContent === '启用', copy.forwardId);
         const [deleted] = await Promise.all([
             page.waitForResponse(response => new URL(response.url()).pathname === copyPath && response.request().method() === 'DELETE'),
-            page.locator('[data-action="forward-delete"][data-id="' + copy.forwardId + '"]').click()
+            clickConsoleAction(page, 'forward-delete', copy.forwardId)
         ]);
         assert.equal(deleted.status(), 202); assert.equal(deleted.request().postDataJSON().expectedRevision, batches.copyRevision);
         await succeeded((await deleted.json()).operationId); await fixture.closed(fixture.unusedListenPort);

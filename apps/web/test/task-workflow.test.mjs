@@ -48,3 +48,24 @@ test('P5 guide remains actionable without representing counts or historical fail
   const connected=workflowSteps({connected:true,overview:{nodes:1,forwards:1,activeOperations:1,failedOperations:1}});
   assert.match(connected[3].detail,/尚在执行/);assert.match(connected[4].detail,/历史失败/);assert.ok(connected.every(item=>item.enabled));
 });
+
+test('guide recommends one next task only from complete bounded counters, never from missing data',()=>{
+  for(const overview of [null,{}, {nodes:0,forwards:0}, {nodes:-1,forwards:0,activeOperations:0},
+    {nodes:0,forwards:NaN,activeOperations:0}]){
+    assert.equal(workflowSteps({connected:true,overview}).filter(step=>step.primary).length,0);
+  }
+  const overview={nodes:0,forwards:0,activeOperations:0,failedOperations:0};
+  assert.equal(workflowSteps({connected:false,overview}).filter(step=>step.primary).length,0);
+  const steps=workflowSteps({connected:true,overview});
+  assert.deepEqual(steps.filter(step=>step.primary).map(step=>step.action),['workflow-node-create']);
+  assert.equal(steps[1].enabled,true);assert.match(steps[0].detail,/共享/);
+});
+
+test('guide prioritizes pending deployment and does not describe historical failures as current incidents',()=>{
+  const selected=overview=>workflowSteps({connected:true,overview}).find(step=>step.primary);
+  assert.equal(selected({nodes:0,forwards:0,activeOperations:2}).view,'operations');
+  assert.equal(selected({nodes:1,forwards:0,activeOperations:0}).action,'workflow-forward-create');
+  const next=selected({nodes:1,forwards:1,activeOperations:0,failedOperations:20});
+  assert.equal(next.label,'查看转发状态');assert.match(next.detail,/不代表当前故障/);
+  assert.ok(!Object.hasOwn(next,'healthy'));assert.ok(!Object.hasOwn(next,'complete'));
+});

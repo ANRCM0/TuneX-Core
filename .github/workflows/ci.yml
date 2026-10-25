@@ -388,6 +388,10 @@ jobs:
       - run: node scripts/run-go.mjs build -o ../.artifacts/network-fixture ./cmd/network-fixture
       - name: Install Chromium only on the disposable browser acceptance runner
         run: npx playwright install --with-deps chromium
+      - name: Canvas gestures, replacement, error focus and mobile editing with fixture API
+        run: npm run test:web:browser
+        env:
+          TUNEX_CANVAS_ARTIFACT_DIR: ${{ github.workspace }}/.artifacts/canvas-ui
       - name: Real default-off Probe, native rule Console/CAS/retry, Agent lifecycle, mTLS, MySQL and bounded TCP fixtures
         run: npm run test:probe
       - name: Real Relay TLS metadata, Profile batches with CAS and lost-response replay, copy and TCP/UDP through Chromium
@@ -400,6 +404,7 @@ jobs:
         with:
           name: probe-workflow-acceptance
           path: |
+            .artifacts/canvas-ui/*.png
             .artifacts/probe/**/evidence.json
             .artifacts/probe/**/product-p-*.json
             .artifacts/probe/**/console-probe-*.png
