@@ -37,7 +37,7 @@ for (const nodeCount of [3,4,8]) test('canvas browser acceptance with '+nodeCoun
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
   const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
-  const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];
+  const page=await browser.newPage({viewport:{width:1440,height:1000},hasTouch:true});const errors=[];
   page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(10000);
   const directory=process.env.TUNEX_CANVAS_ARTIFACT_DIR || join(tmpdir(),'tunex-canvas-acceptance');await mkdir(directory,{recursive:true});
   t.after(async()=>{if(errors.length)console.log({errors});await page.screenshot({path:join(directory,nodeCount+'-last-state.png'),fullPage:true}).catch(()=>{});});
@@ -91,7 +91,12 @@ for (const nodeCount of [3,4,8]) test('canvas browser acceptance with '+nodeCoun
   await page.locator('#line-canvas-preview').click();assert.deepEqual(JSON.parse(await page.locator('#line-canvas-preview-output').textContent()).nodes,machineIds);
   await page.keyboard.press('Escape');await page.keyboard.press('Escape');assert.equal(await page.locator('#line-canvas').getAttribute('role'),'region');
   await page.locator('#line-canvas').screenshot({path:join(directory,nodeCount+'-desktop.png')});
-  await page.setViewportSize({width:390,height:844});await page.locator('#line-canvas-focus').click();
+  await page.setViewportSize({width:390,height:844});
+  if(await page.locator('#line-canvas-close').isVisible())await page.locator('#line-canvas-close').click();
+  await page.locator('#line-canvas-fit').click();await page.waitForFunction(()=>!document.querySelector('.camera-moving'));
+  await page.locator('.fc-node.target').tap();await page.locator('#line-canvas-inspector').waitFor({state:'visible'});
+  assert.equal(await page.locator('[data-canvas-field="targetHost"]').inputValue(),'example.test');
+  await page.locator('#line-canvas-close').click();await page.locator('#line-canvas-focus').click();
   const expanded=await page.locator('#line-canvas').boundingBox();assert.equal(expanded.width,390);assert.equal(expanded.height,844);
   await page.locator('#line-canvas-inspect').click();await page.locator('#line-canvas-tab-route').click();await page.locator('#line-profile').selectOption('profile-a');
   await page.locator('#line-canvas-close').click();await page.emulateMedia({reducedMotion:'reduce'});await page.locator('#line-canvas-fit').click();

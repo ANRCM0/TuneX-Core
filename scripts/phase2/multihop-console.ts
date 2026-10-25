@@ -149,6 +149,7 @@ async function verifyForwardCanvasDraft(page: import('playwright').Page, fixture
     if(await page.locator('#line-canvas-close').isVisible())await page.locator('#line-canvas-close').click();
     await page.locator('#line-canvas-fit').click();await page.waitForFunction(()=>!document.querySelector('#line-canvas.camera-moving'));
     await page.locator('.fc-node.target').click();
+    await page.locator('#line-canvas-inspector').waitFor({state:'visible'});
     assert.equal(await page.locator('#line-canvas-inspector').isVisible(),true);
     assert.equal(await page.locator('[data-canvas-field="targetHost"]').inputValue(),fixture.spec.target.host);
     await page.locator('#line-canvas-focus').click();
