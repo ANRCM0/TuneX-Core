@@ -67,7 +67,12 @@ export async function verifyProfileBatchConsole(page: Page, context: BrowserCont
         await page.locator('#rule-command-dialog').waitFor({ state: 'visible' });
         assert.equal(attempts, before); assert.equal(plans, checked, 'Preparing the frozen batch performed a hidden plan');
         assert.equal(await page.locator('#rule-command-start').isDisabled(), true);
-        assert.match((await page.locator('#rule-command-title').textContent())!, new RegExp('r' + revision));
+        assert.equal(await page.locator('#rule-command-title').textContent(), '批量更新传输配置');
+        for (const row of await page.locator('#rule-command-rows tr').all()) {
+            const frozen = JSON.parse((await row.locator('pre').first().textContent())!);
+            assert.equal(frozen.spec.transport.profileId, fixture.profileId);
+            assert.equal(frozen.spec.transport.configRevision, revision);
+        }
     }
 
     await publish(3); await prepare(3, [fixture.sourceId, fixture.copyId]);

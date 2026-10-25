@@ -131,7 +131,12 @@ export async function verifyRuleConsole(fixture: RuleFixture) {
         await page.locator('#rule-command-close').click(); await page.setViewportSize({ width: 1440, height: 1000 });
         // Only the disposable test fixture injects this terminal failure; it is not a spontaneous Agent fault claim.
         await fixture.injectFailedOperation(committed.operationId);
-        await page.locator('#refresh').click(); await page.locator('[data-view="operations"]').click();
+        await page.locator('[data-view="operations"]').click();
+        const [operations] = await Promise.all([
+            page.waitForResponse(response => new URL(response.url()).pathname === base + 'operations' && response.request().method() === 'GET'),
+            page.locator('#refresh').click()
+        ]);
+        assert.equal(operations.status(), 200);
         await page.locator('[data-action="operation-retry"][data-id="' + committed.operationId + '"]').click();
         await page.waitForFunction(() => document.getElementById('rule-command-title')?.textContent?.startsWith('重试失败操作'));
         await page.locator('#rule-command-consent').check();

@@ -56,8 +56,9 @@ export async function verifyPathBatchConsole(page: Page, context: BrowserContext
         await page.locator('#path-switch-batch-prepare').click(); await page.locator('#rule-command-dialog').waitFor({ state: 'visible' });
         assert.deepEqual({ attempts: attempts.length, proposals, plans }, before, 'Preparing the batch must send no hidden preflight or write');
         assert.equal(await page.locator('#rule-command-start').isDisabled(), true);
-        assert.match((await page.locator('#rule-command-title').textContent())!, new RegExp('Explicit Path ' + templateId + ' -> r' + revision));
+        assert.equal(await page.locator('#rule-command-title').textContent(), '批量更新线路');
         const displayed = JSON.parse((await page.locator('#rule-command-rows tr').first().locator('pre').textContent())!);
+        assert.equal(displayed.command.template.templateId, templateId);
         assert.equal(displayed.command.template.revision, revision); assert.equal(displayed.command.expectedRevision,
             (await call('GET', 'forwards/' + orderedIds[0])).desired.revision);
         assert.deepEqual(displayed.proposedSpec.target, displayed.sourceSpec.target);
