@@ -7,12 +7,13 @@ import { join, extname } from 'node:path';
 import { chromium } from 'playwright';
 
 // Actual console assets and DOM; only the resource API and draft handoff are fixtures.
-test('canvas browser acceptance: replacement, issue focus, gestures, modal navigation and mobile', { timeout: 120000 }, async t => {
+for (const nodeCount of [3,4,8]) test('canvas browser acceptance with '+nodeCount+' machines: replacement, issue focus, gestures and mobile', { timeout: 120000 }, async t => {
   const root = new URL('../../apps/web/', import.meta.url);
+  const machineIds=['a',...Array.from({length:nodeCount-2},(_,index)=>'relay-'+index),'c'];
   const fixture = `
     import { initLineBuilder } from '/console/line-builder.js';
     document.querySelector('#view-relay').hidden=false;
-    const nodes=['a','b','c','d'].map(id=>({id,canUse:true,allowedRoles:null,resourceSource:'private',policy:{allowedListenerAddresses:['127.0.0.1'],allowedPorts:id==='a'?[25565]:[443]}}));
+    const nodes=${JSON.stringify([...machineIds,'d'])}.map(id=>({id,canUse:true,allowedRoles:null,resourceSource:'private',policy:{allowedListenerAddresses:['127.0.0.1'],allowedPorts:id==='a'?[25565]:[443]}}));
     window.handoffs=[];window.reads=[];
     window.builder=initLineBuilder({byId:id=>document.getElementById(id),notify:(text,error)=>{window.notice={text,error}},
       request:async(method,path)=>{window.reads.push({method,path});if(path==='transport-profiles')return {profiles:[{profileId:'profile-a',currentRevision:1}]};
@@ -39,7 +40,7 @@ test('canvas browser acceptance: replacement, issue focus, gestures, modal navig
   const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];
   page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(10000);
   const directory=process.env.TUNEX_CANVAS_ARTIFACT_DIR || join(tmpdir(),'tunex-canvas-acceptance');await mkdir(directory,{recursive:true});
-  t.after(async()=>{if(errors.length)console.log({errors});await page.screenshot({path:join(directory,'last-state.png'),fullPage:true}).catch(()=>{});});
+  t.after(async()=>{if(errors.length)console.log({errors});await page.screenshot({path:join(directory,nodeCount+'-last-state.png'),fullPage:true}).catch(()=>{});});
   await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'networkidle'});
   await page.waitForFunction(()=>window.ready);
   await page.locator('#line-resources-refresh').click();await page.waitForFunction(()=>!document.querySelector('#line-resources-refresh').disabled);
@@ -48,11 +49,13 @@ test('canvas browser acceptance: replacement, issue focus, gestures, modal navig
     await page.locator('#line-canvas-add').click();await page.locator('[data-canvas-role="'+role+'"]').click();
     const choices=page.locator('#line-canvas-candidates button');await (id?choices.filter({has:page.getByText(id,{exact:true})}):choices).click();
   }
-  await add('ingress','a');await add('transit','b');await add('egress','c');await add('target');
+  await add('ingress','a');for(const id of machineIds.slice(1,-1))await add('transit',id);await add('egress','c');await add('target');
   await page.locator('[data-canvas-field="targetHost"]').fill('example.test');await page.locator('[data-canvas-field="targetPort"]').fill('443');
   await page.locator('#line-canvas-layout').click();await page.waitForFunction(()=>!document.querySelector('.camera-moving'));
-  const cards=['ingress','transit','egress','target'].map(role=>page.locator('.fc-node.'+role));
-  for(let i=0;i<3;i++){
+  await page.locator('#line-canvas-viewport').scrollIntoViewIfNeeded();
+  const cards=[...machineIds.map(id=>page.locator('.fc-node').filter({has:page.getByText(id,{exact:true})})),page.locator('.fc-node.target')];
+  cards[0]=page.locator('.fc-node.ingress');
+  for(let i=0;i<cards.length-1;i++){
     const out=cards[i].locator('[data-canvas-out]'),incoming=cards[i+1].locator('[data-canvas-in]');
     if(i===0){const start=await out.boundingBox(),end=await incoming.boundingBox();
       await page.mouse.move(start.x+start.width/2,start.y+start.height/2);await page.mouse.down();
@@ -63,9 +66,10 @@ test('canvas browser acceptance: replacement, issue focus, gestures, modal navig
   assert.equal(await page.locator('#line-canvas-state').textContent(),'草稿结构完整');
   const first=await cards[0].boundingBox(),beforeDrag=await cards[0].getAttribute('style');
   const retainedEdge=await page.locator('.fc-edge:not(.pending)').first().elementHandle();
-  await page.mouse.move(first.x+90,first.y+20);await page.mouse.down();await page.mouse.move(first.x+120,first.y+50,{steps:8});
+  const dragX=first.x+first.width/2,dragY=first.y+Math.min(20,first.height/4);
+  await page.mouse.move(dragX,dragY);await page.mouse.down();await page.mouse.move(dragX+30,dragY+30,{steps:8});
   await page.keyboard.press('Escape');await page.mouse.up();assert.equal(await cards[0].getAttribute('style'),beforeDrag);
-  await page.mouse.move(first.x+90,first.y+20);await page.mouse.down();await page.mouse.move(first.x+120,first.y+50,{steps:8});await page.mouse.up();
+  await page.mouse.move(dragX,dragY);await page.mouse.down();await page.mouse.move(dragX+30,dragY+30,{steps:8});await page.mouse.up();
   assert.notEqual(await cards[0].getAttribute('style'),beforeDrag);assert.equal(await retainedEdge.evaluate(n=>n.isConnected),true);await retainedEdge.dispose();
   await page.locator('#line-canvas-undo').click();assert.equal(await cards[0].getAttribute('style'),beforeDrag);
   await page.locator('#line-prepare').click();assert.equal(await page.locator('#line-name').evaluate(n=>n===document.activeElement),true);
@@ -84,21 +88,21 @@ test('canvas browser acceptance: replacement, issue focus, gestures, modal navig
   await page.locator('#line-canvas-focus').click();assert.equal(await page.locator('#line-canvas').getAttribute('aria-modal'),'true');
   assert.equal(await page.locator('#line-resources-refresh').evaluate(n=>!!n.closest('[inert]')),true);
   await page.locator('#line-canvas-continue').focus();await page.keyboard.press('Tab');assert.equal(await page.locator('#line-canvas').evaluate(n=>n.contains(document.activeElement)),true);
-  await page.locator('#line-canvas-preview').click();assert.deepEqual(JSON.parse(await page.locator('#line-canvas-preview-output').textContent()).nodes,['a','b','c']);
+  await page.locator('#line-canvas-preview').click();assert.deepEqual(JSON.parse(await page.locator('#line-canvas-preview-output').textContent()).nodes,machineIds);
   await page.keyboard.press('Escape');await page.keyboard.press('Escape');assert.equal(await page.locator('#line-canvas').getAttribute('role'),'region');
-  await page.locator('#line-canvas').screenshot({path:join(directory,'desktop.png')});
+  await page.locator('#line-canvas').screenshot({path:join(directory,nodeCount+'-desktop.png')});
   await page.setViewportSize({width:390,height:844});await page.locator('#line-canvas-focus').click();
   const expanded=await page.locator('#line-canvas').boundingBox();assert.equal(expanded.width,390);assert.equal(expanded.height,844);
   await page.locator('#line-canvas-inspect').click();await page.locator('#line-canvas-tab-route').click();await page.locator('#line-profile').selectOption('profile-a');
   await page.locator('#line-canvas-close').click();await page.emulateMedia({reducedMotion:'reduce'});await page.locator('#line-canvas-fit').click();
   assert.equal(await page.locator('#line-canvas').evaluate(n=>n.classList.contains('camera-moving')),false);
-  await page.locator('#line-canvas').screenshot({path:join(directory,'mobile.png')});
+  await page.locator('#line-canvas').screenshot({path:join(directory,nodeCount+'-mobile.png')});
   await page.locator('#line-canvas-continue').click();await page.waitForFunction(()=>window.handoffs.length===1);
-  assert.deepEqual(await page.evaluate(()=>window.handoffs[0].nodes),['a','b','c']);
+  assert.deepEqual(await page.evaluate(()=>window.handoffs[0].nodes),machineIds);
   assert.equal(await page.locator('#line-resources-refresh').evaluate(n=>!!n.closest('[inert]')),false);
   await page.locator('#line-canvas-focus').click();await page.evaluate(()=>window.builder.clear());
   assert.equal(await page.locator('#line-canvas').getAttribute('role'),'region');assert.equal(await page.locator('.fc-node').count(),0);
   assert.equal(await page.evaluate(()=>document.body.classList.contains('fc-editing')),false);
   assert.equal(await page.evaluate(()=>window.reads.every(r=>r.method==='GET')),true);assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({scope:'real-browser-fixture-API',directory,backendAcceptance:false}));
+  console.log(JSON.stringify({scope:'real-browser-fixture-API',nodeCount,directory,backendAcceptance:false}));
 });

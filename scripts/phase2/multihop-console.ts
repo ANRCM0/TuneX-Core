@@ -54,6 +54,8 @@ async function verifyForwardCanvasDraft(page: import('playwright').Page, fixture
     await page.locator('[data-canvas-field="listenPort"]').selectOption(String(fixture.copyPort));
     await page.locator('#line-canvas-layout').click();
     await page.waitForFunction(()=>!document.querySelector('#line-canvas.camera-moving'));
+    // Parameter fields can scroll the document; mouse coordinates must be in the visible viewport.
+    await page.locator('#line-canvas-viewport').scrollIntoViewIfNeeded();
     const cards=path.map(nodeId=>page.locator('.fc-node').filter({has:page.getByText(nodeId,{exact:true})}));
     cards.push(page.locator('.fc-node.target'));
     for(let index=0;index<cards.length-1;index++) {
@@ -62,7 +64,11 @@ async function verifyForwardCanvasDraft(page: import('playwright').Page, fixture
             const start=(await out.boundingBox())!,end=(await incoming.boundingBox())!;
             await page.mouse.move(start.x+start.width/2,start.y+start.height/2);await page.mouse.down();
             await page.mouse.move(end.x+end.width/2+18,end.y+end.height/2,{steps:12});
-            await page.waitForFunction(()=>document.querySelector('.fc-edge.pending')?.classList.contains('snapped'));
+            try { await page.waitForFunction(()=>document.querySelector('.fc-edge.pending')?.classList.contains('snapped')); }
+            catch(error) {
+                await page.locator('#line-canvas').screenshot({path:fixture.directory+'/console-multihop-forward-canvas-drag-failure.png'});
+                throw error;
+            }
             await page.mouse.up();
         } else {await out.press('Enter');await incoming.press('Enter');}
     }
@@ -117,6 +123,7 @@ async function verifyForwardCanvasDraft(page: import('playwright').Page, fixture
     assert.equal(await page.locator('#line-canvas').getAttribute('role'),'region');
     assert.equal(await page.locator('#line-resources-refresh').evaluate(node=>!!node.closest('[inert]')),false);
     await page.waitForFunction(()=>!document.querySelector('#line-canvas.camera-moving'));
+    await page.locator('#line-canvas-viewport').scrollIntoViewIfNeeded();
     const first=(await cards[0]!.boundingBox())!;
     const retainedWire=await page.locator('.fc-edge:not(.pending)').first().elementHandle();
     const beforeDrag=await cards[0]!.getAttribute('style');
