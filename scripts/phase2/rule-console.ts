@@ -70,7 +70,7 @@ export async function verifyRuleConsole(fixture: RuleFixture) {
             await page.locator('[data-action="forward-copy"][data-id="' + result.forwardId + '"]').waitFor();
             await succeeded(result.operationId);
         }
-        for (const copy of copies) await page.getByRole('checkbox', { name: 'Select Forward ' + copy.forwardId, exact: true }).check();
+        for (const copy of copies) await page.getByRole('checkbox', { name: '选择转发 ' + copy.forwardId, exact: true }).check();
         await page.locator('#rule-batch-enable').click();
         assert.equal(await page.locator('#rule-command-start').isDisabled(), true);
         assert.equal(mutations, 2, 'Preparing a batch must not send commands');
@@ -82,12 +82,11 @@ export async function verifyRuleConsole(fixture: RuleFixture) {
         await succeeded(concurrent.operationId);
         await page.locator('#rule-command-consent').check(); await page.locator('#rule-command-start').click();
         await page.waitForFunction(() => {
-            const text = document.getElementById('rule-command-state')?.textContent ?? '';
-            return text.includes('rejected: 1') && text.includes('accepted: 1');
+            return document.querySelectorAll('#rule-command-rows [data-state="rejected"]').length === 1 && document.querySelectorAll('#rule-command-rows [data-state="accepted"]').length === 1;
         });
         assert.equal(mutations, 4, 'Exactly one command per selected rule');
         assert.match((await page.locator('#rule-command-rows tr').nth(0).textContent())!, /REVISION_CONFLICT/);
-        const enabled = JSON.parse((await page.locator('#rule-command-rows tr').nth(1).locator('td').nth(2).textContent())!);
+        const enabled = JSON.parse((await page.locator('#rule-command-rows tr').nth(1).locator('td').nth(2).locator('pre').textContent())!);
         assert.equal(enabled.forwardId, second.forwardId); assert.equal(enabled.revision, 2);
         await succeeded(enabled.operationId);
         for (const port of fixture.listenerPorts) await tcp(port, 'actual-browser-created-native-rule-' + port);
@@ -100,7 +99,7 @@ export async function verifyRuleConsole(fixture: RuleFixture) {
         ]);
         await page.waitForFunction(id => document.querySelector('[data-action="forward-detail"][data-id="' + id + '"]')?.closest('tr')?.textContent?.includes('r2'), second.forwardId);
         const read = await call('GET', 'forwards/' + second.forwardId); assert.equal(read.desired.revision, 2);
-        await page.getByRole('checkbox', { name: 'Select Forward ' + second.forwardId, exact: true }).check();
+        await page.getByRole('checkbox', { name: '选择转发 ' + second.forwardId, exact: true }).check();
         await page.locator('#rule-batch-disable').click();
         const path = base + 'forwards/' + second.forwardId, sent: { key: string | undefined; input: unknown }[] = [];
         let loseReply = true, committed: any;
@@ -115,15 +114,15 @@ export async function verifyRuleConsole(fixture: RuleFixture) {
             committed = await response.json(); await route.abort('failed');
         });
         await page.locator('#rule-command-consent').check(); await page.locator('#rule-command-start').click();
-        await page.waitForFunction(() => document.getElementById('rule-command-state')?.textContent?.includes('uncertain: 1'));
-        assert.equal(sent.length, 1); assert.equal(await page.getByRole('button', { name: 'Replay Same Command', exact: true }).isDisabled(), true);
+        await page.waitForFunction(() => document.querySelectorAll('#rule-command-rows [data-state="uncertain"]').length === 1);
+        assert.equal(sent.length, 1); assert.equal(await page.getByRole('button', { name: '重试原请求', exact: true }).isDisabled(), true);
         await page.locator('#rule-command-consent').check();
         const [replay] = await Promise.all([
             page.waitForResponse(response => new URL(response.url()).pathname === path && response.request().method() === 'PUT'),
-            page.getByRole('button', { name: 'Replay Same Command', exact: true }).click()
+            page.getByRole('button', { name: '重试原请求', exact: true }).click()
         ]);
         assert.equal(replay.status(), 202); assert.deepEqual(await replay.json(), committed);
-        await page.waitForFunction(() => document.getElementById('rule-command-state')?.textContent?.includes('accepted: 1'));
+        await page.waitForFunction(() => document.querySelectorAll('#rule-command-rows [data-state="accepted"]').length === 1);
         assert.equal(sent.length, 2); assert.ok(sent[0]!.key); assert.deepEqual(sent[0], sent[1]);
         assert.equal(committed.revision, 3); await succeeded(committed.operationId);
         await page.setViewportSize({ width: 390, height: 844 });
@@ -134,7 +133,7 @@ export async function verifyRuleConsole(fixture: RuleFixture) {
         await fixture.injectFailedOperation(committed.operationId);
         await page.locator('#refresh').click(); await page.locator('[data-view="operations"]').click();
         await page.locator('[data-action="operation-retry"][data-id="' + committed.operationId + '"]').click();
-        await page.waitForFunction(() => document.getElementById('rule-command-title')?.textContent?.startsWith('Retry Failed Operation'));
+        await page.waitForFunction(() => document.getElementById('rule-command-title')?.textContent?.startsWith('重试失败操作'));
         await page.locator('#rule-command-consent').check();
         const [retry] = await Promise.all([
             page.waitForResponse(response => new URL(response.url()).pathname === base + 'operations/' + committed.operationId + '/retry'),

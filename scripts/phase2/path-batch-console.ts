@@ -64,7 +64,7 @@ export async function verifyPathBatchConsole(page: Page, context: BrowserContext
         assert.deepEqual(displayed.proposedSpec.ingress, displayed.sourceSpec.ingress);
         assert.equal(displayed.proposedSpec.enabled, displayed.sourceSpec.enabled);
     }
-    const result = async (id: string) => JSON.parse((await page.locator('#rule-command-rows tr').filter({ hasText: id }).locator('td').nth(2).textContent())!);
+    const result = async (id: string) => JSON.parse((await page.locator('#rule-command-rows tr').filter({ hasText: id }).locator('td').nth(2).locator('pre').textContent())!);
     async function ready(path: string[]) {
         const deadline = Date.now() + 120000;
         while (Date.now() < deadline) {
@@ -106,8 +106,7 @@ export async function verifyPathBatchConsole(page: Page, context: BrowserContext
     const raced = await call('PUT', extraResource, { expectedRevision: extra.revision, spec: racedSpec }, 202); await fixture.succeeded(raced.operationId);
     await page.locator('#rule-command-consent').check(); await page.locator('#rule-command-start').click();
     await page.waitForFunction(() => {
-        const text = document.getElementById('rule-command-state')?.textContent ?? '';
-        return text.includes('accepted: 1') && text.includes('rejected: 1');
+        return document.querySelectorAll('#rule-command-rows [data-state="accepted"]').length === 1 && document.querySelectorAll('#rule-command-rows [data-state="rejected"]').length === 1;
     });
     assert.equal(proposals, 2); assert.equal(plans, 1); assert.equal(attempts.length, 1);
     assert.match((await page.locator('#rule-command-rows tr').filter({ hasText: extra.forwardId }).textContent())!, /REVISION_CONFLICT/);
@@ -126,13 +125,13 @@ export async function verifyPathBatchConsole(page: Page, context: BrowserContext
         assert.equal(response.status(), 202); committed = await response.json(); await route.abort('failed');
     });
     await page.locator('#rule-command-consent').check(); await page.locator('#rule-command-start').click();
-    await page.waitForFunction(() => document.getElementById('rule-command-state')?.textContent?.includes('uncertain: 1'));
+    await page.waitForFunction(() => document.querySelectorAll('#rule-command-rows [data-state="uncertain"]').length === 1);
     assert.equal(proposals, 3); assert.equal(plans, 2); assert.equal(attempts.length, 2);
-    assert.match((await page.locator('#rule-command-rows tr').filter({ hasText: extra.forwardId }).textContent())!, /pending/);
+    assert.equal(await page.locator('#rule-command-rows tr').filter({ hasText: extra.forwardId }).locator('[data-state="pending"]').count(), 1);
     assert.equal(await page.locator('#rule-command-start').isDisabled(), true);
     await page.screenshot({ path: fixture.directory + '/console-multihop-path-batch-uncertain.png', fullPage: true });
-    await page.locator('#rule-command-consent').check(); await page.getByRole('button', { name: 'Replay Same Command', exact: true }).click();
-    await page.waitForFunction(() => document.getElementById('rule-command-state')?.textContent?.includes('accepted: 1'));
+    await page.locator('#rule-command-consent').check(); await page.getByRole('button', { name: '重试原请求', exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll('#rule-command-rows [data-state="accepted"]').length === 1);
     assert.equal(proposals, 3); assert.equal(plans, 2); assert.equal(attempts.length, 3); assert.deepEqual(attempts[1], attempts[2]);
     assert.deepEqual(await result(fixture.copyId), committed); assert.equal(committed.revision, fixture.revision + 2);
     assert.equal(await page.locator('#rule-command-start').isDisabled(), true, 'Replaying one row must not resume the tail');
@@ -142,8 +141,7 @@ export async function verifyPathBatchConsole(page: Page, context: BrowserContext
     const extraDeployment = (await call('GET', extraResource + '/deployment')).deployment;
     await page.locator('#rule-command-consent').check(); await page.locator('#rule-command-start').click();
     await page.waitForFunction(() => {
-        const text = document.getElementById('rule-command-state')?.textContent ?? '';
-        return text.includes('accepted: 1') && text.includes('unchanged: 1');
+        return document.querySelectorAll('#rule-command-rows [data-state="accepted"]').length === 1 && document.querySelectorAll('#rule-command-rows [data-state="unchanged"]').length === 1;
     });
     const metadataOnly = await result(extra.forwardId); assert.equal(metadataOnly.revision, raced.revision); assert.equal(metadataOnly.operationId, null);
     assert.equal(metadataOnly.pathBinding.revision, 3); assert.equal(metadataOnly.pathBinding.sequence, 2); assert.equal(metadataOnly.pathBinding.changed, true);
