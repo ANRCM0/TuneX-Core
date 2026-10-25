@@ -60,6 +60,20 @@ test('summary counts remain separate', () => {
   assert.deepEqual(summarizePreflight(rows), { total: 3, supported: 1, unsupported: 1, unknown: 1 });
 });
 
+test('incomplete authorization and future reports cannot appear as a confirmed selectable candidate', () => {
+  const missing = explainNodePreflight(node({ canUse: undefined }), { protocol: 'tcp', role: 'ingress', now });
+  assert.equal(missing.status, 'unknown');
+  assert.ok(missing.reasons.some(reason => reason.code === 'AUTHORIZATION_UNKNOWN'));
+  const missingRole = explainNodePreflight(node({ allowedRoles: undefined }), { protocol: 'tcp', role: 'ingress', now });
+  assert.equal(missingRole.status, 'unknown');
+  assert.ok(missingRole.reasons.some(reason => reason.code === 'ROLE_UNKNOWN'));
+  const future = explainNodePreflight(node({ lastReportAt: '2026-10-20T01:00:01.000Z' }), { protocol: 'tcp', now });
+  assert.equal(future.status, 'unknown');
+  assert.ok(future.reasons.some(reason => reason.code === 'REPORT_IN_FUTURE'));
+  assert.notEqual(future.facts.status, 'fresh');
+  assert.equal(explainNodePreflight(node(), { protocol: 'ftp', now }).status, 'unsupported');
+});
+
 test('shared reports stay hidden and purpose denial is independent of declared capabilities',()=>{
   const shared=node({resourceSource:'admin-shared',readDetail:'shared',lastReportAt:null,allowedRoles:['egress']});
   const result=explainNodePreflight(shared,{protocol:'tcp',role:'egress',now});

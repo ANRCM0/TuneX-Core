@@ -11,6 +11,20 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
   const formValue = (form, name) => form.elements.namedItem(name).value;
   const check = (form, name) => form.elements.namedItem(name).checked;
   const shortId = value => String(value).length > 21 ? String(value).slice(0,18) + '…' : String(value);
+  const tasks=new Map();
+  function beginTask(name,formId,buttons=[],freeze=false){
+    const form=el(formId);
+    if(tasks.has(name)||[...tasks.values()].some(task=>task.form===form))return null;
+    const controls=new Map(),task={name,version:sessionVersion,form,controls};
+    const elements=freeze&&form.elements?.[Symbol.iterator]?[...form.elements]:[];
+    for(const control of [...elements,...buttons.map(el)])if(!controls.has(control)){controls.set(control,control.disabled);control.disabled=true;}
+    form.setAttribute('aria-busy','true');tasks.set(name,task);return task;
+  }
+  function finishTask(task){
+    if(!task||tasks.get(task.name)!==task||task.version!==sessionVersion)return;
+    tasks.delete(task.name);task.form.setAttribute('aria-busy','false');
+    for(const [control,disabled] of task.controls)control.disabled=disabled;
+  }
 
   function options(id, items, preferred) {
     const select = el(id), prior = preferred ?? select.value;
@@ -22,7 +36,7 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
       if (String(item.value) === String(prior)) opt.selected = true;
       select.append(opt);
     }
-    select.disabled = !items.length;
+    select.disabled = !items.length || [...tasks.values()].some(task=>task.controls.has(select));
   }
   function invalidate() {
     planVersion++;
@@ -40,14 +54,14 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
       const li=document.createElement('li'),name=document.createElement('span');name.textContent=shortId(id);li.append(name);
       for(const [label,move] of [['上移',-1],['下移',1],['移除',0]]){
         const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=label;
-        button.disabled=move===-1&&index===0||move===1&&index===intermediates.length-1;
+        button.disabled=tasks.has('draft')||tasks.has('submit')||move===-1&&index===0||move===1&&index===intermediates.length-1;
         button.setAttribute('aria-label',label+' '+id);
         button.addEventListener('click',()=>{if(!move)intermediates.splice(index,1);else [intermediates[index],intermediates[index+move]]=[intermediates[index+move],intermediates[index]];invalidate();});li.append(button);
       }
       el('multihop-path').append(li);
     });
     options('multihop-candidate',candidates.relay.filter(n=>multihopCapable(n)&&roleAllowed(n,'transit')&&!path.includes(n.id)).map(n=>({value:n.id})));
-    el('multihop-add').disabled=!multihopEnabled||intermediates.length>=6||!el('multihop-candidate').value;
+    el('multihop-add').disabled=tasks.has('draft')||tasks.has('submit')||!multihopEnabled||intermediates.length>=6||!el('multihop-candidate').value;
     el('multihop-controls').hidden=!multihopEnabled;
   }
   function eligibleNodes() {
@@ -124,6 +138,7 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
   }
   async function publishProfile(event) {
     event.preventDefault();
+    const task=beginTask('profile','relay-profile-form',[],true);if(!task)return;
     try {
       const form=el('relay-profile-form'),profileId=formValue(form,'profileId').trim();
       if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(profileId))throw Error('Profile ID 不合法');
@@ -139,10 +154,13 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
       const expectedRevision=existing?.currentRevision??0;
       if(existing && !confirm('同名 Profile 将基于 r'+expectedRevision+' 发布新 revision，不会自动切换正在运行的 Forward。继续？'))return;
       const response=await mutate('PUT','transport-profiles/'+encodeURIComponent(profileId),{expectedRevision,config});
+      if(task.version!==sessionVersion)return;
       await refreshProfiles();
+      if(task.version!==sessionVersion)return;
       options('relay-profile-select',profileList.map(p=>({value:p.profileId,label:p.profileId+' · r'+p.currentRevision})),profileId);
       notify('Profile 已提交：'+profileId+' · r'+response.revision+'；使用权限仍由 Control Profile Grant 决定。');
-    } catch(e) { notify(e.message,true); }
+    } catch(e) { if(task.version===sessionVersion)notify(e.message,true); }
+    finally{finishTask(task);}
   }
   async function viewEndpoint() {
     try{
@@ -153,6 +171,7 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
   }
   async function saveEndpoint(event) {
     event.preventDefault();
+    const task=beginTask('endpoint','relay-endpoint-form',[],true);if(!task)return;
     try {
       const form=el('relay-endpoint-form'),nodeId=formValue(form,'nodeId');
       const config=relayEndpoint({
@@ -163,11 +182,14 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
       let expectedRevision=0;
       try { const existing=await request('GET','nodes/'+encodeURIComponent(nodeId)+'/relay-endpoint');expectedRevision=existing.revision; }
       catch(e) {if(!e.message.startsWith('NOT_FOUND：'))throw e;}
+      if(task.version!==sessionVersion)return;
       if(expectedRevision>0&&!confirm('已有 Endpoint r'+expectedRevision+'，改动可能影响现有 Relay，请确认继续。'))return;
       const response=await mutate('PUT','nodes/'+encodeURIComponent(nodeId)+'/relay-endpoint',{expectedRevision,config});
+      if(task.version!==sessionVersion)return;
       invalidate();
       notify('Relay Endpoint 已提交 · revision '+response.revision+'；当前不代表端口已成功绑定。');
-    }catch(e){notify(e.message,true);}
+    }catch(e){if(task.version===sessionVersion)notify(e.message,true);}
+    finally{finishTask(task);}
   }
   async function buildSpec() {
     const form=el('relay-forward-form');
@@ -182,6 +204,8 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     return intermediates.length?multihopSpec(fields,[ingress,...intermediates.map(id=>candidates.relay.find(n=>n.id===id)),egress],profile,multihopEnabled):relaySpec(fields,ingress,egress,profile);
   }
   async function preview() {
+    if(tasks.has('submit'))return;
+    const task=beginTask('preview','relay-forward-form',['relay-preview']);if(!task)return;
     invalidate();
     const version=planVersion;
     try {
@@ -204,9 +228,12 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
       el('relay-submit').disabled=false;
       notify('Relay 计划检查通过；尚未部署、授权续期或进行实际链路探测。');
     }catch(e){if(version===planVersion)notify(e.message,true);}
+    finally{finishTask(task);}
   }
   async function submit(event) {
     event.preventDefault();
+    if(tasks.has('preview'))return;
+    const task=beginTask('submit','relay-forward-form',['relay-submit','relay-preview','relay-cancel-edit','relay-reload'],true);if(!task)return;
     const version=planVersion,selected=editing?{...editing}:null;
     try {
       const spec=await buildSpec();
@@ -214,13 +241,18 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
       if(!previewed||JSON.stringify(spec)!==previewed)throw Error('表单已变化，请重新执行计划预览');
       el('relay-submit').disabled=true;
       const result=selected?await mutate('PUT','forwards/'+encodeURIComponent(selected.id),{expectedRevision:selected.revision,spec}):await mutate('POST','forwards',spec);
-      if(version!==planVersion)return;
+      if(task.version!==sessionVersion)return;
       cancelEdit();
       previewed=null;
       await Promise.all([load('forwards'),load('operations'),loadOverview()]);
+      if(task.version!==sessionVersion)return;
       display('operations');
       notify('链路操作已接受，Operation '+(result.operationId??'无变更')+'；请观察路径中各节点的应用状态。');
-    }catch(e){notify(e.message,true);}
+    }catch(e){if(task.version===sessionVersion)notify(e.message,true);}
+    finally{
+      finishTask(task);
+      if(task.version===sessionVersion){previewed=null;el('relay-submit').disabled=true;el('relay-ingress').disabled=Boolean(editing);renderPath();}
+    }
   }
   el('relay-profile-form').addEventListener('submit',publishProfile);
   el('relay-endpoint-form').addEventListener('submit',saveEndpoint);
@@ -266,8 +298,14 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
         !Number.isInteger(connection.targetPort)||connection.targetPort<1||connection.targetPort>65535))
       throw Error('画布监听与目标参数不完整或超出范围');
     if(!confirm('载入当前组合，准备一条新的停用转发？这会替换下方编辑内容；不会撤销或重放此前结果不确定的提交。'))return false;
-    cancelEdit();const version=++editVersion,nodes=[...draft.nodes];
+    const task=beginTask('draft','relay-forward-form',['relay-submit','relay-preview','relay-cancel-edit','relay-reload'],true);
+    if(!task)throw Error('当前表单正在检查、载入或提交，请等待完成后再载入画布草稿。');
+    const prior={editing,pinnedProfileRevision,intermediates:[...intermediates],
+      values:Object.fromEntries(['ingressId','egressId','profileId','listenAddress','listenPort','protocol','targetHost','targetPort'].map(name=>[name,formValue(el('relay-forward-form'),name)])),
+      enabled:check(el('relay-forward-form'),'enabled'),title:el('relay-submit').textContent,cancelHidden:el('relay-cancel-edit').hidden};
+    const version=++editVersion,nodes=[...draft.nodes];let loaded=false;
     const {profileId,profileRevision,protocol}=draft;
+    try {
     if(!await refresh(nodes)||version!==editVersion)return false;
     const path=nodes.map(nodeId=>candidates.relay.find(node=>node.id===nodeId));
     if(path.some((node,index)=>!node||!roleAllowed(node,index===0?'ingress':index===path.length-1?'egress':'transit')||
@@ -282,6 +320,7 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     if(connection&&(!path[0].policy.allowedListenerAddresses.includes(connection.listenAddress)||
         !path[0].policy.allowedPorts.includes(connection.listenPort)))
       throw Error('画布入口监听已不在当前授权中，请重新读取线路资源');
+    cancelEdit();
     const form=el('relay-forward-form');form.reset();
     el('relay-ingress').value=nodes[0];el('relay-egress').value=nodes.at(-1);populateIngress();
     el('relay-profile-select').value=profileId;pinnedProfileRevision=profileRevision;
@@ -293,7 +332,20 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
       form.elements.namedItem('targetHost').value=connection.targetHost.trim();form.elements.namedItem('targetPort').value=String(connection.targetPort);
     }
     el('relay-submit').textContent='创建转发（当前组合）';el('relay-cancel-edit').hidden=false;
-    invalidate();display('relay');return true;
+    invalidate();loaded=true;display('relay');return true;
+    } finally {
+      if(!loaded&&version===editVersion){
+        editing=prior.editing;pinnedProfileRevision=prior.pinnedProfileRevision;intermediates=prior.intermediates;
+        const form=el('relay-forward-form');
+        el('relay-ingress').value=prior.values.ingressId;el('relay-egress').value=prior.values.egressId;populateIngress();
+        for(const [name,value] of Object.entries(prior.values))form.elements.namedItem(name).value=value;
+        form.elements.namedItem('enabled').checked=prior.enabled;
+        el('relay-ingress').disabled=Boolean(editing);el('relay-submit').textContent=prior.title;el('relay-cancel-edit').hidden=prior.cancelHidden;
+        invalidate();
+      }
+      finishTask(task);
+      if(task.version===sessionVersion){el('relay-submit').disabled=true;el('relay-ingress').disabled=Boolean(editing);renderPath();}
+    }
   }
   el('deployment-close').addEventListener('click',()=>el('deployment-dialog').close());
   el('deployment-dialog').addEventListener('close',()=>{if(!el('deployment-dialog').open){deploymentVersion++;deploymentId=null;}});
@@ -357,6 +409,7 @@ function initRelayConsole({ request, mutate, notify, byId, candidates, load, loa
     return true;
   }
   function clear() {
+    for(const task of [...tasks.values()])finishTask(task);
     sessionVersion++;
     multihopEnabled=false;deploymentVersion++;deploymentId=null;cancelEdit();
     el('deployment-nodes').replaceChildren();el('deployment-topology').replaceChildren();el('deployment-state').textContent='';

@@ -125,10 +125,15 @@ export function initLineBuilder({ request, byId, notify, loadDraft, useDraft }) 
       if (loaded === false) { state('未替换当前编辑内容。'); return; }
       if (!save) {
         state('画布路径、监听和目标已载入下方转发表单，默认为停用。请验证部署计划后明确提交；画布后续修改不会自动覆盖已载入表单。');
-        byId('relay-forward-form').scrollIntoView({ block: 'start', behavior: 'smooth' });
+        const form=byId('relay-forward-form');
+        form.scrollIntoView({ block: 'start', behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        const target=form.elements?.namedItem('targetHost');
+        (target&&!target.value?target:byId('relay-preview')).focus?.({preventScroll:true});
       } else {
         state('节点顺序与传输配置已载入线路草稿，不包含监听和业务目标。检查精确修订后再明确发布。');
-        byId('path-template-form').scrollIntoView({ block: 'start', behavior: 'smooth' });
+        const form=byId('path-template-form');
+        form.scrollIntoView({ block: 'start', behavior: globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        form.querySelector?.('input:not([disabled]),select:not([disabled]),button:not([disabled])')?.focus({preventScroll:true});
       }
     } catch (error) { if (token === epoch) { state('草稿准备未完成；请检查连线、参数、授权与精确修订。'); notify(error.message, true); } }
     finally { if (token === epoch && reading) { reading = false; controls(false); } }

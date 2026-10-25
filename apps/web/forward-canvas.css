@@ -33,6 +33,11 @@
 @container(max-width:720px){.fc-progress{padding:8px 8px 0;gap:4px}.fc-progress li{min-width:calc(50% - 4px)}.fc-progress button{font-size:10px;padding:6px 8px}.fc-gesture-hint{left:11px;bottom:60px;max-width:calc(100% - 22px);font-size:10px}.fc-summary>#line-canvas-chain{flex-basis:50%;min-width:70px}.fc-summary>#line-canvas-next{min-height:36px}}
 @media(prefers-reduced-motion:reduce){.fc-node{animation:none}.fc-port::after{transition:none}}
 .fc-node.needs-attention:not(.selected){border-color:#c79650}
+.fc-edge-hit:focus-visible{outline:none;stroke:#3764e840;stroke-width:14}
+/* Visibility must apply immediately so opening controls can receive focus. */
+.fc-inspector.open{transition-property:transform}
+.forward-canvas .fc-port:focus-visible{outline:3px solid #90b7ff;outline-offset:2px}
+@media(pointer:coarse){.forward-canvas .fc-port{width:44px;height:44px}}
 .fc-settings>[data-canvas-replace]{width:100%;margin-bottom:10px}
 .fc-settings [aria-invalid=true]{border-color:#b45145;box-shadow:0 0 0 2px #b4514514}
 .forward-canvas .fc-issue-link{border:0;background:transparent;text-align:left;white-space:normal;line-height:1.7;font-weight:400;color:#8a5c20;padding:6px 8px;justify-content:flex-start}

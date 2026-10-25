@@ -24,8 +24,11 @@ export function explainNodePreflight(node, options = {}) {
   const fail = (code, message) => { reasons.push(reason(code, message)); status = 'unsupported'; };
   const unknown = (code, message) => { reasons.push(reason(code, message)); if (status === 'supported') status = 'unknown'; };
 
+  if (!protocols.length) fail('PROTOCOL_INVALID', '请选择 TCP、UDP 或 TCP / UDP 协议');
   if(node?.canUse===false)fail('NODE_NOT_AUTHORIZED','当前账号没有节点用途授权');
+  else if(node?.canUse!==true)unknown('AUTHORIZATION_UNKNOWN','节点用途授权尚未确认');
   if(options.role&&Array.isArray(node?.allowedRoles)&&!node.allowedRoles.includes(options.role))fail('ROLE_NOT_AUTHORIZED','当前用途未获授权');
+  else if(options.role&&node?.allowedRoles!==null&&!Array.isArray(node?.allowedRoles))unknown('ROLE_UNKNOWN','缺少当前用途的授权声明');
   if (node?.revoked === true) fail('NODE_REVOKED', '节点已撤销');
   if (!node?.credentialUntil) unknown('CREDENTIAL_MISSING', '无有效凭据记录');
   else if (!isTime(node.credentialUntil)) unknown('CREDENTIAL_INVALID', '凭据时间格式无效');
@@ -39,10 +42,11 @@ export function explainNodePreflight(node, options = {}) {
   } else if (!isTime(node.lastReportAt)) {
     unknown('REPORT_INVALID', 'Agent 报告时间格式无效');
   } else {
-    const age = Math.max(0, now - Date.parse(node.lastReportAt));
-    const fresh = age <= REPORT_FRESH_MS;
-    facts = { status: fresh ? 'fresh' : 'stale', reportAgeMs: age, lastReportAt: node.lastReportAt };
-    if (!fresh) unknown('REPORT_STALE', 'Agent 报告超过 5 分钟');
+    const age = now - Date.parse(node.lastReportAt);
+    const fresh = age >= 0 && age <= REPORT_FRESH_MS;
+    facts = { status: fresh ? 'fresh' : age < 0 ? 'unknown' : 'stale', reportAgeMs: age, lastReportAt: node.lastReportAt };
+    if (age < 0) unknown('REPORT_IN_FUTURE', 'Agent 报告时间晚于当前时间，请核对系统时间');
+    else if (!fresh) unknown('REPORT_STALE', 'Agent 报告超过 5 分钟');
   }
 
   if (!policy) {

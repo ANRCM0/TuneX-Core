@@ -35,6 +35,8 @@ class Element {
   close() { if (this.open) { this.open = false; this.listeners.get('close')?.(); } }
   scrollIntoView(options) { this.scrolled = options; }
   focus(options) { this.focused = options ?? {}; this.focusCount = (this.focusCount ?? 0) + 1; }
+  setAttribute(name, value) { (this.attributes ??= new Map()).set(name, String(value)); }
+  getAttribute(name) { return this.attributes?.get(name) ?? null; }
   click() { return this.listeners.get('click')?.({currentTarget:this,target:this}); }
   querySelectorAll() { return []; }
   querySelector(selector) {
@@ -52,7 +54,8 @@ function harness(t, options = {}) {
   byId('token').type='password';
   byId('resource-provision-form').elements=[];
   const retain=new Element('option');retain.value='retain';byId('resource-classify-legacy').append(retain);
-  byId('nodes-filter').elements={namedItem:name=>{assert.equal(name,'ownership');return byId('nodes-ownership');}};
+  byId('forward-form').elements = { namedItem: name => byId('direct-field-' + name) };
+  byId('nodes-filter').elements={namedItem:name=>byId('nodes-' + name)};
   for (const kind of ['forwards','operations']) {
     const form = byId(kind + '-filter'); form.formFields = new Map();
     form.elements = { namedItem(name) {
@@ -69,7 +72,7 @@ function harness(t, options = {}) {
   const views = pageNames.filter(view=>view!=='available').map(view => new Element('view-' + view));
   const document = new Element('document');
   Object.assign(document, { getElementById: byId, createElement: tag => new Element(tag),
-    querySelectorAll: selector => selector === '.nav' ? navs : selector === '.view' ? views : selector === '[data-governance]' ? governanceNavs : assert.fail(selector) });
+    querySelectorAll: selector => selector === '.nav' ? navs : selector === '.view' ? views : selector === '[data-governance]' ? governanceNavs : selector === '.table-wrap' ? [] : assert.fail(selector) });
   Object.defineProperty(globalThis, 'document', { configurable: true, value: document });
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard: { writeText: async value => {
     copies.push(value); if (options.copyError) throw options.copyError;
@@ -432,7 +435,8 @@ test('Direct form submits once, closes only after acceptance and retains the cre
     if(accepted&&resource==='forwards')throw Error('list unavailable');return managementReply(method,resource);
   },mutate:()=>new Promise(resolve=>{release=()=>{accepted=true;resolve({forwardId:'created-forward',revision:1,operationId:'operation-create'});};})});
   await h.connect();h.byId('forward-node').value='node-a';await h.event('show-forward-form','click').result;
-  const fields={node:{value:'node-a'},protocol:{value:'tcp'},listenAddress:{value:'127.0.0.1'},listenPort:{value:'30001'},targetHost:{value:'target.example'},targetPort:{value:'443'},enabled:{checked:true}};
+  const fields=Object.fromEntries(Object.entries({node:'node-a',protocol:'tcp',listenAddress:'127.0.0.1',listenPort:'30001',targetHost:'target.example',targetPort:'443'}).map(([name,value])=>[name,Object.assign(new Element(name),{value})]));
+  fields.enabled=Object.assign(new Element('enabled'),{checked:true});
   h.byId('forward-form').elements={namedItem:name=>fields[name]};
   const first=h.event('forward-form','submit');await h.event('forward-form','submit').result;
   assert.equal(h.mutations.length,1);assert.equal(h.byId('forward-form').hidden,false);

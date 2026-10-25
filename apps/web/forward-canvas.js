@@ -12,7 +12,7 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
   let paintFrame = null, paintFlags = {}, cameraFrame = null, cameraTarget = null, editGroup = null, pinch = null, spaceHeld = false;
   const nodeViews = new Map(), edgeViews = new Map(), touches = new Map(), progressViews = [];
   let pendingPath = null, lastViewport = null;
-  let replacingKey = null, focused = false, focusReturn = null, inertElements = [];
+  let replacingKey = null, focused = false, focusReturn = null, inertElements = [], moveGroup = null, inspectorReturn = null, fieldReturn = null;
   const defaultHint = '滚轮缩放 · Shift + 滚轮平移 · 双指缩放';
   const nodeByKey = key => graph.nodes.find(node => node.key === key);
   const available = node => candidate(node.role, node.nodeId);
@@ -30,7 +30,7 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
   }
   function remember(before, selected = selection) {
     past.push({ graph: copyCanvas(before), selection: selected ? { ...selected } : null });
-    if (past.length > 50) past.shift(); future = []; editGroup = null;
+    if (past.length > 50) past.shift(); future = []; editGroup = null; moveGroup = null;
   }
   function paint() {
     const flags = paintFlags; paintFlags = {}; paintFrame = null;
@@ -82,8 +82,8 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
   }
   function select(value, open = false) {
     commitField();
-    editGroup = null; selection = value; tab = 'node'; renderSelection(); renderInspector();
-    if (open) el('inspector').classList.add('open');
+    editGroup = null; moveGroup = null; selection = value; tab = 'node'; renderSelection(); renderInspector();
+    if (open) openInspector();
   }
   function renderSelection() {
     for (const card of el('nodes').children) card.classList.toggle('selected', selection?.kind === 'node' && card.dataset.canvasNode === selection.key);
@@ -107,7 +107,7 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
       const key = edge.from + ':' + edge.to; retained.add(key);
       let parts = edgeViews.get(key);
       if (!parts) {
-        const group = svg('g', {}), hit = svg('path', { class: 'fc-edge-hit' });
+        const group = svg('g', {}), hit = svg('path', { class: 'fc-edge-hit', tabindex: 0, role: 'button' });
         hit.dataset.canvasFrom = edge.from; hit.dataset.canvasTo = edge.to;
         const line = svg('path', { class: 'fc-edge', 'marker-end': 'url(#line-canvas-arrow)' });
         const text = svg('text', { 'text-anchor': 'middle', class: 'fc-edge-label' });
@@ -116,6 +116,9 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
       const selected = selection?.kind === 'edge' && selection.from === edge.from && selection.to === edge.to;
       const path = curve(point(from, true), point(to, false));
       parts.hit.setAttribute('d', path); parts.line.setAttribute('d', path); parts.line.classList.toggle('selected', selected);
+      parts.hit.setAttribute('aria-label', '连接：' + (from.label || from.nodeId) + ' → ' + (to.label || to.nodeId || '业务目标') + '，按 Enter 查看或断开');
+      parts.hit.setAttribute('aria-pressed', String(selected));
+      parts.hit.setAttribute('tabindex', busy ? '-1' : '0');
       parts.text.setAttribute('x', String((from.x + width + to.x) / 2)); parts.text.setAttribute('y', String((from.y + to.y + height) / 2 - 10));
       parts.text.textContent = to.role === 'target' ? '业务转发' : '节点间传输';
     }
@@ -195,7 +198,7 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
       panel.append(element('h4', '选择节点或连线'), element('p', '点击节点配置参数，点击连线可以断开。位置只影响排版。', 'hint'));
       const steps = element('ol', undefined, 'fc-route-list');
       for (const node of canvasChain(graph)) { const row = element('li'); row.append(button(canvasRoleNames[node.role] + ' · ' + (node.label || node.nodeId || '业务目标'), () => select({ kind: 'node', key: node.key }, true))); steps.append(row); }
-      panel.append(steps, element('p', '键盘：方向键移动节点，Delete 删除选中项，Ctrl+Z 撤销。', 'hint')); return;
+      panel.append(steps, element('p', '键盘：Tab 选择节点或连线，Enter 打开配置，方向键移动节点，Delete 删除选中项，Ctrl+Z 撤销。', 'hint')); return;
     }
     if (selection.kind === 'edge') {
       const from = nodeByKey(selection.from), to = nodeByKey(selection.to);
@@ -272,7 +275,7 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
     }));
   }
   function showSettings(field = 'profile') {
-    commitField(); tab = 'route'; renderInspector(); el('inspector').classList.add('open');
+    commitField(); tab = 'route'; renderInspector(); openInspector();
     if (['profile', 'name', 'protocol'].includes(field)) byId('line-' + field).focus({ preventScroll: true });
   }
   function setupSteps() {
@@ -405,7 +408,7 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
         const key = replacingKey, previous = nodeByKey(key);
         if (!previous || previous.role !== pickerRole) throw Error('更换位置已变化，请重新选择');
         change(replaceCanvasNode(graph, key, resource), { kind: 'node', key });
-        replacingKey = null; el('picker').close(); el('inspector').classList.add('open');
+        replacingKey = null; el('picker').close(); openInspector();
         el('node-settings').querySelector('[data-canvas-replace]')?.focus({ preventScroll: true });
         notify('已更换机器并保留连线，可撤销恢复；部署前请重新预览');
       } catch (error) { notify(error.message, true); }
@@ -424,7 +427,7 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
         const done = pickerRole === 'target' && graph.nodes.some(item => item.role === 'target');
         (done ? el('picker-close') : el('picker').querySelector('[data-canvas-role="' + pickerRole + '"]'))?.focus();
       } else {
-        el('picker').close(); el('inspector').classList.add('open');
+        el('picker').close(); openInspector();
         el('node-settings').querySelector('[data-canvas-field="' + (node.role === 'target' ? 'targetHost' : 'label') + '"]')?.focus({ preventScroll: true });
       }
     }
@@ -521,7 +524,7 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
       if (drag.kind === 'node') {
         if (cancelled) graph = drag.before;
         else if (drag.moved) { remember(drag.before); onChange(); }
-        else el('inspector').classList.add('open');
+        else openInspector();
         nodeViews.get(drag.key)?.card.classList.remove('dragged'); drag = null; renderNodes(); renderEdges(); renderStatus();
       } else { if (!drag.moved && !cancelled && !drag.preserveSelection) select(null); drag = null; }
       gestureHint();
@@ -548,6 +551,8 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
   viewport.addEventListener('focusin', event => {
     const card = event.target.closest('[data-canvas-node]');
     if (card && event.target === card) { select({ kind: 'node', key: card.dataset.canvasNode }); reveal(nodeByKey(card.dataset.canvasNode)); }
+    const edge = event.target.closest('[data-canvas-from]');
+    if (edge) select({ kind: 'edge', from: edge.dataset.canvasFrom, to: edge.dataset.canvasTo });
   });
   function updateField(event) {
     const name = event.target.dataset.canvasField;
@@ -570,6 +575,28 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
     const active = document.activeElement;
     if (active && el('node-settings').contains(active) && active.dataset.canvasField) updateField({ target: active });
   }
+  function fieldFocus() {
+    const active = document.activeElement, name = active?.dataset.canvasField;
+    return name && selection?.kind === 'node' ? { name, key: selection.key,
+      caret: typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd, active.selectionDirection] : null } : null;
+  }
+  function restoreField(saved) {
+    if (!saved || busy || selection?.key !== saved.key) return;
+    const input = el('node-settings').querySelector('[data-canvas-field="' + saved.name + '"]');
+    input?.focus({ preventScroll: true }); if (saved.caret) input?.setSelectionRange(...saved.caret);
+  }
+  function openInspector(focus = false) {
+    if (!el('inspector').classList.contains('open')) inspectorReturn = document.activeElement;
+    el('inspector').classList.add('open'); el('inspect').setAttribute('aria-expanded', 'true');
+    if (focus || getComputedStyle(el('close')).display !== 'none') {
+      el('tab-node').focus({ preventScroll: true });
+    }
+  }
+  function closeInspector() {
+    commitField(); el('inspector').classList.remove('open'); el('inspect').setAttribute('aria-expanded', 'false');
+    const target = inspectorReturn?.isConnected && !el('inspector').contains(inspectorReturn) ? inspectorReturn : el('inspect');
+    target.focus({ preventScroll: true }); inspectorReturn = null;
+  }
   function setFocused(value, restore = true) {
     if (focused === value) return;
     commitField(); cancelGesture(); focused = value;
@@ -591,6 +618,13 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
     else if (restore) (focusReturn?.isConnected ? focusReturn : el('focus')).focus({ preventScroll: true });
   }
   root.addEventListener('keydown', event => {
+    const overlayOpen = el('inspector').classList.contains('open') && getComputedStyle(el('close')).display !== 'none';
+    if (event.key === 'Tab' && overlayOpen && el('inspector').contains(event.target)) {
+      const controls = [...el('inspector').querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled)')].filter(item => item.getClientRects().length && getComputedStyle(item).visibility !== 'hidden');
+      if (event.shiftKey && event.target === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
+      else if (!event.shiftKey && event.target === controls.at(-1)) { event.preventDefault(); controls[0]?.focus(); }
+      return;
+    }
     if (focused && event.key === 'Tab') {
       const controls = [...root.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]')].filter(item => item.getClientRects().length && getComputedStyle(item).visibility !== 'hidden');
       const first = controls[0], last = controls.at(-1);
@@ -599,26 +633,36 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
     }
     if (event.key === 'Escape') {
       if (drag || pinch || wire) { event.preventDefault(); cancelGesture(); render(); }
+      else if (overlayOpen) { event.preventDefault(); closeInspector(); }
       else if (focused) { event.preventDefault(); setFocused(false); }
       return;
     }
     if (event.target.closest('input,select,textarea') || busy) return;
+    if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-canvas-from]')) {
+      event.preventDefault(); select({ kind: 'edge', from: event.target.dataset.canvasFrom, to: event.target.dataset.canvasTo }, true);
+      el('node-settings').querySelector('button')?.focus({ preventScroll: true }); return;
+    }
     if (event.code === 'Space') { if (event.target === viewport || event.target.matches('.fc-node')) { event.preventDefault(); spaceHeld = true; viewport.classList.add('space-pan'); } return; }
     if (event.key === 'Enter' && event.target.matches('.fc-node')) { event.preventDefault(); select({ kind: 'node', key: event.target.dataset.canvasNode }, true); el('node-settings').querySelector('input,select')?.focus({ preventScroll: true }); return; }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); undo(event.shiftKey); return; }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (event.key === 'Delete' && selection) { event.preventDefault(); remove(); return; }
+    if (event.key === 'Delete' && selection && (event.target === viewport || event.target.matches('.fc-node,[data-canvas-from]'))) {
+      event.preventDefault(); remove(); viewport.focus({ preventScroll: true }); return;
+    }
     if (event.key.toLowerCase() === 'f') { event.preventDefault(); fit(true); return; }
     if (event.key.toLowerCase() === 'n') { event.preventDefault(); openPicker(); return; }
     if (selection?.kind === 'node' && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && (event.target === viewport || event.target.matches('.fc-node'))) {
       event.preventDefault(); const next = copyCanvas(graph), node = next.nodes.find(item => item.key === selection.key), distance = event.shiftKey ? 25 : 5;
       node.x += event.key === 'ArrowRight' ? distance : event.key === 'ArrowLeft' ? -distance : 0;
       node.y += event.key === 'ArrowDown' ? distance : event.key === 'ArrowUp' ? -distance : 0;
-      change(next); viewport.focus({ preventScroll: true });
+      const group = node.key + ':' + event.key;
+      if (!event.repeat || moveGroup !== group) { remember(graph); moveGroup = group; }
+      graph = next; renderNodes(); renderEdges(); renderStatus(); onChange();
+      viewport.focus({ preventScroll: true });
     }
   });
   function releaseSpace() { spaceHeld = false; viewport.classList.remove('space-pan'); }
-  root.addEventListener('keyup', event => { if (event.code === 'Space') releaseSpace(); });
+  root.addEventListener('keyup', event => { if (event.code === 'Space') releaseSpace(); if (event.key.startsWith('Arrow')) moveGroup = null; });
   root.addEventListener('focusout', event => { if (event.relatedTarget && !root.contains(event.relatedTarget)) releaseSpace(); });
   globalThis.addEventListener('blur', () => { releaseSpace(); if (drag || pinch || wire) { cancelGesture(); render(); } else stopCamera(); });
   el('add').addEventListener('click', () => openPicker()); el('start').addEventListener('click', () => openPicker('ingress'));
@@ -643,8 +687,9 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
   });
   el('tab-node').addEventListener('click', () => { tab = 'node'; renderInspector(); });
   el('tab-route').addEventListener('click', () => { tab = 'route'; renderInspector(); });
-  el('inspect').addEventListener('click', () => el('inspector').classList.add('open'));
-  el('close').addEventListener('click', () => { el('inspector').classList.remove('open'); el('inspect').focus(); });
+  el('inspect').setAttribute('aria-controls', el('inspector').id); el('inspect').setAttribute('aria-expanded', 'false');
+  el('inspect').addEventListener('click', () => openInspector(true));
+  el('close').addEventListener('click', closeInspector);
   el('next').addEventListener('click', () => { if (!busy) { cancelGesture(); const step = setupSteps().find(item => !item.complete); if (step) step.action(); else preview(); } });
   el('preview').addEventListener('click', preview); el('preview-close').addEventListener('click', () => el('preview-dialog').close());
   el('copy').addEventListener('click', async () => {
@@ -657,9 +702,14 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
     } catch (error) { if (version === session) notify(error.message, true); }
   });
   function setBusy(value) {
+    if (value && !busy) { commitField(); fieldReturn = fieldFocus(); }
     cancelGesture(); busy = value;
     for (const name of ['add', 'start', 'preview', 'zoom-in', 'zoom-out', 'fit', 'search', 'reload', 'continue']) el(name).disabled = value;
     render(); if (el('picker').open) picker();
+    if (!value) {
+      if (document.activeElement === document.body) restoreField(fieldReturn);
+      fieldReturn = null;
+    }
   }
   function clear() {
     setFocused(false, false); replacingKey = null;
@@ -667,7 +717,7 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
     session++; graph = emptyCanvas(); selection = null; past = []; future = []; editGroup = null; tab = 'node'; pickerRole = 'ingress'; busy = false; releaseSpace();
     for (const name of ['picker', 'preview-dialog']) if (el(name).open) el(name).close();
     el('candidates').replaceChildren(); el('preview-path').replaceChildren(); el('problems').replaceChildren(); el('preview-output').textContent = ''; el('search').value = ''; el('keep-adding').checked = false; el('picker-count').textContent = '';
-    el('inspector').classList.remove('open'); setBusy(false); fit();
+    el('inspector').classList.remove('open'); el('inspect').setAttribute('aria-expanded', 'false'); inspectorReturn = null; fieldReturn = null; moveGroup = null; setBusy(false); fit();
     el('issue-list').hidden = true; el('issues').setAttribute('aria-expanded', 'false');
   }
   render(); transform();
@@ -689,6 +739,10 @@ export function initForwardCanvas({ byId, notify, candidates, candidate, readSet
     locateProblem: (requireTarget = true, id) => {
       commitField(); const issues = allIssues(requireTarget), issue = issues.find(item => item.id === id) || issues[0]; if (issue) locateIssue(issue);
     },
-    refresh: () => { cancelGesture(); render(); if (el('picker').open) picker(); },
+    refresh: () => {
+      commitField(); const saved = fieldFocus();
+      cancelGesture(); render(); if (el('picker').open) picker();
+      restoreField(saved);
+    },
   };
 }
