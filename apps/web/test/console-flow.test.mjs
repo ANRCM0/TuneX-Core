@@ -43,7 +43,7 @@ async function loadConsoleModule(url, context, modules) {
     assert.match(source, /\n}\s*$/, 'native composition closing scope');
     // Expose existing closures only in this test copy, never in production code.
     source = source.replace(/\n}\s*$/, `
-      globalThis.flow={load,loadOverview,editor,saveForward,action,refreshDirectCandidates,relayConsole,request,
+      globalThis.flow={load,loadOverview,editor,saveForward,action,refreshDirectCandidates,relayConsole,request,display,refreshCurrentPage,enterScope,
         connect(scope='scope-a'){clearConnectionData();auth.scope=scope;auth.token='x'.repeat(40);
           account={actorId:'actor-a',scopes:[{scopeId:scope,role:'manager',membership:'active',membershipRevision:1,canEnter:true,canManage:true}]};
           updateAccountNavigation();},
@@ -84,6 +84,7 @@ class Element {
   querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
   addEventListener(name, fn) { this.listeners[name] = fn; }
   setAttribute() {}
+  focus() { this.focused = true; }
   scrollIntoView() {}
   reset() {}
   close() { this.open = false; }
@@ -139,6 +140,65 @@ async function harness(handler) {
   return { flow: context.flow, elements, calls };
 }
 const page = (items = [], total = items.length) => ({ page: 1, limit: 25, items, total });
+
+test('machine and available-resource navigation retain independent filters and pages without showing the other view results', async () => {
+  const h = await harness(() => page([node('visible-machine')])); h.flow.connect();
+  h.flow.display('nodes');
+  h.flow.setFilters('nodes', { ownership: 'mine', idPrefix: 'private-' }); h.flow.setPage('nodes', 3);
+  await h.flow.load('nodes');
+  h.flow.display('nodes'); assert.equal(h.flow.page.nodes, 3, 'Reopening the active page retains pagination');
+  h.flow.display('available');
+  assert.equal(h.flow.page.nodes, 1); assert.equal(h.flow.store.nodes.length, 0);
+  h.flow.setFilters('nodes', { ownership: 'available', resourceSource: 'admin-shared' }); h.flow.setPage('nodes', 2);
+  h.flow.display('nodes');
+  assert.equal(h.flow.page.nodes, 3);
+  assert.equal(h.elements.get('nodes-filter').elements.namedItem('idPrefix').value, 'private-');
+  h.flow.display('available'); assert.equal(h.flow.page.nodes, 2);
+  assert.equal(h.elements.get('nodes-filter').elements.namedItem('resourceSource').value, 'admin-shared');
+  h.flow.connect('scope-b'); h.flow.display('nodes');
+  assert.equal(h.flow.page.nodes, 1, 'Connection changes discard view state');
+});
+
+test('late node reads cannot populate a different resource view after navigation', async () => {
+  let release; const h = await harness(() => new Promise(resolve => { release = resolve; }));
+  h.flow.connect(); h.flow.display('nodes'); const reading = h.flow.load('nodes');
+  h.flow.display('available'); release(page([node('private-old')])); await reading;
+  assert.equal(h.flow.store.nodes.length, 0);
+  assert.match(h.elements.get('nodes-query-status').textContent, /尚未读取本页/);
+});
+
+test('late node failures after switching resource view are discarded without replacing its query status', async () => {
+  let reject; const h = await harness(() => new Promise((_resolve, fail) => { reject = fail; }));
+  h.flow.connect(); h.flow.display('nodes'); const reading = h.flow.load('nodes');
+  h.flow.display('available'); reject(Error('old read failed')); assert.equal(await reading, false);
+  assert.match(h.elements.get('nodes-query-status').textContent, /尚未读取本页/);
+});
+
+test('page refresh blocks duplicate reads, keeps a visible failure receipt and recovers only after a new explicit read', async () => {
+  let release, fail = true;
+  const h = await harness(() => new Promise((resolve, reject) => { release = () => fail ? reject(Error('offline')) : resolve(page()); }));
+  h.flow.connect(); h.flow.display('forwards');
+  const first = h.flow.refreshCurrentPage(); await h.flow.refreshCurrentPage();
+  assert.equal(h.calls.length, 1); assert.equal(h.elements.get('refresh').disabled, true);
+  release(); await first;
+  assert.match(h.elements.get('page-read-state').textContent, /读取未完成/);
+  assert.equal(h.elements.get('refresh').disabled, false);
+  fail = false; const retry = h.flow.refreshCurrentPage(); release(); await retry;
+  assert.equal(h.calls.length, 2); assert.match(h.elements.get('page-read-state').textContent, /读取完成/);
+});
+
+test('a late old-space refresh cannot replace a new-space read receipt or its busy control', async () => {
+  const replies = [];
+  const h = await harness(() => new Promise(resolve => replies.push(resolve)));
+  h.flow.connect(); h.flow.display('forwards'); const old = h.flow.refreshCurrentPage();
+  h.flow.connect('scope-b'); h.flow.display('forwards'); const current = h.flow.refreshCurrentPage();
+  replies[0](page()); await old;
+  assert.equal(h.elements.get('refresh').disabled, true);
+  assert.match(h.elements.get('page-read-state').textContent, /正在读取/);
+  replies[1](page()); await current;
+  assert.equal(h.elements.get('refresh').disabled, false);
+  assert.match(h.elements.get('page-read-state').textContent, /读取完成/);
+});
 test('personal overview and candidate selectors do not depend on filtered list pages', async () => {
   const h = await harness(resource => {
     if (resource === 'overview') return { nodes: 80, forwards: 60, activeOperations: 28, failedOperations: 32 };
@@ -186,6 +246,39 @@ test('Direct copy is a detached, disabled new spec requiring an explicit listen 
   const body = JSON.parse(sent[0].options.body); assert.equal(body.enabled, false);
   assert.deepEqual(Object.keys(body).sort(), ['enabled', 'ingress', 'protocols', 'target']);
   assert.equal(original.spec.enabled, true); assert.equal(original.revision, 6);
+});
+
+test('Direct validation focuses the invalid draft field without a write and trims a valid host before submitting', async () => {
+  const h = await harness((resource, options) => {
+    if (resource.startsWith('nodes/candidates')) return page([node('node-a')]);
+    if (options.method === 'POST') return { forwardId: 'created', revision: 1, operationId: 'create-op' };
+    return resource === 'overview' ? { nodes: 1, forwards: 1, activeOperations: 0, failedOperations: 0 } : page();
+  });
+  h.flow.connect(); await h.flow.editor(null);
+  const form = h.elements.get('forward-form'), host = form.elements.namedItem('targetHost'), port = form.elements.namedItem('targetPort');
+  host.value = '   '; port.value = '443';
+  await h.flow.saveForward({ preventDefault() {} });
+  assert.equal(host.focused, true); assert.match(h.elements.get('direct-form-state').textContent, /目标 IP 或域名/);
+  assert.equal(h.calls.some(call => call.options.method !== 'GET'), false);
+  host.value = ' example.test '; port.value = '1.5';
+  await h.flow.saveForward({ preventDefault() {} });
+  assert.equal(port.focused, true); assert.equal(host.value, ' example.test ', 'Invalid draft fields remain available to correct');
+  port.value = '443'; await h.flow.saveForward({ preventDefault() {} });
+  const writes = h.calls.filter(call => call.options.method === 'POST'); assert.equal(writes.length, 1);
+  assert.equal(JSON.parse(writes[0].options.body).target.host, 'example.test');
+});
+
+test('Direct candidate policy changes require explicit listener reselection instead of silently choosing a new authorized port', async () => {
+  let changed = false;
+  const h = await harness(() => { const result = node('node-a'); if (changed) result.policy.allowedPorts = [25566]; return page([result]); });
+  h.flow.connect(); await h.flow.editor(null); assert.equal(h.elements.get('forward-port').value, '25565');
+  changed = true; await h.flow.refreshDirectCandidates();
+  assert.equal(h.elements.get('forward-port').value, '');
+  const form = h.elements.get('forward-form'); form.elements.namedItem('targetHost').value = 'example.test'; form.elements.namedItem('targetPort').value = '443';
+  await h.flow.saveForward({ preventDefault() {} });
+  assert.equal(h.elements.get('forward-port').focused, true); assert.equal(h.calls.some(call => call.options.method !== 'GET'), false);
+  h.elements.get('cancel-forward').listeners.click();
+  assert.equal(h.elements.get('show-forward-form').focused, true); assert.equal(form.hidden, true);
 });
 
 test('Relay copy keeps the immutable Profile lock and path but requires fresh preview and creates disabled intent', async () => {

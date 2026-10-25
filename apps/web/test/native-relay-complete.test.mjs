@@ -214,3 +214,101 @@ test('Relay init isolates unknown write outcomes stale plans and deployment hist
   assert.equal(a.el('deployment-dialog').open,false);assert.equal(a.el('deployment-state').textContent,'');assert.equal(a.el('deployment-nodes').children.length,0);
   await button.listeners.click();assert.equal(a.mutations.length,2);assert.equal(confirmations.length,1);
 });
+
+test('failed canvas transfer keeps the original edit, exact profile revision and unsaved target',async t=>{
+  const saved=['document','confirm'].map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]);
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});
+  Object.defineProperty(globalThis,'confirm',{configurable:true,value:()=>true});
+  t.after(()=>{for(const [name,value] of saved)value?Object.defineProperty(globalThis,name,value):delete globalThis[name];});
+  const h=consoleHarness((_method,path)=>{
+    if(path==='execution-capabilities')return {multihopEnabled:true};
+    if(path==='transport-profiles')return {profiles:[{profileId:'profile-a',currentRevision:3}]};
+    if(path.endsWith('?revision=3'))throw Error('profile temporarily unavailable');
+    if(path.startsWith('transport-profiles/'))return profile;
+    return {};
+  });
+  await h.api.edit({id:'forward-a',revision:7,spec:legacy.relaySpec(form,node('a'),node('b'),profile)});
+  h.el('field-targetHost').value='unsaved.example';
+  await assert.rejects(h.api.loadPathDraft({nodes:['a','b'],profileId:'profile-a',profileRevision:3,protocol:'tcp'}),/temporarily unavailable/);
+  assert.equal(h.el('field-targetHost').value,'unsaved.example');
+  assert.equal(h.el('relay-submit').textContent,'更新链路 r7');assert.equal(h.el('relay-ingress').disabled,true);
+  assert.equal(h.el('relay-submit').disabled,true);
+  await h.el('relay-preview').listeners.click();await h.el('relay-forward-form').listeners.submit({preventDefault(){}});
+  assert.deepEqual(h.mutations[0].slice(0,2),['PUT','forwards/forward-a']);
+  assert.equal(h.mutations[0][2].expectedRevision,7);assert.equal(h.mutations[0][2].spec.target.host,'unsaved.example');
+  assert.equal(h.mutations[0][2].spec.transport.configRevision,2);
+});
+
+test('Relay preview and submit ignore rapid duplicate activation and keep exact fields frozen through the write',async t=>{
+  const original=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});
+  t.after(()=>original?Object.defineProperty(globalThis,'document',original):delete globalThis.document);
+  let releasePlan,releaseWrite;
+  const h=consoleHarness((_method,path)=>path==='execution-capabilities'?{multihopEnabled:true}:
+    path==='transport-profiles'?{profiles:[{profileId:'profile-a',currentRevision:2}]}:
+    path.startsWith('transport-profiles/')?profile:path==='relay-plan'?new Promise(resolve=>{releasePlan=resolve;}):{},
+    {mutate:()=>new Promise(resolve=>{releaseWrite=resolve;})});
+  await h.api.edit({id:'forward-a',revision:7,spec:legacy.relaySpec(form,node('a'),node('b'),profile)});
+  const controls=h.el('relay-forward-form').elements;
+  controls[Symbol.iterator]=function*(){yield h.el('field-targetHost');yield h.el('relay-ingress');yield h.el('relay-submit');};
+  const first=h.el('relay-preview').listeners.click();await h.el('relay-preview').listeners.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.requests.filter(call=>call[1]==='relay-plan').length,1);assert.equal(h.el('relay-preview').disabled,true);
+  releasePlan({reserved:false});await first;
+  const write=h.el('relay-forward-form').listeners.submit({preventDefault(){}});
+  await h.el('relay-forward-form').listeners.submit({preventDefault(){}});await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.mutations.length,1);assert.equal(h.el('field-targetHost').disabled,true);
+  releaseWrite({operationId:'op-once'});await write;
+  assert.equal(h.el('field-targetHost').disabled,false);assert.equal(h.el('relay-submit').disabled,true);
+  assert.equal(h.mutations.length,1);
+});
+
+test('an old preview finishing after clear cannot unlock a new session preview',async t=>{
+  const original=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});
+  t.after(()=>original?Object.defineProperty(globalThis,'document',original):delete globalThis.document);
+  const gates=[];
+  const h=consoleHarness((_method,path)=>path==='execution-capabilities'?{multihopEnabled:true}:
+    path==='transport-profiles'?{profiles:[{profileId:'profile-a',currentRevision:2}]}:
+    path.startsWith('transport-profiles/')?profile:path==='relay-plan'?new Promise(resolve=>gates.push(resolve)):{});
+  const item={id:'forward-a',revision:7,spec:legacy.relaySpec(form,node('a'),node('b'),profile)};
+  await h.api.edit(item);const old=h.el('relay-preview').listeners.click();await new Promise(resolve=>setImmediate(resolve));
+  h.api.clear();await h.api.edit(item);
+  const current=h.el('relay-preview').listeners.click();await new Promise(resolve=>setImmediate(resolve));
+  gates[0]({reserved:false});await old;
+  assert.equal(h.el('relay-preview').disabled,true);assert.equal(h.el('relay-submit').disabled,true);
+  gates[1]({reserved:false});await current;
+  assert.equal(h.el('relay-preview').disabled,false);assert.equal(h.el('relay-submit').disabled,false);
+});
+
+test('Profile writes ignore duplicate activation and delayed receipts after the session is cleared',async t=>{
+  const original=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});
+  t.after(()=>original?Object.defineProperty(globalThis,'document',original):delete globalThis.document);
+  let release;
+  const h=consoleHarness(()=>({}),{mutate:()=>new Promise(resolve=>{release=resolve;})});
+  const values={...profileForm,profileId:'new-profile'};
+  const controls=Object.entries(values).map(([name,value])=>{const input=h.el('profile-'+name);input.value=value;return input;});
+  h.el('relay-profile-form').elements={namedItem:name=>h.el('profile-'+name),[Symbol.iterator]:function*(){yield*controls;}};
+  const writing=h.el('relay-profile-form').listeners.submit({preventDefault(){}});
+  await h.el('relay-profile-form').listeners.submit({preventDefault(){}});
+  assert.equal(h.mutations.length,1);assert.ok(controls.every(input=>input.disabled));
+  h.api.clear();release({revision:1});await writing;
+  assert.ok(controls.every(input=>!input.disabled));assert.equal(h.requests.length,0);
+  assert.equal(h.effects.some(effect=>effect[0]==='notify'),false);
+});
+
+test('Endpoint preparation is single flight and cannot mutate after the session is cleared',async t=>{
+  const original=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>new Element()}});
+  t.after(()=>original?Object.defineProperty(globalThis,'document',original):delete globalThis.document);
+  let release;
+  const h=consoleHarness(()=>new Promise(resolve=>{release=resolve;}));
+  const fields={nodeId:'b',listenAddress:'127.0.0.1',advertisedHost:'relay.example',ports:'34001'};
+  h.el('relay-endpoint-form').elements={namedItem:name=>({value:fields[name]})};
+  const preparing=h.el('relay-endpoint-form').listeners.submit({preventDefault(){}});
+  await h.el('relay-endpoint-form').listeners.submit({preventDefault(){}});
+  assert.equal(h.requests.length,1);
+  h.api.clear();release({revision:2});await preparing;
+  assert.equal(h.mutations.length,0);assert.equal(h.effects.some(effect=>effect[0]==='notify'),false);
+});

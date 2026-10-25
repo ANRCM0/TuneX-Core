@@ -158,9 +158,14 @@ async function verifyForwardCanvasDraft(page: import('playwright').Page, fixture
     assert.equal(expanded.width,390);assert.equal(expanded.height,844);
     await page.locator('#line-canvas').screenshot({path:fixture.directory+'/console-multihop-forward-canvas-mobile.png'});
     await page.keyboard.press('Escape');
-    await page.locator('#line-canvas-close').click();await page.setViewportSize({width:1440,height:1000});
+    assert.equal(await page.locator('#line-canvas-inspect').getAttribute('aria-expanded'),'false');
+    assert.equal(await page.locator('#line-canvas').getAttribute('aria-modal'),'true');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#line-canvas').getAttribute('role'),'region');
+    await page.setViewportSize({width:1440,height:1000});
     await page.locator('#line-use').click();
-    await page.waitForFunction(host=>(document.querySelector('#relay-forward-form [name="targetHost"]') as HTMLInputElement).value===host,fixture.spec.target.host);
+    await page.waitForFunction(host=>!(document.getElementById('line-use') as HTMLButtonElement).disabled&&
+        (document.querySelector('#relay-forward-form [name="targetHost"]') as HTMLInputElement).value===host,fixture.spec.target.host);
     assert.equal(await page.locator('#relay-listen-port').inputValue(),String(fixture.copyPort));
     assert.equal(await page.locator('#relay-forward-form [name="enabled"]').isChecked(),false);
     assert.equal(await page.locator('#relay-submit').isDisabled(),true);

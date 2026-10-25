@@ -37,6 +37,7 @@
       <div><p class="eyebrow">TUNEX CONTROL</p><h1 id="page-title" tabindex="-1">运行概览</h1><p id="page-guidance" class="hint"></p></div>
       <div class="toolbar"><span id="connection-indicator" class="state-tag">未连接</span><button id="refresh" type="button" class="secondary" disabled>刷新数据</button></div>
     </header>
+    <p id="page-read-state" class="hint page-read-state" role="status" aria-live="polite"></p>
     <nav id="page-sections" class="section-nav" aria-label="本页分区" hidden></nav>
     <section class="read-session" aria-label="有界只读刷新">
       <button id="read-session-start" type="button" class="secondary" disabled>临时自动刷新</button>
@@ -253,7 +254,7 @@ unset TUNEX_ENROLLMENT_TOKEN</code></pre>
 
     <section id="view-forwards" class="view" hidden>
       <div class="panel-head section-actions"><div><h2>我的转发</h2><p class="hint">Direct 使用简化表单；Relay / 多跳在链路编辑器重新预检。复制默认停用，必须另选入口端口，不继承执行或健康状态。</p></div><button id="show-forward-form" type="button">新建转发</button></div>
-      <form id="forward-form" class="panel editor" hidden>
+      <form id="forward-form" class="panel editor" aria-labelledby="forward-form-title" hidden>
         <h3 id="forward-form-title">创建 Direct Forward</h3>
         <div class="query-controls">
           <label>独立节点候选 · ID 前缀<input id="direct-candidate-prefix" maxlength="128" autocomplete="off" placeholder="不受节点列表当前页影响"></label>
@@ -263,13 +264,14 @@ unset TUNEX_ENROLLMENT_TOKEN</code></pre>
         </div>
         <p id="direct-candidate-page" class="hint" role="status">尚未查询候选</p>
         <div class="form-grid">
-          <label>入口节点 <select name="node" id="forward-node" required></select></label>
-          <label>协议 <select name="protocol" id="forward-protocol" required></select></label>
-          <label>监听地址 <select name="listenAddress" id="forward-address" required></select></label>
-          <label>入口端口 <select name="listenPort" id="forward-port" required></select></label>
-          <label>目标主机 <input name="targetHost" autocomplete="off" spellcheck="false" placeholder="IP 或域名" required></label>
-          <label>目标端口 <input name="targetPort" type="number" min="1" max="65535" required></label>
+          <label>入口节点 <select name="node" id="forward-node" aria-describedby="direct-form-state" required></select></label>
+          <label>协议 <select name="protocol" id="forward-protocol" aria-describedby="direct-form-state" required></select></label>
+          <label>监听地址 <select name="listenAddress" id="forward-address" aria-describedby="direct-form-state" required></select></label>
+          <label>入口端口 <select name="listenPort" id="forward-port" aria-describedby="direct-form-state" required></select></label>
+          <label>目标主机 <input name="targetHost" autocomplete="off" spellcheck="false" autocapitalize="none" maxlength="253" aria-describedby="direct-form-state" placeholder="IP 或域名" required></label>
+          <label>目标端口 <input name="targetPort" type="number" inputmode="numeric" min="1" max="65535" step="1" aria-describedby="direct-form-state" required></label>
         </div>
+        <p id="direct-form-state" class="hint form-error" role="status" aria-live="polite"></p>
         <label class="check"><input name="enabled" type="checkbox" checked> 创建或更新后请求启用</label>
         <p id="forward-capabilities" class="hint"></p>
         <div id="forward-preflight" class="panel" aria-labelledby="forward-preflight-title">

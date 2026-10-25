@@ -61,6 +61,7 @@ const store = { nodes: [], forwards: [], operations: [] };
 const candidates = { direct: [], relay: [] };
 const candidatePages = { direct: 1, relay: 1 };
 const filters = { nodes: {}, forwards: {}, operations: {} };
+const nodeViewState = new Map();
 const listPresets = {
   'forwards-all': ['forwards', { enabled: '', recoverySuspended: '' }],
   'forwards-disabled': ['forwards', { enabled: 'false', recoverySuspended: '' }],
@@ -130,6 +131,8 @@ function updatePageControls() {
   byId('page-guidance').textContent = signedIn ? guide.detail : '先登录账号并选择可进入的工作空间，再使用本页功能。';
   byId('refresh').textContent = busy ? '正在读取…' : guide.refresh ?? '使用页内读取';
   byId('refresh').disabled = !signedIn || !guide.refresh || busy;
+  byId('refresh').setAttribute('aria-busy', String(busy));
+  document.querySelectorAll('.view').forEach(node => node.setAttribute('aria-busy', String(busy && node.id === 'view-' + (currentView === 'available' ? 'nodes' : currentView))));
   byId('refresh').title = guide.refresh ? '只读取本按钮标明的内容，不提交配置变更。' : '本页有多个独立查询区，请使用对应分区内的读取按钮。';
   byId('read-session-start').disabled = !signedIn || !coreViews.has(currentView) || boundedReading;
   byId('read-session-start').title = !coreViews.has(currentView) ? '本页请使用相应分区内的读取按钮。' : '每 10 秒读取当前页，最多 6 次；不会提交变更。';
@@ -139,14 +142,26 @@ async function refreshCurrentPage() {
   const view = currentView, version = connectionVersion;
   if (pageRefresh?.view === view && pageRefresh.version === version) return;
   const reading = { view, version }; pageRefresh = reading; updatePageControls();
+  byId('page-read-state').textContent = '正在读取本页数据…';
   try {
     connected();
-    if (view === 'overview') await refresh();
-    else if (['nodes','available','forwards','operations'].includes(view)) await load(view === 'available' ? 'nodes' : view);
+    if (view === 'overview') { if (!await refresh()) throw Error('部分数据读取失败，请查看提示并重新刷新；当前结果可能不完整。'); }
+    else if (['nodes','available','forwards','operations'].includes(view)) {
+      const loaded = await load(view === 'available' ? 'nodes' : view);
+      if (!loaded) {
+        if (version === connectionVersion && currentView === view) byId('page-read-state').textContent = '本次读取已被新的筛选或翻页替代，请查看列表查询状态。';
+        return;
+      }
+    }
     else if (view === 'relay') await pathTemplates.list();
     else if (view === 'resources') await adminResources.refresh();
     else if (view === 'members') await memberConsole.read();
-  } catch (error) { if (version === connectionVersion && currentView === view) notify(error.message, true); }
+    if (version === connectionVersion && currentView === view)
+      byId('page-read-state').textContent = '本页读取完成 · ' + new Date().toLocaleTimeString('zh-CN') + '。结果对应本次读取，后续变化需重新刷新。';
+  } catch (error) { if (version === connectionVersion && currentView === view) {
+    byId('page-read-state').textContent = '本次读取未完成；可再次点击刷新。已显示的数据可能来自上次读取。';
+    notify(error.message, true);
+  } }
   finally { if (pageRefresh === reading) { pageRefresh = null; updatePageControls(); } }
 }
 function forwardWriteLocked() { return forwardWrite?.active === true || forwardWrite?.state === 'unknown'; }
@@ -209,17 +224,33 @@ async function submitForwardWrite(label, method, resource, input, forwardId, onA
 function display(view, focus = false) {
   if (!Object.hasOwn(pageGuides, view)) return;
   if(governanceViews.has(view)&&!governance())return;
+  const changed = currentView !== view;
+  if (changed) byId('page-read-state').textContent = '';
+  if (changed && ['nodes','available'].includes(currentView))
+    nodeViewState.set(currentView, { filters: { ...filters.nodes }, page: page.nodes });
   if(currentView!==view)boundedReads?.stop('page-changed');
   if(currentView==='members'&&view!=='members')memberConsole?.leave();
   if(view==='nodes'||view==='available'){
     nodeOwnership=view==='available'?'available':'mine';
-    filters.nodes.ownership=nodeOwnership;page.nodes=1;
+    if (changed) {
+      const saved = nodeViewState.get(view);
+      filters.nodes = saved ? { ...saved.filters } : { ownership: nodeOwnership };
+      page.nodes = saved?.page ?? 1;
+      readVersions.nodes = (readVersions.nodes ?? 0) + 1;
+      store.nodes = []; totals.nodes = 0;
+      const form = byId('nodes-filter'); form.reset();
+      for (const [name, value] of Object.entries(filters.nodes)) form.elements.namedItem(name).value = value;
+      byId('nodes-query-status').textContent = '尚未读取本页筛选结果；请使用刷新或应用筛选。';
+      pagination('nodes', { page: page.nodes, limit: 25, total: 0 });
+    }
+    nodeOwnership = filters.nodes.ownership ?? nodeOwnership;
     byId('nodes-filter').elements.namedItem('ownership').value=nodeOwnership;
     byId('nodes-title').textContent=view==='available'?'可用资源':'我的机器';
     byId('nodes-description').textContent=view==='available'?'按当前账号授权列出私有机器与管理员共享资源；用途限制不授予整机管理权限。':'管理归属于我的私有机器与接入凭据。';
     byId('show-node-form').hidden=view==='available';
   }
   currentView = view;
+  if (changed && ['nodes','available'].includes(view)) renderNodes();
   byId('page-title').textContent = pageGuides[view].title;
   document.querySelectorAll('.view').forEach(node => { node.hidden = node.id !== 'view-' + (view==='available'?'nodes':view); });
   document.querySelectorAll('.nav').forEach(node => {
@@ -241,7 +272,7 @@ async function load(kind,guard) {
   try {
     const result = await request('GET', listResource(kind, page[kind], filters[kind]),undefined,undefined,
       guard?{signal:guard.signal,timeoutMs:10000}:undefined);
-    if (version !== readVersions[kind] || guard && !guard.isCurrent()) return;
+    if (version !== readVersions[kind] || guard && !guard.isCurrent()) return false;
     store[kind] = result.items;
     totals[kind] = result.total;
     if (kind === 'nodes') { renderNodes(); renderForwardPreflight(); renderOps(); }
@@ -249,9 +280,10 @@ async function load(kind,guard) {
     if (kind === 'operations') { renderOperations(); renderOps(); }
     pagination(kind, result);
     status.textContent = context + '当前条件匹配 ' + result.total + ' 条，本页显示 ' + result.items.length + ' 条。';
+    return true;
   } catch (error) {
-    if (version === readVersions[kind] && (!guard || guard.isCurrent()))
-      status.textContent = context + '本次读取失败；下方保留上次结果，不代表当前筛选结果。请重新读取。';
+    if (version !== readVersions[kind] || guard && !guard.isCurrent()) return false;
+    status.textContent = context + '本次读取失败；下方保留上次结果，不代表当前筛选结果。请重新读取。';
     throw error;
   }
 }
@@ -298,8 +330,10 @@ async function refresh() {
     }
     byId('connection-indicator').textContent = '已认证 · ' + auth.scope;
     notify('数据已从 Control 更新；列表中的 Operation 状态不代表独立探测成功。');
+    return true;
   } catch (error) {
     if (version === connectionVersion) notify(error.message || '加载失败', true);
+    return false;
   }
 }
 function updateOverview() {
@@ -543,6 +577,11 @@ function fillCapabilities(preferred) {
   addOptions(byId('forward-protocol'), protocols.map(p => ({ value: p, label: p === 'both' ? 'TCP + UDP' : p.toUpperCase() })), preferred?.protocol);
   addOptions(byId('forward-address'), (node?.policy?.allowedListenerAddresses ?? []).map(a => ({ value: a })), preferred?.address);
   addOptions(byId('forward-port'), (node?.policy?.allowedPorts ?? []).map(p => ({ value: p })), preferred?.port);
+  for (const [id, value, choices] of [
+    ['forward-protocol', preferred?.protocol, protocols],
+    ['forward-address', preferred?.address, node?.policy?.allowedListenerAddresses ?? []],
+    ['forward-port', preferred?.port, node?.policy?.allowedPorts ?? []],
+  ]) if (value !== undefined && !choices.some(choice => String(choice) === String(value))) byId(id).value = '';
   byId('forward-capabilities').textContent = node ? '可用监听地址和端口由当前 Node Policy 决定，服务端会再次检查授权、目标 CIDR 与资源独占。' : '没有具备 ADP/3 Direct 能力和有效凭据的节点；请先接入 Agent。';
   byId('save-forward').disabled = !node || forwardWriteLocked();
   renderForwardPreflight();
@@ -558,6 +597,7 @@ async function editor(item, copy = false) {
   editing = copy ? null : item ?? null;
   const form = byId('forward-form');
   form.reset();
+  clearDirectErrors();
   byId('forward-form-title').textContent = item ? (copy ? '复制为新 Direct Forward（停用）· 来源 r' : '编辑 Direct Forward · r') + item.revision : '创建 Direct Forward';
   form.hidden = false;
   byId('forward-node').disabled = false;
@@ -573,6 +613,34 @@ async function editor(item, copy = false) {
   } else fillNodes();
   display('forwards');
   form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  (item ? form.elements.namedItem('targetHost') : byId('forward-node')).focus({ preventScroll: true });
+}
+function clearDirectErrors() {
+  byId('direct-form-state').textContent = '';
+  for (const name of ['node','protocol','listenAddress','listenPort','targetHost','targetPort'])
+    byId('forward-form').elements.namedItem(name).setAttribute('aria-invalid', 'false');
+}
+function directFieldError(name, message) {
+  const field = byId('forward-form').elements.namedItem(name);
+  field.setAttribute('aria-invalid', 'true');
+  byId('direct-form-state').textContent = message;
+  const target = field.disabled ? byId('direct-candidate-search') : field;
+  target.scrollIntoView({ block: 'nearest' }); target.focus({ preventScroll: true });
+  return false;
+}
+function validateDirectFields(form, node) {
+  clearDirectErrors();
+  const value = name => form.elements.namedItem(name).value;
+  if (!directCapable(node) || !(node.allowedRoles === null || node.allowedRoles?.includes('ingress')))
+    return directFieldError('node', '当前入口机器不可用，请重新查询候选并核对授权。');
+  if (!allowedProtocols(node).includes(value('protocol'))) return directFieldError('protocol', '请选择当前机器支持的协议。');
+  if (!node.policy.allowedListenerAddresses.includes(value('listenAddress'))) return directFieldError('listenAddress', '原监听地址已不可用，请从当前授权中重新选择。');
+  if (!value('listenPort') || !node.policy.allowedPorts.includes(Number(value('listenPort')))) return directFieldError('listenPort', '请选择当前授权的入口端口；复制和授权变化后需要重新确认。');
+  const host = value('targetHost').trim(), port = Number(value('targetPort'));
+  if (!host || host.length > 253 || /\s/.test(host)) return directFieldError('targetHost', '请填写有效的目标 IP 或域名，不能留空或含空白字符。');
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return directFieldError('targetPort', '请填写 1 到 65535 之间的整数目标端口。');
+  form.elements.namedItem('targetHost').value = host;
+  return true;
 }
 async function saveForward(event) {
   event.preventDefault();
@@ -582,6 +650,7 @@ async function saveForward(event) {
     const form = byId('forward-form');
     const nodeId = editing ? editing.spec.ingress.nodeId : form.elements.namedItem('node').value;
     const node = candidates.direct.find(n => n.id === nodeId);
+    if (!validateDirectFields(form, node)) return;
     const spec = directSpec({
       protocol: form.elements.namedItem('protocol').value,
       listenAddress: form.elements.namedItem('listenAddress').value,
@@ -762,6 +831,8 @@ function clearConnectionData() {
   boundedReads?.stop('account-changed');
   connectionVersion++;
   pageRefresh = null;
+  byId('page-read-state').textContent = '';
+  nodeViewState.clear();
   forwardWrite = null; forwardWriteButtons.clear(); renderForwardWrite();
   for (const key of Object.keys(readVersions)) readVersions[key]++;
   privateProvisioning=false;privateProvisionUnknown=false;byId('node-provision-submit').disabled=false;byId('node-provision-reset').hidden=true;byId('node-provision-state').textContent='';
@@ -786,6 +857,7 @@ function clearConnectionData() {
   notificationDeliveries.clear();
   observationServices.clear();
   byId('forward-form').hidden = true; byId('node-form').hidden = true;
+  clearDirectErrors();
   byId('direct-candidate-prefix').value = ''; byId('relay-candidate-prefix').value = '';
   byId('relay-candidate-role').value = 'ingress';
   for (const mode of ['direct', 'relay']) {
@@ -828,14 +900,26 @@ for (const mode of ['direct', 'relay']) {
     if (event.key === 'Enter') { event.preventDefault(); candidatePages[mode] = 1; reload(); }
   });
 }
-document.querySelectorAll('.nav').forEach(node => node.addEventListener('click', () => {
+document.querySelectorAll('.nav').forEach(node => {
+  node.setAttribute('aria-controls', 'view-' + (node.dataset.view === 'available' ? 'nodes' : node.dataset.view));
+  node.addEventListener('keydown', event => {
+    if (!['ArrowDown','ArrowUp','ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    const controls = [...document.querySelectorAll('.nav')].filter(control => !control.hidden && !control.disabled);
+    const index = controls.indexOf(node); if (index < 0) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? controls.length - 1 :
+      (index + (['ArrowDown','ArrowRight'].includes(event.key) ? 1 : -1) + controls.length) % controls.length;
+    controls[next]?.focus();
+  });
+  node.addEventListener('click', () => {
   if(node.hidden)return;
   if (node.dataset.view !== 'notifications') notificationEndpoints.leave();
   display(node.dataset.view,true);
   if(node.dataset.view==='resources'&&auth.scope)adminResources.refresh();
   if(['nodes','available'].includes(node.dataset.view)&&auth.scope)load('nodes').catch(e=>notify(e.message,true));
   if(node.dataset.view==='relay' && auth.scope) Promise.all([relayConsole.refresh(),pathTemplates.list()]).catch(e=>notify(e.message,true));
-}));
+  });
+});
 for (const [id, view] of [['ops-audit', 'audit'], ['ops-alerts', 'alerts'], ['ops-notifications', 'notifications'],
   ['ops-operations', 'operations'], ['ops-forwards', 'forwards']])
   byId(id).addEventListener('click', () => { if (view !== 'notifications') notificationEndpoints.leave(); display(view,true); });
@@ -865,7 +949,12 @@ async function enterScope(scopeId) {
   const scope=account?.scopes.find(item=>item.scopeId===scopeId&&item.canEnter);
   clearConnectionData();auth.scope=scope?.scopeId??'';
   byId('refresh').disabled=!scope;updateAccountNavigation();display('overview',true);
-  if(scope)await refresh();
+  byId('connection-indicator').textContent = scope ? '已认证 · ' + auth.scope + ' · 正在读取' : '账号已认证，选择工作空间';
+  if(scope) {
+    const version = connectionVersion;
+    await refreshCurrentPage();
+    if (version === connectionVersion) byId('connection-indicator').textContent = '已认证 · ' + auth.scope;
+  }
 }
 async function accountPageRead(token,after=null) {
   const version=++accountEpoch;
@@ -897,7 +986,7 @@ byId('connection-form').addEventListener('submit',async event=>{
     const first=account.scopes.find(scope=>scope.canEnter);
     if(first){byId('scope').value=first.scopeId;await enterScope(first.scopeId);}
   }catch(error){if(loginEpoch===accountEpoch){notify(error.message,true);byId('connection-indicator').textContent='登录未完成';}}
-  finally{if(loginAttempt===attempt){loginAttempt=null;byId('connect').disabled=false;byId('connect').textContent='登录账号';byId('token').disabled=false;byId('token-reveal').disabled=false;}}
+  finally{if(loginAttempt===attempt){loginAttempt=null;byId('connect').disabled=false;byId('connect').textContent='登录账号';byId('token').disabled=false;byId('token-reveal').disabled=false;if(!auth.token)byId('token').focus();}}
 });
 byId('token-reveal').addEventListener('click',()=>{
   if(loginAttempt)return;
@@ -919,6 +1008,7 @@ byId('disconnect').addEventListener('click',()=>{
   byId('scope').replaceChildren();byId('token').value='';byId('account-context').hidden=true;
   byId('refresh').disabled=true;byId('disconnect').disabled=true;byId('connection-indicator').textContent='未连接';display('overview');
   notify('已断开连接；当前标签页中的 Bearer Token 已清除。');
+  byId('token').focus();
 });
 byId('resource-operations').addEventListener('click',()=>{display('operations',true);load('operations').catch(error=>notify(error.message,true));});
 byId('refresh').addEventListener('click', refreshCurrentPage);
@@ -933,7 +1023,9 @@ byId('show-forward-form').addEventListener('click', () => editor(null).catch(e =
 byId('cancel-forward').addEventListener('click', () => {
   readVersions['candidates-direct'] = (readVersions['candidates-direct'] ?? 0) + 1;
   editing = null; byId('forward-form').hidden = true;
+  clearDirectErrors(); byId('show-forward-form').focus();
 });
+for (const name of ['input','change']) byId('forward-form').addEventListener(name, clearDirectErrors);
 byId('forward-node').addEventListener('change', () => fillCapabilities());
 byId('forward-protocol').addEventListener('change', () => renderForwardPreflight());
 byId('forward-form').addEventListener('submit', saveForward);
@@ -981,6 +1073,11 @@ boundedReads=createBoundedPageReads({identity:()=>auth.scope&&auth.token?connect
 byId('read-session-start').addEventListener('click',()=>boundedReads.start());
 byId('read-session-stop').addEventListener('click',()=>boundedReads.stop());
 document.addEventListener('visibilitychange',()=>{if(document.hidden)boundedReads.stop('hidden');});
+document.querySelectorAll('.table-wrap').forEach(region => {
+  region.tabIndex = 0; region.setAttribute('role', 'region');
+  const columns = [...region.querySelectorAll('th')].slice(0, 3).map(heading => heading.textContent.trim()).join('、');
+  region.setAttribute('aria-label', (columns ? columns + '表格。' : '表格区域。') + '可横向滚动查看完整内容。');
+});
 updateOverview();
 display('overview');
 

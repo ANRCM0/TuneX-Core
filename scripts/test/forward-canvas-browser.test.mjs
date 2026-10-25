@@ -64,6 +64,27 @@ for (const nodeCount of [3,4,8]) test('canvas browser acceptance with '+nodeCoun
     }else{await out.press('Enter');await incoming.press('Enter');}
   }
   assert.equal(await page.locator('#line-canvas-state').textContent(),'草稿结构完整');
+  const keyboardEdge = page.locator('.fc-edge-hit').first();
+  await keyboardEdge.focus(); await keyboardEdge.press('Enter');
+  assert.equal(await page.locator('.fc-remove').first().evaluate(n=>n===document.activeElement),true);
+  await page.locator('#line-canvas-preview').focus(); await page.keyboard.press('Delete');
+  assert.equal(await page.locator('.fc-edge-hit').count(),nodeCount);
+  await keyboardEdge.focus(); await keyboardEdge.press('Space'); await page.keyboard.press('Enter');
+  assert.equal(await page.locator('.fc-edge-hit').count(),nodeCount-1);
+  await page.locator('#line-canvas-undo').click();
+  assert.equal(await page.locator('#line-canvas-state').textContent(),'草稿结构完整');
+  await cards[0].focus();
+  const beforeKeys=await cards[0].getAttribute('style');
+  await page.keyboard.down('ArrowRight');await page.keyboard.down('ArrowRight');await page.keyboard.down('ArrowRight');await page.keyboard.up('ArrowRight');
+  assert.notEqual(await cards[0].getAttribute('style'),beforeKeys);
+  await page.locator('#line-canvas-undo').click();assert.equal(await cards[0].getAttribute('style'),beforeKeys);
+  await cards.at(-1).focus();await cards.at(-1).press('Enter');
+  await page.locator('[data-canvas-field="targetHost"]').evaluate(n=>{n.focus();n.setSelectionRange(3,7)});
+  await page.evaluate(()=>document.querySelector('#line-profile').dispatchEvent(new Event('change',{bubbles:true})));
+  assert.deepEqual(await page.locator('[data-canvas-field="targetHost"]').evaluate(n=>[n===document.activeElement,n.selectionStart,n.selectionEnd]),[true,3,7]);
+  await page.evaluate(()=>window.builder.refresh());
+  assert.deepEqual(await page.locator('[data-canvas-field="targetHost"]').evaluate(n=>[n===document.activeElement,n.selectionStart,n.selectionEnd]),[true,3,7]);
+  await page.locator('#line-canvas-fit').click();await page.waitForFunction(()=>!document.querySelector('.camera-moving'));
   const first=await cards[0].boundingBox(),beforeDrag=await cards[0].getAttribute('style');
   const retainedEdge=await page.locator('.fc-edge:not(.pending)').first().elementHandle();
   const dragX=first.x+first.width/2,dragY=first.y+Math.min(20,first.height/4);
@@ -95,9 +116,19 @@ for (const nodeCount of [3,4,8]) test('canvas browser acceptance with '+nodeCoun
   if(await page.locator('#line-canvas-close').isVisible())await page.locator('#line-canvas-close').click();
   await page.locator('#line-canvas-fit').click();await page.waitForFunction(()=>!document.querySelector('.camera-moving'));
   await page.locator('.fc-node.target').tap();await page.locator('#line-canvas-inspector').waitFor({state:'visible'});
+  await page.waitForFunction(()=>document.querySelector('#line-canvas-inspector').contains(document.activeElement));
   assert.equal(await page.locator('[data-canvas-field="targetHost"]').inputValue(),'example.test');
   await page.locator('#line-canvas-close').click();await page.locator('#line-canvas-focus').click();
   const expanded=await page.locator('#line-canvas').boundingBox();assert.equal(expanded.width,390);assert.equal(expanded.height,844);
+  await page.locator('#line-canvas-inspect').click();
+  assert.equal(await page.locator('#line-canvas-tab-node').evaluate(n=>n===document.activeElement),true);
+  assert.equal(await page.locator('#line-canvas-inspect').getAttribute('aria-expanded'),'true');
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.locator('#line-canvas-inspector').evaluate(n=>n.contains(document.activeElement)),true);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#line-canvas-inspect').evaluate(n=>n===document.activeElement),true);
+  assert.equal(await page.locator('#line-canvas-inspect').getAttribute('aria-expanded'),'false');
+  assert.equal(await page.locator('#line-canvas').getAttribute('aria-modal'),'true');
   await page.locator('#line-canvas-inspect').click();await page.locator('#line-canvas-tab-route').click();await page.locator('#line-profile').selectOption('profile-a');
   await page.locator('#line-canvas-close').click();await page.emulateMedia({reducedMotion:'reduce'});await page.locator('#line-canvas-fit').click();
   assert.equal(await page.locator('#line-canvas').evaluate(n=>n.classList.contains('camera-moving')),false);
