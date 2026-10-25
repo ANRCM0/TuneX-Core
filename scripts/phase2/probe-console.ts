@@ -60,7 +60,7 @@ export async function verifyDisabledConsole(fixture: ConsoleFixture) {
         assert.equal(await page.locator('#probe-issue').isDisabled(), true);
         await page.locator('#probe-id').fill('unknown-receipt');
         await page.locator('#probe-query').click();
-        await page.waitForFunction(() => document.getElementById('probe-state')?.textContent?.includes('unavailable'));
+        await page.waitForFunction(() => document.getElementById('probe-state')?.textContent?.includes('回执不可用'));
         assert.equal(await page.locator('#probe-receipt').textContent(), '');
         assert.equal(await page.locator('#probe-revoke').isDisabled(), true);
         assert.equal(posts, 0);
@@ -102,7 +102,7 @@ export async function issueFromConsole(fixture: ConsoleFixture, forwardId: strin
         ]);
         assert.equal(capabilities.status(), 200);
         assert.equal((await capabilities.json()).probeIssuanceEnabled, true);
-        await page.waitForFunction(() => document.getElementById('probe-capability')?.textContent?.includes('Control egress issuance=true;'));
+        await page.waitForFunction(() => document.getElementById('probe-capability')?.textContent?.includes('目标连接 已开启'));
         assert.equal(await page.locator('#probe-issue').isDisabled(), false);
         await page.locator('#probe-consent').check();
         const path = `/api/v1/scopes/${fixture.scope}/forwards/${forwardId}/probes`;
@@ -120,7 +120,7 @@ export async function issueFromConsole(fixture: ConsoleFixture, forwardId: strin
             await route.abort('failed');
         });
         await page.locator('#probe-issue').click();
-        await page.waitForFunction(() => document.getElementById('probe-state')?.textContent?.includes('uncertain'));
+        await page.waitForFunction(() => document.getElementById('probe-state')?.textContent?.includes('提交结果未知'));
         assert.equal(sent.length, 1, 'No hidden replacement after a lost committed response');
         assert.equal(await page.locator('#probe-timeout').isDisabled(), true);
         const [replay] = await Promise.all([
@@ -137,7 +137,7 @@ export async function issueFromConsole(fixture: ConsoleFixture, forwardId: strin
         await page.locator('#probe-revoke').click();
         // An expired receipt may be pruned by the revocation mutation itself; never assume minimum retention.
         await page.waitForFunction(() => document.getElementById('probe-receipt')?.textContent?.includes('"state": "revoked"') ||
-            document.getElementById('probe-state')?.textContent?.includes('unavailable'));
+            document.getElementById('probe-state')?.textContent?.includes('回执不可用'));
         assert.equal(await page.locator('#probe-revoke').isDisabled(), true);
         await page.screenshot({ path: fixture.directory + '/console-probe-desktop.png', fullPage: true });
         await page.setViewportSize({ width: 390, height: 844 });
@@ -158,7 +158,7 @@ export async function verifyHistoricalConsole(fixture: ConsoleFixture, id: strin
         assert.equal(record.health, 'unknown'); assert.equal(record.report.historical, true);
         assert.equal(record.report.source, 'agent-reported'); assert.equal(record.report.status, 'connected');
         assert.equal(record.report.applicationPayloadBytes, 0); assert.equal(record.report.applicationHealth, 'unknown');
-        assert.match((await page.locator('#probe-state').textContent())!, /Historical/);
+        assert.match((await page.locator('#probe-state').textContent())!, /历史上报/);
         await page.screenshot({ path: fixture.directory + '/console-probe-historical.png', fullPage: true });
     });
 }
